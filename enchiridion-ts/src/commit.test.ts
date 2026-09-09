@@ -25,20 +25,16 @@ const ErrNoGit = new Error("fake git failure");
 
 class Fake implements Git {
   notAWorkTree = false;
-  addErr: Error | null = null;
-  commitErr: Error | null = null;
+  stageAndCommitErr: Error | null = null;
   added: string[] = [];
   messages: string[] = [];
 
   async isWorkTree(): Promise<boolean> {
     return !this.notAWorkTree;
   }
-  async add(paths: string[]): Promise<void> {
-    if (this.addErr) throw this.addErr;
+  async stageAndCommit(paths: string[], message: string): Promise<string> {
+    if (this.stageAndCommitErr) throw this.stageAndCommitErr;
     this.added.push(...paths);
-  }
-  async commit(message: string): Promise<string> {
-    if (this.commitErr) throw this.commitErr;
     this.messages.push(message);
     return this.messages.length.toString(16).padStart(40, "0");
   }
@@ -197,7 +193,7 @@ test("commit with no paths still commits", async () => {
 
 test("commit propagates a git failure", async () => {
   const git = new Fake();
-  git.commitErr = ErrNoGit;
+  git.stageAndCommitErr = ErrNoGit;
   await assert.rejects(
     commit(
       fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-commit-")),

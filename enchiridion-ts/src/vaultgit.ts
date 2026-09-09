@@ -142,6 +142,25 @@ export class VaultGit implements Git {
     }
   }
 
+  /**
+   * Stage `paths` and commit with `message`, holding a file lock for the
+   * entire add+commit sequence so concurrent ingests can't cross-contaminate
+   * each other's commits (#405). Returns the new commit SHA.
+   *
+   * The lock lives at `.wiki-knowledge/ingest.lock` under the vault root.
+   * It times out after 30 s — long enough for any realistic commit, short
+   * enough to surface a stuck process rather than block forever.
+   */
+  async stageAndCommit(paths: string[], message: string): Promise<string> {
+    const lockPath = path.join(this.root, ".wiki-knowledge", "ingest.lock");
+    return withCommitLock(lockPath, async () => {
+      if (paths.length > 0) {
+        await this.add(paths);
+      }
+      return this.commit(message);
+    });
+  }
+
   /** Write one commit with `message` and return its SHA. Strict: throws. */
   async commit(message: string): Promise<string> {
     const signature = await this.signature();
@@ -608,6 +627,52 @@ function fallbackHost(): string {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Acquire an exclusive lock on `lockPath` (created with the `wx` flag for
+ * atomicity), run `fn`, then release. Retries every 5 ms until the lock is
+ * free or `LOCK_TIMEOUT_MS` elapses.
+ *
+ * Mirrors the sync `withExclusiveLock` in watch.ts but accepts an async
+ * critical section — necessary because the add+commit sequence uses
+ * isomorphic-git's Promise-based API.
+ */
+async function withCommitLock<T>(
+  lockPath: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const LOCK_TIMEOUT_MS = 30_000;
+  const RETRY_MS = 5;
+
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+
+  const start = Date.now();
+  let fd: number | undefined;
+  for (;;) {
+    try {
+      fd = fs.openSync(lockPath, "wx");
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (Date.now() - start > LOCK_TIMEOUT_MS) {
+        throw new VaultGitError(
+          `git stageAndCommit: lock timeout after ${LOCK_TIMEOUT_MS} ms (${lockPath}) — a previous ingest may have crashed`,
+        );
+      }
+      await new Promise<void>((r) => setTimeout(r, RETRY_MS));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      // best-effort: ENOENT means another process already cleaned up
+    }
+  }
 }
 
 async function readBlobAsString(root: string, oid: string): Promise<string> {

@@ -24,10 +24,8 @@ class Fake implements Git {
   async isWorkTree(): Promise<boolean> {
     return !this.notAWorkTree;
   }
-  async add(paths: string[]): Promise<void> {
+  async stageAndCommit(paths: string[], message: string): Promise<string> {
     this.added.push(...paths);
-  }
-  async commit(message: string): Promise<string> {
     this.messages.push(message);
     return this.messages.length.toString(16).padStart(40, "0");
   }
