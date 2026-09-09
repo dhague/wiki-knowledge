@@ -278,7 +278,7 @@ export class Resolved {
         );
         continue;
       }
-      if (page.title === "") {
+      if (page.op === OpCreate && page.title === "") {
         problems.push(`${prefix}.title is required`);
       }
 
@@ -600,7 +600,9 @@ function applyFrontmatter(
   titles: Map<string, string>,
   v: Vault | null,
 ): Page {
-  page = page.set("title", planPage.title);
+  if (planPage.op === OpCreate || planPage.title !== "") {
+    page = page.set("title", planPage.title);
+  }
 
   const merging = planPage.op === OpUpdate;
   for (const [key, value] of planPage.frontmatter.all()) {

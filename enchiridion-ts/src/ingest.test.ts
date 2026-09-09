@@ -301,6 +301,23 @@ test("shape validation rejects kind on update", () => {
   assert.ok(got.includes("kind must not be set for op=update"), got);
 });
 
+test("shape validation allows missing title on update", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md"}]}`,
+    "",
+  );
+  assert.strictEqual(got, "");
+});
+
+test("shape validation still requires title on create", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[{"op":"create","kind":"concept","body":"b"}]}`,
+    "",
+  );
+  assert.ok(got.includes("pages[0].title is required"), got);
+});
+
 test("shape validation rejects an unknown kind", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
@@ -617,6 +634,54 @@ test("execute records updates, not creates", async () => {
   await resolved.execute(git);
   assert.ok(git.messages[0].includes("updated: wiki/concepts/a.md"));
   assert.ok(!git.messages[0].includes("created:"));
+});
+
+test("execute update with no title keeps existing title", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: Existing Title\n---\nbody\n",
+  });
+  const resolved = resolveOK(
+    decodePlanOK(`{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"new body\\n"}]}`),
+    root,
+  );
+  resolved.validate();
+  const git = new Fake();
+  await resolved.execute(git);
+  const written = fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8");
+  assert.ok(written.includes("title: Existing Title"), `title overwritten: ${written}`);
+});
+
+test("execute update with empty title keeps existing title", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: Existing Title\n---\nbody\n",
+  });
+  const resolved = resolveOK(
+    decodePlanOK(`{"title":"T","pages":[
+    {"op":"update","title":"","page_ref":"wiki/concepts/a.md","body":"new body\\n"}]}`),
+    root,
+  );
+  resolved.validate();
+  const git = new Fake();
+  await resolved.execute(git);
+  const written = fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8");
+  assert.ok(written.includes("title: Existing Title"), `title overwritten: ${written}`);
+});
+
+test("execute update with present title renames it", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: Old Title\n---\nbody\n",
+  });
+  const resolved = resolveOK(
+    decodePlanOK(`{"title":"T","pages":[
+    {"op":"update","title":"New Title","page_ref":"wiki/concepts/a.md","body":"new body\\n"}]}`),
+    root,
+  );
+  resolved.validate();
+  const git = new Fake();
+  await resolved.execute(git);
+  const written = fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8");
+  assert.ok(written.includes("title: New Title"), `title not updated: ${written}`);
 });
 
 test("execute a synthesis save", async () => {
