@@ -637,8 +637,14 @@ test("stageAndCommit: two concurrent calls each commit exactly their own paths",
 
   // Fire both stageAndCommit calls concurrently — no await between them.
   const [shaA, shaB] = await Promise.all([
-    repo.stageAndCommit(["wiki/concepts/a.md"], "ingest: A\n\ncreated: wiki/concepts/a.md\n"),
-    repo.stageAndCommit(["wiki/concepts/b.md"], "ingest: B\n\ncreated: wiki/concepts/b.md\n"),
+    repo.stageAndCommit(
+      ["wiki/concepts/a.md"],
+      "ingest: A\n\ncreated: wiki/concepts/a.md\n",
+    ),
+    repo.stageAndCommit(
+      ["wiki/concepts/b.md"],
+      "ingest: B\n\ncreated: wiki/concepts/b.md\n",
+    ),
   ]);
 
   // Both commits must be distinct, non-empty SHAs.
