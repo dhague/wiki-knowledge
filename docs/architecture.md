@@ -21,7 +21,7 @@ Two seams worth keeping straight, since the diagrams show them:
 
 Modules are grouped into responsibility clusters. An arrow between clusters means at least one module in the source cluster imports at least one module in the target cluster; individual module-level imports are collapsed for readability (see each cluster's file list for exact contents). The dashed arrows from the composite root are `cli.ts` importing every cluster — it is the composition root, one commander file per subcommand, and the wiring of every subcommand passes through it.
 
-→ [View diagram](diagrams/module-dependency-graph.html)
+[![Module dependency graph](diagrams/module-dependency-graph.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/module-dependency-graph.html)
 
 Cluster contents:
 
@@ -39,7 +39,7 @@ Cluster contents:
 
 Each of the plugin's five skills, traced through its agent (if any) to the cluster(s) it drives. `/wiki-watch` and `/save-conversation` are dispatchers: both hand off into the `/wiki-ingest` flow rather than duplicating it. The hooks row shows the automatic path — `hooks.json` wires both events to `bin/enchiridion hook <event>`, and the state they write is what Session capture and Stats read.
 
-→ [View diagram](diagrams/skill-agent-cluster-flow.html)
+[![Skill → agent → cluster flow](diagrams/skill-agent-cluster-flow.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/skill-agent-cluster-flow.html)
 
 Notes:
 
@@ -55,40 +55,40 @@ One diagram per cluster from the module dependency graph. The modules' types are
 
 ### Core library
 
-→ [View diagram](diagrams/types-core-library.html)
+[![Core library type diagram](diagrams/types-core-library.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-core-library.html)
 
 ### Vault ops
 
-→ [View diagram](diagrams/types-vault-ops.html)
+[![Vault ops type diagram](diagrams/types-vault-ops.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-vault-ops.html)
 
 No `SearchIndex` relationship here on purpose — the first *two seams* note above: `searchindex` does not go through `vault`, so the old facade arrow is reversed (it imports `vaultgit` only), and `enchiridion search` opens the index itself.
 
 ### Search
 
-→ [View diagram](diagrams/types-search.html)
+[![Search type diagram](diagrams/types-search.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-search.html)
 
 Search correctness lives in `Index.sync`, which every `Search` and a bare `--reindex` run before matching: it compares `meta.git_head` (the watermark) against `Git.CommittedPages(watermark)`'s reported `Head`, and does nothing when they're equal — one commit lookup, no filesystem work. When they differ, it applies the returned delta (or, on an unreachable watermark or a first build, a full rebuild from `HEAD`'s tree — [ADR-0015](adr/0015-search-index-view-of-committed-history.md)) — so the FTS5 table can never go stale because a caller forgot an inline update, and a page that was never committed is never seen at all. There is no `ForRoot` per-root cache and no `Vault` facade (the *two seams* above): the CLI command opens the one `Index` via `searchindex.Open`, and passes it down as a `discover.Searcher` (ADR-0010).
 
 ### Ingestion pipeline
 
-→ [View diagram](diagrams/types-ingestion-pipeline.html)
+[![Ingestion pipeline type diagram](diagrams/types-ingestion-pipeline.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-ingestion-pipeline.html)
 
 The pipeline is `Resolve → Validate → Execute → commit`; validation reads only resolved facts and execution writes only resolved pages, so the checked plan and the written plan cannot diverge. The chain-of-evidence check is run twice — pre-flight by validation (a courtesy) and again by `commit.Commit` as the hard gate — so a hand-built manifest can't route around it. `discover` is the one place this cluster reaches into Search: `Check` classifies overlap candidates against the index via a `Searcher`, which is how `cli`'s single open `Index` reaches it without a vault root. Two types here share a name with another in the same diagram, so the ingestscan ones carry a prefix — `IngestCandidate` is `ingestscan.Candidate` (vs `discover.Candidate` above) and `ScanGit` is `ingestscan.Git` (vs `commit.Git`); the stereotypes name the real package either way.
 
 ### Session capture
 
-→ [View diagram](diagrams/types-session-capture.html)
+[![Session capture type diagram](diagrams/types-session-capture.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-session-capture.html)
 
 `enchiridion save-session` reads the transcript path the SessionStart hook recorded (under `.claude/wiki-knowledge/sessions/`), renders the JSONL transcript to markdown, and writes `raw/conversations/<YYYY-MM-DD-hhmm>-<slug>-<short-id>.md`, printing the vault-relative path. It serves both hosts — Claude Code's hook-recorded transcript path on disk, or OpenCode's tracker-plugin state (fetched by shelling out to `opencode export`).
 
 ### Watch
 
-→ [View diagram](diagrams/types-watch.html)
+[![Watch type diagram](diagrams/types-watch.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-watch.html)
 
 `watch.ts` itself is pure — it holds no watcher and touches no filesystem it isn't handed. The `cli.ts` watch subcommand is where the composition happens: a chokidar observer feeds `Debouncer.RecordEvent`, a ticker drains `Debouncer.SettledFiles()`, and each settled file is queued only if `ingestscan.Scan` marks it eligible. `watch` and `ingestscan` don't import each other; that edge runs through the composite root.
 
 ### Stats
 
-→ [View diagram](diagrams/types-stats.html)
+[![Stats type diagram](diagrams/types-stats.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-stats.html)
 
 `enchiridion tool-call-stats` reads the JSON-lines log the PostToolUse hook appends to per session, and prints the per-tool histogram with the prompt-count proxy — tool-call count, not exact turn count, is the recoverable metric ([#99](https://github.com/dhague/wiki-knowledge/issues/99)). `enchiridion ingest` also prints the same summary after the commit SHA, best-effort and silent when no log exists.
