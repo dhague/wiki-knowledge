@@ -324,7 +324,13 @@ test(
   async () => {
     const root = await buildCommittedVault();
     const { status, stdout, stderr } = runBundled(
-      ["discover", "--title", "Connection Pooling in Postgres"],
+      [
+        "discover",
+        "--title",
+        "Connection Pooling in Postgres",
+        "--related-threshold",
+        "0.000001",
+      ],
       { cwd: root, env: { WIKI_ROOT: root } },
     );
     assert.equal(status, 0, stderr);

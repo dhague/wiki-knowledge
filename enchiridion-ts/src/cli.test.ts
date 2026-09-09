@@ -1119,7 +1119,13 @@ async function buildCommittedVault(): Promise<string> {
 test("discover: single-page mode finds the overlapping page and emits one candidate per line", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
-    ["discover", "--title", "Connection Pooling in Postgres"],
+    [
+      "discover",
+      "--title",
+      "Connection Pooling in Postgres",
+      "--related-threshold",
+      "0.000001",
+    ],
     { cwd: root, env: { WIKI_ROOT: root } },
   );
   assert.equal(status, 0, stderr);
