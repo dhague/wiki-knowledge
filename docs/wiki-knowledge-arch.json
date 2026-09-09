@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "wiki-knowledge Plugin — Runtime Architecture",
+    "output": "temp/wiki-knowledge-architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "host", "type": "frontend", "label": "Claude Code Host", "sublabel": "session · slash commands", "pos": [30, 260], "size": [132, 56] },
+    { "id": "skill_ingest", "type": "frontend", "label": "wiki-ingest Skill", "sublabel": "/wiki-ingest <file>", "pos": [193, 155], "size": [140, 54] },
+    { "id": "agent_ingest", "type": "backend", "label": "wiki-ingest Agent", "sublabel": "Sonnet · Read/Write/Bash", "pos": [368, 155], "size": [145, 54] },
+    { "id": "researcher", "type": "backend", "label": "wiki-researcher Agent", "sublabel": "Haiku · read-only Q&A", "pos": [193, 330], "size": [148, 54] },
+    { "id": "cli", "type": "backend", "label": "enchiridion CLI", "sublabel": "node scripts/cli.cjs", "pos": [541, 225], "size": [148, 54] },
+    { "id": "vault", "type": "database", "label": "Vault", "sublabel": "wiki/*.md on disk", "pos": [711, 148], "size": [130, 54] },
+    { "id": "search_index", "type": "database", "label": "Search Index", "sublabel": "SQLite FTS5 · HEAD view", "pos": [711, 320], "size": [148, 54] },
+    { "id": "vault_git", "type": "database", "label": "Vault Git Repo", "sublabel": "separate git history", "pos": [876, 218], "size": [138, 54] },
+    { "id": "hooks", "type": "backend", "label": "Hooks", "sublabel": "SessionStart · PostToolUse", "pos": [541, 362], "size": [138, 54] },
+    { "id": "session_state", "type": "backend", "label": "Session State", "sublabel": "transcript capture", "pos": [867, 362], "size": [148, 54] }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "LLM Trust Boundary",
+      "wraps": ["host", "skill_ingest", "agent_ingest", "researcher"],
+      "pad": 18
+    },
+    {
+      "kind": "region",
+      "label": "Data Layer — no LLM calls",
+      "wraps": ["cli", "vault", "search_index", "vault_git", "hooks", "session_state"],
+      "pad": 18
+    }
+  ],
+  "connections": [
+    {
+      "from": "host",
+      "to": "skill_ingest",
+      "label": "/wiki-ingest <file>",
+      "variant": "emphasis"
+    },
+    {
+      "from": "skill_ingest",
+      "to": "agent_ingest",
+      "label": "Task · Sonnet subagent",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [350, 220]
+    },
+    {
+      "from": "agent_ingest",
+      "to": "cli",
+      "label": "Bash: discover + ingest",
+      "variant": "emphasis",
+      "labelAt": [527, 220]
+    },
+    {
+      "from": "cli",
+      "to": "vault",
+      "label": "write wiki/*.md",
+      "variant": "emphasis",
+      "labelAt": [700, 210]
+    },
+    {
+      "from": "cli",
+      "to": "search_index",
+      "label": "FTS5 query",
+      "variant": "emphasis",
+      "labelAt": [700, 293]
+    },
+    {
+      "from": "vault",
+      "to": "vault_git",
+      "label": "isomorphic-git commit",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [[776, 105], [945, 105]],
+      "labelAt": [860, 105]
+    },
+    {
+      "from": "host",
+      "to": "researcher",
+      "label": "/wiki-ask",
+      "variant": "dashed",
+      "labelAt": [178, 326]
+    },
+    {
+      "from": "host",
+      "to": "hooks",
+      "label": "lifecycle events",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [[96, 425], [610, 425]],
+      "labelAt": [353, 434]
+    },
+    {
+      "from": "hooks",
+      "to": "session_state",
+      "label": "session files",
+      "variant": "dashed",
+      "route": "orthogonal-h",
+      "labelAt": [720, 432]
+    },
+    {
+      "from": "researcher",
+      "to": "cli",
+      "label": "enchiridion search",
+      "variant": "dashed",
+      "via": [[341, 288], [615, 288]],
+      "toSide": "bottom",
+      "labelAt": [470, 299]
+    },
+    {
+      "from": "search_index",
+      "to": "vault_git",
+      "label": "lazy sync (HEAD)",
+      "variant": "dashed",
+      "labelAt": [867, 302]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Primary Path: /wiki-ingest",
+      "items": [
+        "User → Skill dispatches wiki-ingest Agent (Sonnet) via Task tool",
+        "Agent reads raw doc, authors IngestPlan JSON, calls enchiridion discover (FTS5 dedup)",
+        "Agent calls enchiridion ingest --plan; CLI: validate → resolve → execute → write wiki/*.md",
+        "isomorphic-git commits to Vault repo; CLI prints commit SHA; Agent reports manifest"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "/wiki-ask Path",
+      "items": [
+        "User → /wiki-ask → Skill dispatches wiki-researcher Agent (Haiku) via Task tool",
+        "Agent calls enchiridion search; CLI queries FTS5 (Search Index lazily syncs HEAD commits)",
+        "Agent follows typed edges (refines / contradicts / example-of) to expand the answer frontier",
+        "Agent synthesises answer; proposes save-candidate — never writes directly"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Architecture Notes",
+      "items": [
+        "Data Layer (CLI, Vault, Index, Git): purely deterministic — no LLM calls; LLM zone holds Host + Skills + Agents",
+        "enchiridion CLI: 15+ subcommands via node scripts/cli.cjs shim (discover, ingest, search, vault, page, place, hook, save-session…)",
+        "External: Claude API (host-only, Sonnet/Haiku) · isomorphic-git (pure-JS) · node-sqlite3-wasm (FTS5 WASM) · Node.js ≥ 22.12"
+      ]
+    }
+  ]
+}
