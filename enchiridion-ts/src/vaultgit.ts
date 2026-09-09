@@ -336,17 +336,21 @@ export class VaultGit implements Git {
     } catch {
       return new ScanFacts(this.root, new Map(), new Map());
     }
-    const treeOids = await this.headBlobOids(headOid);
-    const dates = await this.allCommitDates(headOid);
+    const cache: object = {};
+    const treeOids = await this.headBlobOids(headOid, cache);
+    const dates = await this.allCommitDates(headOid, cache);
     return new ScanFacts(this.root, treeOids, dates);
   }
 
   /** `{path: blob oid}` for every blob in head's tree — one tree walk. */
-  private async headBlobOids(headOid: string): Promise<Map<string, string>> {
+  private async headBlobOids(
+    headOid: string,
+    cache: object = {},
+  ): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     await this.walkTree(headOid, async (filepath, entry) => {
       out.set(filepath, await entry.oid());
-    });
+    }, cache);
     return out;
   }
 
@@ -356,8 +360,11 @@ export class VaultGit implements Git {
    * history walk feeds the sweep's date comparison for every raw file and every
    * back-pointer page at once.
    */
-  private async allCommitDates(headOid: string): Promise<Map<string, string>> {
-    return this.latestCommitDates(headOid, changedPaths);
+  private async allCommitDates(
+    headOid: string,
+    cache: object = {},
+  ): Promise<Map<string, string>> {
+    return this.latestCommitDates(headOid, () => true, cache);
   }
 
   // -------------------------------------------------------------------------
@@ -497,36 +504,41 @@ export class VaultGit implements Git {
    * read; the range-walk counterpart is inlined in `rangeSnapshot`.
    */
   private async commitDates(headOid: string): Promise<Map<string, string>> {
-    return this.latestCommitDates(headOid, changedWikiPaths);
+    return this.latestCommitDates(headOid, isPageRef);
   }
 
   /**
    * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
-   * `select`ed from each commit, over every commit reachable from head. The
-   * shared spine of [commitDates] (wiki pages only) and [allCommitDates] (all
-   * paths): merge commits are skipped so date attribution stays stable
-   * (ADR-0015), and the newest timestamp wins, not log order.
+   * accepted by `keep`, over every commit reachable from head. Merge commits
+   * are skipped before any diff so date attribution stays stable (ADR-0015),
+   * and the newest timestamp wins, not log order.
+   *
+   * Uses [changedBlobPaths] instead of `includeChanges` so unchanged subtrees
+   * are pruned — per-commit cost is proportional to what actually changed, not
+   * to total vault size (#419).
    *
    * Lenient: empty dates when the history can't be walked.
    */
   private async latestCommitDates(
     headOid: string,
-    select: (commit: git.ReadCommitResult) => string[],
+    keep: (p: string) => boolean,
+    cache: object = {},
   ): Promise<Map<string, string>> {
     const latest = new Map<string, number>();
     try {
-      const commits = await git.log({
-        fs,
-        dir: this.root,
-        ref: headOid,
-        includeChanges: true,
-      });
+      const commits = await git.log({ fs, dir: this.root, ref: headOid, cache });
       for (const commit of commits) {
         if (commit.commit.parent.length > 1) continue;
-        const paths = select(commit);
-        if (paths.length === 0) continue;
+        const parentOid = commit.commit.parent[0] ?? EMPTY_TREE;
+        const paths = await changedBlobPaths(
+          this.root,
+          commit.oid,
+          parentOid,
+          cache,
+        );
         const when = commit.commit.author.timestamp * 1000;
         for (const p of paths) {
+          if (!keep(p)) continue;
           const prev = latest.get(p);
           if (prev === undefined || when > prev) latest.set(p, when);
         }
@@ -583,10 +595,12 @@ export class VaultGit implements Git {
   private async walkTree(
     headOid: string,
     visit: (filepath: string, entry: git.WalkerEntry) => Promise<void>,
+    cache: object = {},
   ): Promise<void> {
     await git.walk({
       fs,
       dir: this.root,
+      cache,
       trees: [git.TREE({ ref: headOid })],
       map: async (filepath: string, [entry]: (git.WalkerEntry | null)[]) => {
         if (!entry) return null;
@@ -685,6 +699,66 @@ async function porcelainDiff(
   return true;
 }
 
+/** SHA-1 of the empty tree — used as the parent oid for root commits. */
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/**
+ * The blob (leaf) paths that differ between `commitOid` and `parentOid`,
+ * diffing the commit tree against its parent with pruning: when both sides of
+ * a directory have the same tree oid, the subtree is skipped entirely (#419).
+ * Per-commit cost is therefore proportional to what the commit actually
+ * changed, not to total vault size. Output is identical to what `getChanges`
+ * (`isomorphic-git` internal) would return, because pruning only skips entries
+ * that `getChanges` would have found unchanged and dropped anyway.
+ */
+async function changedBlobPaths(
+  root: string,
+  commitOid: string,
+  parentOid: string,
+  cache: object,
+): Promise<string[]> {
+  const out: string[] = [];
+  await git.walk({
+    fs,
+    dir: root,
+    cache,
+    trees: [git.TREE({ ref: commitOid }), git.TREE({ ref: parentOid })],
+    map: async (
+      filepath: string,
+      [current, previous]: (git.WalkerEntry | null)[],
+    ) => {
+      if (filepath === ".") return true; // always descend root
+
+      const [curType, prevType] = await Promise.all([
+        current?.type(),
+        previous?.type(),
+      ]);
+
+      // Both are trees: compare oids to decide whether to descend.
+      if (curType === "tree" || prevType === "tree") {
+        if (curType === "tree" && prevType === "tree") {
+          const [curOid, prevOid] = await Promise.all([
+            current!.oid(),
+            previous!.oid(),
+          ]);
+          // Equal oids — identical subtree, nothing to report; prune.
+          if (curOid === prevOid) return null;
+        }
+        return true; // descend
+      }
+
+      // Blob level — record if added, removed, or changed.
+      const [curOid, prevOid] = await Promise.all([
+        current?.oid(),
+        previous?.oid(),
+      ]);
+      if (curOid !== prevOid) out.push(filepath);
+      return null; // don't descend blobs
+    },
+  });
+  return out;
+}
+
 /** The `wiki/**.md` paths a logged commit (with includeChanges) touched. */
 function changedWikiPaths(commit: git.ReadCommitResult): string[] {
   const changes = commit.commit.changes;
@@ -693,18 +767,6 @@ function changedWikiPaths(commit: git.ReadCommitResult): string[] {
   for (const change of changes) {
     const filepath = change[2];
     if (filepath && isPageRef(filepath)) out.push(filepath);
-  }
-  return out;
-}
-
-/** Every path a logged commit (with includeChanges) touched, unfiltered. */
-function changedPaths(commit: git.ReadCommitResult): string[] {
-  const changes = commit.commit.changes;
-  if (!changes) return [];
-  const out: string[] = [];
-  for (const change of changes) {
-    const filepath = change[2];
-    if (filepath) out.push(filepath);
   }
   return out;
 }
