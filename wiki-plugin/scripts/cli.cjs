@@ -42143,7 +42143,9 @@ function buildProgram() {
     "path to an IngestPlan JSON file ('-' reads stdin)"
   ).option(
     "--ignore <rawRel>",
-    "never offer this raw/ file again for a sweep (appends it to its folder's .ingestignore)"
+    "never offer this raw/ file again for a sweep (appends it to its folder's .ingestignore); repeatable",
+    collectFlag,
+    []
   ).option(
     "--ignore-comment <comment>",
     "optional trailing comment for the --ignore entry"
@@ -42153,18 +42155,21 @@ function buildProgram() {
   ).action(
     async (opts) => {
       const planPath = opts.plan ?? "";
-      const ignoreRel = opts.ignore ?? "";
+      const ignoreRels = opts.ignore ?? [];
       if (opts.dryRun && planPath === "") {
         throw new Error(
           "--dry-run only applies to --plan; --ignore always writes"
         );
       }
-      if (planPath === "" === (ignoreRel === "")) {
+      if (planPath === "" === (ignoreRels.length === 0)) {
         throw new Error("exactly one of --plan or --ignore is required");
       }
       const { root } = resolveRoot();
-      if (ignoreRel !== "") {
-        ignoreRawFile(root, ignoreRel, opts.ignoreComment ?? "");
+      if (ignoreRels.length > 0) {
+        const comment = opts.ignoreComment ?? "";
+        for (const ignoreRel of ignoreRels) {
+          ignoreRawFile(root, ignoreRel, comment);
+        }
         return;
       }
       await runPlan(planPath, root, opts.dryRun ?? false);
