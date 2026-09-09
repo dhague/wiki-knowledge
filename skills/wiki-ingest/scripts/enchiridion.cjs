@@ -26323,9 +26323,63 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
 // src/vaultgit.ts
 var vaultgit_exports = {};
 __export(vaultgit_exports, {
+  ScanFacts: () => ScanFacts,
   VaultGit: () => VaultGit,
   VaultGitError: () => VaultGitError
 });
+async function porcelainDiff(diskPath, headBlob) {
+  let work;
+  try {
+    work = await import_node_fs8.default.promises.readFile(diskPath);
+  } catch {
+    work = null;
+  }
+  const onDisk = work !== null;
+  const inHead = headBlob !== null;
+  if (!inHead && !onDisk) return false;
+  if (!inHead && onDisk) return true;
+  if (inHead && !onDisk) return true;
+  if (headBlob.equals(work)) return false;
+  if (!headBlob.includes(0) && !work.includes(0)) {
+    if (normalizeEol(headBlob.toString("utf8")) === normalizeEol(work.toString("utf8"))) {
+      return false;
+    }
+  }
+  return true;
+}
+async function changedBlobPaths(root, commitOid, parentOid, cache) {
+  const out = [];
+  await git.walk({
+    fs: import_node_fs8.default,
+    dir: root,
+    cache,
+    trees: [git.TREE({ ref: commitOid }), git.TREE({ ref: parentOid })],
+    map: async (filepath, [current, previous]) => {
+      if (filepath === ".") return true;
+      const [curType, prevType] = await Promise.all([
+        current?.type(),
+        previous?.type()
+      ]);
+      if (curType === "tree" || prevType === "tree") {
+        if (curType === "tree" && prevType === "tree") {
+          const [curOid2, prevOid2] = await Promise.all([
+            current.oid(),
+            previous.oid()
+          ]);
+          if (curOid2 === prevOid2) return null;
+        }
+        return true;
+      }
+      const [curOid, prevOid] = await Promise.all([
+        current?.oid(),
+        previous?.oid()
+      ]);
+      if (curOid !== prevOid) out.push(filepath);
+      return null;
+    }
+  });
+  return out;
+}
 function changedWikiPaths(commit3) {
   const changes = commit3.commit.changes;
   if (!changes) return [];
@@ -26415,7 +26469,7 @@ async function resolveFilePath(root, headOid, filePath) {
   if (!foundOid) throw new Error(`${filePath} not found in HEAD`);
   return foundOid;
 }
-var git, import_node_fs8, import_node_os2, import_node_path9, VaultGitError, VaultGit;
+var git, import_node_fs8, import_node_os2, import_node_path9, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE;
 var init_vaultgit = __esm({
   "src/vaultgit.ts"() {
     "use strict";
@@ -26605,14 +26659,6 @@ var init_vaultgit = __esm({
        */
       async porcelainMentions(rel) {
         try {
-          const diskPath = import_node_path9.default.join(this.root, rel);
-          let work = null;
-          try {
-            work = await import_node_fs8.default.promises.readFile(diskPath);
-          } catch {
-            work = null;
-          }
-          const onDisk = work !== null;
           let headBlob = null;
           try {
             const headOid = await git.resolveRef({
@@ -26626,20 +26672,57 @@ var init_vaultgit = __esm({
           } catch {
             headBlob = null;
           }
-          const inHead = headBlob !== null;
-          if (!inHead && !onDisk) return false;
-          if (!inHead && onDisk) return true;
-          if (inHead && !onDisk) return true;
-          if (headBlob.equals(work)) return false;
-          if (!headBlob.includes(0) && !work.includes(0)) {
-            if (normalizeEol(headBlob.toString("utf8")) === normalizeEol(work.toString("utf8"))) {
-              return false;
-            }
-          }
-          return true;
+          return await porcelainDiff(import_node_path9.default.join(this.root, rel), headBlob);
         } catch {
           return false;
         }
+      }
+      /**
+       * A batched read of the two lenient facts the ingest sweep needs
+       * ([ScanFacts.lastCommitDate] and [ScanFacts.porcelainMentions]), computed in
+       * a single HEAD tree walk plus a single history walk rather than one walk per
+       * file (#415). The returned object answers per-file queries from in-memory
+       * maps, so a folder sweep over N files costs O(tree + history) instead of
+       * O(N × (tree + history)) — the difference between "returns" and "hangs" on a
+       * vault of thousands of raw files.
+       *
+       * Lenient like the per-file surface: a missing or unreadable repository yields
+       * empty maps, so `lastCommitDate` returns "" and `porcelainMentions` reads a
+       * file as untracked — the same fail-toward-offering defaults the sweep relies
+       * on.
+       */
+      async scanFacts() {
+        let headOid;
+        try {
+          headOid = await git.resolveRef({ fs: import_node_fs8.default, dir: this.root, ref: "HEAD" });
+        } catch {
+          return new ScanFacts(this.root, /* @__PURE__ */ new Map(), /* @__PURE__ */ new Map());
+        }
+        const cache = {};
+        const treeOids = await this.headBlobOids(headOid, cache);
+        const dates = await this.allCommitDates(headOid, cache);
+        return new ScanFacts(this.root, treeOids, dates);
+      }
+      /** `{path: blob oid}` for every blob in head's tree — one tree walk. */
+      async headBlobOids(headOid, cache = {}) {
+        const out = /* @__PURE__ */ new Map();
+        await this.walkTree(
+          headOid,
+          async (filepath, entry) => {
+            out.set(filepath, await entry.oid());
+          },
+          cache
+        );
+        return out;
+      }
+      /**
+       * `{path: YYYY-MM-DD}` — the latest non-merge commit date per path over every
+       * commit reachable from head, for *all* paths (not just `wiki/**.md`). One
+       * history walk feeds the sweep's date comparison for every raw file and every
+       * back-pointer page at once.
+       */
+      async allCommitDates(headOid, cache = {}) {
+        return this.latestCommitDates(headOid, () => true, cache);
       }
       // -------------------------------------------------------------------------
       /**
@@ -26748,20 +26831,41 @@ var init_vaultgit = __esm({
        * read; the range-walk counterpart is inlined in `rangeSnapshot`.
        */
       async commitDates(headOid) {
+        return this.latestCommitDates(headOid, isPageRef);
+      }
+      /**
+       * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
+       * accepted by `keep`, over every commit reachable from head. Merge commits
+       * are skipped before any diff so date attribution stays stable (ADR-0015),
+       * and the newest timestamp wins, not log order.
+       *
+       * Uses [changedBlobPaths] instead of `includeChanges` so unchanged subtrees
+       * are pruned — per-commit cost is proportional to what actually changed, not
+       * to total vault size (#419).
+       *
+       * Lenient: empty dates when the history can't be walked.
+       */
+      async latestCommitDates(headOid, keep, cache = {}) {
         const latest = /* @__PURE__ */ new Map();
         try {
           const commits = await git.log({
             fs: import_node_fs8.default,
             dir: this.root,
             ref: headOid,
-            includeChanges: true
+            cache
           });
           for (const commit3 of commits) {
             if (commit3.commit.parent.length > 1) continue;
-            const paths = changedWikiPaths(commit3);
-            if (paths.length === 0) continue;
+            const parentOid = commit3.commit.parent[0] ?? EMPTY_TREE;
+            const paths = await changedBlobPaths(
+              this.root,
+              commit3.oid,
+              parentOid,
+              cache
+            );
             const when = commit3.commit.author.timestamp * 1e3;
             for (const p of paths) {
+              if (!keep(p)) continue;
               const prev = latest.get(p);
               if (prev === void 0 || when > prev) latest.set(p, when);
             }
@@ -26807,10 +26911,11 @@ var init_vaultgit = __esm({
        * keep being descended into (isomorphic-git's walk prunes a directory whose
        * `map` returns null, so we must return a truthy value for them).
        */
-      async walkTree(headOid, visit) {
+      async walkTree(headOid, visit, cache = {}) {
         await git.walk({
           fs: import_node_fs8.default,
           dir: this.root,
+          cache,
           trees: [git.TREE({ ref: headOid })],
           map: async (filepath, [entry]) => {
             if (!entry) return null;
@@ -26822,6 +26927,32 @@ var init_vaultgit = __esm({
         });
       }
     };
+    ScanFacts = class {
+      constructor(root, treeOids, dates) {
+        this.root = root;
+        this.treeOids = treeOids;
+        this.dates = dates;
+      }
+      /** The last commit date of rel, or "" when absent from the date map. */
+      async lastCommitDate(rel) {
+        return this.dates.get(rel) ?? "";
+      }
+      /** Whether rel is modified or untracked, using the precomputed HEAD tree. */
+      async porcelainMentions(rel) {
+        let headBlob = null;
+        const oid = this.treeOids.get(rel);
+        if (oid !== void 0) {
+          try {
+            const { blob } = await git.readBlob({ fs: import_node_fs8.default, dir: this.root, oid });
+            headBlob = Buffer.from(blob);
+          } catch {
+            headBlob = null;
+          }
+        }
+        return porcelainDiff(import_node_path9.default.join(this.root, rel), headBlob);
+      }
+    };
+    EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
   }
 });
 
@@ -38131,7 +38262,7 @@ async function scan(root, folder, git2) {
   const vault = new Vault(root);
   const pages = vault.pagesWithText();
   const backPointers = backPointersByRaw(pages);
-  if (git2 === null) git2 = new VaultGit(root);
+  if (git2 === null) git2 = await new VaultGit(root).scanFacts();
   const rels = walkRaw(root, folder);
   const result = { eligible: [], ignored: [] };
   for (const rel of rels) {
@@ -41552,6 +41683,9 @@ async function runPlan(planPath, root, dryRun) {
   const sha = await resolved.execute(new VaultGit(root));
   console.log(sha);
   printToolCallSummary();
+  if (planPath !== "-") {
+    import_node_fs18.default.unlinkSync(planPath);
+  }
 }
 function printToolCallSummary() {
   const sessionID = process.env.CLAUDE_CODE_SESSION_ID;
@@ -41939,7 +42073,7 @@ function buildProgram() {
   ).action(async (folderArg, opts) => {
     const { root } = resolveRoot();
     const folder = folderArg === void 0 ? "" : normalizeFolderArg(folderArg);
-    const result = await scan(root, folder, new VaultGit(root));
+    const result = await scan(root, folder, null);
     if (opts.json) {
       for (const c of result.eligible) {
         console.log(
