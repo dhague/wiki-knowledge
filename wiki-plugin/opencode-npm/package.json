@@ -1,12 +1,16 @@
 {
   "name": "@dhague/wiki-knowledge",
-  "version": "0.11.6",
+  "version": "0.11.7",
   "description": "Clean-room ingestion and retrieval over a git-backed markdown wiki vault, following the Karpathy LLM-wiki pattern.",
   "author": {
     "name": "Darren Hague",
     "email": "darren.hague@fortybeans.com"
   },
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhague/wiki-knowledge"
+  },
   "publishConfig": {
     "access": "public"
   },
