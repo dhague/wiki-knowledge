@@ -648,8 +648,14 @@ test("execute update with no title keeps existing title", async () => {
   resolved.validate();
   const git = new Fake();
   await resolved.execute(git);
-  const written = fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8");
-  assert.ok(written.includes("title: Existing Title"), `title overwritten: ${written}`);
+  const written = fs.readFileSync(
+    path.join(root, "wiki/concepts/a.md"),
+    "utf8",
+  );
+  assert.ok(
+    written.includes("title: Existing Title"),
+    `title overwritten: ${written}`,
+  );
 });
 
 test("execute update with empty title keeps existing title", async () => {
@@ -664,8 +670,14 @@ test("execute update with empty title keeps existing title", async () => {
   resolved.validate();
   const git = new Fake();
   await resolved.execute(git);
-  const written = fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8");
-  assert.ok(written.includes("title: Existing Title"), `title overwritten: ${written}`);
+  const written = fs.readFileSync(
+    path.join(root, "wiki/concepts/a.md"),
+    "utf8",
+  );
+  assert.ok(
+    written.includes("title: Existing Title"),
+    `title overwritten: ${written}`,
+  );
 });
 
 test("execute update with present title renames it", async () => {
@@ -680,8 +692,14 @@ test("execute update with present title renames it", async () => {
   resolved.validate();
   const git = new Fake();
   await resolved.execute(git);
-  const written = fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8");
-  assert.ok(written.includes("title: New Title"), `title not updated: ${written}`);
+  const written = fs.readFileSync(
+    path.join(root, "wiki/concepts/a.md"),
+    "utf8",
+  );
+  assert.ok(
+    written.includes("title: New Title"),
+    `title not updated: ${written}`,
+  );
 });
 
 test("execute a synthesis save", async () => {
