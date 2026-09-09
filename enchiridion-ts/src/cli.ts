@@ -141,6 +141,9 @@ async function runPlan(
   const sha = await resolved.execute(new VaultGit(root));
   console.log(sha);
   printToolCallSummary();
+  if (planPath !== "-") {
+    fs.unlinkSync(planPath);
+  }
 }
 
 /** Reports what this run cost, after the SHA, when the PostToolUse hook has

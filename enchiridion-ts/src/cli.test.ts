@@ -636,6 +636,12 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
       path.join(root, "wiki", "concepts", "prepared-statements.md"),
     ),
   );
+  // Plan file deleted on success.
+  assert.ok(
+    !fs.existsSync(planPath),
+    "plan file should be deleted after successful ingest",
+  );
+
   const { status: logStatus } = spawnSync(
     "git",
     ["-C", root, "log", "--oneline"],
@@ -644,6 +650,54 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
     },
   );
   assert.equal(logStatus, 0);
+});
+
+test("ingest: plan file NOT deleted when ingest fails", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  await git.init({ fs, dir: root });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "initial",
+    author: { name: "test", email: "t@e.com", timestamp: 1, timezoneOffset: 0 },
+    committer: {
+      name: "test",
+      email: "t@e.com",
+      timestamp: 1,
+      timezoneOffset: 0,
+    },
+  });
+
+  // Plan references a non-existent raw file — validation fails, ingest errors.
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "Broken plan",
+      action: "ingest",
+      source_date: "2026-03-01",
+      raw: "raw/missing.md",
+      pages: [
+        {
+          op: "create",
+          title: "T",
+          kind: "concept",
+          body: "b\n",
+          frontmatter: { summary: "s" },
+        },
+      ],
+    }),
+  );
+
+  const { status } = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.notEqual(status, 0);
+  assert.ok(fs.existsSync(planPath), "plan file must survive a failed ingest");
 });
 
 test("ingest: --dry-run prints the describe, writes nothing", async () => {
