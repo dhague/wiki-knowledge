@@ -39447,11 +39447,12 @@ var HintRelated = "related";
 var HintDistinct = "distinct";
 var DuplicateThreshold = 15;
 var RelatedThreshold = 5;
-var DefaultLimit = 200;
+var DefaultLimit = 0;
+var UnboundedSearchLimit = 1e7;
 var wordRE = /[a-z0-9]+/g;
 function withDefaults(o) {
   return {
-    limit: o.limit > 0 ? o.limit : DefaultLimit,
+    limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
     duplicateThreshold: o.duplicateThreshold === 0 ? DuplicateThreshold : o.duplicateThreshold,
     relatedThreshold: o.relatedThreshold === 0 ? RelatedThreshold : o.relatedThreshold
   };
@@ -39503,16 +39504,18 @@ async function check2(searcher, title, summary, body, opts) {
         break;
       }
     }
+    const hint = classify(
+      hit.score,
+      shares,
+      o.duplicateThreshold,
+      o.relatedThreshold
+    );
+    if (hint === HintDistinct) continue;
     candidates.push({
       page_ref: hit.pageRef,
       title: hit.title,
       score: hit.score,
-      hint: classify(
-        hit.score,
-        shares,
-        o.duplicateThreshold,
-        o.relatedThreshold
-      ),
+      hint,
       summary: hit.summary,
       tags: hit.tags,
       volatility: hit.volatility,
@@ -42143,7 +42146,9 @@ function buildProgram() {
     "path to an IngestPlan JSON file ('-' reads stdin)"
   ).option(
     "--ignore <rawRel>",
-    "never offer this raw/ file again for a sweep (appends it to its folder's .ingestignore)"
+    "never offer this raw/ file again for a sweep (appends it to its folder's .ingestignore); repeatable",
+    collectFlag,
+    []
   ).option(
     "--ignore-comment <comment>",
     "optional trailing comment for the --ignore entry"
@@ -42153,18 +42158,21 @@ function buildProgram() {
   ).action(
     async (opts) => {
       const planPath = opts.plan ?? "";
-      const ignoreRel = opts.ignore ?? "";
+      const ignoreRels = opts.ignore ?? [];
       if (opts.dryRun && planPath === "") {
         throw new Error(
           "--dry-run only applies to --plan; --ignore always writes"
         );
       }
-      if (planPath === "" === (ignoreRel === "")) {
+      if (planPath === "" === (ignoreRels.length === 0)) {
         throw new Error("exactly one of --plan or --ignore is required");
       }
       const { root } = resolveRoot();
-      if (ignoreRel !== "") {
-        ignoreRawFile(root, ignoreRel, opts.ignoreComment ?? "");
+      if (ignoreRels.length > 0) {
+        const comment = opts.ignoreComment ?? "";
+        for (const ignoreRel of ignoreRels) {
+          ignoreRawFile(root, ignoreRel, comment);
+        }
         return;
       }
       await runPlan(planPath, root, opts.dryRun ?? false);
@@ -42201,7 +42209,7 @@ function buildProgram() {
     "path to the planned page's own body text (single-page mode)"
   ).option(
     "--limit <n>",
-    `max candidates per page (default ${DefaultLimit})`,
+    `max hits scanned per page; 0 = unbounded (score is the real filter) (default ${DefaultLimit})`,
     (v) => Number(v),
     DefaultLimit
   ).option(

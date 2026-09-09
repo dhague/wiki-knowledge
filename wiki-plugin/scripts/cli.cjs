@@ -39447,11 +39447,12 @@ var HintRelated = "related";
 var HintDistinct = "distinct";
 var DuplicateThreshold = 15;
 var RelatedThreshold = 5;
-var DefaultLimit = 200;
+var DefaultLimit = 0;
+var UnboundedSearchLimit = 1e7;
 var wordRE = /[a-z0-9]+/g;
 function withDefaults(o) {
   return {
-    limit: o.limit > 0 ? o.limit : DefaultLimit,
+    limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
     duplicateThreshold: o.duplicateThreshold === 0 ? DuplicateThreshold : o.duplicateThreshold,
     relatedThreshold: o.relatedThreshold === 0 ? RelatedThreshold : o.relatedThreshold
   };
@@ -39503,16 +39504,18 @@ async function check2(searcher, title, summary, body, opts) {
         break;
       }
     }
+    const hint = classify(
+      hit.score,
+      shares,
+      o.duplicateThreshold,
+      o.relatedThreshold
+    );
+    if (hint === HintDistinct) continue;
     candidates.push({
       page_ref: hit.pageRef,
       title: hit.title,
       score: hit.score,
-      hint: classify(
-        hit.score,
-        shares,
-        o.duplicateThreshold,
-        o.relatedThreshold
-      ),
+      hint,
       summary: hit.summary,
       tags: hit.tags,
       volatility: hit.volatility,
@@ -42206,7 +42209,7 @@ function buildProgram() {
     "path to the planned page's own body text (single-page mode)"
   ).option(
     "--limit <n>",
-    `max candidates per page (default ${DefaultLimit})`,
+    `max hits scanned per page; 0 = unbounded (score is the real filter) (default ${DefaultLimit})`,
     (v) => Number(v),
     DefaultLimit
   ).option(
