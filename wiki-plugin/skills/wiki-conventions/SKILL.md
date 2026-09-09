@@ -165,8 +165,7 @@ Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else n
 **Batch independent invocations.** When a step needs more than one independent `enchiridion` call — e.g. several `search` queries for different terms or candidates — batch them into a single tool call rather than issuing each separately; each extra tool call costs a full turn. On Claude Code, chain with `;` in one `Bash` call; on OpenCode, the `wiki` tool handles one subcommand per call so issue them in parallel in one message. Examples:
 
 ```bash
-# Claude Code (Bash, chained) — resolve binary once, then chain calls
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+# Claude Code (Bash, chained) — $ENCHIRIDION already resolved above; chain calls
 "$ENCHIRIDION" search "prepared statements" --json; "$ENCHIRIDION" search "connection pooling" --json
 ```
 

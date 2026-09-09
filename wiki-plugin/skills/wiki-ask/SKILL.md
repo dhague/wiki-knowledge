@@ -8,6 +8,12 @@ Reads `wiki-conventions` for anything this procedure doesn't cover — folder st
 
 Retrieval **never modifies an existing page** — no edit, no move, no delete, ever. One write: new `synthesis/` page, only on explicit user confirmation ([saving-synthesis.md](saving-synthesis.md)).
 
+**On Claude Code**, resolve the binary once before any step that calls it:
+```bash
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+```
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<subcommand>", ...])` instead — see `## Scripts` in `wiki-conventions`.
+
 ## Invocation
 
 - **If not already running as `wiki-researcher` agent** (system prompt doesn't identify you as it — e.g. invoked directly via `/wiki-ask <question>`): only action is delegate. Call `Task` with `subagent_type: "wiki-researcher"` and prompt containing the question, then relay the answer. Keeps reading and link-following inside subagent's context — on its Haiku model — regardless of invoking session's model.
@@ -16,12 +22,6 @@ Retrieval **never modifies an existing page** — no edit, no move, no delete, e
 - **If you are `wiki-researcher` agent**: continue directly with procedure below using own tools. **Recommend** save (step 8); never perform one — subagent can't ask user, and unconfirmed save is the exact failure this design prevents.
 
 Scripts live in the plugin's install directory and resolve vault root themselves.
-
-**On Claude Code:** resolve the binary once before any step that calls it:
-```bash
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
-```
-Then use `"$ENCHIRIDION"` for every call below. On **OpenCode** use `wiki(args=["<subcommand>", ...])` instead — see `## Scripts` in `wiki-conventions`.
 
 Search `wiki/**` only — `raw/` is not indexed; its `source/` stub has the summary.
 

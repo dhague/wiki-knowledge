@@ -6,15 +6,13 @@ description: Save the current conversation to $WIKI_ROOT as a raw markdown artif
 
 Captures session transcript into `$WIKI_ROOT/raw/conversations/`, files it into wiki.
 
-## Procedure
-
-**On Claude Code:** resolve the binary once before any step that calls it:
+**On Claude Code**, resolve the binary once before any step that calls it:
 ```bash
 ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
 ```
-Then use `"$ENCHIRIDION"` for every call below.
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** replace every `Bash` + `"$ENCHIRIDION" <subcommand> <args...>` call with `wiki(args=["<subcommand>", ...])` — same subcommand, same flags, no path to resolve. See `## Scripts` in `wiki-conventions` for detail.
 
-**On OpenCode:** replace every `Bash` + `"$ENCHIRIDION" <subcommand> <args...>` call with `wiki(args=["<subcommand>", ...])` — same subcommand, same flags, no path to resolve. See `## Scripts` in `wiki-conventions` for detail.
+## Procedure
 
 `save-session` detects the host from which session-id var is set — `$CLAUDE_CODE_SESSION_ID` or `$OPENCODE_SESSION_ID` — and fetches transcript accordingly.
 

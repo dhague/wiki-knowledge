@@ -9,6 +9,12 @@ Reads `wiki-conventions` for anything this procedure doesn't spell out — folde
 
 Scripts live in plugin's install directory, resolve vault root itself — see `## Scripts` in `wiki-conventions` for full reference (vault-root resolution, locating the plugin root, common tasks, script catalogue).
 
+**On Claude Code**, resolve the binary once before any step that calls it:
+```bash
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+```
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** replace every `Bash` + `"$ENCHIRIDION" <subcommand> <args...>` call with `wiki(args=["<subcommand>", ...])` — same subcommand, same flags, no path to resolve.
+
 ## Invocation
 
 - `/wiki-ingest <folder>` or `/wiki-ingest` (no path) — **sweep**, not single ingestion. `Read` [`reference/sweep.md`](reference/sweep.md) and follow it instead.
@@ -17,14 +23,6 @@ Scripts live in plugin's install directory, resolve vault root itself — see `#
 - **If you are `wiki-ingest` agent**, continue with procedure using own tools. (Single-file work only — sweep delegates one file at a time, per [`reference/sweep.md`](reference/sweep.md).)
 
 ## Procedure
-
-**On Claude Code:** resolve the binary once before any step that calls it:
-```bash
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
-```
-Then use `"$ENCHIRIDION"` for every call below.
-
-**On OpenCode:** replace every `Bash` + `"$ENCHIRIDION" <subcommand> <args...>` call with `wiki(args=["<subcommand>", ...])` — same subcommand, same flags, no path to resolve. See `## Scripts` in `wiki-conventions` for detail.
 
 Given one document at `<path>`.
 

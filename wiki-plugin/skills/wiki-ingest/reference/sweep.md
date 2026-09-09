@@ -4,12 +4,13 @@ Read only when `/wiki-ingest` invoked with **folder** (under `raw/`, with or wit
 
 **Sweep**: list every raw file in scope scanner considers eligible, ask per file, delegate each accepted file to `wiki-ingest` agent one at a time. Run sweep in *invoking* session, not as subagent — subagent has no channel to user (see [#18]'s finding, applied unchanged here), per-file confirmation must be answered by human.
 
-## Procedure
-
-Resolve the binary once before any command below (Claude Code only; on OpenCode use `wiki(args=[...])` instead):
+**On Claude Code**, resolve the binary once before any step that calls it:
 ```bash
 ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
 ```
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=[...])` instead.
+
+## Procedure
 
 1. **Run the scan.** `"$ENCHIRIDION" ingest-scan <folder-or-empty>` (or `--json` for machine-readable output) prints every file needing ingestion with reason:
    - `never-ingested` — no page's `raw_source` points at it (fresh file).

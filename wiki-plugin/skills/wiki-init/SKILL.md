@@ -8,6 +8,12 @@ New empty vault at target dir. One-time scaffold. Not `wiki-ingest` (that fills 
 
 Folder layout, `.gitignore`, git init, `settings.json`, scaffold commit — all handled by `bin/enchiridion init` (see `enchiridion-ts/src/initwiki.ts`). Only decision left: deployment mode.
 
+**On Claude Code**, resolve the binary once before running anything:
+```bash
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+```
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["init", ...])` instead.
+
 ## Procedure
 
 Given target dir `<vault>` (path arg, or `cwd` if omitted):
@@ -16,11 +22,7 @@ Given target dir `<vault>` (path arg, or `cwd` if omitted):
    - **query-from-anywhere** — common for personal/dogfooding vault: plugin stays installed user-scope elsewhere, new vault just needs registration.
    - **dedicated** — vault *is* a Claude Code project with plugin installed project-scope inside it. `enchiridion init` won't attempt that install (not its job) — only skips writing `settings.json`; tell user to install plugin into `<vault>` and launch Claude Code from `<vault>` root after.
 
-2. **Run the binary.** Resolve the binary path first, then pass it as `--plugin-root` for query-from-anywhere mode:
-   ```bash
-   ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
-   ```
-   On OpenCode, `plugin_root` comes from `.opencode/wiki-knowledge/config.json`; use `wiki(args=["init", ...])` instead. Pass plugin root straight through as `--plugin-root`:
+2. **Run the binary.** On OpenCode, `plugin_root` comes from `.opencode/wiki-knowledge/config.json`. Pass plugin root straight through as `--plugin-root`:
    ```
    # query-from-anywhere:
    "$ENCHIRIDION" init "<vault>" --mode query-from-anywhere --plugin-root "$(dirname "$(dirname "$ENCHIRIDION")")"

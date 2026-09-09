@@ -8,13 +8,15 @@ User-initiated, foreground, event-driven watcher — not system daemon, not hook
 
 Substantive logic in the `watch` subcommand of the enchiridion script layer (`<plugin-root>/bin/enchiridion watch` — event detection, per-file debounce, lock file, queue file) and existing sweep machinery (`enchiridion ingest-scan`, `wiki-ingest` agent, `enchiridion ingest`). This file is procedural glue: launch watcher, run startup sweep, poll queue, dispatch one `wiki-ingest` subagent per file.
 
+**On Claude Code**, resolve the binary once before any step that calls it:
+```bash
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+```
+Use `"$ENCHIRIDION"` for every call below.
+
 ## Procedure
 
-1. **Resolve the binary and vault root.** Run once at the start:
-   ```bash
-   ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
-   ```
-   Then resolve vault root — `$WIKI_ROOT` if set, else `cwd`, per the vault root resolution order. Every command below assumes cwd (or `$WIKI_ROOT`) is vault.
+1. **Resolve the vault root** — `$WIKI_ROOT` if set, else `cwd`, per the vault root resolution order. Every command below assumes cwd (or `$WIKI_ROOT`) is vault.
 
 2. **Launch the `enchiridion watch` subcommand in the background**:
    ```
