@@ -348,9 +348,13 @@ export class VaultGit implements Git {
     cache: object = {},
   ): Promise<Map<string, string>> {
     const out = new Map<string, string>();
-    await this.walkTree(headOid, async (filepath, entry) => {
-      out.set(filepath, await entry.oid());
-    }, cache);
+    await this.walkTree(
+      headOid,
+      async (filepath, entry) => {
+        out.set(filepath, await entry.oid());
+      },
+      cache,
+    );
     return out;
   }
 
@@ -526,7 +530,12 @@ export class VaultGit implements Git {
   ): Promise<Map<string, string>> {
     const latest = new Map<string, number>();
     try {
-      const commits = await git.log({ fs, dir: this.root, ref: headOid, cache });
+      const commits = await git.log({
+        fs,
+        dir: this.root,
+        ref: headOid,
+        cache,
+      });
       for (const commit of commits) {
         if (commit.commit.parent.length > 1) continue;
         const parentOid = commit.commit.parent[0] ?? EMPTY_TREE;
