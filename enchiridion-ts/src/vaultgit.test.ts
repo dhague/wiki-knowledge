@@ -617,3 +617,47 @@ test("porcelainMentions reports a staged (git add) modification (#366)", async (
   // Working tree and index both have new content; HEAD has original.
   assert.equal(await repo.porcelainMentions("raw/notes.md"), true);
 });
+
+// ---------------------------------------------------------------------------
+// stageAndCommit — concurrent-safety (#405)
+// ---------------------------------------------------------------------------
+
+test("stageAndCommit: two concurrent calls each commit exactly their own paths", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await repo.init();
+
+  // Prime the repo with an initial commit so HEAD exists.
+  writeFile(root, "wiki/concepts/seed.md", "seed\n");
+  await commitAll(root, "seed");
+
+  // Write both plans' pages to disk without staging.
+  writeFile(root, "wiki/concepts/a.md", "a content\n");
+  writeFile(root, "wiki/concepts/b.md", "b content\n");
+
+  // Fire both stageAndCommit calls concurrently — no await between them.
+  const [shaA, shaB] = await Promise.all([
+    repo.stageAndCommit(["wiki/concepts/a.md"], "ingest: A\n\ncreated: wiki/concepts/a.md\n"),
+    repo.stageAndCommit(["wiki/concepts/b.md"], "ingest: B\n\ncreated: wiki/concepts/b.md\n"),
+  ]);
+
+  // Both commits must be distinct, non-empty SHAs.
+  assert.match(shaA, /^[0-9a-f]{40}$/);
+  assert.match(shaB, /^[0-9a-f]{40}$/);
+  assert.notEqual(shaA, shaB);
+
+  // Each commit must contain exactly its own pages — no empty commits, no
+  // cross-contamination.
+  const log = await git.log({ fs, dir: root });
+  // log[0] and log[1] are the two ingest commits (order not deterministic);
+  // log[2] is "seed".
+  const commitMessages = log.slice(0, 2).map((c) => c.commit.message);
+  assert.ok(
+    commitMessages.some((m) => m.includes("ingest: A")),
+    "A's commit must be in history",
+  );
+  assert.ok(
+    commitMessages.some((m) => m.includes("ingest: B")),
+    "B's commit must be in history",
+  );
+});

@@ -40,11 +40,14 @@ export class ErrGate extends Error {
 }
 
 /** The slice of [VaultGit] this module needs, named as an interface so tests
- * can commit against an in-memory fake instead of a real repository. */
+ * can commit against an in-memory fake instead of a real repository.
+ *
+ * [stageAndCommit] is one atomic unit so implementations can hold a file lock
+ * across the stage+commit sequence — preventing concurrent ingests from
+ * cross-contaminating each other's commits (#405). */
 export interface Git {
   isWorkTree(): Promise<boolean>;
-  add(paths: string[]): Promise<void>;
-  commit(message: string): Promise<string>;
+  stageAndCommit(paths: string[], message: string): Promise<string>;
 }
 
 /** One `old -> new` pair in a manifest. */
@@ -151,8 +154,5 @@ export async function commit(
   }
   await checkChainOfEvidence(root, m);
   const paths = stagedPaths(m);
-  if (paths.length > 0) {
-    await git.add(paths);
-  }
-  return git.commit(buildMessage(m));
+  return git.stageAndCommit(paths, buildMessage(m));
 }
