@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   tag:
@@ -107,8 +108,9 @@ jobs:
       - name: Publish to npm (idempotent)
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Trusted Publishing (OIDC) needs npm >= 11.5.1; node 22 ships ~10.x.
+          npm install -g npm@latest
           PUBLISHED=$(npm show "@dhague/wiki-knowledge@${VERSION}" version 2>/dev/null || true)
           if [ "$PUBLISHED" = "$VERSION" ]; then
             echo "v$VERSION already published to npm, skipping."
