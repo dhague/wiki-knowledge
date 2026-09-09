@@ -9,6 +9,12 @@ Reads `wiki-conventions` for anything this procedure doesn't spell out — folde
 
 Scripts live in plugin's install directory, resolve vault root itself — see `## Scripts` in `wiki-conventions` for full reference (vault-root resolution, locating the plugin root, common tasks, script catalogue).
 
+**On Claude Code**, resolve the binary once before any step that calls it:
+```bash
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+```
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** replace every `Bash` + `"$ENCHIRIDION" <subcommand> <args...>` call with `wiki(args=["<subcommand>", ...])` — same subcommand, same flags, no path to resolve.
+
 ## Invocation
 
 - `/wiki-ingest <folder>` or `/wiki-ingest` (no path) — **sweep**, not single ingestion. `Read` [`reference/sweep.md`](reference/sweep.md) and follow it instead.
@@ -18,13 +24,11 @@ Scripts live in plugin's install directory, resolve vault root itself — see `#
 
 ## Procedure
 
-**On OpenCode:** replace every `Bash` + `"<plugin-root>/bin/enchiridion" <subcommand> <args...>` call in this procedure with `wiki(args=["<subcommand>", ...])` — same subcommand, same flags, no path to resolve. See `## Scripts` in `wiki-conventions` for detail.
-
 Given one document at `<path>`.
 
 1. **Read** document in full; also read `<path>`'s folder's `INGESTION.md` if it exists — issue both reads in one message (see [`reference/ingestion-hints.md`](reference/ingestion-hints.md)). Hints override defaults below.
 2. **Semantic-chunk.** One page or several? Default one; split when document covers multiple independent ideas deserving own future citation.
-3. **Draft the plan, then discover, then classify.** Write `<plan.json>` now — same file step 4 finishes and step 5 runs; nothing written twice. Give every candidate chunk from step 2 a `pages` entry with `title`, `frontmatter.summary`, `body` filled in (full shape in step 4); leave `edges` and unjudged frontmatter for step 4. Run `"<plugin-root>/bin/enchiridion" discover --plan <plan.json> --tags-containing "<candidate tags, comma list>" --tag-count "<candidate tags, comma list>"` once against whole draft — no per-chunk calls, no scratch files. Derive both comma lists from this draft's own candidate tags (the tags step 2's chunks are likely to want); always pass both. Returns candidates classified `duplicate`/`refines`/`related`/`distinct` per page, each carrying `summary`, `tags`, `volatility`, `superseded_by` — plus, in place of the full tag-vocabulary dump, the plain-text matches for `--tags-containing` and per-tag counts for `--tag-count` (0 means safe to mint) for step 4 tag-minting.
+3. **Draft the plan, then discover, then classify.** Write `<plan.json>` now — same file step 4 finishes and step 5 runs; nothing written twice. Give every candidate chunk from step 2 a `pages` entry with `title`, `frontmatter.summary`, `body` filled in (full shape in step 4); leave `edges` and unjudged frontmatter for step 4. Run `"$ENCHIRIDION" discover --plan <plan.json> --tags-containing "<candidate tags, comma list>" --tag-count "<candidate tags, comma list>"` once against whole draft — no per-chunk calls, no scratch files. Derive both comma lists from this draft's own candidate tags (the tags step 2's chunks are likely to want); always pass both. Returns candidates classified `duplicate`/`refines`/`related`/`distinct` per page, each carrying `summary`, `tags`, `volatility`, `superseded_by` — plus, in place of the full tag-vocabulary dump, the plain-text matches for `--tags-containing` and per-tag counts for `--tag-count` (0 means safe to mint) for step 4 tag-minting.
 
    Hint is starting point — confirm or override against candidate's own `summary`; record only which **op** each plan entry gets. Step 4 owns every write; nothing here calls `Edit` or `enchiridion page`.
    - **`distinct` (or no candidates).** New subject. Keep as `op: "create"`; consider surfaced pages as typed-edge targets in step 4.
@@ -33,7 +37,7 @@ Given one document at `<path>`.
      - List-valued keys (`tags`, edge-lists: `refines`/`contradicts`/`example-of`/`source`/`related`/`supersedes`) **unioned** with existing values when `enchiridion ingest` applies plan — never diff, always full intended membership.
    - **Contradiction.** Candidate conflicts with existing page's claim — semantic judgment hint can't make (only measures lexical overlap), check regardless. **Never overwrite existing page.** Keep new page as `op: "create"`, set `contradicts` and `supersedes` on it pointing at superseded `page_ref`. Superseded page content untouched; only new page carries these edges.
    - Candidate touching multiple existing pages: judge each pairing independently — document can update one while contradicting another.
-4. **Finish the plan.** Fill `edges` and any frontmatter step 3 left open on `<plan.json>` — placement, frontmatter, body, commit one downstream call: `"<plugin-root>/bin/enchiridion" ingest --plan <plan.json>` (step 5). Full shape:
+4. **Finish the plan.** Fill `edges` and any frontmatter step 3 left open on `<plan.json>` — placement, frontmatter, body, commit one downstream call: `"$ENCHIRIDION" ingest --plan <plan.json>` (step 5). Full shape:
 
    ```jsonc
    {
@@ -92,5 +96,5 @@ Given one document at `<path>`.
      - Non-judgment edge: **every page except stub carries `source` edge to stub** — each chunk of multi-chunk split, `op: "update"` same as `create`. Edges merge on update so restating safe; omit only if page already carries it from earlier pass.
    - **Body** for `update` page: write *complete* new body (not diff) when material changes; omit `body` key entirely to leave existing body untouched. For `create`, `body` always required.
    - **`raw_source: true`** derives link from plan's `raw` field. **Ingestion never renames raw file** — file from outside plugin keeps name verbatim; don't add `YYYY-MM-DD-hhmm-` prefix (bound at creation, plugin-created files only). `enchiridion ingest` mechanics: literal `#` separates anchor from path, so `#` in *filename* must be `%23`; unbalanced `)` in filename must be encoded (destination ends at first unbalanced `)`).
-5. **Run it.** `"<plugin-root>/bin/enchiridion" ingest --plan <plan.json>` validates whole plan up front (required fields, `update` `page_ref` exists, `create` target doesn't yet, every edge/`raw_source` resolves — including siblings this plan creates — and when `raw` set, chain of evidence: stub exists and every page links back) before writing, then executes place → frontmatter → body → commit in one pass (index not touched — next search's staleness scan picks the pages up) and prints commit SHA. On error: nothing committed, written pages left on disk uncommitted (writes idempotent — fix plan and rerun, don't hand-repair).
+5. **Run it.** `"$ENCHIRIDION" ingest --plan <plan.json>` validates whole plan up front (required fields, `update` `page_ref` exists, `create` target doesn't yet, every edge/`raw_source` resolves — including siblings this plan creates — and when `raw` set, chain of evidence: stub exists and every page links back) before writing, then executes place → frontmatter → body → commit in one pass (index not touched — next search's staleness scan picks the pages up) and prints commit SHA. On error: nothing committed, written pages left on disk uncommitted (writes idempotent — fix plan and rerun, don't hand-repair).
 6. **Report.** Short manifest only — pages created vs. updated, edges added, `supersedes` pairs recorded. No page-content dumps.

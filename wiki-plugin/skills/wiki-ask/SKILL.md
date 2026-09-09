@@ -8,6 +8,12 @@ Reads `wiki-conventions` for anything this procedure doesn't cover — folder st
 
 Retrieval **never modifies an existing page** — no edit, no move, no delete, ever. One write: new `synthesis/` page, only on explicit user confirmation ([saving-synthesis.md](saving-synthesis.md)).
 
+**On Claude Code**, resolve the binary once before any step that calls it:
+```bash
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+```
+Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<subcommand>", ...])` instead — see `## Scripts` in `wiki-conventions`.
+
 ## Invocation
 
 - **If not already running as `wiki-researcher` agent** (system prompt doesn't identify you as it — e.g. invoked directly via `/wiki-ask <question>`): only action is delegate. Call `Task` with `subagent_type: "wiki-researcher"` and prompt containing the question, then relay the answer. Keeps reading and link-following inside subagent's context — on its Haiku model — regardless of invoking session's model.
@@ -25,10 +31,10 @@ Given a question:
 
 1. **Expand the query.** Before searching, write **5–8 alternative phrasings** of key terms: synonyms, jargon form, plain-English form, singular/plural, acronym and expansion, verb and noun forms. Single word choice must not decide whether a page is found — vault tags are emergent, so target page may name the thing differently. Expansions become the term list passed to `enchiridion search` below.
 
-2. **Single search call.** One call to `bin/enchiridion search` does the work — composes BM25 text matching with metadata filters, ranks results, defaults to excluding superseded pages. Pass **only term list** from step 1 as single space-separated string (it tokenizes and phrase-quotes each term). Use `--json` and read the records:
+2. **Single search call.** One call to `enchiridion search` does the work — composes BM25 text matching with metadata filters, ranks results, defaults to excluding superseded pages. Pass **only term list** from step 1 as single space-separated string (it tokenizes and phrase-quotes each term). Use `--json` and read the records:
 
    ```bash
-   "<plugin-root>/bin/enchiridion" search \
+   "$ENCHIRIDION" search \
        "<term1> <term2> <term3>" \
        --kind concept \
        --since 2026-07-01 --date-field source_date \
@@ -50,10 +56,10 @@ Given a question:
 
    `source` excluded from fallback — belongs to provenance path, not general expansion. Only follow it when question matches provenance row below.
 
-4. **Filter frontier for currency.** Superseded page is never an answer — `supersedes` is a *recorded fact* (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)), and recorded fact beats any recency guess. Run `"<plugin-root>/bin/enchiridion" superseded-by` with every candidate's `page_ref` as positional arg (`--json` for machine-readable line per candidate); walks each one's `supersedes` inversions in-process and returns each candidate's *active* page:
+4. **Filter frontier for currency.** Superseded page is never an answer — `supersedes` is a *recorded fact* (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)), and recorded fact beats any recency guess. Run `"$ENCHIRIDION" superseded-by` with every candidate's `page_ref` as positional arg (`--json` for machine-readable line per candidate); walks each one's `supersedes` inversions in-process and returns each candidate's *active* page:
 
    ```
-   "<plugin-root>/bin/enchiridion" superseded-by wiki/concepts/a.md wiki/concepts/x.md --json
+   "$ENCHIRIDION" superseded-by wiki/concepts/a.md wiki/concepts/x.md --json
    ```
 
    Each result: `{"seed": ..., "active": ..., "chain": [...]}`. Apply directly — **no need to re-derive by hand:**
