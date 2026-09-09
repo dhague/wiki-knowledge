@@ -763,6 +763,36 @@ test("ingest: --ignore appends to the folder's .ingestignore", () => {
   assert.equal(ignoreFile, "foo.eml  # done\n");
 });
 
+test("ingest: multiple --ignore flags in one call all get written", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  fs.mkdirSync(path.join(root, "raw", "emails"), { recursive: true });
+  fs.writeFileSync(path.join(root, "raw", "emails", "a.eml"), "x");
+  fs.writeFileSync(path.join(root, "raw", "emails", "b.eml"), "x");
+
+  const { status, stderr } = runEnv(
+    [
+      "ingest",
+      "--ignore",
+      "raw/emails/a.eml",
+      "--ignore",
+      "raw/emails/b.eml",
+      "--ignore-comment",
+      "bulk",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const ignoreFile = fs.readFileSync(
+    path.join(root, "raw", "emails", ".ingestignore"),
+    "utf8",
+  );
+  assert.ok(ignoreFile.includes("a.eml  # bulk\n"), ignoreFile);
+  assert.ok(ignoreFile.includes("b.eml  # bulk\n"), ignoreFile);
+});
+
 test("ingest: --ignore rejects a path outside raw/", () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
