@@ -26363,6 +26363,36 @@ function fallbackHost() {
 function messageOf(err) {
   return err instanceof Error ? err.message : String(err);
 }
+async function withCommitLock(lockPath, fn) {
+  const LOCK_TIMEOUT_MS = 3e4;
+  const RETRY_MS = 5;
+  import_node_fs8.default.mkdirSync(import_node_path9.default.dirname(lockPath), { recursive: true });
+  const start = Date.now();
+  let fd;
+  for (; ; ) {
+    try {
+      fd = import_node_fs8.default.openSync(lockPath, "wx");
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+      if (Date.now() - start > LOCK_TIMEOUT_MS) {
+        throw new VaultGitError(
+          `git stageAndCommit: lock timeout after ${LOCK_TIMEOUT_MS} ms (${lockPath}) \u2014 a previous ingest may have crashed`
+        );
+      }
+      await new Promise((r) => setTimeout(r, RETRY_MS));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    if (fd !== void 0) import_node_fs8.default.closeSync(fd);
+    try {
+      import_node_fs8.default.unlinkSync(lockPath);
+    } catch {
+    }
+  }
+}
 async function readBlobAsString(root, oid) {
   const { blob } = await git.readBlob({ fs: import_node_fs8.default, dir: root, oid });
   return Buffer.from(blob).toString("utf8");
@@ -26441,6 +26471,24 @@ var init_vaultgit = __esm({
             await git.remove({ fs: import_node_fs8.default, dir: this.root, filepath: file });
           }
         }
+      }
+      /**
+       * Stage `paths` and commit with `message`, holding a file lock for the
+       * entire add+commit sequence so concurrent ingests can't cross-contaminate
+       * each other's commits (#405). Returns the new commit SHA.
+       *
+       * The lock lives at `.wiki-knowledge/ingest.lock` under the vault root.
+       * It times out after 30 s — long enough for any realistic commit, short
+       * enough to surface a stuck process rather than block forever.
+       */
+      async stageAndCommit(paths, message) {
+        const lockPath = import_node_path9.default.join(this.root, ".wiki-knowledge", "ingest.lock");
+        return withCommitLock(lockPath, async () => {
+          if (paths.length > 0) {
+            await this.add(paths);
+          }
+          return this.commit(message);
+        });
       }
       /** Write one commit with `message` and return its SHA. Strict: throws. */
       async commit(message) {
@@ -38245,10 +38293,7 @@ async function commit2(root, m, git2) {
   }
   await checkChainOfEvidence(root, m);
   const paths = stagedPaths(m);
-  if (paths.length > 0) {
-    await git2.add(paths);
-  }
-  return git2.commit(buildMessage(m));
+  return git2.stageAndCommit(paths, buildMessage(m));
 }
 
 // src/initwiki.ts
@@ -38491,7 +38536,7 @@ var Resolved = class {
         );
         continue;
       }
-      if (page.title === "") {
+      if (page.op === OpCreate && page.title === "") {
         problems.push(`${prefix}.title is required`);
       }
       if (page.op === OpCreate) {
@@ -38736,7 +38781,9 @@ function resolveTitle(targetRef, titles, v) {
   return import_node_path16.default.posix.basename(targetRef);
 }
 function applyFrontmatter(page, planPage, pageDir, plan, titles, v) {
-  page = page.set("title", planPage.title);
+  if (planPage.op === OpCreate || planPage.title !== "") {
+    page = page.set("title", planPage.title);
+  }
   const merging = planPage.op === OpUpdate;
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
