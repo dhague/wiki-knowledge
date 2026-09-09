@@ -648,7 +648,7 @@ async function withCommitLock<T>(
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
 
   const start = Date.now();
-  let fd = -1;
+  let fd: number | undefined;
   for (;;) {
     try {
       fd = fs.openSync(lockPath, "wx");
@@ -666,11 +666,11 @@ async function withCommitLock<T>(
   try {
     return await fn();
   } finally {
-    if (fd !== -1) fs.closeSync(fd);
+    if (fd !== undefined) fs.closeSync(fd);
     try {
       fs.unlinkSync(lockPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    } catch {
+      // best-effort: ENOENT means another process already cleaned up
     }
   }
 }
