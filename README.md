@@ -112,6 +112,8 @@ python -m pytest
 
 ## Architecture
 
+![wiki-knowledge Plugin — Runtime Architecture](docs/architecture-share-card.png)
+
 Key decisions are documented in [docs/adr/](docs/adr/):
 - No MCP server — everything runs as skills + agents + Bash-invoked scripts
 - No embeddings — lexical FTS5 search + agent comprehension
