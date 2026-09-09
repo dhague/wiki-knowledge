@@ -296,16 +296,6 @@ export class VaultGit implements Git {
    */
   async porcelainMentions(rel: string): Promise<boolean> {
     try {
-      const diskPath = path.join(this.root, rel);
-
-      let work: Buffer | null = null;
-      try {
-        work = await fs.promises.readFile(diskPath);
-      } catch {
-        work = null; // not on disk
-      }
-      const onDisk = work !== null;
-
       let headBlob: Buffer | null = null;
       try {
         const headOid = await git.resolveRef({
@@ -319,29 +309,55 @@ export class VaultGit implements Git {
       } catch {
         headBlob = null; // no HEAD, or not in HEAD
       }
-      const inHead = headBlob !== null;
-
-      if (!inHead && !onDisk) return false; // absent everywhere
-      if (!inHead && onDisk) return true; // untracked (a brand-new file)
-      if (inHead && !onDisk) return true; // deleted from the working tree
-
-      // Tracked and on disk. Byte-identical is clean. Otherwise a CRLF/LF-only
-      // difference is autocrlf's doing, not a real change — but only for text
-      // (no NUL byte): binary files aren't subject to autocrlf conversion, so
-      // a differing binary file is genuinely modified.
-      if (headBlob!.equals(work!)) return false;
-      if (!headBlob!.includes(0) && !work!.includes(0)) {
-        if (
-          normalizeEol(headBlob!.toString("utf8")) ===
-          normalizeEol(work!.toString("utf8"))
-        ) {
-          return false;
-        }
-      }
-      return true;
+      return await porcelainDiff(path.join(this.root, rel), headBlob);
     } catch {
       return false;
     }
+  }
+
+  /**
+   * A batched read of the two lenient facts the ingest sweep needs
+   * ([ScanFacts.lastCommitDate] and [ScanFacts.porcelainMentions]), computed in
+   * a single HEAD tree walk plus a single history walk rather than one walk per
+   * file (#415). The returned object answers per-file queries from in-memory
+   * maps, so a folder sweep over N files costs O(tree + history) instead of
+   * O(N × (tree + history)) — the difference between "returns" and "hangs" on a
+   * vault of thousands of raw files.
+   *
+   * Lenient like the per-file surface: a missing or unreadable repository yields
+   * empty maps, so `lastCommitDate` returns "" and `porcelainMentions` reads a
+   * file as untracked — the same fail-toward-offering defaults the sweep relies
+   * on.
+   */
+  async scanFacts(): Promise<ScanFacts> {
+    let headOid: string;
+    try {
+      headOid = await git.resolveRef({ fs, dir: this.root, ref: "HEAD" });
+    } catch {
+      return new ScanFacts(this.root, new Map(), new Map());
+    }
+    const treeOids = await this.headBlobOids(headOid);
+    const dates = await this.allCommitDates(headOid);
+    return new ScanFacts(this.root, treeOids, dates);
+  }
+
+  /** `{path: blob oid}` for every blob in head's tree — one tree walk. */
+  private async headBlobOids(headOid: string): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    await this.walkTree(headOid, async (filepath, entry) => {
+      out.set(filepath, await entry.oid());
+    });
+    return out;
+  }
+
+  /**
+   * `{path: YYYY-MM-DD}` — the latest non-merge commit date per path over every
+   * commit reachable from head, for *all* paths (not just `wiki/**.md`). One
+   * history walk feeds the sweep's date comparison for every raw file and every
+   * back-pointer page at once.
+   */
+  private async allCommitDates(headOid: string): Promise<Map<string, string>> {
+    return this.latestCommitDates(headOid, changedPaths);
   }
 
   // -------------------------------------------------------------------------
@@ -481,6 +497,22 @@ export class VaultGit implements Git {
    * read; the range-walk counterpart is inlined in `rangeSnapshot`.
    */
   private async commitDates(headOid: string): Promise<Map<string, string>> {
+    return this.latestCommitDates(headOid, changedWikiPaths);
+  }
+
+  /**
+   * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
+   * `select`ed from each commit, over every commit reachable from head. The
+   * shared spine of [commitDates] (wiki pages only) and [allCommitDates] (all
+   * paths): merge commits are skipped so date attribution stays stable
+   * (ADR-0015), and the newest timestamp wins, not log order.
+   *
+   * Lenient: empty dates when the history can't be walked.
+   */
+  private async latestCommitDates(
+    headOid: string,
+    select: (commit: git.ReadCommitResult) => string[],
+  ): Promise<Map<string, string>> {
     const latest = new Map<string, number>();
     try {
       const commits = await git.log({
@@ -491,7 +523,7 @@ export class VaultGit implements Git {
       });
       for (const commit of commits) {
         if (commit.commit.parent.length > 1) continue;
-        const paths = changedWikiPaths(commit);
+        const paths = select(commit);
         if (paths.length === 0) continue;
         const when = commit.commit.author.timestamp * 1000;
         for (const p of paths) {
@@ -568,8 +600,90 @@ export class VaultGit implements Git {
 }
 
 // ---------------------------------------------------------------------------
+// ScanFacts
+// ---------------------------------------------------------------------------
+
+/**
+ * The batched result of [VaultGit.scanFacts] — answers the ingest sweep's two
+ * lenient per-file questions from in-memory maps built in one tree walk + one
+ * history walk (#415). Structurally satisfies the sweep's `Git` interface in
+ * `ingestscan.ts`, so it drops straight into `scan()`.
+ */
+export class ScanFacts {
+  constructor(
+    private readonly root: string,
+    /** Vault-relative path → blob oid in HEAD's tree. */
+    private readonly treeOids: Map<string, string>,
+    /** Vault-relative path → latest non-merge commit date (YYYY-MM-DD). */
+    private readonly dates: Map<string, string>,
+  ) {}
+
+  /** The last commit date of rel, or "" when absent from the date map. */
+  async lastCommitDate(rel: string): Promise<string> {
+    return this.dates.get(rel) ?? "";
+  }
+
+  /** Whether rel is modified or untracked, using the precomputed HEAD tree. */
+  async porcelainMentions(rel: string): Promise<boolean> {
+    let headBlob: Buffer | null = null;
+    const oid = this.treeOids.get(rel);
+    if (oid !== undefined) {
+      try {
+        const { blob } = await git.readBlob({ fs, dir: this.root, oid });
+        headBlob = Buffer.from(blob);
+      } catch {
+        headBlob = null;
+      }
+    }
+    return porcelainDiff(path.join(this.root, rel), headBlob);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * The working-tree-vs-HEAD-blob comparison behind `porcelainMentions`, shared
+ * by the per-file [VaultGit.porcelainMentions] and the batched [ScanFacts].
+ * `headBlob` is the file's bytes at HEAD, or null when it isn't in HEAD.
+ *
+ * The CRLF/LF-insensitive text comparison is deliberate: isomorphic-git's own
+ * `status` doesn't apply `core.autocrlf` reliably, so a clean CRLF checkout of
+ * an LF blob (the norm under `core.autocrlf=true` on Windows) would report
+ * `*modified`. We read the blob and working-tree file ourselves and compare
+ * them line-ending-insensitively — but only for text (no NUL byte); binary
+ * files aren't subject to autocrlf, so a differing binary file is genuinely
+ * modified.
+ */
+async function porcelainDiff(
+  diskPath: string,
+  headBlob: Buffer | null,
+): Promise<boolean> {
+  let work: Buffer | null;
+  try {
+    work = await fs.promises.readFile(diskPath);
+  } catch {
+    work = null; // not on disk
+  }
+  const onDisk = work !== null;
+  const inHead = headBlob !== null;
+
+  if (!inHead && !onDisk) return false; // absent everywhere
+  if (!inHead && onDisk) return true; // untracked (a brand-new file)
+  if (inHead && !onDisk) return true; // deleted from the working tree
+
+  if (headBlob!.equals(work!)) return false;
+  if (!headBlob!.includes(0) && !work!.includes(0)) {
+    if (
+      normalizeEol(headBlob!.toString("utf8")) ===
+      normalizeEol(work!.toString("utf8"))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /** The `wiki/**.md` paths a logged commit (with includeChanges) touched. */
 function changedWikiPaths(commit: git.ReadCommitResult): string[] {
@@ -579,6 +693,18 @@ function changedWikiPaths(commit: git.ReadCommitResult): string[] {
   for (const change of changes) {
     const filepath = change[2];
     if (filepath && isPageRef(filepath)) out.push(filepath);
+  }
+  return out;
+}
+
+/** Every path a logged commit (with includeChanges) touched, unfiltered. */
+function changedPaths(commit: git.ReadCommitResult): string[] {
+  const changes = commit.commit.changes;
+  if (!changes) return [];
+  const out: string[] = [];
+  for (const change of changes) {
+    const filepath = change[2];
+    if (filepath) out.push(filepath);
   }
   return out;
 }

@@ -269,6 +269,44 @@ test("scan: same commit means not offered", async () => {
   assert.equal(result.ignored.length, 0);
 });
 
+test("scan: raw file recommitted after its page is offered (batched dates, #415)", async () => {
+  // Exercises the batched real-git path: the page is committed first, the raw
+  // file re-committed on a later date. The sweep must offer it via the
+  // one-pass commit-date map, not a per-file git log.
+  const root = tmpRoot();
+  const repo = new VaultGit(root);
+  await repo.init();
+  write(root, "raw/notes.md", "raw notes");
+  write(
+    root,
+    "wiki/sources/notes.md",
+    '---\ntitle: Notes\nraw_source: "[notes.md](../../raw/notes.md)"\n---\n# Notes\n',
+  );
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "ingest notes",
+    author: deterministicSignature(0), // 2026-01-01
+    committer: deterministicSignature(0),
+  });
+  // Re-commit only the raw file on a later date.
+  write(root, "raw/notes.md", "raw notes revised");
+  await git.add({ fs, dir: root, filepath: "raw/notes.md" });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "revise raw",
+    author: deterministicSignature(48), // 2026-01-03
+    committer: deterministicSignature(48),
+  });
+
+  const result = await scan(root, "", null);
+  assert.equal(result.eligible.length, 1);
+  assert.equal(result.eligible[0].rawRel, "raw/notes.md");
+  assert.equal(result.eligible[0].reason, ReasonChangedSinceIngestion);
+});
+
 test("scan: dirty working tree overrides date equality", async () => {
   const root = tmpRoot();
   const repo = new VaultGit(root);

@@ -766,7 +766,9 @@ export function buildProgram(): Command {
       const { root } = resolveRoot();
       const folder =
         folderArg === undefined ? "" : normalizeFolderArg(folderArg);
-      const result = await scanIngest(root, folder, new VaultGit(root));
+      // null → scan builds the batched git facts (one tree walk + one history
+      // walk) rather than the per-file VaultGit surface (#415).
+      const result = await scanIngest(root, folder, null);
       if (opts.json) {
         for (const c of result.eligible) {
           console.log(

@@ -195,7 +195,11 @@ export async function scan(
   const vault = new Vault(root);
   const pages = vault.pagesWithText();
   const backPointers = backPointersByRaw(pages);
-  if (git === null) git = new VaultGit(root);
+  // A null git means "the real repository at root". Build the batched facts
+  // (one tree walk + one history walk) rather than the per-file VaultGit
+  // surface, so a folder sweep over thousands of files stays O(tree + history)
+  // instead of O(files × walks) (#415).
+  if (git === null) git = await new VaultGit(root).scanFacts();
 
   const rels = walkRaw(root, folder);
 
