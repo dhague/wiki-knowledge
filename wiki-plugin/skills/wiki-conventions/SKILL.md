@@ -153,7 +153,11 @@ Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else n
 
 **Invocation differs by host:**
 
-- **Claude Code:** `${CLAUDE_PLUGIN_ROOT}` is substituted before you read this. Call via `Bash`: `"${CLAUDE_PLUGIN_ROOT}/bin/enchiridion" <subcommand> <args...>`.
+- **Claude Code:** Resolve the binary once per Bash session, then reuse `$ENCHIRIDION` for every subsequent call:
+  ```bash
+  ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+  "$ENCHIRIDION" <subcommand> <args...>
+  ```
 - **OpenCode:** skip `bin/enchiridion` and path resolution entirely — use the `wiki` tool directly: `wiki(args=["<subcommand>", "<arg1>", ...])` with the same subcommand and flags listed below. The tool runs the bundle in-process; no `node` on PATH required, no config.json lookup needed.
 
 `node` is the one already-installed runtime the shim depends on (Claude Code path only) — there is no binary to download and no lazy fetch. Works identically in dedicated mode or query-from-anywhere mode.
@@ -161,8 +165,9 @@ Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else n
 **Batch independent invocations.** When a step needs more than one independent `enchiridion` call — e.g. several `search` queries for different terms or candidates — batch them into a single tool call rather than issuing each separately; each extra tool call costs a full turn. On Claude Code, chain with `;` in one `Bash` call; on OpenCode, the `wiki` tool handles one subcommand per call so issue them in parallel in one message. Examples:
 
 ```bash
-# Claude Code (Bash, chained)
-"${CLAUDE_PLUGIN_ROOT}/bin/enchiridion" search "prepared statements" --json; "${CLAUDE_PLUGIN_ROOT}/bin/enchiridion" search "connection pooling" --json
+# Claude Code (Bash, chained) — resolve binary once, then chain calls
+ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+"$ENCHIRIDION" search "prepared statements" --json; "$ENCHIRIDION" search "connection pooling" --json
 ```
 
 ```

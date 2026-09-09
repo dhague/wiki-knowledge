@@ -47,7 +47,7 @@ For **session holding the conversation** — invoked `wiki-researcher` and got `
 4. **Run it and report.**
 
    ```bash
-   "<plugin-root>/bin/enchiridion" ingest --plan <plan.json>
+   "$ENCHIRIDION" ingest --plan <plan.json>
    ```
 
    Validates whole plan before touching disk, then writes page and makes one structured commit — printing SHA. Report path and SHA in one line. If it raises, nothing was committed; fix plan and rerun (writes are idempotent).
