@@ -954,7 +954,7 @@ export function buildProgram(): Command {
     )
     .option(
       "--limit <n>",
-      `max candidates per page (default ${DiscoverDefaultLimit})`,
+      `max hits scanned per page; 0 = unbounded (score is the real filter) (default ${DiscoverDefaultLimit})`,
       (v: string) => Number(v),
       DiscoverDefaultLimit,
     )

@@ -24,6 +24,7 @@ import {
   HintRefines,
   HintRelated,
   HintDistinct,
+  UnboundedSearchLimit,
   type Searcher,
   type Candidate,
 } from "./discover.js";
@@ -180,7 +181,7 @@ test("check sends an OR query with raw:true and a limit", async () => {
   });
   assert.ok(fake.lastQuery);
   assert.equal(fake.lastQuery!.raw, true);
-  assert.equal(fake.lastQuery!.limit, 200); // DefaultLimit
+  assert.equal(fake.lastQuery!.limit, UnboundedSearchLimit);
   assert.equal(
     fake.lastQuery!.text,
     `"connection" OR "pooling" OR "reuse" OR "connections"`,
@@ -238,8 +239,29 @@ test("check honours custom thresholds", async () => {
     duplicateThreshold: 0,
     relatedThreshold: 0,
   });
+  // score 10 → related (above default relatedThreshold 5.0); score 3 → distinct
+  // (below 5.0) and therefore filtered out
+  assert.equal(candidates.length, 1);
   assert.equal(candidates[0].hint, HintRelated);
-  assert.equal(candidates[1].hint, HintDistinct);
+});
+
+test("check does not emit distinct candidates", async () => {
+  const fake = new FakeSearcher();
+  fake.hits = [
+    hit("low.md", "Unrelated Topic", 1.0),
+    hit("high.md", "Connection Pooling Patterns", 10.0),
+  ];
+  const candidates = await check(fake, "Connection Pooling", "", "", {
+    limit: 0,
+    duplicateThreshold: 0,
+    relatedThreshold: 0,
+  });
+  assert.ok(
+    candidates.every((c) => c.hint !== HintDistinct),
+    "no distinct candidate emitted",
+  );
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].page_ref, "high.md");
 });
 
 // ---------------------------------------------------------------------------
@@ -254,7 +276,7 @@ test("check finds its own title in a real vault", async () => {
       "Connection Pooling in Postgres",
       "",
       "",
-      { limit: 0, duplicateThreshold: 0, relatedThreshold: 0 },
+      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
     );
     assert.ok(refOf(candidates, "wiki/concepts/connection-pooling.md"));
   } finally {
@@ -272,7 +294,7 @@ test("check survives noisy new text that an AND query would zero out", async () 
       "Connection Pooling in Postgres",
       "A totally unrelated sentence about zebras and volcanoes.",
       "",
-      { limit: 0, duplicateThreshold: 0, relatedThreshold: 0 },
+      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
     );
     assert.ok(refOf(candidates, "wiki/concepts/connection-pooling.md"));
   } finally {
@@ -289,7 +311,7 @@ test("check with a verbatim body ranks that page highest", async () => {
       "",
       "Connection pooling reduces per-request handshake overhead by " +
         "reusing a fixed set of open connections across callers.",
-      { limit: 0, duplicateThreshold: 0, relatedThreshold: 0 },
+      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
     );
     assert.ok(candidates.length > 0);
     assert.equal(candidates[0].page_ref, "wiki/concepts/connection-pooling.md");
@@ -338,7 +360,7 @@ test("check returns the full payload from a real vault", async () => {
       "Connection Pooling in Postgres",
       "",
       "",
-      { limit: 0, duplicateThreshold: 0, relatedThreshold: 0 },
+      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
     );
     const top = refOf(candidates, "wiki/concepts/connection-pooling.md");
     assert.ok(top);
@@ -376,8 +398,8 @@ test("discover runs check for every plan page", async () => {
     ];
     const results = await discover(idx, pages, {
       limit: 0,
-      duplicateThreshold: 0,
-      relatedThreshold: 0,
+      duplicateThreshold: 1e-6,
+      relatedThreshold: 1e-8,
     });
     assert.deepEqual(
       results.map((r) => r.title),

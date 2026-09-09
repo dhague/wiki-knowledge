@@ -38,9 +38,14 @@ export const HintDistinct: Hint = "distinct";
 export const DuplicateThreshold = 15.0;
 /** The score at or above which a hit is related. */
 export const RelatedThreshold = 5.0;
-/** Deliberately generous: a narrow cap hides exactly the near-duplicates this
- * call exists to surface. */
-export const DefaultLimit = 200;
+/** Default limit: 0 = unbounded (score is the real filter; distinct hits are
+ * never emitted). Pass a positive value as a hard safety cap on hits scanned. */
+export const DefaultLimit = 0;
+
+/** Sentinel passed to the searcher when limit is 0 (unbounded). SQLite FTS5
+ * has no native score-gate, so we materialise the full result set here and
+ * filter in the loop. */
+export const UnboundedSearchLimit = 10_000_000;
 
 /** Matches the tokens that build a query and are compared for shared title
  * tokens — `[a-z0-9]+` over lowercased text, exactly as discover.py. */
@@ -73,7 +78,7 @@ export interface Options {
 /** Fill the calibrated defaults for zero-valued options. */
 function withDefaults(o: Options): Required<Options> {
   return {
-    limit: o.limit > 0 ? o.limit : DefaultLimit,
+    limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
     duplicateThreshold:
       o.duplicateThreshold === 0 ? DuplicateThreshold : o.duplicateThreshold,
     relatedThreshold:
@@ -160,16 +165,22 @@ export async function check(
         break;
       }
     }
+    const hint = classify(
+      hit.score,
+      shares,
+      o.duplicateThreshold,
+      o.relatedThreshold,
+    );
+    // distinct carries no action (no cite, no edge, no dedup decision). The
+    // absence of duplicate/refines/related already signals "safe to mint".
+    // Risk: a page scoring just under relatedThreshold is silently dropped
+    // here. Threshold calibration is a dependency on #47 (eval fixture).
+    if (hint === HintDistinct) continue;
     candidates.push({
       page_ref: hit.pageRef,
       title: hit.title,
       score: hit.score,
-      hint: classify(
-        hit.score,
-        shares,
-        o.duplicateThreshold,
-        o.relatedThreshold,
-      ),
+      hint,
       summary: hit.summary,
       tags: hit.tags,
       volatility: hit.volatility,
