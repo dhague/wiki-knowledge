@@ -544,6 +544,51 @@ test("lastCommitDate is lenient on a non-repo", async () => {
   );
 });
 
+test("lastCommitDate does not attribute a merge commit (pruning rewrite, #419)", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await repo.init();
+  writeFile(root, "wiki/concepts/base.md", "base\n");
+  await commitAll(root, "base", deterministicSignature(1));
+
+  // Feature branch adds merge-only.md
+  const featureHead = await mergeBranch(
+    root,
+    "feature-419",
+    "wiki/concepts/merge-only.md",
+    "merge-only\n",
+    "feature add merge-only",
+    deterministicSignature(2),
+  );
+  const mainHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
+
+  // Merge: write merge-only.md back (checkout to master removed it), commit
+  // with both branch tips as parents.
+  writeFile(root, "wiki/concepts/merge-only.md", "merge-only\n");
+  await git.add({ fs, dir: root, filepath: "." });
+  const mergeHash = await git.commit({
+    fs,
+    dir: root,
+    message: "merge feature-419",
+    parent: [mainHead, featureHead],
+    author: deterministicSignature(3),
+    committer: deterministicSignature(3),
+  });
+  await git.writeRef({
+    fs,
+    dir: root,
+    ref: "refs/heads/master",
+    value: mergeHash,
+    force: true,
+  });
+
+  // merge-only.md first appeared on the feature branch (non-merge commit at
+  // hour 2), but HEAD points to the merge commit. The merge commit must not
+  // attribute the date; the feature-branch non-merge commit must.
+  const date = await repo.lastCommitDate("wiki/concepts/merge-only.md");
+  assert.equal(date, "2026-01-01", "date from non-merge feature commit");
+});
+
 // ---------------------------------------------------------------------------
 // PorcelainMentions
 // ---------------------------------------------------------------------------
