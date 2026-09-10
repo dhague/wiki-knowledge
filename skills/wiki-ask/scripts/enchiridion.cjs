@@ -38160,6 +38160,28 @@ function parse(text2) {
   }
   return patterns;
 }
+function compile(patterns) {
+  const literals = /* @__PURE__ */ new Set();
+  const globs = [];
+  for (const pattern of patterns) {
+    if (!/[*?]/.test(pattern)) {
+      literals.add(pattern);
+    } else {
+      let re = "";
+      for (const ch of pattern) {
+        if (ch === "*") re += "[^/]*";
+        else if (ch === "?") re += "[^/]";
+        else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      globs.push(new RegExp(`^${re}$`));
+    }
+  }
+  return {
+    matches(name) {
+      return literals.has(name) || globs.some((re) => re.test(name));
+    }
+  };
+}
 function append(folder, pattern, comment) {
   const filePath = import_node_path10.default.join(folder, Filename);
   let existing = null;
@@ -38226,21 +38248,6 @@ function loadIngestignore(folder) {
   }
   return parse(text2);
 }
-function matchesIngestignore(filename, patterns) {
-  for (const pattern of patterns) {
-    if (globMatch(pattern, filename)) return true;
-  }
-  return false;
-}
-function globMatch(pattern, name) {
-  let re = "";
-  for (const ch of pattern) {
-    if (ch === "*") re += "[^/]*";
-    else if (ch === "?") re += "[^/]";
-    else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${re}$`).test(name);
-}
 function backPointersByRaw(pages) {
   const out = {};
   for (const [pageRef2, page] of Object.entries(pages)) {
@@ -38265,15 +38272,21 @@ async function scan(root, folder, git2) {
   if (git2 === null) git2 = await new VaultGit(root).scanFacts();
   const rels = walkRaw(root, folder);
   const result = { eligible: [], ignored: [] };
+  const matcherCache = /* @__PURE__ */ new Map();
   for (const rel of rels) {
     const dir = import_node_path11.default.dirname(import_node_path11.default.join(root, ...rel.split("/")));
-    let patterns;
-    try {
-      patterns = loadIngestignore(dir);
-    } catch (err) {
-      throw new Error(`${rel}: ${err.message}`, { cause: err });
+    let matcher = matcherCache.get(dir);
+    if (matcher === void 0) {
+      let patterns;
+      try {
+        patterns = loadIngestignore(dir);
+      } catch (err) {
+        throw new Error(`${rel}: ${err.message}`, { cause: err });
+      }
+      matcher = compile(patterns);
+      matcherCache.set(dir, matcher);
     }
-    if (matchesIngestignore(import_node_path11.default.basename(rel), patterns)) {
+    if (matcher.matches(import_node_path11.default.basename(rel))) {
       result.ignored.push(rel);
       continue;
     }
