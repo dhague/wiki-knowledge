@@ -37,6 +37,36 @@ export function parse(text: string): string[] {
   return patterns;
 }
 
+/** A precompiled matcher built from a set of `.ingestignore` patterns. */
+export interface Matcher {
+  matches(name: string): boolean;
+}
+
+/** Build a `Matcher` from a parsed pattern list. Literal patterns (no `*`/`?`)
+ * go into a `Set`; globs are compiled to `RegExp` once, not per file. */
+export function compile(patterns: string[]): Matcher {
+  const literals = new Set<string>();
+  const globs: RegExp[] = [];
+  for (const pattern of patterns) {
+    if (!/[*?]/.test(pattern)) {
+      literals.add(pattern);
+    } else {
+      let re = "";
+      for (const ch of pattern) {
+        if (ch === "*") re += "[^/]*";
+        else if (ch === "?") re += "[^/]";
+        else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      globs.push(new RegExp(`^${re}$`));
+    }
+  }
+  return {
+    matches(name: string): boolean {
+      return literals.has(name) || globs.some((re) => re.test(name));
+    },
+  };
+}
+
 /** Add pattern to folder's `.ingestignore`, creating the file if absent.
  *
  * Idempotent — a pattern already present isn't re-added, so a sweep run twice

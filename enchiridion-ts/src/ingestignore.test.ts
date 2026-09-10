@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Filename, append, parse } from "./ingestignore.js";
+import { Filename, append, compile, parse } from "./ingestignore.js";
 
 test("parse strips comments and blanks", () => {
   const patterns = parse(
@@ -57,3 +57,41 @@ test("append refuses a missing folder", () => {
 function readIgnore(folder: string): string {
   return fs.readFileSync(path.join(folder, Filename), "utf8");
 }
+
+test("compile: empty patterns matches nothing", () => {
+  const m = compile([]);
+  assert.equal(m.matches("anything.md"), false);
+});
+
+test("compile: literal pattern matches exactly", () => {
+  const m = compile(["doc.md", "notes.txt"]);
+  assert.equal(m.matches("doc.md"), true);
+  assert.equal(m.matches("notes.txt"), true);
+  assert.equal(m.matches("other.md"), false);
+});
+
+test("compile: glob star matches multiple chars", () => {
+  const m = compile(["*.tmp"]);
+  assert.equal(m.matches("foo.tmp"), true);
+  assert.equal(m.matches(".tmp"), true);
+  assert.equal(m.matches("foo.md"), false);
+});
+
+test("compile: glob question-mark matches single char", () => {
+  const m = compile(["file?.md"]);
+  assert.equal(m.matches("fileA.md"), true);
+  assert.equal(m.matches("file.md"), false);
+  assert.equal(m.matches("fileAB.md"), false);
+});
+
+test("compile: glob does not cross path separators", () => {
+  const m = compile(["*.tmp"]);
+  assert.equal(m.matches("sub/foo.tmp"), false);
+});
+
+test("compile: literal and glob patterns coexist", () => {
+  const m = compile(["exact.md", "*.tmp"]);
+  assert.equal(m.matches("exact.md"), true);
+  assert.equal(m.matches("bar.tmp"), true);
+  assert.equal(m.matches("other.md"), false);
+});

@@ -19,7 +19,12 @@ import path from "node:path";
 import { Vault } from "./vault.js";
 import type { PageWithText } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
-import { Filename, parse as parseIngestignore } from "./ingestignore.js";
+import {
+  Filename,
+  compile,
+  parse as parseIngestignore,
+  type Matcher,
+} from "./ingestignore.js";
 
 /** The slice of [VaultGit] the sweep needs, named as an interface so tests can
  * script the git facts rather than standing up a work tree.
@@ -117,31 +122,6 @@ export function loadIngestignore(folder: string): string[] {
   return parseIngestignore(text);
 }
 
-/** Report whether filename matches any pattern, using filepath.Match-style
- * glob semantics (a bare filename or a simple glob are the only supported
- * shapes, since `/`, `!` and `**` are rejected at parse time). */
-export function matchesIngestignore(
-  filename: string,
-  patterns: string[],
-): boolean {
-  for (const pattern of patterns) {
-    if (globMatch(pattern, filename)) return true;
-  }
-  return false;
-}
-
-/** filepath.Match for the only shapes [ingestignore.parse] allows: a `*`
- * matches any sequence of non-separator characters, a `?` any single one. */
-function globMatch(pattern: string, name: string): boolean {
-  let re = "";
-  for (const ch of pattern) {
-    if (ch === "*") re += "[^/]*";
-    else if (ch === "?") re += "[^/]";
-    else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${re}$`).test(name);
-}
-
 /** Return `{raw_rel_lower: [page_ref, …]}` for every page with a raw_source.
  * Keys are lowercased vault-relative paths; values are page refs.
  *
@@ -204,17 +184,23 @@ export async function scan(
   const rels = walkRaw(root, folder);
 
   const result: Result = { eligible: [], ignored: [] };
+  const matcherCache = new Map<string, Matcher>();
   for (const rel of rels) {
     // Own folder, no ancestor walk: a raw/emails/.ingestignore does not
     // govern raw/emails/sub/ — that folder needs its own.
     const dir = path.dirname(path.join(root, ...rel.split("/")));
-    let patterns: string[];
-    try {
-      patterns = loadIngestignore(dir);
-    } catch (err) {
-      throw new Error(`${rel}: ${(err as Error).message}`, { cause: err });
+    let matcher = matcherCache.get(dir);
+    if (matcher === undefined) {
+      let patterns: string[];
+      try {
+        patterns = loadIngestignore(dir);
+      } catch (err) {
+        throw new Error(`${rel}: ${(err as Error).message}`, { cause: err });
+      }
+      matcher = compile(patterns);
+      matcherCache.set(dir, matcher);
     }
-    if (matchesIngestignore(path.basename(rel), patterns)) {
+    if (matcher.matches(path.basename(rel))) {
       result.ignored.push(rel);
       continue;
     }
