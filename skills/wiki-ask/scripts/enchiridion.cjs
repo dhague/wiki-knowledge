@@ -39460,14 +39460,16 @@ var HintRelated = "related";
 var HintDistinct = "distinct";
 var DuplicateThreshold = 15;
 var RelatedThreshold = 5;
-var DefaultLimit = 0;
+var DefaultLimit = 200;
+var DefaultMaxCandidates = 15;
 var UnboundedSearchLimit = 1e7;
 var wordRE = /[a-z0-9]+/g;
 function withDefaults(o) {
   return {
     limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
     duplicateThreshold: o.duplicateThreshold === 0 ? DuplicateThreshold : o.duplicateThreshold,
-    relatedThreshold: o.relatedThreshold === 0 ? RelatedThreshold : o.relatedThreshold
+    relatedThreshold: o.relatedThreshold === 0 ? RelatedThreshold : o.relatedThreshold,
+    maxCandidates: o.maxCandidates > 0 ? o.maxCandidates : DefaultMaxCandidates
   };
 }
 function titleTokens(title) {
@@ -39535,7 +39537,7 @@ async function check2(searcher, title, summary, body, opts) {
       superseded_by: hit.supersededBy
     });
   }
-  return candidates;
+  return candidates.slice(0, o.maxCandidates);
 }
 function pageSummary(page) {
   const got = page.frontmatter.get("summary");
@@ -41821,10 +41823,12 @@ async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
   }));
   const vocab = await index.tagCounts();
   if (tagsContain === "" && tagCount === "") {
-    printIndentedJSON({ pages, vocabulary: vocab });
+    console.log(
+      JSON.stringify({ pages, vocabulary: vocab })
+    );
     return;
   }
-  printIndentedJSON({ pages });
+  console.log(JSON.stringify({ pages }));
   if (tagsContain !== "") {
     const matches = tagsContaining(vocab, splitCommaList(tagsContain));
     console.log(bracketListRepr(matches));
@@ -42226,6 +42230,11 @@ function buildProgram() {
     (v) => Number(v),
     DefaultLimit
   ).option(
+    "--max-candidates <n>",
+    `max candidates kept per page, highest-scoring first; 0 = use default`,
+    (v) => Number(v),
+    DefaultMaxCandidates
+  ).option(
     "--duplicate-threshold <n>",
     "",
     (v) => Number(v),
@@ -42247,7 +42256,8 @@ function buildProgram() {
       const discoverOpts = {
         limit: opts.limit,
         duplicateThreshold: opts.duplicateThreshold,
-        relatedThreshold: opts.relatedThreshold
+        relatedThreshold: opts.relatedThreshold,
+        maxCandidates: opts.maxCandidates
       };
       const index = await Index.open(root);
       try {
