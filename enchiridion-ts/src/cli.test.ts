@@ -1201,8 +1201,7 @@ test("discover: --plan with --tags-containing emits the bracket list", async () 
   );
   assert.equal(status, 0, stderr);
   const lines = stdout.trim().split("\n");
-  // pages payload is indented JSON spanning several lines; the bracket list is
-  // the final line.
+  // bracket list is always the final line regardless of pages payload length
   const last = lines[lines.length - 1];
   assert.match(last, /^\[.*database.*\]$/);
 });

@@ -25,6 +25,8 @@ import {
   HintRelated,
   HintDistinct,
   UnboundedSearchLimit,
+  DefaultLimit,
+  DefaultMaxCandidates,
   type Searcher,
   type Candidate,
 } from "./discover.js";
@@ -178,6 +180,7 @@ test("check sends an OR query with raw:true and a limit", async () => {
     limit: 0,
     duplicateThreshold: 0,
     relatedThreshold: 0,
+    maxCandidates: 0,
   });
   assert.ok(fake.lastQuery);
   assert.equal(fake.lastQuery!.raw, true);
@@ -194,6 +197,7 @@ test("check returns no candidates for an empty query", async () => {
     limit: 0,
     duplicateThreshold: 0,
     relatedThreshold: 0,
+    maxCandidates: 0,
   });
   assert.deepEqual(candidates, []);
   assert.equal(fake.lastQuery, null);
@@ -217,6 +221,7 @@ test("check classifies each hit and carries the full payload", async () => {
     limit: 0,
     duplicateThreshold: 0,
     relatedThreshold: 0,
+    maxCandidates: 0,
   });
   assert.equal(candidates.length, 1);
   const c = candidates[0];
@@ -238,6 +243,7 @@ test("check honours custom thresholds", async () => {
     limit: 0,
     duplicateThreshold: 0,
     relatedThreshold: 0,
+    maxCandidates: 0,
   });
   // score 10 → related (above default relatedThreshold 5.0); score 3 → distinct
   // (below 5.0) and therefore filtered out
@@ -255,6 +261,7 @@ test("check does not emit distinct candidates", async () => {
     limit: 0,
     duplicateThreshold: 0,
     relatedThreshold: 0,
+    maxCandidates: 0,
   });
   assert.ok(
     candidates.every((c) => c.hint !== HintDistinct),
@@ -276,7 +283,12 @@ test("check finds its own title in a real vault", async () => {
       "Connection Pooling in Postgres",
       "",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     assert.ok(refOf(candidates, "wiki/concepts/connection-pooling.md"));
   } finally {
@@ -294,7 +306,12 @@ test("check survives noisy new text that an AND query would zero out", async () 
       "Connection Pooling in Postgres",
       "A totally unrelated sentence about zebras and volcanoes.",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     assert.ok(refOf(candidates, "wiki/concepts/connection-pooling.md"));
   } finally {
@@ -311,7 +328,12 @@ test("check with a verbatim body ranks that page highest", async () => {
       "",
       "Connection pooling reduces per-request handshake overhead by " +
         "reusing a fixed set of open connections across callers.",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     assert.ok(candidates.length > 0);
     assert.equal(candidates[0].page_ref, "wiki/concepts/connection-pooling.md");
@@ -328,7 +350,12 @@ test("check hints a real hit as duplicate with permissive thresholds", async () 
       "Connection Pooling in Postgres",
       "Reuse connections instead of opening a new one per request.",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     const top = refOf(candidates, "wiki/concepts/connection-pooling.md");
     assert.ok(top);
@@ -345,6 +372,7 @@ test("check respects the limit", async () => {
       limit: 1,
       duplicateThreshold: 0,
       relatedThreshold: 0,
+      maxCandidates: 0,
     });
     assert.ok(candidates.length <= 1);
   } finally {
@@ -360,7 +388,12 @@ test("check returns the full payload from a real vault", async () => {
       "Connection Pooling in Postgres",
       "",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     const top = refOf(candidates, "wiki/concepts/connection-pooling.md");
     assert.ok(top);
@@ -373,6 +406,89 @@ test("check returns the full payload from a real vault", async () => {
   } finally {
     idx.close();
   }
+});
+
+// ---------------------------------------------------------------------------
+// withDefaults: bounded default limit, maxCandidates default
+// ---------------------------------------------------------------------------
+
+test("withDefaults: DefaultLimit (200) is passed through as bounded, not unbounded", async () => {
+  const fake = new FakeSearcher();
+  await check(fake, "Connection Pooling", "", "", {
+    limit: DefaultLimit, // 200 — the CLI default
+    duplicateThreshold: 0,
+    relatedThreshold: 0,
+    maxCandidates: 0,
+  });
+  assert.ok(fake.lastQuery);
+  assert.equal(fake.lastQuery!.limit, DefaultLimit); // stays 200, not UnboundedSearchLimit
+});
+
+test("withDefaults: explicit limit 0 is the escape hatch to unbounded", async () => {
+  const fake = new FakeSearcher();
+  await check(fake, "Connection Pooling", "", "", {
+    limit: 0, // explicit escape hatch via --limit 0
+    duplicateThreshold: 0,
+    relatedThreshold: 0,
+    maxCandidates: 0,
+  });
+  assert.ok(fake.lastQuery);
+  assert.equal(fake.lastQuery!.limit, UnboundedSearchLimit);
+});
+
+// ---------------------------------------------------------------------------
+// check: maxCandidates cap
+// ---------------------------------------------------------------------------
+
+test("check caps results at maxCandidates, keeping highest-scoring hits", async () => {
+  const fake = new FakeSearcher();
+  // 20 hits all above relatedThreshold, score-descending (search order)
+  fake.hits = Array.from({ length: 20 }, (_, i) => {
+    const score = 20 - i; // 20, 19, 18, ... 1
+    return hit(`page-${i}.md`, `Topic ${i}`, score);
+  });
+  const cap = 5;
+  const candidates = await check(fake, "Topic 0", "", "", {
+    limit: 0,
+    duplicateThreshold: 0,
+    relatedThreshold: 5.0,
+    maxCandidates: cap,
+  });
+  // Only hits with score >= 5.0 pass the threshold: scores 20..5 → 16 hits
+  // then sliced to cap
+  assert.equal(candidates.length, cap);
+  // Highest-scoring hit is first
+  assert.ok(candidates[0].score >= candidates[candidates.length - 1].score);
+});
+
+test("check does not slice when fewer candidates than maxCandidates", async () => {
+  const fake = new FakeSearcher();
+  fake.hits = [
+    hit("a.md", "Connection Pooling", 10),
+    hit("b.md", "Reuse Patterns", 8),
+  ];
+  const candidates = await check(fake, "Connection Pooling", "", "", {
+    limit: 0,
+    duplicateThreshold: 0,
+    relatedThreshold: 5.0,
+    maxCandidates: 15,
+  });
+  assert.equal(candidates.length, 2);
+});
+
+test("withDefaults: maxCandidates 0 resolves to DefaultMaxCandidates", async () => {
+  const fake = new FakeSearcher();
+  // 20 hits all above relatedThreshold
+  fake.hits = Array.from({ length: 20 }, (_, i) =>
+    hit(`page-${i}.md`, `Topic ${i}`, 10 - i * 0.1),
+  );
+  const candidates = await check(fake, "Topic", "", "", {
+    limit: 0,
+    duplicateThreshold: 0,
+    relatedThreshold: 5.0,
+    maxCandidates: 0, // → DefaultMaxCandidates (15)
+  });
+  assert.equal(candidates.length, DefaultMaxCandidates);
 });
 
 // ---------------------------------------------------------------------------
@@ -400,6 +516,7 @@ test("discover runs check for every plan page", async () => {
       limit: 0,
       duplicateThreshold: 1e-6,
       relatedThreshold: 1e-8,
+      maxCandidates: 0,
     });
     assert.deepEqual(
       results.map((r) => r.title),
@@ -431,6 +548,7 @@ test("discover survives an update page with no body", async () => {
       limit: 0,
       duplicateThreshold: 0,
       relatedThreshold: 0,
+      maxCandidates: 0,
     });
     assert.equal(results.length, 1);
   } finally {

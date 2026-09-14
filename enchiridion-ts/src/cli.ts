@@ -38,6 +38,7 @@ import {
   tagsContaining,
   tagCounts,
   DefaultLimit as DiscoverDefaultLimit,
+  DefaultMaxCandidates as DiscoverDefaultMaxCandidates,
   DuplicateThreshold as DiscoverDuplicateThreshold,
   RelatedThreshold as DiscoverRelatedThreshold,
 } from "./discover.js";
@@ -324,6 +325,7 @@ async function runDiscoverPlan(
     limit: number;
     duplicateThreshold: number;
     relatedThreshold: number;
+    maxCandidates: number;
   },
   tagsContain: string,
   tagCount: string,
@@ -345,11 +347,13 @@ async function runDiscoverPlan(
   const vocab = await index.tagCounts();
 
   if (tagsContain === "" && tagCount === "") {
-    printIndentedJSON({ pages, vocabulary: vocab } satisfies PlanPayload);
+    console.log(
+      JSON.stringify({ pages, vocabulary: vocab } satisfies PlanPayload),
+    );
     return;
   }
 
-  printIndentedJSON({ pages } satisfies PagesPayload);
+  console.log(JSON.stringify({ pages } satisfies PagesPayload));
   if (tagsContain !== "") {
     const matches = tagsContaining(vocab, splitCommaList(tagsContain));
     console.log(bracketListRepr(matches));
@@ -964,6 +968,12 @@ export function buildProgram(): Command {
       DiscoverDefaultLimit,
     )
     .option(
+      "--max-candidates <n>",
+      `max candidates kept per page, highest-scoring first; 0 = use default`,
+      (v: string) => Number(v),
+      DiscoverDefaultMaxCandidates,
+    )
+    .option(
       "--duplicate-threshold <n>",
       "",
       (v: string) => Number(v),
@@ -990,6 +1000,7 @@ export function buildProgram(): Command {
         summary?: string;
         bodyFile?: string;
         limit: number;
+        maxCandidates: number;
         duplicateThreshold: number;
         relatedThreshold: number;
         tagsContaining?: string;
@@ -1000,6 +1011,7 @@ export function buildProgram(): Command {
           limit: opts.limit,
           duplicateThreshold: opts.duplicateThreshold,
           relatedThreshold: opts.relatedThreshold,
+          maxCandidates: opts.maxCandidates,
         };
         // The one index handle for this run — one per vault at a time
         // (ADR-0010), owned here because this command is the only thing that
