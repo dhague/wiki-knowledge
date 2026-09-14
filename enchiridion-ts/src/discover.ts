@@ -38,9 +38,12 @@ export const HintDistinct: Hint = "distinct";
 export const DuplicateThreshold = 15.0;
 /** The score at or above which a hit is related. */
 export const RelatedThreshold = 5.0;
-/** Default limit: 0 = unbounded (score is the real filter; distinct hits are
- * never emitted). Pass a positive value as a hard safety cap on hits scanned. */
-export const DefaultLimit = 0;
+/** Default limit: 200 hits scanned per page. Pass 0 as an explicit escape
+ * hatch for unbounded scanning (--limit 0 on the CLI). */
+export const DefaultLimit = 200;
+/** Default cap on candidates returned per page, keeping the highest-scoring
+ * overlaps. */
+export const DefaultMaxCandidates = 15;
 
 /** Sentinel passed to the searcher when limit is 0 (unbounded). SQLite FTS5
  * has no native score-gate, so we materialise the full result set here and
@@ -73,9 +76,12 @@ export interface Options {
   limit: number;
   duplicateThreshold: number;
   relatedThreshold: number;
+  maxCandidates: number;
 }
 
-/** Fill the calibrated defaults for zero-valued options. */
+/** Fill the calibrated defaults for zero-valued options. `limit: 0` is a
+ * special escape hatch that maps to UnboundedSearchLimit (no cap); all other
+ * zero values restore their named defaults. */
 function withDefaults(o: Options): Required<Options> {
   return {
     limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
@@ -83,6 +89,7 @@ function withDefaults(o: Options): Required<Options> {
       o.duplicateThreshold === 0 ? DuplicateThreshold : o.duplicateThreshold,
     relatedThreshold:
       o.relatedThreshold === 0 ? RelatedThreshold : o.relatedThreshold,
+    maxCandidates: o.maxCandidates > 0 ? o.maxCandidates : DefaultMaxCandidates,
   };
 }
 
@@ -187,7 +194,7 @@ export async function check(
       superseded_by: hit.supersededBy,
     });
   }
-  return candidates;
+  return candidates.slice(0, o.maxCandidates);
 }
 
 /** Pairs one planned page's title with its discovered candidates. */
