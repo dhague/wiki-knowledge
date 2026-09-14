@@ -347,7 +347,9 @@ async function runDiscoverPlan(
   const vocab = await index.tagCounts();
 
   if (tagsContain === "" && tagCount === "") {
-    console.log(JSON.stringify({ pages, vocabulary: vocab } satisfies PlanPayload));
+    console.log(
+      JSON.stringify({ pages, vocabulary: vocab } satisfies PlanPayload),
+    );
     return;
   }
 

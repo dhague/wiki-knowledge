@@ -283,7 +283,12 @@ test("check finds its own title in a real vault", async () => {
       "Connection Pooling in Postgres",
       "",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8, maxCandidates: 0 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     assert.ok(refOf(candidates, "wiki/concepts/connection-pooling.md"));
   } finally {
@@ -301,7 +306,12 @@ test("check survives noisy new text that an AND query would zero out", async () 
       "Connection Pooling in Postgres",
       "A totally unrelated sentence about zebras and volcanoes.",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8, maxCandidates: 0 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     assert.ok(refOf(candidates, "wiki/concepts/connection-pooling.md"));
   } finally {
@@ -318,7 +328,12 @@ test("check with a verbatim body ranks that page highest", async () => {
       "",
       "Connection pooling reduces per-request handshake overhead by " +
         "reusing a fixed set of open connections across callers.",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8, maxCandidates: 0 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     assert.ok(candidates.length > 0);
     assert.equal(candidates[0].page_ref, "wiki/concepts/connection-pooling.md");
@@ -335,7 +350,12 @@ test("check hints a real hit as duplicate with permissive thresholds", async () 
       "Connection Pooling in Postgres",
       "Reuse connections instead of opening a new one per request.",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8, maxCandidates: 0 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     const top = refOf(candidates, "wiki/concepts/connection-pooling.md");
     assert.ok(top);
@@ -368,7 +388,12 @@ test("check returns the full payload from a real vault", async () => {
       "Connection Pooling in Postgres",
       "",
       "",
-      { limit: 0, duplicateThreshold: 1e-6, relatedThreshold: 1e-8, maxCandidates: 0 },
+      {
+        limit: 0,
+        duplicateThreshold: 1e-6,
+        relatedThreshold: 1e-8,
+        maxCandidates: 0,
+      },
     );
     const top = refOf(candidates, "wiki/concepts/connection-pooling.md");
     assert.ok(top);
