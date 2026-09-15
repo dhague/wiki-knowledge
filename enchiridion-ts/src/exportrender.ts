@@ -9,6 +9,9 @@
  * Link rewriting uses the iterLinks/offset-splice path from wikipage.ts:
  * .md destinations are rewritten to .html (anchors preserved); a link whose
  * target is outside the exported set is stripped to plain label text.
+ *
+ * renderAggregate yields the aggregate pages (tag pages, tag index, per-kind
+ * index pages, and front page). renderAll combines both passes.
  */
 
 import path from "node:path";
@@ -428,4 +431,219 @@ export function* renderPages(
       content: buildPage(pageRef, record, text, exported, pages, tagSlugMap),
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Aggregate page rendering (#463): tag pages, kind indexes, front page
+// ---------------------------------------------------------------------------
+
+/** Relative path from one HTML output path to another (both output-root-relative). */
+function relFromTo(srcHtmlPath: string, destHtmlPath: string): string {
+  return path.posix.relative(path.posix.dirname(srcHtmlPath), destHtmlPath);
+}
+
+/** Nav bar for a generated HTML page at `htmlPath`. */
+function navBarFor(htmlPath: string): string {
+  const rel = relFromTo(htmlPath, "index.html");
+  const relTags = relFromTo(htmlPath, "tags/index.html");
+  return `<nav><a href="${escHtml(rel)}">Home</a> · <a href="${escHtml(relTags)}">Tags</a></nav>`;
+}
+
+/** Derive the wiki folder name for a kind from its pageRefs. */
+function kindFolderFromRefs(pageRefs: string[]): string {
+  for (const ref of pageRefs) {
+    const parts = ref.split("/");
+    if (parts.length >= 3 && parts[0] === "wiki") return parts[1];
+  }
+  return "";
+}
+
+function buildTagPage(
+  tag: string,
+  slug: string,
+  pageRefs: string[],
+  pages: Map<string, { record?: PageRecord; text: string }>,
+): string {
+  const htmlPath = `tags/${slug}.html`;
+  const nav = navBarFor(htmlPath);
+  const items = pageRefs
+    .map((ref) => {
+      const title = pages.get(ref)?.record?.title || ref;
+      const link = relFromTo(htmlPath, mdToHtml(ref));
+      return `<li><a href="${escHtml(link)}">${escHtml(title)}</a></li>`;
+    })
+    .join("\n");
+  const main = `<h1>Tag: ${escHtml(tag)}</h1>\n<ul>\n${items}\n</ul>`;
+  return buildHtmlShell(escHtml(`Tag: ${tag}`), nav, main);
+}
+
+function buildTagIndexPage(
+  tagMap: Map<string, string[]>,
+  tagToSlug: Map<string, string>,
+): string {
+  const htmlPath = "tags/index.html";
+  const nav = navBarFor(htmlPath);
+  const sortedTags = [...tagMap.keys()].sort();
+  const items = sortedTags
+    .map((tag) => {
+      const slug = tagToSlug.get(tag)!;
+      const count = tagMap.get(tag)!.length;
+      const n = count === 1 ? "1 page" : `${count} pages`;
+      return `<li><a href="${escHtml(slug + ".html")}">${escHtml(tag)}</a> (${n})</li>`;
+    })
+    .join("\n");
+  const main = `<h1>Tags</h1>\n<ul>\n${items}\n</ul>`;
+  return buildHtmlShell("Tags", nav, main);
+}
+
+function buildKindIndexPage(
+  kind: string,
+  folder: string,
+  pageRefs: string[],
+  pages: Map<string, { record?: PageRecord; text: string }>,
+): string {
+  const htmlPath = `wiki/${folder}/index.html`;
+  const nav = navBarFor(htmlPath);
+  const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+  const items = [...pageRefs]
+    .sort((a, b) => {
+      const ta = pages.get(a)?.record?.title || a;
+      const tb = pages.get(b)?.record?.title || b;
+      return ta.localeCompare(tb);
+    })
+    .map((ref) => {
+      const title = pages.get(ref)?.record?.title || ref;
+      const link = relFromTo(htmlPath, mdToHtml(ref));
+      return `<li><a href="${escHtml(link)}">${escHtml(title)}</a></li>`;
+    })
+    .join("\n");
+  const main = `<h1>${escHtml(label)} pages</h1>\n<ul>\n${items}\n</ul>`;
+  return buildHtmlShell(escHtml(`${label} pages`), nav, main);
+}
+
+function buildFrontPage(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  meta: ExportMeta,
+  opts: ExportOptions,
+  kindBlurbs: Map<string, string>,
+): string {
+  const htmlPath = "index.html";
+  const nav = navBarFor(htmlPath);
+
+  const totalPages = [...meta.kindMap.values()].reduce(
+    (s, refs) => s + refs.length,
+    0,
+  );
+  const totalTags = meta.tagMap.size;
+  const kindCount = meta.kindMap.size;
+  const summary = `${totalPages} ${totalPages === 1 ? "page" : "pages"} across ${kindCount} ${kindCount === 1 ? "kind" : "kinds"} · ${totalTags} ${totalTags === 1 ? "tag" : "tags"}`;
+
+  // Per-kind block
+  const kindItems = [...meta.kindMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([kind, refs]) => {
+      const folder = kindFolderFromRefs(refs);
+      const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+      const n = refs.length;
+      const blurb = kindBlurbs.get(kind) ?? "";
+      const link = folder ? `wiki/${folder}/index.html` : "";
+      const kindLink = link
+        ? `<a href="${escHtml(link)}">${escHtml(label)}</a>`
+        : escHtml(label);
+      const count = `${n} ${n === 1 ? "page" : "pages"}`;
+      const blurbPart = blurb ? ` — ${escHtml(blurb)}` : "";
+      return `<li><strong>${kindLink}</strong>: ${count}${blurbPart}</li>`;
+    })
+    .join("\n");
+
+  // Get-started block
+  const starters = opts.starters;
+  let startedItems: string;
+  if (starters && starters.length > 0) {
+    startedItems = starters
+      .map(({ pageRef, annotation }) => {
+        const record = pages.get(pageRef)?.record;
+        const title = record?.title || pageRef;
+        const link = mdToHtml(pageRef);
+        const annPart = annotation ? ` — ${escHtml(annotation)}` : "";
+        return `<li><a href="${escHtml(link)}">${escHtml(title)}</a>${annPart}</li>`;
+      })
+      .join("\n");
+  } else {
+    startedItems = meta.getStarted
+      .map(({ pageRef, title }) => {
+        const link = mdToHtml(pageRef);
+        return `<li><a href="${escHtml(link)}">${escHtml(title)}</a></li>`;
+      })
+      .join("\n");
+  }
+
+  const main =
+    `<h1>Wiki</h1>\n<p>${escHtml(summary)}</p>\n` +
+    (kindItems ? `<h2>By kind</h2>\n<ul>\n${kindItems}\n</ul>\n` : "") +
+    (startedItems ? `<h2>Get started</h2>\n<ul>\n${startedItems}\n</ul>` : "");
+
+  return buildHtmlShell("Wiki", nav, main);
+}
+
+/**
+ * Lazy generator yielding aggregate HTML pages: one page per tag, the tag
+ * index, per-kind index pages, and the front page (index.html). Pure — no
+ * filesystem access.
+ *
+ * `kindBlurbs` maps a kind value (e.g. "concept") to the summary string from
+ * its `KIND.md`, shown on the front page. Pass an empty map when not available.
+ */
+export function* renderAggregate(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  meta: ExportMeta,
+  opts: ExportOptions = {},
+  kindBlurbs: Map<string, string> = new Map(),
+): Generator<RenderedPage> {
+  const tagToSlug = buildTagSlugMap([...meta.tagMap.keys()]);
+
+  // Tag pages
+  for (const [tag, pageRefs] of meta.tagMap) {
+    const slug = tagToSlug.get(tag)!;
+    yield {
+      path: `tags/${slug}.html`,
+      content: buildTagPage(tag, slug, pageRefs, pages),
+    };
+  }
+
+  // Tag index
+  yield {
+    path: "tags/index.html",
+    content: buildTagIndexPage(meta.tagMap, tagToSlug),
+  };
+
+  // Per-kind index pages
+  for (const [kind, pageRefs] of meta.kindMap) {
+    const folder = kindFolderFromRefs(pageRefs);
+    if (!folder) continue;
+    yield {
+      path: `wiki/${folder}/index.html`,
+      content: buildKindIndexPage(kind, folder, pageRefs, pages),
+    };
+  }
+
+  // Front page
+  yield {
+    path: "index.html",
+    content: buildFrontPage(pages, meta, opts, kindBlurbs),
+  };
+}
+
+/**
+ * Combined generator: per-page HTML (renderPages) + aggregate pages
+ * (renderAggregate). This is the entry point for the export writer.
+ */
+export function* renderAll(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  meta: ExportMeta,
+  opts: ExportOptions = {},
+  kindBlurbs: Map<string, string> = new Map(),
+): Generator<RenderedPage> {
+  yield* renderPages(pages, meta, opts);
+  yield* renderAggregate(pages, meta, opts, kindBlurbs);
 }

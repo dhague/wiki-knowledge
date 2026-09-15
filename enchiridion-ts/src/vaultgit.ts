@@ -316,6 +316,31 @@ export class VaultGit implements Git {
   }
 
   /**
+   * Vault-relative paths of files under any of `subtrees` that are staged,
+   * modified-tracked, or untracked non-ignored — the dirty set the export
+   * subcommand checks before writing. Lenient: returns [] when root is not a
+   * work tree or the status can't be read.
+   */
+  async dirtyFiles(subtrees: string[]): Promise<string[]> {
+    try {
+      const matrix = await git.statusMatrix({
+        fs,
+        dir: this.root,
+        filter: (f: string) => coveredByPaths(f, subtrees),
+      });
+      const dirty: string[] = [];
+      for (const [filepath, head, workdir, stage] of matrix) {
+        const isClean = head === 1 && workdir === 1 && stage === 1;
+        const isIgnored = head === 0 && workdir === 0 && stage === 0;
+        if (!isClean && !isIgnored) dirty.push(filepath as string);
+      }
+      return dirty;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * A batched read of the two lenient facts the ingest sweep needs
    * ([ScanFacts.lastCommitDate] and [ScanFacts.porcelainMentions]), computed in
    * a single HEAD tree walk plus a single history walk rather than one walk per

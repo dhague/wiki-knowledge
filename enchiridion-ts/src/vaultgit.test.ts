@@ -712,3 +712,92 @@ test("stageAndCommit: two concurrent calls each commit exactly their own paths",
     "B's commit must be in history",
   );
 });
+
+// ---------------------------------------------------------------------------
+// dirtyFiles
+// ---------------------------------------------------------------------------
+
+test("dirtyFiles returns [] for a non-git directory (lenient)", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  const dirty = await repo.dirtyFiles(["wiki/"]);
+  assert.deepEqual(dirty, []);
+});
+
+test("dirtyFiles returns [] when the subtree is clean", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await git.init({ fs, dir: root });
+  writeFile(root, "wiki/concepts/foo.md", "# Foo\n");
+  await commitAll(root, "seed");
+
+  const dirty = await repo.dirtyFiles(["wiki/"]);
+  assert.deepEqual(dirty, []);
+});
+
+test("dirtyFiles detects an untracked file in the subtree", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await git.init({ fs, dir: root });
+  writeFile(root, "wiki/concepts/foo.md", "# Foo\n");
+  await commitAll(root, "seed");
+
+  // Add a new untracked file
+  writeFile(root, "wiki/concepts/bar.md", "# Bar\n");
+
+  const dirty = await repo.dirtyFiles(["wiki/"]);
+  assert.equal(dirty.length, 1);
+  assert.ok(dirty[0].includes("bar.md"), `expected bar.md in dirty: ${dirty}`);
+});
+
+test("dirtyFiles detects a modified tracked file", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await git.init({ fs, dir: root });
+  writeFile(root, "wiki/concepts/foo.md", "# Foo\n");
+  await commitAll(root, "seed");
+
+  fs.writeFileSync(path.join(root, "wiki/concepts/foo.md"), "# Foo modified\n");
+
+  const dirty = await repo.dirtyFiles(["wiki/"]);
+  assert.equal(dirty.length, 1);
+  assert.ok(dirty[0].includes("foo.md"), `expected foo.md in dirty: ${dirty}`);
+});
+
+test("dirtyFiles detects a staged file", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await git.init({ fs, dir: root });
+  writeFile(root, "wiki/concepts/foo.md", "# Foo\n");
+  await commitAll(root, "seed");
+
+  writeFile(root, "wiki/concepts/bar.md", "# Bar\n");
+  await git.add({ fs, dir: root, filepath: "wiki/concepts/bar.md" });
+
+  const dirty = await repo.dirtyFiles(["wiki/"]);
+  assert.equal(dirty.length, 1);
+  assert.ok(dirty[0].includes("bar.md"), `expected bar.md in dirty: ${dirty}`);
+});
+
+test("dirtyFiles scopes to wiki/ — raw/ changes not reported when raw/ excluded", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await git.init({ fs, dir: root });
+  writeFile(root, "wiki/concepts/foo.md", "# Foo\n");
+  writeFile(root, "raw/inbox/doc.md", "raw content\n");
+  await commitAll(root, "seed");
+
+  // Modify raw file only
+  fs.writeFileSync(path.join(root, "raw/inbox/doc.md"), "modified raw\n");
+
+  const dirty = await repo.dirtyFiles(["wiki/"]);
+  assert.deepEqual(dirty, [], "wiki/ scope should not see raw/ changes");
+
+  const dirtyWithRaw = await repo.dirtyFiles(["wiki/", "raw/"]);
+  assert.equal(
+    dirtyWithRaw.length,
+    1,
+    "wiki/+raw/ scope should see raw/ changes",
+  );
+  assert.ok(dirtyWithRaw[0].includes("doc.md"));
+});
