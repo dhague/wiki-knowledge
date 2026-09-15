@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Markers, Vault, hasMarker, resolveRoot } from "./vault.js";
+import {
+  Markers,
+  Vault,
+  hasMarker,
+  readKindMeta,
+  resolveRoot,
+} from "./vault.js";
 import type { LookupEnv } from "./vault.js";
 import { Page } from "./wikipage.js";
 
@@ -215,4 +221,84 @@ test("pages decodes records", () => {
   assert.equal(a.title, "A");
   assert.equal(a.kind, "concept");
   assert.deepEqual(a.supersededBy, ["wiki/sources/s.md"]);
+});
+
+test("readKindMeta returns kind and summary from a well-formed KIND.md", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
+  fs.writeFileSync(
+    path.join(dir, "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\nOptional body.\n",
+  );
+  const meta = readKindMeta(dir);
+  assert.deepEqual(meta, { kind: "person", summary: "A human individual." });
+});
+
+test("readKindMeta returns null for a missing KIND.md", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
+  assert.equal(readKindMeta(dir), null);
+});
+
+test("readKindMeta returns null for a KIND.md without frontmatter", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
+  fs.writeFileSync(path.join(dir, "KIND.md"), "No frontmatter here.\n");
+  assert.equal(readKindMeta(dir), null);
+});
+
+test("readKindMeta returns null when frontmatter has no kind key", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
+  fs.writeFileSync(
+    path.join(dir, "KIND.md"),
+    "---\nsummary: Just a summary.\n---\n",
+  );
+  assert.equal(readKindMeta(dir), null);
+});
+
+test("readKindMeta returns null for malformed YAML frontmatter", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
+  fs.writeFileSync(path.join(dir, "KIND.md"), "---\n: bad: yaml: [\n---\n");
+  assert.equal(readKindMeta(dir), null);
+});
+
+test("discoveredKinds uses KIND.md declared value when present", () => {
+  const v = writeVault({
+    "wiki/people/alice.md": "---\ntitle: Alice\n---\n",
+  });
+  // Write a KIND.md declaring kind: person
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "people", "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\n",
+  );
+  assert.deepEqual(v.discoveredKinds(), { person: "people" });
+});
+
+test("discoveredKinds falls back to folderToKind when no KIND.md", () => {
+  const v = writeVault({
+    "wiki/decisions/d.md": "---\ntitle: D\n---\n",
+  });
+  assert.deepEqual(v.discoveredKinds(), { decision: "decisions" });
+});
+
+test("discoveredKinds ignores KIND.md in canonical kind folders", () => {
+  const v = writeVault({
+    "wiki/concepts/a.md": "a\n",
+  });
+  // Even if someone puts a KIND.md in a canonical folder, it is ignored
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "concepts", "KIND.md"),
+    "---\nkind: custom-concept\nsummary: Should be ignored.\n---\n",
+  );
+  // concepts is canonical — still resolves to the empty discovered map (concepts stays canonical)
+  assert.deepEqual(v.discoveredKinds(), {});
+});
+
+test("pages() round-trip: wiki/people page reads back as kind person via KIND.md", () => {
+  const v = writeVault({
+    "wiki/people/alice.md": "---\ntitle: Alice\n---\nbio\n",
+  });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "people", "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\n",
+  );
+  const pages = v.pages();
+  assert.equal(pages["wiki/people/alice.md"].kind, "person");
 });

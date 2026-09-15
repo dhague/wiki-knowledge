@@ -39,14 +39,20 @@ import path from "node:path";
  * see the module doc. */
 const GeneratedIndexRef = "wiki/_index.md";
 
+/** `KIND.md` placed inside a kind-folder (`wiki/<kind>/KIND.md`) is metadata
+ * about that kind, not a page (#441). It matches the three-segment shape so it
+ * must be excluded explicitly, parallel to `GeneratedIndexRef`. */
+const KindMetaFilename = "KIND.md";
+
 /**
  * The page predicate: whether a vault-relative path (ADR-0009) names a page.
  *
  * A page is `wiki/<kind-folder>/<file>.md` — exactly three path segments, a
- * `.md` suffix, and never the generated index. Every consumer of the page
- * concept — the disk walk (`enumeratePageRefs`), the git walk
- * (`vaultgit.committedPages`), and the index's status count — filters through
- * this one predicate, so no two of them can disagree about an edge vault.
+ * `.md` suffix, and never the generated index or a `KIND.md` kind-metadata
+ * file. Every consumer of the page concept — the disk walk
+ * (`enumeratePageRefs`), the git walk (`vaultgit.committedPages`), and the
+ * index's status count — filters through this one predicate, so no two of them
+ * can disagree about an edge vault.
  *
  * Excluded by the shape: `wiki/a.md` (no kind-folder), `wiki/_index.md` (not
  * directly under a kind-folder — and never a page on principle),
@@ -59,7 +65,8 @@ export function isPageRef(ref: string): boolean {
   if (ref === GeneratedIndexRef) return false;
   if (!ref.startsWith("wiki/")) return false;
   if (!ref.endsWith(".md")) return false;
-  return ref.split("/").length === 3;
+  if (ref.split("/").length !== 3) return false;
+  return ref.split("/")[2] !== KindMetaFilename;
 }
 
 /**

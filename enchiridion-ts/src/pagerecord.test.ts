@@ -149,3 +149,29 @@ test("supersedes resolves a percent-encoded target to its decoded page ref", () 
   );
   assert.deepEqual(supersedes(rec), ["wiki/concepts/old name (draft) #1.md"]);
 });
+
+test("newPageRecord uses kindByFolder override for custom folders", () => {
+  const rec = newPageRecord(
+    "wiki/people/alice.md",
+    "---\ntitle: Alice\n---\n",
+    { people: "person" },
+  );
+  assert.equal(rec.kind, "person");
+});
+
+test("newPageRecord: kindByFolder does not override canonical FolderKinds", () => {
+  // Even if someone passes a wrong override for a canonical folder, FolderKinds wins.
+  const rec = newPageRecord("wiki/concepts/a.md", "---\ntitle: A\n---\n", {
+    concepts: "wrong",
+  });
+  assert.equal(rec.kind, "concept");
+});
+
+test("newPageRecord falls back to folderToKind when kindByFolder has no entry", () => {
+  const rec = newPageRecord(
+    "wiki/decisions/use-fts5.md",
+    "---\ntitle: Use FTS5\n---\n",
+    { people: "person" }, // no entry for "decisions"
+  );
+  assert.equal(rec.kind, "decision");
+});
