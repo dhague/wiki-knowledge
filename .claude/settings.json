@@ -1,15 +1,1 @@
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); case \"$f\" in */enchiridion-ts/*.ts) ets=\"${f%%/enchiridion-ts/*}/enchiridion-ts\"; p=\"$ets/node_modules/.bin/prettier\"; [ -f \"$p\" ] && \"$p\" --write \"$f\" >/dev/null 2>&1 ;; esac; true"
-          }
-        ]
-      }
-    ]
-  }
-}
+{}
