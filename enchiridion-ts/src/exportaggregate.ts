@@ -23,7 +23,6 @@ import {
 } from "./exportmeta.js";
 import {
   RenderedPage,
-  CSS,
   escHtml,
   buildHtmlShell,
   mdToHtml,
