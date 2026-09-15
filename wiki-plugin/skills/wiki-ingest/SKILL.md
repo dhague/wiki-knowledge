@@ -58,7 +58,7 @@ Given one document at `<path>`.
        },
        {
          "op": "create",
-         "kind": "concept",            // source | synthesis | entity | concept — placement algorithm in wiki-conventions, first match wins
+         "kind": "concept",            // any kind returned by `enchiridion vault kinds` — canonical (source | synthesis | entity | concept) or a custom kind whose folder pre-exists; placement algorithm in wiki-conventions, first match wins
          "title": "<page title>",
          "body": "<full markdown body>",
          "frontmatter": {
@@ -90,7 +90,7 @@ Given one document at `<path>`.
    Every `edges` value and `raw_source: true` names target by **vault-relative path only** (`"wiki/concepts/foo.md"`, matching the kind-folders in [Vault structure](../wiki-conventions/SKILL.md)) — never a composed `[Title](../dest.md)` string. `enchiridion ingest` reads each target's title (on disk or from sibling in plan), works out `../` relativisation, percent-encodes destination; never build link string by hand. Exception: *body* links — write as ordinary markdown (`[label](destination)`), encoded or not; `enchiridion ingest` re-encodes on write.
 
    Judgment calls when filling in (folder's `INGESTION.md` may override any, except where noted):
-   - **Kind** (create pages only): per [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm), first match wins. `enchiridion ingest` computes kebab-slug from `kind`+`title` — never hand-slugify.
+   - **Kind** (create pages only): run `"$ENCHIRIDION" vault kinds --json` once (OpenCode: `wiki(args=["vault", "kinds", "--json"])`) to get the complete placement vocabulary — the four canonical kinds plus any custom kind-folders already present in the vault. Apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm) over all returned kinds, first match wins; custom kinds are peers of canonical ones. Never emit a kind not returned by `vault kinds` — `enchiridion ingest` rejects an unknown kind. `enchiridion ingest` computes kebab-slug from `kind`+`title` — never hand-slugify.
    - **The `source/` stub is not optional** (see [The chain of evidence](../wiki-conventions/SKILL.md#the-chain-of-evidence)) — thin fine, absent not. Prior pass already filed stub: target with `op: "update"`, not second create.
    - **Typed edges** ([vocabulary](../wiki-conventions/SKILL.md#typed-edges)) — judge for **every new or updated page** against every page surfaced in step 3. Assign most specific type true (`related` only as fallback); `contradicts`/`supersedes` decided by step 3, belong on *new* page only — never on superseded page.
      - Non-judgment edge: **every page except stub carries `source` edge to stub** — each chunk of multi-chunk split, `op: "update"` same as `create`. Edges merge on update so restating safe; omit only if page already carries it from earlier pass.
