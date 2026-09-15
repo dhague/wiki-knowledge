@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as git from "isomorphic-git";
-import { Vault, readKindMeta } from "./vault.js";
-import { buildExportMeta, type ExportOptions } from "./exportmeta.js";
+import { Vault } from "./vault.js";
+import {
+  buildExportMeta,
+  type ExportOptions,
+  type StarterEntry,
+} from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
-import { renderAggregatePages, type StarterEntry } from "./exportaggregate.js";
-import { KindFolders } from "./place.js";
+import { renderAggregatePages } from "./exportaggregate.js";
 import type { PageRecord } from "./pagerecord.js";
 
 // ---------------------------------------------------------------------------
@@ -114,20 +117,6 @@ function enumerateRawRefs(root: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Kind blurbs
-// ---------------------------------------------------------------------------
-
-/** Read KIND.md summary blurbs for all canonical kind-folders at vault root. */
-function loadKindBlurbs(root: string): Map<string, string> {
-  const blurbs = new Map<string, string>();
-  for (const [kind, folder] of Object.entries(KindFolders)) {
-    const meta = readKindMeta(path.join(root, "wiki", folder));
-    if (meta?.summary) blurbs.set(kind, meta.summary);
-  }
-  return blurbs;
-}
-
-// ---------------------------------------------------------------------------
 // Temp-dir write → atomic rename
 // ---------------------------------------------------------------------------
 
@@ -219,20 +208,13 @@ export async function runExport(
   }
 
   // 4. Build metadata
-  const exportOpts: ExportOptions = { includeRaw };
+  const exportOpts: ExportOptions = { includeRaw, starters };
   const meta = buildExportMeta(pagesMap, exportOpts);
-  const kindBlurbs = loadKindBlurbs(root);
 
   // 5. Render all pages
   function* allPages(): Generator<{ path: string; content: string }> {
     yield* renderPages(pagesMap, meta, exportOpts);
-    yield* renderAggregatePages(
-      pagesMap,
-      meta,
-      exportOpts,
-      starters,
-      kindBlurbs,
-    );
+    yield* renderAggregatePages(pagesMap, meta, exportOpts);
   }
 
   // 6. Write to temp dir

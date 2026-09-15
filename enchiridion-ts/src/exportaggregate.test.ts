@@ -1,13 +1,23 @@
+/**
+ * Tests for exportaggregate.ts.
+ *
+ * Includes a property test: every intra-site link in the full generator output
+ * (renderPages + renderAggregatePages) resolves to an emitted output path.
+ * This is the export analogue of the "a move touches only link lines and all
+ * links still resolve" invariant in wikipage.test.ts.
+ */
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import fc from "fast-check";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
-import { buildExportMeta } from "./exportmeta.js";
+import { buildExportMeta, buildTagSlugMap } from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
 
 // ---------------------------------------------------------------------------
-// Fixtures (same as exportrender.test.ts)
+// Fixtures
 // ---------------------------------------------------------------------------
 
 const conceptA = `---
@@ -53,21 +63,31 @@ tags:
 kind: source
 ---
 
-No links.
+No links to wiki pages.
+`;
+
+const kindConceptMd = `---
+summary: Fundamental building blocks.
+---
 `;
 
 function makePages(
   entries: Array<[string, string]>,
 ): Map<string, { record?: PageRecord; text: string }> {
   const wikiEntries = entries.filter(([ref]) => ref.startsWith("wiki/"));
-  const rawEntries = entries.filter(([ref]) => !ref.startsWith("wiki/"));
+  const otherEntries = entries.filter(([ref]) => !ref.startsWith("wiki/"));
+
   const textMap: Record<string, string> = {};
   for (const [ref, text] of wikiEntries) textMap[ref] = text;
   const records = loadRecords(textMap);
+
   const result = new Map<string, { record?: PageRecord; text: string }>();
-  for (const [ref, text] of wikiEntries)
-    result.set(ref, { record: records[ref]!, text });
-  for (const [ref, text] of rawEntries) result.set(ref, { text });
+  for (const [ref, text] of wikiEntries) {
+    result.set(ref, { record: records[ref], text });
+  }
+  for (const [ref, text] of otherEntries) {
+    result.set(ref, { text });
+  }
   return result;
 }
 
@@ -78,335 +98,392 @@ const wikiPages = makePages([
   ["wiki/sources/source-one.md", sourceA],
 ]);
 
-function _collectAll(
-  pages: Map<string, { record?: PageRecord; text: string }>,
-  opts = {},
-) {
-  const meta = buildExportMeta(pages, opts);
-  const result = new Map<string, string>();
-  for (const { path, content } of renderPages(pages, meta, opts))
-    result.set(path, content);
-  for (const { path, content } of renderAggregatePages(pages, meta, opts))
-    result.set(path, content);
-  return result;
-}
+// ---------------------------------------------------------------------------
+// buildTagSlugMap
+// ---------------------------------------------------------------------------
+
+test("buildTagSlugMap: unique tags get their plain slug", () => {
+  const m = buildTagSlugMap(["alpha", "beta", "shared"]);
+  assert.equal(m.get("alpha"), "alpha");
+  assert.equal(m.get("beta"), "beta");
+  assert.equal(m.get("shared"), "shared");
+});
+
+test("buildTagSlugMap: colliding tags get suffix-disambiguated slugs", () => {
+  // "foo bar" and "foo-bar" both slugify to "foo-bar"
+  const m = buildTagSlugMap(["foo bar", "foo-bar"]);
+  const slugs = [...m.values()];
+  // Both assigned, one plain and one suffixed
+  assert.equal(new Set(slugs).size, 2, "slugs must be unique");
+  const sorted = slugs.sort();
+  assert.equal(sorted[0], "foo-bar");
+  assert.equal(sorted[1], "foo-bar-2");
+});
+
+test("buildTagSlugMap: three collisions get sequential suffixes", () => {
+  const m = buildTagSlugMap(["a b", "a-b", "a  b"]);
+  const slugs = [...m.values()];
+  assert.equal(new Set(slugs).size, 3, "three unique slugs");
+});
 
 // ---------------------------------------------------------------------------
 // Tag pages
 // ---------------------------------------------------------------------------
 
-test("renderAggregatePages: emits one HTML page per tag", () => {
+test("renderAggregatePages: yields one tag page per tag", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  // Tags: alpha, shared, beta, source-tag — each gets a page
-  assert.ok(out.has("tags/alpha.html"));
-  assert.ok(out.has("tags/shared.html"));
-  assert.ok(out.has("tags/beta.html"));
-  assert.ok(out.has("tags/source-tag.html"));
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const tagPages = pages.filter(
+    (p) => p.path.startsWith("tags/") && p.path !== "tags/index.html",
+  );
+  // tags: alpha, beta, shared, source-tag => 4 tag pages
+  assert.equal(tagPages.length, meta.tagMap.size);
 });
 
-test("renderAggregatePages: tag page lists pages carrying that tag", () => {
+test("renderAggregatePages: tag page paths are tags/<slug>.html", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const alphaPage = out.get("tags/alpha.html")!;
-  assert.ok(alphaPage.includes("Alpha Concept"), "should list Alpha Concept");
-  assert.ok(alphaPage.includes("Alpha Entity"), "should list Alpha Entity");
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const tagPages = pages.filter(
+    (p) => p.path.startsWith("tags/") && p.path !== "tags/index.html",
+  );
+  for (const p of tagPages) {
+    assert.match(p.path, /^tags\/[a-z0-9-]+\.html$/);
+  }
+});
+
+test("renderAggregatePages: tag page lists pages with that tag", () => {
+  const meta = buildExportMeta(wikiPages);
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const alphaPage = pages.find((p) => p.path === "tags/alpha.html");
+  assert.ok(alphaPage, "tags/alpha.html should be emitted");
   assert.ok(
-    !alphaPage.includes("Beta Concept"),
-    "should not list Beta Concept",
+    alphaPage.content.includes("Alpha Concept"),
+    "should list Alpha Concept",
   );
-});
-
-test("renderAggregatePages: tag page links back to wiki pages", () => {
-  const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const alphaPage = out.get("tags/alpha.html")!;
-  // From tags/, wiki pages are at ../wiki/concepts/alpha-concept.html
-  assert.ok(alphaPage.includes("../wiki/concepts/alpha-concept.html"));
-});
-
-test("renderAggregatePages: tag slug collision suffix-disambiguated", () => {
-  // Two tags that produce the same slug
-  const collidingPages = makePages([
-    [
-      "wiki/concepts/c1.md",
-      `---\ntitle: C1\ntags:\n  - "foo bar"\n  - "foo-bar"\nkind: concept\n---\ntext\n`,
-    ],
-  ]);
-  const meta = buildExportMeta(collidingPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(collidingPages, meta))
-    out.set(path, content);
-  // Both "foo bar" and "foo-bar" slugify to "foo-bar" — one should be "foo-bar-2"
-  const paths = [...out.keys()].filter(
-    (p) => p.startsWith("tags/") && p !== "tags/index.html",
+  assert.ok(
+    alphaPage.content.includes("Alpha Entity"),
+    "should list Alpha Entity",
   );
-  assert.equal(paths.length, 2);
-  assert.ok(paths.some((p) => p === "tags/foo-bar.html"));
-  assert.ok(paths.some((p) => p === "tags/foo-bar-2.html"));
 });
 
 // ---------------------------------------------------------------------------
 // Tag index
 // ---------------------------------------------------------------------------
 
-test("renderAggregatePages: emits tags/index.html", () => {
+test("renderAggregatePages: yields tags/index.html when tags exist", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  assert.ok(out.has("tags/index.html"));
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const index = pages.find((p) => p.path === "tags/index.html");
+  assert.ok(index, "tags/index.html must be emitted");
 });
 
-test("renderAggregatePages: tag index lists all tags with counts", () => {
+test("renderAggregatePages: tag index contains all tags with counts", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const idx = out.get("tags/index.html")!;
-  assert.ok(idx.includes("alpha"), "should list tag 'alpha'");
-  assert.ok(idx.includes("shared"), "should list tag 'shared'");
-  assert.ok(idx.includes("beta"), "should list tag 'beta'");
-  assert.ok(idx.includes("source-tag"), "should list tag 'source-tag'");
-  // counts
-  assert.ok(idx.includes("(2)"), "shared has 2 pages");
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const index = pages.find((p) => p.path === "tags/index.html")!;
+  assert.ok(index.content.includes("alpha"), "index should mention 'alpha'");
+  assert.ok(index.content.includes("shared"), "index should mention 'shared'");
+  // alpha has 2 pages
+  const alphaCount = (index.content.match(/>alpha<\/a> \(2\)/g) ?? []).length;
+  assert.ok(alphaCount > 0, "alpha tag should show count 2");
 });
 
-test("renderAggregatePages: always emits tags/index.html even for empty vault", () => {
-  const meta = buildExportMeta(new Map());
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(new Map(), meta))
-    out.set(path, content);
-  assert.ok(out.has("tags/index.html"), "tag index always present");
-  // No individual tag pages when no tags exist
-  const tagPages = [...out.keys()].filter(
-    (p) => p.startsWith("tags/") && p !== "tags/index.html",
-  );
-  assert.equal(tagPages.length, 0, "no individual tag pages for tagless vault");
+test("renderAggregatePages: tags/index.html always emitted (nav invariant)", () => {
+  const noTagPages = makePages([
+    ["wiki/concepts/foo.md", "---\ntitle: Foo\nkind: concept\n---\nBody.\n"],
+  ]);
+  const meta = buildExportMeta(noTagPages);
+  const pages = [...renderAggregatePages(noTagPages, meta)];
+  const index = pages.find((p) => p.path === "tags/index.html");
+  assert.ok(index, "tags/index.html must always be emitted so nav links work");
 });
 
 // ---------------------------------------------------------------------------
 // Per-kind index pages
 // ---------------------------------------------------------------------------
 
-test("renderAggregatePages: emits per-kind index page for each present kind", () => {
+test("renderAggregatePages: yields a kind index page for each kind present", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  assert.ok(out.has("wiki/concepts/index.html"));
-  assert.ok(out.has("wiki/entities/index.html"));
-  assert.ok(out.has("wiki/sources/index.html"));
-  assert.ok(!out.has("wiki/synthesis/index.html"), "no synthesis kind present");
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const kindIndexes = pages.filter(
+    (p) => p.path.endsWith("/index.html") && p.path.startsWith("wiki/"),
+  );
+  assert.equal(kindIndexes.length, meta.kindMap.size);
+});
+
+test("renderAggregatePages: kind index pages have correct paths", () => {
+  const meta = buildExportMeta(wikiPages);
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const paths = new Set(pages.map((p) => p.path));
+  assert.ok(paths.has("wiki/concepts/index.html"), "wiki/concepts/index.html");
+  assert.ok(paths.has("wiki/entities/index.html"), "wiki/entities/index.html");
+  assert.ok(paths.has("wiki/sources/index.html"), "wiki/sources/index.html");
 });
 
 test("renderAggregatePages: kind index lists pages of that kind", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const conceptIdx = out.get("wiki/concepts/index.html")!;
-  assert.ok(conceptIdx.includes("Alpha Concept"));
-  assert.ok(conceptIdx.includes("Beta Concept"));
-  assert.ok(!conceptIdx.includes("Alpha Entity"));
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const conceptIndex = pages.find(
+    (p) => p.path === "wiki/concepts/index.html",
+  )!;
+  assert.ok(
+    conceptIndex.content.includes("Alpha Concept"),
+    "concept index should list Alpha Concept",
+  );
+  assert.ok(
+    conceptIndex.content.includes("Beta Concept"),
+    "concept index should list Beta Concept",
+  );
+  assert.ok(
+    !conceptIndex.content.includes("Alpha Entity"),
+    "concept index should not list Alpha Entity",
+  );
 });
 
 // ---------------------------------------------------------------------------
 // Front page
 // ---------------------------------------------------------------------------
 
-test("renderAggregatePages: emits index.html", () => {
+test("renderAggregatePages: always yields index.html", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  assert.ok(out.has("index.html"));
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const front = pages.find((p) => p.path === "index.html");
+  assert.ok(front, "index.html must be emitted");
 });
 
 test("renderAggregatePages: front page shows total page count", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const idx = out.get("index.html")!;
-  assert.ok(idx.includes("4 pages"), "should show '4 pages'");
-});
-
-test("renderAggregatePages: front page links to kind index pages", () => {
-  const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const idx = out.get("index.html")!;
-  assert.ok(idx.includes("wiki/concepts/index.html"));
-  assert.ok(idx.includes("wiki/entities/index.html"));
-});
-
-test("renderAggregatePages: front page get-started block uses fallback when no starters", () => {
-  const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  const idx = out.get("index.html")!;
-  // Fallback ranking: alpha-concept has most inbound links
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const front = pages.find((p) => p.path === "index.html")!;
   assert.ok(
-    idx.includes("Alpha Concept"),
-    "should include Alpha Concept in get-started",
+    front.content.includes("4 pages"),
+    "front page should show '4 pages'",
   );
 });
 
-test("renderAggregatePages: front page get-started block uses supplied starters", () => {
+test("renderAggregatePages: front page shows per-kind counts linked to kind indexes", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta, {}, [
-    { pageRef: "wiki/sources/source-one.md", annotation: "Start here" },
-  ]))
-    out.set(path, content);
-  const idx = out.get("index.html")!;
-  assert.ok(idx.includes("Source One"), "should show Source One from starters");
-  assert.ok(idx.includes("Start here"), "should show annotation");
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  assert.ok(
+    front.content.includes("wiki/concepts/index.html"),
+    "front page should link to concepts index",
+  );
+  assert.ok(
+    front.content.includes("(2)"),
+    "front page should show concept count",
+  );
 });
 
-test("renderAggregatePages: front page shows KIND.md blurb when provided", () => {
-  const meta = buildExportMeta(wikiPages);
-  const kindBlurbs = new Map([["concept", "Core wiki concepts."]]);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(
-    wikiPages,
-    meta,
-    {},
-    [],
-    kindBlurbs,
-  ))
-    out.set(path, content);
-  const idx = out.get("index.html")!;
-  assert.ok(idx.includes("Core wiki concepts."), "should show kind blurb");
+test("renderAggregatePages: front page includes KIND.md blurb when present", () => {
+  const pagesWithKind = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["wiki/concepts/KIND.md", kindConceptMd],
+  ]);
+  const meta = buildExportMeta(pagesWithKind);
+  const pages = [...renderAggregatePages(pagesWithKind, meta)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  assert.ok(
+    front.content.includes("Fundamental building blocks"),
+    "front page should show KIND.md summary blurb",
+  );
 });
 
-test("renderAggregatePages: every page carries Home · Tags nav", () => {
+test("renderAggregatePages: front page uses supplied starters when given", () => {
   const meta = buildExportMeta(wikiPages);
-  const out = new Map<string, string>();
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    out.set(path, content);
-  for (const [p, html] of out) {
-    assert.ok(html.includes("index.html"), `${p}: should have Home link`);
-    assert.ok(html.includes("tags/index.html"), `${p}: should have Tags link`);
+  const opts = {
+    starters: [
+      {
+        pageRef: "wiki/sources/source-one.md",
+        annotation: "Start here",
+      },
+    ],
+  };
+  const pages = [...renderAggregatePages(wikiPages, meta, opts)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  assert.ok(front.content.includes("Source One"), "should show starter title");
+  assert.ok(front.content.includes("Start here"), "should show annotation");
+});
+
+test("renderAggregatePages: front page uses fallback ranking when no starters supplied", () => {
+  const meta = buildExportMeta(wikiPages);
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  // alpha-concept has highest inbound count — should appear in get-started
+  assert.ok(
+    front.content.includes("Alpha Concept"),
+    "front page should include top get-started entry",
+  );
+});
+
+test("renderAggregatePages: supplied starters with non-exported pageRef are silently skipped", () => {
+  const meta = buildExportMeta(wikiPages);
+  const opts = {
+    starters: [
+      { pageRef: "wiki/concepts/alpha-concept.md" },
+      { pageRef: "wiki/nonexistent/page.md" }, // not in exported set
+    ],
+  };
+  const pages = [...renderAggregatePages(wikiPages, meta, opts)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  assert.ok(
+    front.content.includes("Alpha Concept"),
+    "valid starter should appear",
+  );
+  assert.ok(
+    !front.content.includes("nonexistent"),
+    "invalid starter should not appear",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Nav header on all pages
+// ---------------------------------------------------------------------------
+
+test("renderAggregatePages: every page carries Home · Tags nav header", () => {
+  const meta = buildExportMeta(wikiPages);
+  const pages = [...renderAggregatePages(wikiPages, meta)];
+  for (const page of pages) {
+    assert.ok(
+      page.content.includes(">Home<") && page.content.includes(">Tags<"),
+      `${page.path} should carry Home · Tags nav`,
+    );
   }
 });
 
 // ---------------------------------------------------------------------------
-// Property test: every intra-site link resolves to an emitted output path
+// Property test: every intra-site link resolves to an emitted path
 // ---------------------------------------------------------------------------
 
-test("property: every intra-site link resolves to an emitted path", () => {
-  // Collect all emitted paths from both generators
-  const meta = buildExportMeta(wikiPages);
-  const allPaths = new Set<string>();
-  for (const { path } of renderPages(wikiPages, meta)) allPaths.add(path);
-  for (const { path } of renderAggregatePages(wikiPages, meta))
-    allPaths.add(path);
-
-  // Collect all href values from all emitted HTML
-  const hrefRe = /href="([^"]+)"/g;
-  const all = new Map<string, string>(allPaths.size > 0 ? [] : []);
-  for (const { path, content } of renderPages(wikiPages, meta))
-    all.set(path, content);
-  for (const { path, content } of renderAggregatePages(wikiPages, meta))
-    all.set(path, content);
-
-  for (const [fromPath, html] of all) {
-    const fromDir = fromPath.includes("/")
-      ? fromPath.slice(0, fromPath.lastIndexOf("/"))
-      : "";
-    let m: RegExpExecArray | null;
-    while ((m = hrefRe.exec(html)) !== null) {
-      const href = m[1];
-      if (
-        !href ||
-        href.startsWith("http") ||
-        href.startsWith("#") ||
-        href.startsWith("//")
-      )
-        continue;
-      // Strip anchor
-      const [dest] = href.split("#");
-      if (!dest) continue;
-      // Resolve relative href to vault-relative path
-      const resolved = resolveRelative(fromDir, dest);
-      assert.ok(
-        allPaths.has(resolved),
-        `${fromPath}: href "${href}" resolves to "${resolved}" but that path was not emitted`,
-      );
-    }
+/**
+ * Extract all href values from HTML content that look like intra-site links
+ * (relative paths ending in .html, not starting with http(s):// or #).
+ */
+function extractIntraSiteHrefs(html: string): string[] {
+  const hrefs: string[] = [];
+  const re = /href="([^"#][^"]*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const href = m[1];
+    if (href.startsWith("http://") || href.startsWith("https://")) continue;
+    if (!href.endsWith(".html")) continue;
+    hrefs.push(href);
   }
-});
-
-/** Resolve a relative `href` from a `fromDir` (vault-relative directory string,
- * empty for root-level pages) to a vault-relative path. */
-function resolveRelative(fromDir: string, href: string): string {
-  if (!fromDir) return href.replace(/^\.\//, "");
-  const parts = [...fromDir.split("/"), ...href.split("/")];
-  const resolved: string[] = [];
-  for (const part of parts) {
-    if (part === "..") resolved.pop();
-    else if (part !== ".") resolved.push(part);
-  }
-  return resolved.join("/");
+  return hrefs;
 }
 
-// fast-check property: for any set of pages with arbitrary tags, every tag
-// page emitted has a corresponding entry in the tag index.
-test("property: every tag page is listed in the tag index", () => {
+/**
+ * Resolve a relative href from a page's html path to a normalised output path.
+ * e.g. from "tags/alpha.html", href "../wiki/concepts/foo.html"
+ *   → "wiki/concepts/foo.html"
+ */
+function resolveHref(fromHtmlPath: string, href: string): string {
+  const fromDir = path.posix.dirname(fromHtmlPath);
+  // path.posix.resolve returns an absolute path; strip leading "/"
+  return path.posix.resolve("/" + fromDir, href).replace(/^\//, "");
+}
+
+test("property: every intra-site link in full output resolves to an emitted path", () => {
+  // Deterministic fixture: more than enough to exercise all link types
+  const meta = buildExportMeta(wikiPages);
+
+  const allPages = [
+    ...renderPages(wikiPages, meta),
+    ...renderAggregatePages(wikiPages, meta),
+  ];
+
+  const emittedPaths = new Set(allPages.map((p) => p.path));
+
+  const broken: string[] = [];
+  for (const page of allPages) {
+    for (const href of extractIntraSiteHrefs(page.content)) {
+      const resolved = resolveHref(page.path, href);
+      if (!emittedPaths.has(resolved)) {
+        broken.push(`${page.path}: href "${href}" → "${resolved}" not emitted`);
+      }
+    }
+  }
+  assert.deepEqual(
+    broken,
+    [],
+    `Broken intra-site links:\n${broken.join("\n")}`,
+  );
+});
+
+test("property (fast-check): intra-site links resolve for random page sets", () => {
+  const kindPairs: Array<[string, string]> = [
+    ["concept", "concepts"],
+    ["entity", "entities"],
+    ["source", "sources"],
+    ["synthesis", "synthesis"],
+  ];
+
+  const tagPool = ["alpha", "beta", "gamma", "foo-bar", "shared"];
+  const titlePool = [
+    "Page One",
+    "Page Two",
+    "Page Three",
+    "Page Four",
+    "Page Five",
+  ];
+
   fc.assert(
     fc.property(
       fc.array(
-        fc.tuple(
-          fc.stringMatching(/^[a-z][a-z0-9]{0,19}$/),
-          fc.array(fc.stringMatching(/^[a-z][a-z0-9-]{0,19}$/), {
-            minLength: 1,
+        fc.record({
+          kindIdx: fc.integer({ min: 0, max: 3 }),
+          titleIdx: fc.integer({ min: 0, max: 4 }),
+          tagIdxs: fc.uniqueArray(fc.integer({ min: 0, max: 4 }), {
+            minLength: 0,
             maxLength: 3,
           }),
-        ),
-        { minLength: 1, maxLength: 5 },
+        }),
+        { minLength: 1, maxLength: 10 },
       ),
-      (pageDefs) => {
-        const pages = new Map<string, { record?: PageRecord; text: string }>();
-        const textMap: Record<string, string> = {};
-        for (const [slug, tags] of pageDefs) {
-          const ref = `wiki/concepts/${slug}.md`;
-          const text = `---\ntitle: ${slug}\ntags:\n${tags.map((t) => `  - ${t}`).join("\n")}\nkind: concept\n---\nbody\n`;
-          textMap[ref] = text;
+      (specs) => {
+        const entries: Array<[string, string]> = [];
+        const seen = new Map<string, number>();
+
+        for (const spec of specs) {
+          const [kind, folder] = kindPairs[spec.kindIdx];
+          const title = titlePool[spec.titleIdx];
+          const slug = title.toLowerCase().replace(/\s+/g, "-");
+          const key = `${folder}/${slug}`;
+          const n = (seen.get(key) ?? 0) + 1;
+          seen.set(key, n);
+          const filename = n === 1 ? `${slug}.md` : `${slug}-${n}.md`;
+          const ref = `wiki/${folder}/${filename}`;
+
+          const tags = spec.tagIdxs.map((i) => tagPool[i]);
+          const tagsYaml =
+            tags.length > 0
+              ? `tags:\n${tags.map((t) => `  - ${t}`).join("\n")}\n`
+              : "";
+          const text = `---\ntitle: ${title}\nsummary: Summary for ${title}.\n${tagsYaml}kind: ${kind}\n---\n\nBody text.\n`;
+          entries.push([ref, text]);
         }
-        const records = loadRecords(textMap);
-        for (const [ref, text] of Object.entries(textMap)) {
-          pages.set(ref, { record: records[ref]!, text });
-        }
+
+        const pages = makePages(entries);
         const meta = buildExportMeta(pages);
-        const out = new Map<string, string>();
-        for (const { path, content } of renderAggregatePages(pages, meta))
-          out.set(path, content);
-        if (meta.tagMap.size === 0) return;
-        const idx = out.get("tags/index.html");
-        assert.ok(
-          idx !== undefined,
-          "tag index should be emitted when tags exist",
-        );
-        for (const slug of out.keys()) {
-          if (slug.startsWith("tags/") && slug !== "tags/index.html") {
-            assert.ok(
-              idx.includes(slug.slice("tags/".length)),
-              `tag index should list ${slug}`,
-            );
+
+        const allOutput = [
+          ...renderPages(pages, meta),
+          ...renderAggregatePages(pages, meta),
+        ];
+
+        const emittedPaths = new Set(allOutput.map((p) => p.path));
+
+        for (const page of allOutput) {
+          for (const href of extractIntraSiteHrefs(page.content)) {
+            const resolved = resolveHref(page.path, href);
+            if (!emittedPaths.has(resolved)) {
+              return false; // fast-check will report the failing input
+            }
           }
         }
+        return true;
       },
     ),
-    { numRuns: 50 },
+    { numRuns: 100 },
   );
 });

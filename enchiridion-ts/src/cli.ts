@@ -58,7 +58,7 @@ import {
   ExportDirtyError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
-import type { StarterEntry } from "./exportaggregate.js";
+import type { StarterEntry } from "./exportmeta.js";
 
 /** Prints the standard stub message and marks the process failed. */
 function stub(command: Command, label: string): void {
