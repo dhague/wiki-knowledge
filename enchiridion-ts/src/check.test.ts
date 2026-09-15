@@ -414,10 +414,7 @@ test("fix frontmatter-link-format: quotes unquoted YAML list link", async () => 
   });
   const changed = await fixFrontmatterLinkFormat(root);
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
-  const text = fs.readFileSync(
-    path.join(root, "wiki/concepts/foo.md"),
-    "utf8",
-  );
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
   assert.match(text, /- "\[Bar\]/);
   // After fix, check should be clean
   const findings = await frontmatterLinkFormat(root);
@@ -433,10 +430,7 @@ test("fix frontmatter-link-format: encodes # in link destination", async () => {
   });
   const changed = await fixFrontmatterLinkFormat(root);
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
-  const text = fs.readFileSync(
-    path.join(root, "wiki/concepts/foo.md"),
-    "utf8",
-  );
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
   assert.match(text, /bar%23baz\.md/);
   const findings = await frontmatterLinkFormat(root);
   assert.deepEqual(findings, []);
@@ -467,7 +461,10 @@ test("fix ingestion-source-integrity: moves raw/ body link to raw_source frontma
   const text = fs.readFileSync(path.join(root, "wiki/sources/doc.md"), "utf8");
   assert.match(text, /raw_source: "\[doc\.md\]\(\.\.\/\.\.\/raw\/doc\.md\)"/);
   // raw/ link removed from body
-  assert.doesNotMatch(text.split("---\n").slice(2).join("---\n"), /raw\/doc\.md/);
+  assert.doesNotMatch(
+    text.split("---\n").slice(2).join("---\n"),
+    /raw\/doc\.md/,
+  );
   // After fix, check should be clean
   const findings = await ingestionSourceIntegrity(root);
   assert.deepEqual(findings, []);
