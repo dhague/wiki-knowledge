@@ -75,8 +75,17 @@ function linkTarget(markdownLink: string, pageDir: string): string {
 /**
  * Decodes one page's frontmatter. SupersededBy is always empty here — it needs
  * every other page, so only [loadRecords] fills it in.
+ *
+ * `kindByFolder` is an optional folder→kind override map (e.g. populated by
+ * [Vault.discoveredKinds]), checked before [FolderKinds] and the
+ * [folderToKind] heuristic. Canonical four folders are always resolved via
+ * [FolderKinds], which is checked first and takes precedence.
  */
-export function newPageRecord(pageRef: string, text: string): PageRecord {
+export function newPageRecord(
+  pageRef: string,
+  text: string,
+  kindByFolder?: Record<string, string>,
+): PageRecord {
   // The kind-folder is the directory directly under `wiki/` that holds this
   // page (`wiki/concepts/a.md` → folder `concepts`). A page not at that exact
   // depth (e.g. `wiki/foo.md` or `wiki/concepts/nested/deep.md`) is a
@@ -87,7 +96,7 @@ export function newPageRecord(pageRef: string, text: string): PageRecord {
   if (path.posix.dirname(pageDir) !== "wiki") {
     throw new Error(`"${pageRef}": not directly under a wiki kind-folder`);
   }
-  const kind = FolderKinds[folder] ?? folderToKind(folder);
+  const kind = FolderKinds[folder] ?? kindByFolder?.[folder] ?? folderToKind(folder);
 
   const data = frontmatterMap(text);
 
@@ -197,13 +206,18 @@ function stringList(v: unknown): string[] {
  * Pages in any `wiki/<folder>/` are decoded and included; custom kind-folders
  * are fully supported via [folderToKind]. Pages at the wrong depth (not
  * directly under a kind-folder) are an error.
+ *
+ * `kindByFolder` is an optional folder→kind override map, passed through to
+ * [newPageRecord] so that KIND.md declarations take precedence over
+ * [folderToKind] for custom folders.
  */
 export function loadRecords(
   pages: Record<string, string>,
+  kindByFolder?: Record<string, string>,
 ): Record<string, PageRecord> {
   const records: Record<string, PageRecord> = {};
   for (const [pageRef, text] of Object.entries(pages)) {
-    records[pageRef] = newPageRecord(pageRef, text);
+    records[pageRef] = newPageRecord(pageRef, text, kindByFolder);
   }
 
   const supersededBy: Record<string, string[]> = {};
