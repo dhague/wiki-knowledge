@@ -21,8 +21,8 @@ import util from "node:util";
 import { Page } from "./wikipage.js";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
-import { Kinds, path as placePath } from "./place.js";
-import { Vault, resolveRoot } from "./vault.js";
+import { KindFolders, Kinds, path as placePath } from "./place.js";
+import { Vault, readKindMeta, resolveRoot } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";
 import { scan as scanIngest } from "./ingestscan.js";
@@ -605,9 +605,10 @@ export function buildProgram(): Command {
     });
 
   // vault — bare or `vault root` prints the resolved root; `vault move
-  // <old_ref> <new_ref>` moves a page and fixes every link. The one
-  // subcommand that resolves a vault root (CLAUDE.md). The parent's action
-  // runs for bare `vault`, and is inherited by `vault root` and `vault move`
+  // <old_ref> <new_ref>` moves a page and fixes every link; `vault kinds`
+  // lists all placement kinds as a JSON array. The one subcommand that
+  // resolves a vault root (CLAUDE.md). The parent's action runs for bare
+  // `vault`, and is inherited by `vault root`, `vault move`, and `vault kinds`
   // (commander runs a parent's action when a subcommand has no handler of its
   // own; the subcommand's own args are parsed before it).
   const vault = program
@@ -637,6 +638,34 @@ export function buildProgram(): Command {
       const { root } = resolveRoot();
       const changed = new Vault(root).movePage(oldRef, newRef);
       for (const pageRef of changed) console.log(pageRef);
+    });
+  vault
+    .command("kinds")
+    .description(
+      "List all placement kinds as a compact JSON array: canonical four plus any discovered custom folders",
+    )
+    .action(() => {
+      const { root } = resolveRoot();
+      const custom = new Vault(root).discoveredKinds();
+      const result: {
+        kind: string;
+        folder: string;
+        canonical: boolean;
+        definition: { kind: string; summary: string } | null;
+      }[] = [];
+      for (const kind of Kinds) {
+        result.push({
+          kind,
+          folder: KindFolders[kind],
+          canonical: true,
+          definition: null,
+        });
+      }
+      for (const [kind, folder] of Object.entries(custom)) {
+        const meta = readKindMeta(path.join(root, "wiki", folder));
+        result.push({ kind, folder, canonical: false, definition: meta });
+      }
+      console.log(JSON.stringify(result));
     });
 
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no

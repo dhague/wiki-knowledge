@@ -1205,3 +1205,102 @@ test("discover: --plan with --tags-containing emits the bracket list", async () 
   const last = lines[lines.length - 1];
   assert.match(last, /^\[.*database.*\]$/);
 });
+
+test("vault kinds: canonical-only vault returns four entries", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  fs.mkdirSync(path.join(root, "wiki", "entities"), { recursive: true });
+  fs.mkdirSync(path.join(root, "wiki", "sources"), { recursive: true });
+  fs.mkdirSync(path.join(root, "wiki", "synthesis"), { recursive: true });
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    folder: string;
+    canonical: boolean;
+    definition: null;
+  }[];
+  assert.equal(kinds.length, 4);
+  for (const entry of kinds) {
+    assert.equal(entry.canonical, true);
+    assert.equal(entry.definition, null);
+  }
+  const kindNames = kinds.map((e) => e.kind);
+  assert.ok(kindNames.includes("concept"));
+  assert.ok(kindNames.includes("entity"));
+  assert.ok(kindNames.includes("source"));
+  assert.ok(kindNames.includes("synthesis"));
+});
+
+test("vault kinds: custom folder without KIND.md has definition null", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "decisions"), { recursive: true });
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    folder: string;
+    canonical: boolean;
+    definition: unknown;
+  }[];
+  const custom = kinds.filter((e) => !e.canonical);
+  assert.equal(custom.length, 1);
+  assert.equal(custom[0].kind, "decision");
+  assert.equal(custom[0].folder, "decisions");
+  assert.equal(custom[0].definition, null);
+});
+
+test("vault kinds: custom folder with KIND.md reports declared kind and summary", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "people"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "people", "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\nOptional body.\n",
+  );
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    folder: string;
+    canonical: boolean;
+    definition: { kind: string; summary: string } | null;
+  }[];
+  const custom = kinds.filter((e) => !e.canonical);
+  assert.equal(custom.length, 1);
+  assert.equal(custom[0].kind, "person");
+  assert.equal(custom[0].folder, "people");
+  assert.equal(custom[0].canonical, false);
+  assert.deepEqual(custom[0].definition, {
+    kind: "person",
+    summary: "A human individual.",
+  });
+});
+
+test("vault kinds: respects WIKI_ROOT env var", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  fs.mkdirSync(path.join(other, "wiki", "people"), { recursive: true });
+  fs.writeFileSync(
+    path.join(other, "wiki", "people", "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\n",
+  );
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    cwd: root,
+    env: { WIKI_ROOT: other },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    canonical: boolean;
+  }[];
+  const custom = kinds.filter((e) => !e.canonical);
+  assert.equal(custom.length, 1);
+  assert.equal(custom[0].kind, "person");
+});
