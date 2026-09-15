@@ -7605,7 +7605,8 @@ function isPageRef(ref) {
   if (ref === GeneratedIndexRef) return false;
   if (!ref.startsWith("wiki/")) return false;
   if (!ref.endsWith(".md")) return false;
-  return ref.split("/").length === 3;
+  if (ref.split("/").length !== 3) return false;
+  return ref.split("/")[2] !== KindMetaFilename;
 }
 function enumeratePageRefs(root) {
   const wikiDir = import_node_path7.default.join(root, "wiki");
@@ -7637,13 +7638,14 @@ function toSlash(p) {
 function isENOENT(err) {
   return err.code === "ENOENT";
 }
-var import_node_fs6, import_node_path7, GeneratedIndexRef;
+var import_node_fs6, import_node_path7, GeneratedIndexRef, KindMetaFilename;
 var init_pagepredicate = __esm({
   "src/pagepredicate.ts"() {
     "use strict";
     import_node_fs6 = __toESM(require("node:fs"), 1);
     import_node_path7 = __toESM(require("node:path"), 1);
     GeneratedIndexRef = "wiki/_index.md";
+    KindMetaFilename = "KIND.md";
   }
 });
 
@@ -37710,6 +37712,7 @@ function path6(kind, title, extraKindFolders) {
 // src/vault.ts
 var import_node_fs7 = __toESM(require("node:fs"), 1);
 var import_node_path8 = __toESM(require("node:path"), 1);
+var import_yaml3 = __toESM(require_dist(), 1);
 
 // src/pagerecord.ts
 var import_node_path6 = __toESM(require("node:path"), 1);
@@ -37793,14 +37796,14 @@ function linkTarget(markdownLink, pageDir) {
   }
   return resolveLinkDest(dest, pageDir);
 }
-function newPageRecord(pageRef2, text2) {
+function newPageRecord(pageRef2, text2, kindByFolder) {
   let pageDir = import_node_path6.default.posix.dirname(pageRef2);
   if (pageDir === ".") pageDir = "";
   const folder = import_node_path6.default.posix.basename(pageDir);
   if (import_node_path6.default.posix.dirname(pageDir) !== "wiki") {
     throw new Error(`"${pageRef2}": not directly under a wiki kind-folder`);
   }
-  const kind = FolderKinds[folder] ?? folderToKind(folder);
+  const kind = FolderKinds[folder] ?? kindByFolder?.[folder] ?? folderToKind(folder);
   const data = frontmatterMap(text2);
   const edges = [];
   for (const key of EdgeKeys) {
@@ -37874,10 +37877,10 @@ function stringList(v) {
   if (!Array.isArray(v)) return [];
   return v.map((item) => scalar(item));
 }
-function loadRecords(pages) {
+function loadRecords(pages, kindByFolder) {
   const records = {};
   for (const [pageRef2, text2] of Object.entries(pages)) {
-    records[pageRef2] = newPageRecord(pageRef2, text2);
+    records[pageRef2] = newPageRecord(pageRef2, text2, kindByFolder);
   }
   const supersededBy = {};
   for (const [pageRef2, rec] of Object.entries(records)) {
@@ -37936,6 +37939,27 @@ function resolve(p) {
 }
 function isENOENT2(err) {
   return err.code === "ENOENT";
+}
+function readKindMeta(folderAbsPath) {
+  let text2;
+  try {
+    text2 = import_node_fs7.default.readFileSync(import_node_path8.default.join(folderAbsPath, "KIND.md"), "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
+    if (!hasFrontmatter || frontmatter === "") return null;
+    const data = (0, import_yaml3.parse)(frontmatter);
+    if (data === null || typeof data !== "object") return null;
+    const map = data;
+    const kind = typeof map["kind"] === "string" ? map["kind"].trim() : "";
+    if (!kind) return null;
+    const summary = typeof map["summary"] === "string" ? map["summary"] : "";
+    return { kind, summary };
+  } catch {
+    return null;
+  }
 }
 var Vault = class {
   constructor(root) {
@@ -38022,7 +38046,9 @@ var Vault = class {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (FolderKinds[entry.name] !== void 0) continue;
-      out[folderToKind(entry.name)] = entry.name;
+      const meta = readKindMeta(import_node_path8.default.join(this.root, "wiki", entry.name));
+      const kind = meta?.kind ?? folderToKind(entry.name);
+      out[kind] = entry.name;
     }
     return out;
   }
@@ -38038,7 +38064,12 @@ var Vault = class {
   /** Return every `wiki/**` page as a {pageRef: record + text} map. */
   pagesWithText() {
     const pages = this.loadWikiPages();
-    const records = loadRecords(pages);
+    const discovered = this.discoveredKinds();
+    const kindByFolder = {};
+    for (const [kind, folder] of Object.entries(discovered)) {
+      kindByFolder[folder] = kind;
+    }
+    const records = loadRecords(pages, kindByFolder);
     const out = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: pages[ref] };
@@ -41643,13 +41674,6 @@ init_vaultgit();
 init_pagepredicate();
 function walkAllMd(root) {
   const wikiDir = import_node_path20.default.join(root, "wiki");
-  let topEntries;
-  try {
-    topEntries = import_node_fs18.default.readdirSync(wikiDir, { withFileTypes: true });
-  } catch (err) {
-    if (err.code === "ENOENT") return [];
-    throw err;
-  }
   const refs = [];
   const walk2 = (dir) => {
     for (const entry of import_node_fs18.default.readdirSync(dir, { withFileTypes: true })) {
@@ -41661,7 +41685,11 @@ function walkAllMd(root) {
       }
     }
   };
-  walk2(wikiDir);
+  try {
+    walk2(wikiDir);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
   return refs.sort();
 }
 async function kindFolderConformance(root) {
@@ -41671,8 +41699,9 @@ async function kindFolderConformance(root) {
     if (filename === "KIND.md") continue;
     if (ref === "wiki/_index.md") continue;
     if (!isPageRef(ref)) {
-      const depth = ref.split("/").length;
-      const detail = depth === 2 ? "at wiki/ root \u2014 not under any kind-folder" : `nested ${depth - 3} level(s) below a kind-folder \u2014 must be a direct child`;
+      const segmentCount = ref.split("/").length;
+      const nestingDepth = segmentCount - 3;
+      const detail = segmentCount === 2 ? "at wiki/ root \u2014 not under any kind-folder" : `nested ${nestingDepth} level(s) below a kind-folder \u2014 must be a direct child`;
       findings.push({ pageRef: ref, detail });
     }
   }
@@ -41735,7 +41764,10 @@ async function staleSynthesis(root) {
     const ts = new Date(dateStr).getTime();
     if (ts < cutoffMs) {
       const daysAgo = Math.floor((Date.now() - ts) / 864e5);
-      findings.push({ pageRef: ref, detail: `last committed ${daysAgo} days ago` });
+      findings.push({
+        pageRef: ref,
+        detail: `last committed ${daysAgo} days ago`
+      });
     }
   }
   return findings;
@@ -41795,7 +41827,10 @@ async function orphans(root) {
         inbound.set(target, (inbound.get(target) ?? 0) + 1);
     }
   }
-  return [...inbound.entries()].filter(([, count]) => count === 0).map(([ref]) => ({ pageRef: ref, detail: "no inbound links from other wiki pages" })).sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+  return [...inbound.entries()].filter(([, count]) => count === 0).map(([ref]) => ({
+    pageRef: ref,
+    detail: "no inbound links from other wiki pages"
+  })).sort((a, b) => a.pageRef.localeCompare(b.pageRef));
 }
 var CHECKS = {
   "kind-folder-conformance": kindFolderConformance,
@@ -41806,6 +41841,128 @@ var CHECKS = {
   "unresolved-supersession": unresolvedSupersession,
   "contradiction-callouts": contradictionCallouts,
   orphans
+};
+async function fixFrontmatterLinkFormat(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const changed = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+    if (!hasFrontmatter || frontmatter === "") continue;
+    let fm = frontmatter.split("\n").map((line) => {
+      if (!/^\s*-\s+\[/.test(line)) return line;
+      const open2 = line.indexOf("[");
+      if (open2 < 0) return line;
+      const closeParenIdx = line.lastIndexOf(")");
+      if (closeParenIdx < 0) return line;
+      return line.slice(0, open2) + `"${line.slice(open2, closeParenIdx + 1)}"` + line.slice(closeParenIdx + 1);
+    }).join("\n");
+    const edits = [];
+    for (const link2 of iterLinks(fm)) {
+      const fullDecoded = link2.decodedPath + (link2.decodedAnchor ? "#" + link2.decodedAnchor : "");
+      const reencoded = percentEncode(fullDecoded);
+      if (link2.dest !== reencoded)
+        edits.push({ start: link2.start, end: link2.end, dest: reencoded });
+    }
+    edits.sort((a, b) => b.start - a.start);
+    for (const e of edits) fm = fm.slice(0, e.start) + e.dest + fm.slice(e.end);
+    if (fm === frontmatter) continue;
+    import_node_fs18.default.writeFileSync(import_node_path20.default.join(root, ref), `---
+${fm}---
+${body}`, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
+async function fixIngestionSourceIntegrity(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const changed = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    if (!ref.startsWith("wiki/sources/")) continue;
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+    if (!hasFrontmatter) continue;
+    if (/^raw_source\s*:/m.test(frontmatter)) continue;
+    const rawLinkRe = /\[[^\]]+\]\(\.\.\/\.\.\/raw\/[^)]+\)/g;
+    const rawLinks = [...body.matchAll(rawLinkRe)];
+    if (rawLinks.length !== 1) continue;
+    const [m] = rawLinks;
+    const newFm = frontmatter.trimEnd() + `
+raw_source: "${m[0]}"
+`;
+    const newBody = body.slice(0, m.index) + body.slice(m.index + m[0].length);
+    import_node_fs18.default.writeFileSync(
+      import_node_path20.default.join(root, ref),
+      `---
+${newFm}---
+${newBody}`,
+      "utf8"
+    );
+    changed.push(ref);
+  }
+  return changed;
+}
+async function fixMissingCrossReferences(root) {
+  const pagesWithText = new Vault(root).pagesWithText();
+  const titleToRef = /* @__PURE__ */ new Map();
+  const ambiguous = /* @__PURE__ */ new Set();
+  for (const [ref, { record }] of Object.entries(pagesWithText)) {
+    if (!record.title) continue;
+    if (ambiguous.has(record.title)) continue;
+    if (titleToRef.has(record.title)) {
+      titleToRef.delete(record.title);
+      ambiguous.add(record.title);
+    } else {
+      titleToRef.set(record.title, ref);
+    }
+  }
+  const changed = [];
+  for (const [ref, { text: text2 }] of Object.entries(pagesWithText)) {
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+    const pageDir = ref.split("/").slice(0, -1).join("/");
+    const linkedRefs = /* @__PURE__ */ new Set();
+    const linkSpans = [];
+    for (const link2 of iterLinks(body)) {
+      linkedRefs.add(resolveLinkDest(link2.decodedPath, pageDir));
+      let spanStart = link2.start - 1;
+      while (spanStart > 0 && body[spanStart] !== "[") spanStart--;
+      linkSpans.push([spanStart, link2.end + 1]);
+    }
+    let newBody = body;
+    let anyEdit = false;
+    for (const [title, targetRef] of titleToRef) {
+      if (targetRef === ref) continue;
+      if (linkedRefs.has(targetRef)) continue;
+      const idx = newBody.indexOf(title);
+      if (idx < 0) continue;
+      if (linkSpans.some(([s, e]) => idx >= s && idx + title.length <= e))
+        continue;
+      const ch = idx > 0 ? newBody[idx - 1] : "";
+      if (ch === "[" || ch === "`") continue;
+      const relPath2 = import_node_path20.default.relative(pageDir, targetRef).split(import_node_path20.default.sep).join("/");
+      const insertion = `[${title}](${percentEncode(relPath2)})`;
+      const diff = insertion.length - title.length;
+      newBody = newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
+      for (let i = 0; i < linkSpans.length; i++) {
+        if (linkSpans[i][0] > idx) {
+          linkSpans[i] = [linkSpans[i][0] + diff, linkSpans[i][1] + diff];
+        }
+      }
+      linkSpans.push([idx, idx + insertion.length]);
+      linkedRefs.add(targetRef);
+      anyEdit = true;
+    }
+    if (!anyEdit) continue;
+    const newText = hasFrontmatter ? `---
+${frontmatter}---
+${newBody}` : newBody;
+    import_node_fs18.default.writeFileSync(import_node_path20.default.join(root, ref), newText, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
+var FIXES = {
+  "frontmatter-link-format": fixFrontmatterLinkFormat,
+  "ingestion-source-integrity": fixIngestionSourceIntegrity,
+  "missing-cross-references": fixMissingCrossReferences
 };
 
 // src/cli.ts
@@ -42181,11 +42338,33 @@ function buildProgram() {
     const changed = new Vault(root).movePage(oldRef, newRef);
     for (const pageRef2 of changed) console.log(pageRef2);
   });
+  vault.command("kinds").description(
+    "List all placement kinds as a compact JSON array: canonical four plus any discovered custom folders"
+  ).action(() => {
+    const { root } = resolveRoot();
+    const custom = new Vault(root).discoveredKinds();
+    const result = [];
+    for (const kind of Kinds) {
+      result.push({
+        kind,
+        folder: KindFolders[kind],
+        canonical: true,
+        definition: null
+      });
+    }
+    for (const [kind, folder] of Object.entries(custom)) {
+      const meta = readKindMeta(import_node_path21.default.join(root, "wiki", folder));
+      result.push({ kind, folder, canonical: false, definition: meta });
+    }
+    console.log(JSON.stringify(result));
+  });
   const checkNames = Object.keys(CHECKS).join(", ");
   const check3 = program2.command("check").description(`Run a vault health check by name; names: ${checkNames}`).argument("<name>", "check name").option("--json", "emit findings as a JSON array").action(async (name, opts) => {
     const fn = CHECKS[name];
     if (!fn) {
-      console.error(`enchiridion check: unknown check "${name}"; known: ${checkNames}`);
+      console.error(
+        `enchiridion check: unknown check "${name}"; known: ${checkNames}`
+      );
       process.exitCode = 1;
       return;
     }
@@ -42198,6 +42377,21 @@ function buildProgram() {
     }
   });
   void check3;
+  const fixNames = Object.keys(FIXES).join(", ");
+  const fix = program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").action(async (name) => {
+    const fn = FIXES[name];
+    if (!fn) {
+      console.error(
+        `enchiridion fix: unknown fix "${name}"; known: ${fixNames}`
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const { root } = resolveRoot();
+    const changed = await fn(root);
+    for (const ref of changed) console.log(ref);
+  });
+  void fix;
   const page = program2.command("page").description("Read and edit one page's frontmatter");
   page.command("get").argument("<file>", "markdown file").argument("<key>", "frontmatter key").description("Print a frontmatter value").action((file, key) => {
     const p = loadPage(file);
