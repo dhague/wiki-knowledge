@@ -1296,7 +1296,10 @@ test("vault kinds: respects WIKI_ROOT env var", () => {
     env: { WIKI_ROOT: other },
   });
   assert.equal(status, 0, stderr);
-  const kinds = JSON.parse(stdout.trim()) as { kind: string; canonical: boolean }[];
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    canonical: boolean;
+  }[];
   const custom = kinds.filter((e) => !e.canonical);
   assert.equal(custom.length, 1);
   assert.equal(custom[0].kind, "person");
