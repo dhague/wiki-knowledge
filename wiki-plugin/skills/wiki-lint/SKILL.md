@@ -37,52 +37,38 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<sub
 find <vault-root>/wiki -name "*.md" | sort
 ```
 
-Collect the full list. Also collect all `wiki/sources/` pages for check 2.
+Collect the full list. No extra collection needed for specific check types — the check commands handle their own scoping internally.
 
 ### 3. Run mechanical checks
 
-These can be executed as batch bash commands without reading every page in full. Run them in parallel where possible. Run in this order; check IDs now match run order.
+Run all eight with `"$ENCHIRIDION" check <name> --json`. Each returns a JSON array of `{"pageRef": "...", "detail": "..."}` objects, or `[]` when clean. Run in parallel where the vault is large:
 
-**Check 1 — Kind-folder conformance:** Every `wiki/**/*.md` (excluding `KIND.md`) must sit *directly* under a valid kind-folder — one of the canonical four or any pre-existing custom folder. A page at the `wiki/` root or nested below a kind-folder is a violation. Get the valid set dynamically:
 ```bash
-# Get all valid folder names (canonical + custom)
-VALID_FOLDERS=$("$ENCHIRIDION" vault kinds --json | python3 -c \
-  "import json,sys; print('|'.join(d['folder'] for d in json.load(sys.stdin)))")
-# Find violations: not directly under a valid folder, excluding KIND.md
-find <vault-root>/wiki -name "*.md" ! -name "KIND.md" | \
-  grep -vE "/wiki/($VALID_FOLDERS)/[^/]+\.md$"
+"$ENCHIRIDION" check kind-folder-conformance --json
+"$ENCHIRIDION" check ingestion-source-integrity --json
+"$ENCHIRIDION" check frontmatter-link-format --json
+"$ENCHIRIDION" check stale-synthesis --json
+"$ENCHIRIDION" check missing-volatility-source-date --json
+"$ENCHIRIDION" check unresolved-supersession --json
+"$ENCHIRIDION" check contradiction-callouts --json
+"$ENCHIRIDION" check orphans --json
 ```
-Finding: page not directly under a valid kind-folder. Fix level: **confirm first** (uses `enchiridion vault move`).
 
-**Check 2 — Ingestion source integrity:** Every `wiki/sources/*.md` must carry a `raw_source:` frontmatter field:
-```bash
-grep -rL '^raw_source:' <vault-root>/wiki/sources/*.md
-```
-Or use `"$ENCHIRIDION" page get <file> raw_source` (exits non-zero when absent). Finding: source page missing `raw_source`. Fix level: **auto-fix** if body contains an unambiguous markdown link into `raw/` (move it to frontmatter field); otherwise **report only**.
+**Check 1 — Kind-folder conformance:** Every `.md` under `wiki/` (excluding `KIND.md` and `_index.md`) must sit directly under a valid kind-folder — canonical four or any pre-existing custom folder. Pages at the `wiki/` root or nested below a kind-folder are violations. Fix level: **confirm first** (uses `enchiridion vault move`).
 
-**Check 3 — Frontmatter link format:** All links in frontmatter edge keys (`supersedes`, `refines`, `contradicts`, `example-of`, `source`, `related`) and `raw_source` must be quoted YAML strings (`"[title](path)"`) with percent-encoded destinations (space, `%`, `#`, `(`, `)`, `<`, `>` encoded; unicode stays literal). Scan frontmatter blocks for unquoted link lines or destinations containing literal spaces. Finding: unquoted link or unencoded destination. Fix level: **auto-fix**.
+**Check 2 — Ingestion source integrity:** Every `wiki/sources/*.md` must carry a `raw_source:` frontmatter field. Fix level: **auto-fix** if body contains an unambiguous `raw/` link; otherwise **report only**.
 
-**Check 4 — Stale synthesis:** Any `wiki/synthesis/*.md` whose git commit date is > 30 days ago:
-```bash
-git -C <vault-root> log -1 --format="%ai" -- wiki/synthesis/<page>.md
-```
-Finding: synthesis page older than 30 days. Fix level: **report only**.
+**Check 3 — Frontmatter link format:** Links in frontmatter edge keys must be quoted YAML strings (`"[title](path)"`) with percent-encoded destinations (space, `%`, `#`, `(`, `)`, `<`, `>` encoded; unicode stays literal). Fix level: **auto-fix**.
 
-**Check 5 — Missing volatility / source_date:** Pages missing either `volatility` or `source_date` frontmatter field. Use `"$ENCHIRIDION" page get <file> volatility` and `page get <file> source_date`. Finding: field absent. Fix level: **report only** (values require author judgment).
+**Check 4 — Stale synthesis:** Synthesis pages whose last git commit is > 30 days ago. Fix level: **report only**.
 
-**Check 6 — Unresolved supersession:** A `contradicts` edge that was resolved by replacement should also set `supersedes`. Heuristic for "resolved": page carries `contradicts:` but does NOT also have an active `> [!warning] Contradiction` callout in its body — that combination indicates the conflict was acknowledged and replaced but `supersedes` was never recorded. Pages with both the `contradicts:` edge and an active callout are live contradictions (check 7), not check 6. Flag pages where `contradicts` is present, `supersedes` is absent, and no active contradiction callout is found in the body. Finding: page contradicts target without recording supersession. Fix level: **report only** (needs author judgment on which replacement page to name).
+**Check 5 — Missing volatility / source_date:** Pages missing either `volatility` or `source_date` frontmatter field. Fix level: **report only** (values require author judgment).
 
-**Check 7 — Contradiction callouts:** Grep for unresolved callouts in body:
-```bash
-grep -rl '> \[!warning\] Contradiction' <vault-root>/wiki
-```
-Finding: page contains active contradiction warning. Fix level: **report only** (needs author judgment).
+**Check 6 — Unresolved supersession:** Page has `contradicts:` edge, no `supersedes:` edge, and no active `> [!warning] Contradiction` callout in the body — resolved contradiction with supersession unrecorded. Pages with both `contradicts:` and an active callout are live contradictions (check 7). Fix level: **report only**.
 
-**Check 8 — Orphans:** For each `wiki/**/*.md`, check whether any other page contains a link to it. Build an inbound-link count across all pages:
-```bash
-# For each page P, count occurrences of P's filename/path in all other pages' bodies and frontmatter
-```
-A page with zero inbound links from any other wiki page is an orphan. Note: `wiki/sources/` stubs are linked via `raw_source:` — only count `wiki/`-to-`wiki/` inbound links. Finding: page has zero inbound links from other wiki pages. Fix level: **report only** (orphan may need links added or page deleted — both are author decisions).
+**Check 7 — Contradiction callouts:** Pages containing an active `> [!warning] Contradiction` callout in the body. Fix level: **report only**.
+
+**Check 8 — Orphans:** Pages with zero inbound links from other wiki pages (body or frontmatter edges). Fix level: **report only**.
 
 ### 4. Run judgment checks
 
