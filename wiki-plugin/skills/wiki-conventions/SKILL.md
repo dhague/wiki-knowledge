@@ -22,7 +22,7 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
     └── <user-extensible>/    ← emails/ meetings/ notes/ clippings/ documents/ … an OPEN set
 ```
 
-- Four **kind-folders** under `wiki/` are the fixed set. **Kind** is the only axis both decidable from a page's content *and* domain-independent. Domain- or topic-axed trees fail decidability and are not used. (See [Naming](#naming) for folder-vs-value convention.)
+- Four **kind-folders** under `wiki/` are the canonical set; any user-added `wiki/<custom>/` folder that pre-exists is a peer placement target (see [Placement algorithm](#placement-algorithm)). **Kind** is the only axis both decidable from a page's content *and* domain-independent. Domain- or topic-axed trees fail decidability and are not used. (See [Naming](#naming) for folder-vs-value convention.)
 - **Multi-membership never spawns a second folder.** Page touching several subjects filed once, by primary function; every other facet rides on **tags + typed edges**. Folder tree is only a thin, decidable filing handle.
 - `raw/` is **sibling** of `wiki/`, not child — immutable-originals-vs-generated split. Search index walks `wiki/**` only; never lists `raw/`.
 - `raw/` is **inbox** scanned by deterministic script; subfolders are **user-extensible** — no mandated catch-all.
@@ -30,12 +30,13 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
 
 ### Placement algorithm
 
-**Top-to-bottom, first match wins** — placement is deterministic. Kinds split into *origin-defined* (`source`, `synthesis`) and *subject-defined* (`entity`, `concept`):
+**Top-to-bottom, first match wins** — placement is deterministic. Kinds split into *origin-defined* (`source`, `synthesis`) and *subject-defined* (`entity`, `concept`, or any custom kind):
 
 1. Stand-in for an ingested raw artifact? → **`sources/`** (must carry `raw_source:` field → its `raw/` file).
 2. Saved query result synthesized from other pages? → **`synthesis/`**.
 3. Primarily a named thing linked repeatedly? → **`entities/`**.
-4. Otherwise → **`concepts/`** (default).
+4. **Custom kind** — does the subject fit a custom kind-folder that already exists in the vault? → **`wiki/<custom>/`**. Call `enchiridion vault kinds --json` to discover available custom kinds before deciding; each entry carries `{kind, folder, canonical, definition}`. Custom kinds are peers of canonical ones — weigh them alongside the canonical four, not as a last resort. The plugin never auto-creates a kind-folder; only a pre-existing folder is a valid target.
+5. Otherwise → **`concepts/`** (default).
 
 ### The chain of evidence
 
@@ -186,7 +187,7 @@ wiki(args=["search", "connection pooling", "--json"])
 | `enchiridion ingest` | Executing an `IngestPlan` — resolve, validate, write, commit — after agent assembles plan. | `bin/enchiridion ingest --plan <path>`; add `--dry-run` to validate and print without writing. `bin/enchiridion ingest --ignore <raw_rel> [--ignore <raw_rel> …] [--ignore-comment <text>]` appends to folder's `.ingestignore`; `--ignore` is repeatable so multiple paths can be bulk-added in one call. |
 | `enchiridion ingest-scan` | Sweeping `raw/` for files needing ingestion (never-ingested, changed-since-ingestion). | `bin/enchiridion ingest-scan [folder] --json`. |
 | `enchiridion watch` | Long-running filesystem watcher over `raw/` with per-file debounce, exclusive lock, queue file — launched by `/wiki-watch`. | `bin/enchiridion watch [--vault ROOT] [--debounce SECONDS] [--poll-interval SECONDS]`. `bin/enchiridion watch [--vault ROOT] --dequeue <raw_rel>` removes one queue entry. |
-| `enchiridion vault` | Resolving vault root, or moving a page (rewrites all inbound links across vault and outbound links inside moved page). | Bare `bin/enchiridion vault` (or `bin/enchiridion vault root`) prints resolved root. `bin/enchiridion vault move <old-page-ref> <new-page-ref>` prints each changed page ref, one per line. |
+| `enchiridion vault` | Resolving vault root, listing all available kinds, or moving a page (rewrites all inbound links across vault and outbound links inside moved page). | Bare `bin/enchiridion vault` (or `bin/enchiridion vault root`) prints resolved root. `bin/enchiridion vault kinds [--json]` lists every kind — the four canonical kinds (`canonical: true`) plus any custom kind-folder; each entry: `{kind, folder, canonical, definition}` (`definition` is `KIND.md` summary or `null`). `bin/enchiridion vault move <old-page-ref> <new-page-ref>` prints each changed page ref, one per line. |
 | `enchiridion init` | Scaffolding new empty vault: folders, `.gitignore`, git init, optional `settings.json`. | `bin/enchiridion init <path> --mode {query-from-anywhere|dedicated} [--plugin-root DIR]`. |
 | `enchiridion save-session` | Capturing current session's transcript as raw file in vault. Called from `/save-conversation`. | `bin/enchiridion save-session [--slug "<phrase>"]`. |
 | `enchiridion page` | Frontmatter edits during ingestion. Takes a **file path**, resolves no vault root. | `bin/enchiridion page get <file> <key>` (exits non-zero when key absent) · `page set <file> <key> <value> [--json]` · `page merge <file> <key> <json-list>` (unions list-valued keys — `tags`, edge keys). |
