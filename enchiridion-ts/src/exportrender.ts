@@ -54,7 +54,7 @@ mdRender.renderer.rules.heading_open = (tokens, idx) => {
 // HTML helpers
 // ---------------------------------------------------------------------------
 
-function escHtml(s: string): string {
+export function escHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -63,7 +63,7 @@ function escHtml(s: string): string {
 }
 
 /** Convert a vault-relative .md path to a .html path. */
-function mdToHtml(ref: string): string {
+export function mdToHtml(ref: string): string {
   return ref.endsWith(".md") ? ref.slice(0, -3) + ".html" : ref;
 }
 
@@ -290,7 +290,7 @@ function renderFrontmatterTable(
 // CSS
 // ---------------------------------------------------------------------------
 
-const CSS = `
+export const CSS = `
 body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 0 auto; padding: 1rem 1.5rem; line-height: 1.6; }
 nav { margin-bottom: 1.5rem; font-size: 0.875rem; }
 nav a { color: inherit; }
@@ -315,7 +315,11 @@ function buildNavBar(pageRef: string): string {
   return `<nav><a href="${prefix}index.html">Home</a> · <a href="${prefix}tags/index.html">Tags</a></nav>`;
 }
 
-function buildHtmlShell(title: string, nav: string, main: string): string {
+export function buildHtmlShell(
+  title: string,
+  nav: string,
+  main: string,
+): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

@@ -17,10 +17,23 @@ import path from "node:path";
 import { PageRecord } from "./pagerecord.js";
 import { iterLinks, resolveLinkDest } from "./wikipage.js";
 
+/** One user-supplied entry for the get-started block. */
+export interface StarterEntry {
+  pageRef: string;
+  /** Optional annotation shown next to the link. */
+  annotation?: string;
+}
+
 /** Options controlling which subtrees are included in the export. */
 export interface ExportOptions {
   /** When true, raw/ pages are included in the exported set. Default false. */
   includeRaw?: boolean;
+  /**
+   * User-supplied get-started list. When provided, the front page uses these
+   * instead of the fallback ranking. pageRefs not in the exported set are
+   * silently skipped.
+   */
+  starters?: StarterEntry[];
 }
 
 /** One entry in the get-started ranking. */
