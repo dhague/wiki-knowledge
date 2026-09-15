@@ -47,6 +47,14 @@ _Avoid_: Link (a typed edge is a specific relationship; "link" alone means any m
 **Supersedes**:
 A recorded fact that one page replaces another, distinct from a `newer wins` recency guess. On a contradiction, ingestion appends a new page and records `supersedes` — it never overwrites the superseded page.
 
+**Concept fragmentation**:
+A cluster of small, closely-related concept pages whose knowledge is better expressed as one page with sections. The degenerate two-member case is a pair of near-duplicate pages. Distinct from concepts that are merely *related*: distinct-but-related concepts are joined by a typed edge, not folded.
+_Avoid_: Duplication (too narrow — fragmentation is scatter across pages, not only exact copies).
+
+**Fold**:
+The operation that resolves concept fragmentation by absorbing a cluster of pages into one survivor page, each folded page's content becoming a section of the survivor, and every inbound link repointed to the survivor. Lossless by construction — no knowledge is dropped — which is why the folded pages are deleted rather than recorded as superseded ([ADR-0021](docs/adr/0021-fold-is-lossless-delete-not-supersede.md)).
+_Avoid_: Merge (generic), Supersede (a fold is lossless and deletes the losers; supersession preserves both pages to keep a conflicting claim).
+
 **Volatility**:
 A page's authored judgment of how likely its content is to go stale: `stable`, `evolving`, or `volatile`. Drives whether retrieval discounts a page's age.
 
