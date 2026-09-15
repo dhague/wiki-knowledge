@@ -16,11 +16,25 @@
 import path from "node:path";
 import { PageRecord } from "./pagerecord.js";
 import { iterLinks, resolveLinkDest } from "./wikipage.js";
+import { slugify } from "./place.js";
+
+/** One user-supplied entry for the get-started block. */
+export interface StarterEntry {
+  pageRef: string;
+  /** Optional annotation shown next to the link. */
+  annotation?: string;
+}
 
 /** Options controlling which subtrees are included in the export. */
 export interface ExportOptions {
   /** When true, raw/ pages are included in the exported set. Default false. */
   includeRaw?: boolean;
+  /**
+   * User-supplied get-started list. When provided, the front page uses these
+   * instead of the fallback ranking. pageRefs not in the exported set are
+   * silently skipped.
+   */
+  starters?: StarterEntry[];
 }
 
 /** One entry in the get-started ranking. */
@@ -51,6 +65,36 @@ export interface ExportMeta {
 
 /** Number of pages in the fallback get-started list. */
 const GET_STARTED_COUNT = 12;
+
+/**
+ * Maps each tag string to a unique URL slug. Tags that produce the same base
+ * slug get a numeric suffix: "foo", "foo-2", "foo-3", …
+ * Input is sorted for determinism before assignment.
+ */
+export function buildTagSlugMap(tags: string[]): Map<string, string> {
+  const sorted = [...tags].sort();
+  const slugMap = new Map<string, string>();
+  const assigned = new Set<string>();
+
+  for (const tag of sorted) {
+    const base = slugify(tag, 0);
+    if (!assigned.has(base)) {
+      slugMap.set(tag, base);
+      assigned.add(base);
+    } else {
+      let n = 2;
+      let candidate = `${base}-${n}`;
+      while (assigned.has(candidate)) {
+        n++;
+        candidate = `${base}-${n}`;
+      }
+      slugMap.set(tag, candidate);
+      assigned.add(candidate);
+    }
+  }
+
+  return slugMap;
+}
 
 /**
  * Collect all vault-relative link targets found in a page's full text
