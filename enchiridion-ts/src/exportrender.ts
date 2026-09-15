@@ -449,28 +449,6 @@ function navBarFor(htmlPath: string): string {
   return `<nav><a href="${escHtml(rel)}">Home</a> · <a href="${escHtml(relTags)}">Tags</a></nav>`;
 }
 
-/** Build a collision-safe tag→slug map, sorted alphabetically to pick the
- * bare slug (first alphabetically wins; later collisions get `-2`, `-3`, …). */
-function buildTagSlugMap(tagMap: Map<string, string[]>): Map<string, string> {
-  const tags = [...tagMap.keys()].sort();
-  const tagToSlug = new Map<string, string>();
-  const usedSlugs = new Set<string>();
-  for (const tag of tags) {
-    const base = slugify(tag, 0) || "tag";
-    if (!usedSlugs.has(base)) {
-      tagToSlug.set(tag, base);
-      usedSlugs.add(base);
-    } else {
-      let n = 2;
-      while (usedSlugs.has(`${base}-${n}`)) n++;
-      const slug = `${base}-${n}`;
-      tagToSlug.set(tag, slug);
-      usedSlugs.add(slug);
-    }
-  }
-  return tagToSlug;
-}
-
 /** Derive the wiki folder name for a kind from its pageRefs. */
 function kindFolderFromRefs(pageRefs: string[]): string {
   for (const ref of pageRefs) {
@@ -527,13 +505,17 @@ function buildKindIndexPage(
   const htmlPath = `wiki/${folder}/index.html`;
   const nav = navBarFor(htmlPath);
   const label = kind.charAt(0).toUpperCase() + kind.slice(1);
-  const items = pageRefs
+  const items = [...pageRefs]
+    .sort((a, b) => {
+      const ta = pages.get(a)?.record?.title || a;
+      const tb = pages.get(b)?.record?.title || b;
+      return ta.localeCompare(tb);
+    })
     .map((ref) => {
       const title = pages.get(ref)?.record?.title || ref;
       const link = relFromTo(htmlPath, mdToHtml(ref));
       return `<li><a href="${escHtml(link)}">${escHtml(title)}</a></li>`;
     })
-    .sort() // sort by rendered html for determinism
     .join("\n");
   const main = `<h1>${escHtml(label)} pages</h1>\n<ul>\n${items}\n</ul>`;
   return buildHtmlShell(escHtml(`${label} pages`), nav, main);
@@ -579,10 +561,10 @@ function buildFrontPage(
   let startedItems: string;
   if (starters && starters.length > 0) {
     startedItems = starters
-      .map(({ ref, annotation }) => {
-        const record = pages.get(ref)?.record;
-        const title = record?.title || ref;
-        const link = mdToHtml(ref);
+      .map(({ pageRef, annotation }) => {
+        const record = pages.get(pageRef)?.record;
+        const title = record?.title || pageRef;
+        const link = mdToHtml(pageRef);
         const annPart = annotation ? ` — ${escHtml(annotation)}` : "";
         return `<li><a href="${escHtml(link)}">${escHtml(title)}</a>${annPart}</li>`;
       })
@@ -618,7 +600,7 @@ export function* renderAggregate(
   opts: ExportOptions = {},
   kindBlurbs: Map<string, string> = new Map(),
 ): Generator<RenderedPage> {
-  const tagToSlug = buildTagSlugMap(meta.tagMap);
+  const tagToSlug = buildTagSlugMap([...meta.tagMap.keys()]);
 
   // Tag pages
   for (const [tag, pageRefs] of meta.tagMap) {

@@ -483,8 +483,13 @@ function collectAll(
 ) {
   const meta = buildExportMeta(pages, opts);
   const result = new Map<string, string>();
-  for (const { path, content } of renderAll(pages, meta, opts, kindBlurbs)) {
-    result.set(path, content);
+  for (const { path: relPath, content } of renderAll(
+    pages,
+    meta,
+    opts,
+    kindBlurbs,
+  )) {
+    result.set(relPath, content);
   }
   return result;
 }
