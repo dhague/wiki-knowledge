@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadRecords } from "./pagerecord.js";
+import { loadRecords, type PageRecord } from "./pagerecord.js";
 import { buildExportMeta } from "./exportmeta.js";
 
 // ---------------------------------------------------------------------------
@@ -62,10 +62,7 @@ See [Alpha Concept](../wiki/concepts/alpha-concept.md).
 
 function makePages(
   entries: Array<[string, string]>,
-): Map<
-  string,
-  { record?: import("./pagerecord.js").PageRecord; text: string }
-> {
+): Map<string, { record?: PageRecord; text: string }> {
   // Split into wiki/ (need full PageRecord) and raw/ (text only).
   const wikiEntries = entries.filter(([ref]) => ref.startsWith("wiki/"));
   const rawEntries = entries.filter(([ref]) => !ref.startsWith("wiki/"));
@@ -74,10 +71,7 @@ function makePages(
   for (const [ref, text] of wikiEntries) textMap[ref] = text;
   const records = loadRecords(textMap);
 
-  const result = new Map<
-    string,
-    { record?: import("./pagerecord.js").PageRecord; text: string }
-  >();
+  const result = new Map<string, { record?: PageRecord; text: string }>();
   for (const [ref, text] of wikiEntries) {
     result.set(ref, { record: records[ref]!, text });
   }

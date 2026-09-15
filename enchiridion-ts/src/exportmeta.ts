@@ -59,12 +59,12 @@ const GET_STARTED_COUNT = 12;
  */
 function outboundRefs(pageRef: string, body: string): Set<string> {
   const pageDir = path.posix.dirname(pageRef);
-  const dir = pageDir === "." ? "" : pageDir;
+  // resolveLinkDest expects "" for vault root; path.posix.dirname returns "." for flat paths.
+  const baseDir = pageDir === "." ? "" : pageDir;
   const refs = new Set<string>();
   for (const link of iterLinks(body)) {
     if (link.isImage) continue;
-    // decodedPath is already anchor-free and decoded
-    const resolved = resolveLinkDest(link.decodedPath, dir);
+    const resolved = resolveLinkDest(link.decodedPath, baseDir);
     refs.add(resolved);
   }
   return refs;
