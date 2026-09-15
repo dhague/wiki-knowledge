@@ -78,3 +78,21 @@ _Avoid_: Tool call — a turn may batch several tool calls together, so the two 
 **Tool call**:
 One `tool_use` invocation within a turn. Turns are not exactly recoverable from what's observable locally (no per-message identifier or timestamp in the `PostToolUse` payload, and subagent turns aren't persisted at all), so tool-call count is the measured proxy for turn count — see [ADR-0007](docs/adr/0007-turn-cost-not-tool-call-count.md).
 _Avoid_: Turn (interchangeably) — a tool call is one invocation; a turn may contain several. #98 used the two loosely before this ADR pinned them apart.
+
+**Export**:
+Rendering the vault to a self-contained, offline static HTML site — `wiki/` always, `raw/` opt-in — via `enchiridion export`. A deterministic file transform that reads the working tree but refuses to run while the exported subtree is dirty, so the site never publishes uncommitted bytes ([ADR-0022](docs/adr/0022-static-html-export.md)). Distinct from ingestion (into the vault) and retrieval (out of it): export is a read-only projection of the whole vault into another format.
+_Avoid_: Publish, build — "export" names specifically this markdown-to-HTML projection, not deployment or the TypeScript bundle build.
+
+**Web tree**:
+The generated site, at `web/` under the vault root by default (`--out` overrides). A gitignored, reproducible artifact — never committed, never a source of truth. Mirrors the vault tree, `.md`→`.html`.
+_Avoid_: Site, output dir (informal — `web/` is the default, but the term is the tree it holds).
+
+**Tag page**:
+One generated HTML page per tag (`web/tags/<slug>.html`) listing every page that carries the tag, plus a tag index (`web/tags/index.html`) of all tags with counts. Export-only — tags themselves are just a frontmatter list; the tag page is their materialised, browsable form.
+
+**Kind index page**:
+A generated `web/wiki/<folder>/index.html` listing every page of one kind, linked from the front page's per-kind counts. Exists so every exported page is reachable from the front page without listing them all there.
+
+**Get-started set**:
+The 10–12 pages the exported front page links as entry points. Chosen by the `/wiki-export` skill's LLM judgment over the script's ranked candidates (and the vault's own root docs), or, when the script runs bare, by a deterministic inbound-link-count fallback ([ADR-0022](docs/adr/0022-static-html-export.md)). The script emits candidates and accepts the chosen set via `--starters`; it never authors the judgment and never depends on it.
+_Avoid_: Featured pages, index (the front page is more than this set).
