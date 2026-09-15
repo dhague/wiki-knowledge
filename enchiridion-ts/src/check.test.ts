@@ -41,18 +41,19 @@ function writeVault(pages: Record<string, string>): string {
 }
 
 /** Minimal valid page frontmatter with given overrides. */
-function page(
-  title: string,
-  extra = "",
-  body = "Body text.\n",
-): string {
+function page(title: string, extra = "", body = "Body text.\n"): string {
   return `---\ntitle: ${title}\n${extra}---\n${body}`;
 }
 
 /** Init a bare git repo at root, stage and commit all files with a specific
  * author timestamp (Unix seconds). */
 async function gitCommit(root: string, timestamp: number): Promise<void> {
-  const author = { name: "Test", email: "t@t.com", timestamp, timezoneOffset: 0 };
+  const author = {
+    name: "Test",
+    email: "t@t.com",
+    timestamp,
+    timezoneOffset: 0,
+  };
   await git.init({ fs, dir: root });
   const walk = (dir: string): string[] => {
     const out: string[] = [];
@@ -65,7 +66,13 @@ async function gitCommit(root: string, timestamp: number): Promise<void> {
     return out;
   };
   for (const f of walk(root)) await git.add({ fs, dir: root, filepath: f });
-  await git.commit({ fs, dir: root, message: "init", author, committer: author });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "init",
+    author,
+    committer: author,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +191,11 @@ test("check 3: unquoted list item link is a violation", async () => {
       "---\ntitle: Foo\nrelated:\n  - [Bar](../entities/bar.md)\n---\nBody.\n",
   });
   const findings = await frontmatterLinkFormat(root);
-  assert.ok(findings.some((f) => f.pageRef === "wiki/concepts/foo.md" && /unquoted/.test(f.detail)));
+  assert.ok(
+    findings.some(
+      (f) => f.pageRef === "wiki/concepts/foo.md" && /unquoted/.test(f.detail),
+    ),
+  );
 });
 
 test("check 3: unencoded # in filename destination is a violation", async () => {
@@ -197,7 +208,11 @@ test("check 3: unencoded # in filename destination is a violation", async () => 
     ),
   });
   const findings = await frontmatterLinkFormat(root);
-  assert.ok(findings.some((f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail)));
+  assert.ok(
+    findings.some(
+      (f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail),
+    ),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -276,10 +291,8 @@ test("check 5: page missing source_date is a violation", async () => {
 // Check 6 — unresolvedSupersession
 // ---------------------------------------------------------------------------
 
-const contradictsFm =
-  'contradicts:\n  - "[Bar](../entities/bar.md)"\n';
-const supersedesFm =
-  'supersedes:\n  - "[Old Bar](../entities/old-bar.md)"\n';
+const contradictsFm = 'contradicts:\n  - "[Bar](../entities/bar.md)"\n';
+const supersedesFm = 'supersedes:\n  - "[Old Bar](../entities/old-bar.md)"\n';
 const calloutBody = "> [!warning] Contradiction\nSome conflict noted.\n";
 
 test("check 6: contradicts + supersedes is clean", async () => {
@@ -335,11 +348,7 @@ test("check 7: page with active Contradiction callout is a violation", async () 
 
 test("check 8: page with inbound link is clean", async () => {
   const root = writeVault({
-    "wiki/concepts/foo.md": page(
-      "Foo",
-      "",
-      "[Bar](../entities/bar.md)\n",
-    ),
+    "wiki/concepts/foo.md": page("Foo", "", "[Bar](../entities/bar.md)\n"),
     "wiki/entities/bar.md": page("Bar"),
   });
   const findings = await orphans(root);

@@ -90,7 +90,9 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
  * Every wiki/sources/ page must carry a raw_source frontmatter field pointing
  * into raw/.
  */
-export async function ingestionSourceIntegrity(root: string): Promise<Finding[]> {
+export async function ingestionSourceIntegrity(
+  root: string,
+): Promise<Finding[]> {
   const pages = new Vault(root).pages();
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
@@ -168,7 +170,10 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
     const ts = new Date(dateStr).getTime();
     if (ts < cutoffMs) {
       const daysAgo = Math.floor((Date.now() - ts) / 86400000);
-      findings.push({ pageRef: ref, detail: `last committed ${daysAgo} days ago` });
+      findings.push({
+        pageRef: ref,
+        detail: `last committed ${daysAgo} days ago`,
+      });
     }
   }
   return findings;
@@ -262,7 +267,10 @@ export async function orphans(root: string): Promise<Finding[]> {
 
   return [...inbound.entries()]
     .filter(([, count]) => count === 0)
-    .map(([ref]) => ({ pageRef: ref, detail: "no inbound links from other wiki pages" }))
+    .map(([ref]) => ({
+      pageRef: ref,
+      detail: "no inbound links from other wiki pages",
+    }))
     .sort((a, b) => a.pageRef.localeCompare(b.pageRef));
 }
 

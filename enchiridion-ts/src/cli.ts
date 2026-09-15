@@ -680,7 +680,9 @@ export function buildProgram(): Command {
     .action(async (name: string, opts: { json?: boolean }) => {
       const fn = CHECKS[name];
       if (!fn) {
-        console.error(`enchiridion check: unknown check "${name}"; known: ${checkNames}`);
+        console.error(
+          `enchiridion check: unknown check "${name}"; known: ${checkNames}`,
+        );
         process.exitCode = 1;
         return;
       }
