@@ -37,13 +37,13 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<sub
 find <vault-root>/wiki -name "*.md" | sort
 ```
 
-Collect the full list. Also collect all `wiki/sources/` pages for check 7.
+Collect the full list. Also collect all `wiki/sources/` pages for check 2.
 
 ### 3. Run mechanical checks
 
-These can be executed as batch bash commands without reading every page in full. Run them in parallel where possible. Execution order within this section: 9, 7, 8, 10, 13, 14, 1, 3 — numbered by check ID, not run order.
+These can be executed as batch bash commands without reading every page in full. Run them in parallel where possible. Run in this order; check IDs now match run order.
 
-**Check 9 — Kind-folder conformance:** Every `wiki/**/*.md` (excluding `KIND.md`) must sit *directly* under a valid kind-folder — one of the canonical four or any pre-existing custom folder. A page at the `wiki/` root or nested below a kind-folder is a violation. Get the valid set dynamically:
+**Check 1 — Kind-folder conformance:** Every `wiki/**/*.md` (excluding `KIND.md`) must sit *directly* under a valid kind-folder — one of the canonical four or any pre-existing custom folder. A page at the `wiki/` root or nested below a kind-folder is a violation. Get the valid set dynamically:
 ```bash
 # Get all valid folder names (canonical + custom)
 VALID_FOLDERS=$("$ENCHIRIDION" vault kinds --json | python3 -c \
@@ -54,31 +54,31 @@ find <vault-root>/wiki -name "*.md" ! -name "KIND.md" | \
 ```
 Finding: page not directly under a valid kind-folder. Fix level: **confirm first** (uses `enchiridion vault move`).
 
-**Check 7 — Ingestion source integrity:** Every `wiki/sources/*.md` must carry a `raw_source:` frontmatter field:
+**Check 2 — Ingestion source integrity:** Every `wiki/sources/*.md` must carry a `raw_source:` frontmatter field:
 ```bash
 grep -rL '^raw_source:' <vault-root>/wiki/sources/*.md
 ```
 Or use `"$ENCHIRIDION" page get <file> raw_source` (exits non-zero when absent). Finding: source page missing `raw_source`. Fix level: **auto-fix** if body contains an unambiguous markdown link into `raw/` (move it to frontmatter field); otherwise **report only**.
 
-**Check 8 — Frontmatter link format:** All links in frontmatter edge keys (`supersedes`, `refines`, `contradicts`, `example-of`, `source`, `related`) and `raw_source` must be quoted YAML strings (`"[title](path)"`) with percent-encoded destinations (space, `%`, `#`, `(`, `)`, `<`, `>` encoded; unicode stays literal). Scan frontmatter blocks for unquoted link lines or destinations containing literal spaces. Finding: unquoted link or unencoded destination. Fix level: **auto-fix**.
+**Check 3 — Frontmatter link format:** All links in frontmatter edge keys (`supersedes`, `refines`, `contradicts`, `example-of`, `source`, `related`) and `raw_source` must be quoted YAML strings (`"[title](path)"`) with percent-encoded destinations (space, `%`, `#`, `(`, `)`, `<`, `>` encoded; unicode stays literal). Scan frontmatter blocks for unquoted link lines or destinations containing literal spaces. Finding: unquoted link or unencoded destination. Fix level: **auto-fix**.
 
-**Check 10 — Stale synthesis:** Any `wiki/synthesis/*.md` whose git commit date is > 30 days ago:
+**Check 4 — Stale synthesis:** Any `wiki/synthesis/*.md` whose git commit date is > 30 days ago:
 ```bash
 git -C <vault-root> log -1 --format="%ai" -- wiki/synthesis/<page>.md
 ```
 Finding: synthesis page older than 30 days. Fix level: **report only**.
 
-**Check 13 — Missing volatility / source_date:** Pages missing either `volatility` or `source_date` frontmatter field. Use `"$ENCHIRIDION" page get <file> volatility` and `page get <file> source_date`. Finding: field absent. Fix level: **report only** (values require author judgment).
+**Check 5 — Missing volatility / source_date:** Pages missing either `volatility` or `source_date` frontmatter field. Use `"$ENCHIRIDION" page get <file> volatility` and `page get <file> source_date`. Finding: field absent. Fix level: **report only** (values require author judgment).
 
-**Check 14 — Unresolved supersession:** A `contradicts` edge that was resolved by replacement should also set `supersedes`. Heuristic for "resolved": page carries `contradicts:` but does NOT also have an active `> [!warning] Contradiction` callout in its body — that combination indicates the conflict was acknowledged and replaced but `supersedes` was never recorded. Pages with both the `contradicts:` edge and an active callout are live contradictions (check 1), not check 14. Flag pages where `contradicts` is present, `supersedes` is absent, and no active contradiction callout is found in the body. Finding: page contradicts target without recording supersession. Fix level: **report only** (needs author judgment on which replacement page to name).
+**Check 6 — Unresolved supersession:** A `contradicts` edge that was resolved by replacement should also set `supersedes`. Heuristic for "resolved": page carries `contradicts:` but does NOT also have an active `> [!warning] Contradiction` callout in its body — that combination indicates the conflict was acknowledged and replaced but `supersedes` was never recorded. Pages with both the `contradicts:` edge and an active callout are live contradictions (check 7), not check 6. Flag pages where `contradicts` is present, `supersedes` is absent, and no active contradiction callout is found in the body. Finding: page contradicts target without recording supersession. Fix level: **report only** (needs author judgment on which replacement page to name).
 
-**Check 1 — Contradiction callouts:** Grep for unresolved callouts in body:
+**Check 7 — Contradiction callouts:** Grep for unresolved callouts in body:
 ```bash
 grep -rl '> \[!warning\] Contradiction' <vault-root>/wiki
 ```
 Finding: page contains active contradiction warning. Fix level: **report only** (needs author judgment).
 
-**Check 3 — Orphans:** For each `wiki/**/*.md`, check whether any other page contains a link to it. Build an inbound-link count across all pages:
+**Check 8 — Orphans:** For each `wiki/**/*.md`, check whether any other page contains a link to it. Build an inbound-link count across all pages:
 ```bash
 # For each page P, count occurrences of P's filename/path in all other pages' bodies and frontmatter
 ```
@@ -88,25 +88,25 @@ A page with zero inbound links from any other wiki page is an orphan. Note: `wik
 
 These require reading page content and applying semantic judgment. Run after the mechanical pass. Limit to pages not already flagged to avoid duplicate work.
 
-**Check 2 — Stale claims:** For pages whose last git commit is > 90 days ago, check whether a newer source on the same topic (by title/tag overlap) has been ingested since. Use `enchiridion search` to find related pages with more recent commits:
+**Check 9 — Stale claims:** For pages whose last git commit is > 90 days ago, check whether a newer source on the same topic (by title/tag overlap) has been ingested since. Use `enchiridion search` to find related pages with more recent commits:
 ```bash
 "$ENCHIRIDION" search "<page-title-terms>" --limit 10 --json
 ```
 Compare `git_date` of related pages. If a related page's `git_date` is substantially newer and their content covers the same ground, flag. Finding: page's claims may be superseded by newer content. Fix level: **report only**.
 
-**Check 4 — Implicit concepts:** Identify terms appearing verbatim (or near-verbatim) across ≥ 3 pages that do not have their own `wiki/concepts/` or `wiki/entities/` page. These are candidates for extraction. Judgment call: noun phrases in body text that would make coherent stand-alone pages. Finding: term lacks its own page. Fix level: **confirm first** (creating a new page via a new ingestion plan).
+**Check 10 — Implicit concepts:** Identify terms appearing verbatim (or near-verbatim) across ≥ 3 pages that do not have their own `wiki/concepts/` or `wiki/entities/` page. These are candidates for extraction. Judgment call: noun phrases in body text that would make coherent stand-alone pages. Finding: term lacks its own page. Fix level: **confirm first** (creating a new page via a new ingestion plan).
 
-**Check 5 — Missing cross-references:** For each page, check whether it names another wiki page's title in its body without linking to it. Scan body text for strings matching `title:` values from other pages. Finding: page body mentions `<title>` without linking to `<path>`. Fix level: **auto-fix** when match is unambiguous (page title matches exactly, one candidate); **confirm first** when ambiguous.
+**Check 11 — Missing cross-references:** For each page, check whether it names another wiki page's title in its body without linking to it. Scan body text for strings matching `title:` values from other pages. Finding: page body mentions `<title>` without linking to `<path>`. Fix level: **auto-fix** when match is unambiguous (page title matches exactly, one candidate); **confirm first** when ambiguous.
 
-**Check 6 — Data gaps:** For pages with `volatility: volatile` or `volatility: evolving` and `source_date` > 180 days ago, identify claims whose premises could have changed. Flag as candidates for a targeted search or new ingestion. Finding: page's volatile/evolving claims likely need refresh. Fix level: **report only**.
+**Check 12 — Data gaps:** For pages with `volatility: volatile` or `volatility: evolving` and `source_date` > 180 days ago, identify claims whose premises could have changed. Flag as candidates for a targeted search or new ingestion. Finding: page's volatile/evolving claims likely need refresh. Fix level: **report only**.
 
-**Check 11 — Summary quality:** For each page:
+**Check 13 — Summary quality:** For each page:
 - Missing `summary` field — **report only**.
 - Empty `summary` — **report only**.
 - `summary` > ~25 words — **report only** (guideline is ≤ ~20 words).
 - Vague `summary` (contains phrases like "this page covers", "information about", "notes on", or is a bare restatement of the title) — **report only**.
 
-**Check 12 — Under-typed edges:** For pages where `related:` edge targets could be reclassified as `refines`, `example-of`, or `contradicts`. Read the body text for both the source and target page to judge. Apply the typed-edge vocabulary from `wiki-conventions`:
+**Check 14 — Under-typed edges:** For pages where `related:` edge targets could be reclassified as `refines`, `example-of`, or `contradicts`. Read the body text for both the source and target page to judge. Apply the typed-edge vocabulary from `wiki-conventions`:
 - `refines` if source page sharpens/extends target's idea.
 - `example-of` if source page is a concrete instance of target.
 - `contradicts` if claims conflict.
@@ -131,7 +131,7 @@ related:
 
 **Raw source field migration:** For a `wiki/sources/*.md` page missing `raw_source:` frontmatter but containing a `raw/` link in its body (`[filename](../../raw/...)`) — move the link to `raw_source:` in frontmatter, remove from body if it was the only occurrence. Only auto-fix when exactly one `raw/` link exists in the body; otherwise report only.
 
-**Body cross-reference links:** For check 5 unambiguous matches — page body mentions an existing page's exact title without a link — insert the relative markdown link inline. Verify the path resolves before writing.
+**Body cross-reference links:** For check 11 unambiguous matches — page body mentions an existing page's exact title without a link — insert the relative markdown link inline. Verify the path resolves before writing.
 
 After auto-fixing, note each change in the summary (file, what changed).
 
@@ -148,16 +148,16 @@ Each proposal entry must include:
 
 Proposal shapes:
 
-**Cross-reference insertion (check 5, ambiguous):** "Page `<page>` mentions '<title>' without linking to it, but multiple candidate pages match. Which page should be linked?"
+**Cross-reference insertion (check 11, ambiguous):** "Page `<page>` mentions '<title>' without linking to it, but multiple candidate pages match. Which page should be linked?"
 Present candidate list and wait for selection or "skip". On selection: insert relative markdown link inline at the first unlinked mention.
 
-**Kind-folder conformance (check 9):** "Page `<path>` is not directly under a valid kind-folder. Move it to `wiki/<correct-kind>/`? `enchiridion vault move` rewrites all inbound links."
+**Kind-folder conformance (check 1):** "Page `<path>` is not directly under a valid kind-folder. Move it to `wiki/<correct-kind>/`? `enchiridion vault move` rewrites all inbound links."
 Command on yes: `"$ENCHIRIDION" vault move <old-ref> <new-ref>`
 
-**Implicit concept (check 4):** "Term '<term>' appears in N pages without its own concept page. Create one?"
+**Implicit concept (check 10):** "Term '<term>' appears in N pages without its own concept page. Create one?"
 Command on yes: invoke `/wiki-ingest` with the term and the context pages as input.
 
-**Edge retyping (check 12):** "In `<page>`, `related:` → `<target>` looks like `<specific-type>` because `<reason>`. Retype?"
+**Edge retyping (check 14):** "In `<page>`, `related:` → `<target>` looks like `<specific-type>` because `<reason>`. Retype?"
 Command on yes: `"$ENCHIRIDION" page set <absolute-path> <specific-type> "<link-string>"` and remove the entry from `related:`.
 
 ### 7. Report
@@ -189,17 +189,17 @@ If no findings remain after fixes, report "Vault is clean."
 
 | # | Check | Dimension | Fix level |
 |---|---|---|---|
-| 1 | Contradiction callouts | structural | report only |
-| 2 | Stale claims | structural | report only |
-| 3 | Orphans | structural | report only |
-| 4 | Implicit concepts | structural | confirm first |
-| 5 | Missing cross-references | structural | auto-fix (unambiguous) / confirm first |
-| 6 | Data gaps | structural | report only |
-| 7 | Ingestion source integrity | structural | auto-fix (unambiguous) / report only |
-| 8 | Frontmatter link format | structural | auto-fix |
-| 9 | Kind-folder conformance | structural | confirm first |
-| 10 | Stale synthesis | structural | report only |
-| 11 | Summary quality | retrievability | report only |
-| 12 | Under-typed edges | retrievability | confirm first |
-| 13 | Missing volatility / source_date | retrievability | report only |
-| 14 | Unresolved supersession | retrievability | report only |
+| 1 | Kind-folder conformance | structural | confirm first |
+| 2 | Ingestion source integrity | structural | auto-fix (unambiguous) / report only |
+| 3 | Frontmatter link format | structural | auto-fix |
+| 4 | Stale synthesis | structural | report only |
+| 5 | Missing volatility / source_date | retrievability | report only |
+| 6 | Unresolved supersession | retrievability | report only |
+| 7 | Contradiction callouts | structural | report only |
+| 8 | Orphans | structural | report only |
+| 9 | Stale claims | structural | report only |
+| 10 | Implicit concepts | structural | confirm first |
+| 11 | Missing cross-references | structural | auto-fix (unambiguous) / confirm first |
+| 12 | Data gaps | structural | report only |
+| 13 | Summary quality | retrievability | report only |
+| 14 | Under-typed edges | retrievability | confirm first |
