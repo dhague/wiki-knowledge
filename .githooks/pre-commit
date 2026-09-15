@@ -1,0 +1,15 @@
+#!/bin/sh
+# Run prettier on staged enchiridion-ts .ts files before every commit.
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACM | grep '^enchiridion-ts/.*\.ts$' || true)
+[ -z "$staged" ] && exit 0
+
+repo_root=$(git rev-parse --show-toplevel)
+prettier="$repo_root/enchiridion-ts/node_modules/.bin/prettier"
+[ -f "$prettier" ] || exit 0
+
+echo "$staged" | while IFS= read -r f; do
+  "$prettier" --write "$repo_root/$f"
+  git add "$repo_root/$f"
+done

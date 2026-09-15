@@ -51,6 +51,7 @@ import {
   runWatch,
 } from "./watch.js";
 import { canonicalSourceDate } from "./sourcedate.js";
+import { CHECKS, FIXES } from "./check.js";
 
 /** Prints the standard stub message and marks the process failed. */
 function stub(command: Command, label: string): void {
@@ -667,6 +668,54 @@ export function buildProgram(): Command {
       }
       console.log(JSON.stringify(result));
     });
+
+  // check <name> [--json] — run one vault health check by name; print
+  // findings as plain text (one per line) or as a JSON array with --json.
+  const checkNames = Object.keys(CHECKS).join(", ");
+  const check = program
+    .command("check")
+    .description(`Run a vault health check by name; names: ${checkNames}`)
+    .argument("<name>", "check name")
+    .option("--json", "emit findings as a JSON array")
+    .action(async (name: string, opts: { json?: boolean }) => {
+      const fn = CHECKS[name];
+      if (!fn) {
+        console.error(
+          `enchiridion check: unknown check "${name}"; known: ${checkNames}`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const { root } = resolveRoot();
+      const findings = await fn(root);
+      if (opts.json) {
+        console.log(JSON.stringify(findings));
+      } else {
+        for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+      }
+    });
+  void check; // referenced only for side effect of registering the command
+
+  // fix <name> — apply an auto-fix by name; prints each changed page ref.
+  const fixNames = Object.keys(FIXES).join(", ");
+  const fix = program
+    .command("fix")
+    .description(`Apply an auto-fix by name; names: ${fixNames}`)
+    .argument("<name>", "fix name")
+    .action(async (name: string) => {
+      const fn = FIXES[name];
+      if (!fn) {
+        console.error(
+          `enchiridion fix: unknown fix "${name}"; known: ${fixNames}`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const { root } = resolveRoot();
+      const changed = await fn(root);
+      for (const ref of changed) console.log(ref);
+    });
+  void fix; // referenced only for side effect of registering the command
 
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no
   // vault root (CLAUDE.md).
