@@ -32,6 +32,18 @@ test("isPageRef rejects the generated wiki/_index.md — never a page", () => {
   assert.equal(isPageRef("wiki/_index.md"), false);
 });
 
+test("isPageRef rejects KIND.md in a custom kind-folder — kind metadata, not a page (#441)", () => {
+  assert.equal(isPageRef("wiki/decisions/KIND.md"), false);
+});
+
+test("isPageRef rejects KIND.md in a canonical kind-folder — kind metadata, not a page (#441)", () => {
+  assert.equal(isPageRef("wiki/concepts/KIND.md"), false);
+});
+
+test("isPageRef still accepts a normal page in a folder that also has KIND.md", () => {
+  assert.equal(isPageRef("wiki/decisions/use-fts5.md"), true);
+});
+
 test("isPageRef rejects a nested page — a structural error, not a page", () => {
   assert.equal(isPageRef("wiki/concepts/nested/deep.md"), false);
 });
@@ -69,6 +81,7 @@ test("enumeratePageRefs counts only pages, using the same rule as isPageRef", ()
   write("wiki/concepts/a.md");
   write("wiki/entities/b.md");
   write("wiki/decisions/d.md");
+  write("wiki/decisions/KIND.md", "# decisions kind metadata");
   write("wiki/_index.md", "generated table");
   write("wiki/loose.md");
   write("wiki/concepts/nested/deep.md");
