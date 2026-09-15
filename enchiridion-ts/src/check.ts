@@ -33,13 +33,6 @@ export interface Finding {
  * structural errors that enumeratePageRefs silently skips. */
 function walkAllMd(root: string): string[] {
   const wikiDir = path.join(root, "wiki");
-  let topEntries: fs.Dirent[];
-  try {
-    topEntries = fs.readdirSync(wikiDir, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
   const refs: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -51,7 +44,11 @@ function walkAllMd(root: string): string[] {
       }
     }
   };
-  walk(wikiDir);
+  try {
+    walk(wikiDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
   return refs.sort();
 }
 
