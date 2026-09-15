@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
 import { buildExportMeta } from "./exportmeta.js";
-import { renderPages } from "./exportrender.js";
+import { renderPages, renderAggregate, renderAll } from "./exportrender.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -469,4 +470,189 @@ test("renderPages: bare anchor links in body are preserved", () => {
 test("renderPages: empty pages yields nothing", () => {
   const rendered = collectPages(new Map());
   assert.equal(rendered.size, 0);
+});
+
+// ---------------------------------------------------------------------------
+// renderAggregate: tag pages, tag index, kind indexes, front page
+// ---------------------------------------------------------------------------
+
+function collectAll(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  opts = {},
+  kindBlurbs: Map<string, string> = new Map(),
+) {
+  const meta = buildExportMeta(pages, opts);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAll(pages, meta, opts, kindBlurbs)) {
+    result.set(path, content);
+  }
+  return result;
+}
+
+test("renderAggregate: emits tag pages for each tag", () => {
+  const meta = buildExportMeta(wikiPages);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAggregate(wikiPages, meta)) {
+    result.set(path, content);
+  }
+  // wikiPages has tags: alpha, shared, beta, concepts-only, entity-tag
+  assert.ok(result.has("tags/alpha.html"), "tag page for 'alpha' missing");
+  assert.ok(result.has("tags/shared.html"), "tag page for 'shared' missing");
+  const alphaPage = result.get("tags/alpha.html")!;
+  assert.ok(alphaPage.includes("Tag: alpha"), "tag page title missing");
+  assert.ok(
+    alphaPage.includes("Alpha Concept"),
+    "alpha page should list Alpha Concept",
+  );
+});
+
+test("renderAggregate: emits tag index", () => {
+  const meta = buildExportMeta(wikiPages);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAggregate(wikiPages, meta)) {
+    result.set(path, content);
+  }
+  assert.ok(result.has("tags/index.html"), "tag index missing");
+  const tagIndex = result.get("tags/index.html")!;
+  assert.ok(tagIndex.includes("Tags"), "tag index title missing");
+  assert.ok(tagIndex.includes("alpha"), "tag index should list alpha tag");
+});
+
+test("renderAggregate: emits per-kind index pages", () => {
+  const meta = buildExportMeta(wikiPages);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAggregate(wikiPages, meta)) {
+    result.set(path, content);
+  }
+  assert.ok(result.has("wiki/concepts/index.html"), "concepts index missing");
+  assert.ok(result.has("wiki/entities/index.html"), "entities index missing");
+  assert.ok(result.has("wiki/sources/index.html"), "sources index missing");
+
+  const conceptsIndex = result.get("wiki/concepts/index.html")!;
+  assert.ok(
+    conceptsIndex.includes("Concept pages"),
+    "concepts index heading missing",
+  );
+  assert.ok(
+    conceptsIndex.includes("Alpha Concept"),
+    "concepts index should list Alpha Concept",
+  );
+});
+
+test("renderAggregate: emits front page", () => {
+  const meta = buildExportMeta(wikiPages);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAggregate(wikiPages, meta)) {
+    result.set(path, content);
+  }
+  assert.ok(result.has("index.html"), "front page missing");
+  const frontPage = result.get("index.html")!;
+  assert.ok(frontPage.includes("Wiki"), "front page title missing");
+  assert.ok(
+    frontPage.includes("4 pages"),
+    "front page should show total page count",
+  );
+  assert.ok(
+    frontPage.includes("Get started"),
+    "front page get-started missing",
+  );
+});
+
+test("renderAggregate: front page shows kind blurb when provided", () => {
+  const meta = buildExportMeta(wikiPages);
+  const kindBlurbs = new Map([["concept", "Core building blocks"]]);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAggregate(
+    wikiPages,
+    meta,
+    {},
+    kindBlurbs,
+  )) {
+    result.set(path, content);
+  }
+  const frontPage = result.get("index.html")!;
+  assert.ok(
+    frontPage.includes("Core building blocks"),
+    "front page should include kind blurb",
+  );
+});
+
+test("renderAggregate: tag slugs are collision-safe", () => {
+  // Two tags that produce the same slug: "foo bar" and "Foo Bar" → "foo-bar"
+  const collidingPages = makePages([
+    [
+      "wiki/concepts/page-a.md",
+      `---
+title: Page A
+summary: A
+tags:
+  - foo bar
+  - Foo Bar
+kind: concept
+---
+Body.
+`,
+    ],
+  ]);
+  const meta = buildExportMeta(collidingPages);
+  const result = new Map<string, string>();
+  for (const { path } of renderAggregate(collidingPages, meta)) {
+    result.set(path, "");
+  }
+  // Both tags should have distinct paths
+  const tagPaths = [...result.keys()].filter(
+    (p) => p.startsWith("tags/") && p !== "tags/index.html",
+  );
+  assert.equal(tagPaths.length, 2, `expected 2 tag paths, got: ${tagPaths}`);
+  assert.equal(new Set(tagPaths).size, 2, "tag paths should be distinct");
+});
+
+test("renderAggregate: nav header present on every aggregate page", () => {
+  const meta = buildExportMeta(wikiPages);
+  const result = new Map<string, string>();
+  for (const { path, content } of renderAggregate(wikiPages, meta)) {
+    result.set(path, content);
+  }
+  for (const [pagePath, content] of result) {
+    assert.ok(content.includes("<nav>"), `nav bar missing on ${pagePath}`);
+    assert.ok(content.includes("Home"), `Home link missing on ${pagePath}`);
+    assert.ok(content.includes("Tags"), `Tags link missing on ${pagePath}`);
+  }
+});
+
+test("renderAll: property — every intra-site link resolves to an emitted path", () => {
+  const allRendered = collectAll(wikiPages);
+  const emittedPaths = new Set(allRendered.keys());
+
+  const failures: string[] = [];
+  for (const [srcPath, content] of allRendered) {
+    // Extract all href="..." values from the HTML
+    const hrefRe = /href="([^"]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = hrefRe.exec(content)) !== null) {
+      const href = m[1];
+      // Skip absolute URLs and anchor-only links
+      if (href.startsWith("http") || href.startsWith("#") || href === "")
+        continue;
+      // Strip anchor fragment
+      const [hrefPath] = href.split("#");
+      if (!hrefPath || !hrefPath.endsWith(".html")) continue;
+      // Resolve relative to the source file's directory using posix path ops
+      const srcDir = srcPath.includes("/")
+        ? srcPath.slice(0, srcPath.lastIndexOf("/"))
+        : "";
+      const joined = srcDir ? `${srcDir}/${hrefPath}` : hrefPath;
+      const normalized = path.posix.normalize(joined);
+      if (!emittedPaths.has(normalized)) {
+        failures.push(
+          `${srcPath}: broken link ${href} → resolved ${normalized}`,
+        );
+      }
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `broken intra-site links:\n${failures.join("\n")}`,
+  );
 });
