@@ -13,8 +13,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 import { mkdirSafe } from "./fsutil.js";
-import { Page, planMove } from "./wikipage.js";
+import { Page, planMove, splitFrontmatter } from "./wikipage.js";
 import { loadRecords } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 import { FolderKinds, KindFolders, folderToKind } from "./place.js";
@@ -94,6 +95,38 @@ function resolve(p: string): string {
 
 function isENOENT(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+/**
+ * Reads the `KIND.md` declaration in an absolute folder path.
+ *
+ * Returns `{kind, summary}` when the file exists and contains a YAML
+ * frontmatter block with a non-empty `kind:` key. Degrades gracefully to
+ * `null` on a missing file, missing or empty frontmatter, malformed YAML, or
+ * a missing `kind` key — the caller falls back to [folderToKind].
+ */
+export function readKindMeta(
+  folderAbsPath: string,
+): { kind: string; summary: string } | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(folderAbsPath, "KIND.md"), "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
+    if (!hasFrontmatter || frontmatter === "") return null;
+    const data = parseYaml(frontmatter) as unknown;
+    if (data === null || typeof data !== "object") return null;
+    const map = data as Record<string, unknown>;
+    const kind = typeof map["kind"] === "string" ? map["kind"].trim() : "";
+    if (!kind) return null;
+    const summary = typeof map["summary"] === "string" ? map["summary"] : "";
+    return { kind, summary };
+  } catch {
+    return null;
+  }
 }
 
 /** Pairs a decoded record with the page text it was decoded from, so a caller
@@ -203,7 +236,9 @@ export class Vault {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (FolderKinds[entry.name] !== undefined) continue;
-      out[folderToKind(entry.name)] = entry.name;
+      const meta = readKindMeta(path.join(this.root, "wiki", entry.name));
+      const kind = meta?.kind ?? folderToKind(entry.name);
+      out[kind] = entry.name;
     }
     return out;
   }
@@ -221,7 +256,14 @@ export class Vault {
   /** Return every `wiki/**` page as a {pageRef: record + text} map. */
   pagesWithText(): Record<string, PageWithText> {
     const pages = this.loadWikiPages();
-    const records = loadRecords(pages);
+    // Build a folder→kind override map from discoveredKinds() so that custom
+    // folders with a KIND.md declaration read back with their declared value.
+    const discovered = this.discoveredKinds(); // {kind: folder}
+    const kindByFolder: Record<string, string> = {};
+    for (const [kind, folder] of Object.entries(discovered)) {
+      kindByFolder[folder] = kind;
+    }
+    const records = loadRecords(pages, kindByFolder);
     const out: Record<string, PageWithText> = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: pages[ref] };
