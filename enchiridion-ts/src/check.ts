@@ -340,7 +340,7 @@ export async function fixMissingCrossReferences(root: string): Promise<string[]>
 
   const changed: string[] = [];
   for (const [ref, { text }] of Object.entries(pagesWithText)) {
-    const { frontmatter, hasFrontmatter, body, bodyOffset } = splitFrontmatter(text);
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
     const pageDir = ref.split("/").slice(0, -1).join("/");
 
     // Collect refs already linked from this body
