@@ -15,7 +15,12 @@
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { PageRecord } from "./pagerecord.js";
-import { ExportMeta, ExportOptions, GetStartedEntry } from "./exportmeta.js";
+import {
+  ExportMeta,
+  ExportOptions,
+  GetStartedEntry,
+  buildTagSlugMap,
+} from "./exportmeta.js";
 import {
   RenderedPage,
   CSS,
@@ -23,7 +28,7 @@ import {
   buildHtmlShell,
   mdToHtml,
 } from "./exportrender.js";
-import { slugify, KindFolders } from "./place.js";
+import { KindFolders } from "./place.js";
 import { splitFrontmatter } from "./wikipage.js";
 
 // ---------------------------------------------------------------------------
@@ -34,40 +39,6 @@ function navBar(htmlPath: string): string {
   const depth = htmlPath.split("/").length - 1;
   const prefix = depth === 0 ? "./" : "../".repeat(depth);
   return `<nav><a href="${prefix}index.html">Home</a> · <a href="${prefix}tags/index.html">Tags</a></nav>`;
-}
-
-// ---------------------------------------------------------------------------
-// Tag slug map with collision-safe suffix disambiguation
-// ---------------------------------------------------------------------------
-
-/**
- * Maps each tag string to a unique URL slug. Tags that produce the same base
- * slug get a numeric suffix: "foo", "foo-2", "foo-3", …
- * Input is sorted for determinism before assignment.
- */
-export function buildTagSlugMap(tags: string[]): Map<string, string> {
-  const sorted = [...tags].sort();
-  const slugMap = new Map<string, string>();
-  const assigned = new Set<string>();
-
-  for (const tag of sorted) {
-    const base = slugify(tag, 0);
-    if (!assigned.has(base)) {
-      slugMap.set(tag, base);
-      assigned.add(base);
-    } else {
-      let n = 2;
-      let candidate = `${base}-${n}`;
-      while (assigned.has(candidate)) {
-        n++;
-        candidate = `${base}-${n}`;
-      }
-      slugMap.set(tag, candidate);
-      assigned.add(candidate);
-    }
-  }
-
-  return slugMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +224,7 @@ function renderFrontPage(
 
   const main = [
     `<h1>Wiki</h1>`,
-    `<p>${totalPages} page${totalPages === 1 ? "" : "s"}</p>`,
+    `<p>${totalPages} page${totalPages === 1 ? "" : "s"} · <a href="tags/index.html">Tags</a></p>`,
     `<section>`,
     `<h2>Browse by Kind</h2>`,
     `<ul>`,

@@ -15,7 +15,7 @@ import path from "node:path";
 import MarkdownIt from "markdown-it";
 import { parse as parseYaml } from "yaml";
 import { PageRecord, EdgeKeys } from "./pagerecord.js";
-import { ExportMeta, ExportOptions } from "./exportmeta.js";
+import { ExportMeta, ExportOptions, buildTagSlugMap } from "./exportmeta.js";
 import { iterLinks, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
 import { slugify } from "./place.js";
 
@@ -180,8 +180,12 @@ function renderFmLink(
 }
 
 /** Render a tag as a link to its tag page. */
-function renderTagLink(tag: string, pageRef: string): string {
-  const slug = slugify(tag, 0);
+function renderTagLink(
+  tag: string,
+  pageRef: string,
+  tagSlugMap: Map<string, string>,
+): string {
+  const slug = tagSlugMap.get(tag) ?? slugify(tag, 0);
   const prefix = rootPrefix(pageRef);
   return `<a href="${escHtml(`${prefix}tags/${slug}.html`)}">${escHtml(tag)}</a>`;
 }
@@ -192,6 +196,7 @@ function renderFmValue(
   value: unknown,
   pageRef: string,
   exported: Set<string>,
+  tagSlugMap: Map<string, string>,
 ): string {
   if (value === null || value === undefined) return "";
 
@@ -199,7 +204,7 @@ function renderFmValue(
     if (!Array.isArray(value)) return escHtml(String(value));
     const items = value.map(
       (tag) =>
-        `<li>${renderTagLink(typeof tag === "string" ? tag : String(tag), pageRef)}</li>`,
+        `<li>${renderTagLink(typeof tag === "string" ? tag : String(tag), pageRef, tagSlugMap)}</li>`,
     );
     return `<ul>${items.join("")}</ul>`;
   }
@@ -248,6 +253,7 @@ function renderFrontmatterTable(
   text: string,
   exported: Set<string>,
   allPages: Map<string, { record?: PageRecord; text: string }>,
+  tagSlugMap: Map<string, string>,
 ): string {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
   if (!hasFrontmatter) return "";
@@ -261,7 +267,7 @@ function renderFrontmatterTable(
   // Literal keys in original order
   for (const [key, value] of Object.entries(fmMap)) {
     rows.push(
-      `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef, exported)}</td></tr>`,
+      `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef, exported, tagSlugMap)}</td></tr>`,
     );
   }
 
@@ -340,6 +346,7 @@ function buildPage(
   text: string,
   exported: Set<string>,
   allPages: Map<string, { record?: PageRecord; text: string }>,
+  tagSlugMap: Map<string, string>,
 ): string {
   const nav = buildNavBar(pageRef);
   const fmTable = renderFrontmatterTable(
@@ -348,6 +355,7 @@ function buildPage(
     text,
     exported,
     allPages,
+    tagSlugMap,
   );
   const { body } = splitFrontmatter(text);
   const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef, exported));
@@ -393,7 +401,7 @@ function buildRawPage(
  */
 export function* renderPages(
   pages: Map<string, { record?: PageRecord; text: string }>,
-  _meta: ExportMeta,
+  meta: ExportMeta,
   opts: ExportOptions = {},
 ): Generator<RenderedPage> {
   const includeRaw = opts.includeRaw ?? false;
@@ -405,6 +413,8 @@ export function* renderPages(
     }
   }
 
+  const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
+
   for (const pageRef of exported) {
     const entry = pages.get(pageRef)!;
     const { record, text } = entry;
@@ -415,7 +425,7 @@ export function* renderPages(
     }
     yield {
       path: htmlPath,
-      content: buildPage(pageRef, record, text, exported, pages),
+      content: buildPage(pageRef, record, text, exported, pages, tagSlugMap),
     };
   }
 }

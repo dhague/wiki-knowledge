@@ -12,9 +12,9 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import fc from "fast-check";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
-import { buildExportMeta } from "./exportmeta.js";
+import { buildExportMeta, buildTagSlugMap } from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
-import { buildTagSlugMap, renderAggregatePages } from "./exportaggregate.js";
+import { renderAggregatePages } from "./exportaggregate.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
