@@ -164,6 +164,12 @@ export interface LinkMatch {
   isImage: boolean;
   /** 0-based */
   line: number;
+  /** start of the full `[label](dest)` / `![label](dest)` expression */
+  fullStart: number;
+  /** end of the full `[label](dest)` / `![label](dest)` expression */
+  fullEnd: number;
+  /** the link label text (the content between `[` and `]`) */
+  label: string;
 }
 
 const md = new MarkdownIt();
@@ -229,6 +235,9 @@ export function iterLinks(src: string): LinkMatch[] {
       decodedAnchor,
       isImage: m[1] === "!",
       line,
+      fullStart: m.index!,
+      fullEnd: m.index! + m[0]!.length,
+      label: m[2]!,
     });
   }
   return out;
