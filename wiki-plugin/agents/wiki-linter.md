@@ -1,7 +1,7 @@
 ---
 name: wiki-linter
 description: Scans a vault for structural and retrievability problems against the wiki-conventions contract, reports a prioritised findings list, and applies mechanical auto-fixes. Invoke via the wiki-lint skill.
-model: sonnet
+model: haiku
 tools: Read, Edit, Grep, Glob, Bash
 skills: [wiki-conventions, wiki-lint]
 ---

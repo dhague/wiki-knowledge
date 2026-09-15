@@ -58,10 +58,11 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
     if (ref === "wiki/_index.md") continue;
     if (!isPageRef(ref)) {
       const segmentCount = ref.split("/").length; // "wiki/foo.md"=2, "wiki/k/sub/p.md"=4
+      const nestingDepth = segmentCount - 3; // levels below kind-folder (0 = direct child, >0 = nested)
       const detail =
         segmentCount === 2
           ? "at wiki/ root — not under any kind-folder"
-          : `nested ${segmentCount - 3} level(s) below a kind-folder — must be a direct child`;
+          : `nested ${nestingDepth} level(s) below a kind-folder — must be a direct child`;
       findings.push({ pageRef: ref, detail });
     }
   }
@@ -244,7 +245,9 @@ export const CHECKS: Record<string, (root: string) => Promise<Finding[]>> = {
 // ---------------------------------------------------------------------------
 
 // Fix for check 3 — apply quoting and encoding corrections to frontmatter links in place.
-export async function fixFrontmatterLinkFormat(root: string): Promise<string[]> {
+export async function fixFrontmatterLinkFormat(
+  root: string,
+): Promise<string[]> {
   const pages = new Vault(root).loadWikiPages();
   const changed: string[] = [];
   for (const [ref, text] of Object.entries(pages)) {
@@ -275,8 +278,7 @@ export async function fixFrontmatterLinkFormat(root: string): Promise<string[]> 
     const edits: Array<{ start: number; end: number; dest: string }> = [];
     for (const link of iterLinks(fm)) {
       const fullDecoded =
-        link.decodedPath +
-        (link.decodedAnchor ? "#" + link.decodedAnchor : "");
+        link.decodedPath + (link.decodedAnchor ? "#" + link.decodedAnchor : "");
       const reencoded = percentEncode(fullDecoded);
       if (link.dest !== reencoded)
         edits.push({ start: link.start, end: link.end, dest: reencoded });
@@ -292,7 +294,9 @@ export async function fixFrontmatterLinkFormat(root: string): Promise<string[]> 
 }
 
 // Fix for check 2 — move the one unambiguous raw/ body link to raw_source: frontmatter.
-export async function fixIngestionSourceIntegrity(root: string): Promise<string[]> {
+export async function fixIngestionSourceIntegrity(
+  root: string,
+): Promise<string[]> {
   const pages = new Vault(root).loadWikiPages();
   const changed: string[] = [];
   for (const [ref, text] of Object.entries(pages)) {
@@ -308,7 +312,8 @@ export async function fixIngestionSourceIntegrity(root: string): Promise<string[
 
     const [m] = rawLinks;
     const newFm = frontmatter.trimEnd() + `\nraw_source: "${m[0]}"\n`;
-    const newBody = body.slice(0, m.index!) + body.slice(m.index! + m[0].length);
+    const newBody =
+      body.slice(0, m.index!) + body.slice(m.index! + m[0].length);
     fs.writeFileSync(
       path.join(root, ref),
       `---\n${newFm}---\n${newBody}`,
@@ -321,7 +326,9 @@ export async function fixIngestionSourceIntegrity(root: string): Promise<string[
 
 // Fix for check 11 (unambiguous case) — insert relative markdown links for exact title
 // matches that appear in body text without an existing link to that page.
-export async function fixMissingCrossReferences(root: string): Promise<string[]> {
+export async function fixMissingCrossReferences(
+  root: string,
+): Promise<string[]> {
   const pagesWithText = new Vault(root).pagesWithText();
 
   // Build title → ref map; drop titles shared by multiple pages (ambiguous)
@@ -356,23 +363,21 @@ export async function fixMissingCrossReferences(root: string): Promise<string[]>
     }
 
     let newBody = body;
-    let delta = 0; // offset shift from previous insertions
     let anyEdit = false;
 
     for (const [title, targetRef] of titleToRef) {
       if (targetRef === ref) continue;
       if (linkedRefs.has(targetRef)) continue;
 
-      const searchIn = newBody;
-      const idx = searchIn.indexOf(title);
+      const idx = newBody.indexOf(title);
       if (idx < 0) continue;
 
-      // Skip if the mention falls inside an existing link span
-      const adjustedSpans = linkSpans.map(([s, e]) => [s + delta, e + delta] as [number, number]);
-      if (adjustedSpans.some(([s, e]) => idx >= s && idx + title.length <= e)) continue;
+      // Skip if the mention falls inside an existing link span (linkSpans stays in sync with newBody)
+      if (linkSpans.some(([s, e]) => idx >= s && idx + title.length <= e))
+        continue;
 
       // Skip if preceded by [ (already a link label) or backtick (code span)
-      const ch = idx > 0 ? searchIn[idx - 1] : "";
+      const ch = idx > 0 ? newBody[idx - 1] : "";
       if (ch === "[" || ch === "`") continue;
 
       const relPath = path
@@ -380,15 +385,26 @@ export async function fixMissingCrossReferences(root: string): Promise<string[]>
         .split(path.sep)
         .join("/");
       const insertion = `[${title}](${percentEncode(relPath)})`;
+      const diff = insertion.length - title.length;
       newBody =
         newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
-      delta += insertion.length - title.length;
+
+      // Shift spans after the insertion point and add the new span
+      for (let i = 0; i < linkSpans.length; i++) {
+        if (linkSpans[i][0] > idx) {
+          linkSpans[i] = [linkSpans[i][0] + diff, linkSpans[i][1] + diff];
+        }
+      }
+      linkSpans.push([idx, idx + insertion.length]);
+
       linkedRefs.add(targetRef);
       anyEdit = true;
     }
 
     if (!anyEdit) continue;
-    const newText = hasFrontmatter ? `---\n${frontmatter}---\n${newBody}` : newBody;
+    const newText = hasFrontmatter
+      ? `---\n${frontmatter}---\n${newBody}`
+      : newBody;
     fs.writeFileSync(path.join(root, ref), newText, "utf8");
     changed.push(ref);
   }

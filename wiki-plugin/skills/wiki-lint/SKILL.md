@@ -60,7 +60,7 @@ Run all eight with `"$ENCHIRIDION" check <name> --json`. Each returns a JSON arr
 
 **Check 7 — Contradiction callouts:** Pages containing an active `> [!warning] Contradiction` callout in the body. Fix level: **report only**.
 
-**Check 8 — Orphans:** Pages with zero inbound links from other wiki pages (body or frontmatter edges). Fix level: **report only**.
+**Check 8 — Orphans:** Pages with zero inbound links from other wiki pages (body or frontmatter edges). Fix level: **confirm first** (delete via git rm after user confirms).
 
 ### 3. Run judgment checks
 
@@ -136,9 +136,6 @@ Command on yes: `"$ENCHIRIDION" page set <absolute-path> <specific-type> "<link-
 **Delete orphan page:** "Page `<path>` has no inbound links and no apparent purpose. Delete it?"
 Command on yes: `git -C <vault-root> rm <vault-relative-path> && git -C <vault-root> commit -m "chore: remove orphan page <path>"`
 
-**Merge duplicate pages:** "Pages `<path-a>` and `<path-b>` appear to cover the same topic. Merge `<path-b>` into `<path-a>`?"
-Command on yes: (1) incorporate `<path-b>`'s body into `<path-a>` via `Edit`; (2) `"$ENCHIRIDION" vault move <path-b> <path-a>` to rewrite all inbound links; (3) `git -C <vault-root> rm <path-b>` and commit.
-
 ### 6. Report
 
 After auto-fixes and confirms, emit the final report. Structure:
@@ -175,7 +172,7 @@ If no findings remain after fixes, report "Vault is clean."
 | 5 | Missing volatility / source_date | retrievability | report only |
 | 6 | Unresolved supersession | retrievability | report only |
 | 7 | Contradiction callouts | structural | report only |
-| 8 | Orphans | structural | report only |
+| 8 | Orphans | structural | confirm first |
 | 9 | Stale claims | structural | report only |
 | 10 | Implicit concepts | structural | confirm first |
 | 11 | Missing cross-references | structural | auto-fix (unambiguous) / confirm first |
