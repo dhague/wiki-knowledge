@@ -43,11 +43,16 @@ Collect the full list. Also collect all `wiki/sources/` pages for check 7.
 
 These can be executed as batch bash commands without reading every page in full. Run them in parallel where possible. Execution order within this section: 9, 7, 8, 10, 13, 14, 1, 3 — numbered by check ID, not run order.
 
-**Check 9 — OKF conformance:** Any `wiki/**/*.md` not under one of `concepts/`, `entities/`, `sources/`, `synthesis/`:
+**Check 9 — Kind-folder conformance:** Every `wiki/**/*.md` (excluding `KIND.md`) must sit *directly* under a valid kind-folder — one of the canonical four or any pre-existing custom folder. A page at the `wiki/` root or nested below a kind-folder is a violation. Get the valid set dynamically:
 ```bash
-find <vault-root>/wiki -name "*.md" | grep -vE '/wiki/(concepts|entities|sources|synthesis)/'
+# Get all valid folder names (canonical + custom)
+VALID_FOLDERS=$("$ENCHIRIDION" vault kinds --json | python3 -c \
+  "import json,sys; print('|'.join(d['folder'] for d in json.load(sys.stdin)))")
+# Find violations: not directly under a valid folder, excluding KIND.md
+find <vault-root>/wiki -name "*.md" ! -name "KIND.md" | \
+  grep -vE "/wiki/($VALID_FOLDERS)/[^/]+\.md$"
 ```
-Finding: page not in a kind-folder. Fix level: **confirm first** (uses `enchiridion vault move`).
+Finding: page not directly under a valid kind-folder. Fix level: **confirm first** (uses `enchiridion vault move`).
 
 **Check 7 — Ingestion source integrity:** Every `wiki/sources/*.md` must carry a `raw_source:` frontmatter field:
 ```bash
@@ -146,7 +151,7 @@ Proposal shapes:
 **Cross-reference insertion (check 5, ambiguous):** "Page `<page>` mentions '<title>' without linking to it, but multiple candidate pages match. Which page should be linked?"
 Present candidate list and wait for selection or "skip". On selection: insert relative markdown link inline at the first unlinked mention.
 
-**OKF conformance (check 9):** "Page `<path>` belongs in `wiki/<correct-kind>/` but is at `<current-path>`. Move it? `enchiridion vault move` rewrites all inbound links."
+**Kind-folder conformance (check 9):** "Page `<path>` is not directly under a valid kind-folder. Move it to `wiki/<correct-kind>/`? `enchiridion vault move` rewrites all inbound links."
 Command on yes: `"$ENCHIRIDION" vault move <old-ref> <new-ref>`
 
 **Implicit concept (check 4):** "Term '<term>' appears in N pages without its own concept page. Create one?"
@@ -174,7 +179,7 @@ After auto-fixes and confirms, emit the final report. Structure:
 ```
 
 Priority ordering in the report:
-1. **HIGH** — contradictions, OKF non-conformance, missing `raw_source` on source pages, frontmatter link format issues.
+1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues.
 2. **MEDIUM** — orphans, under-typed edges, stale synthesis, missing `volatility`/`source_date`.
 3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession.
 
@@ -192,7 +197,7 @@ If no findings remain after fixes, report "Vault is clean."
 | 6 | Data gaps | structural | report only |
 | 7 | Ingestion source integrity | structural | auto-fix (unambiguous) / report only |
 | 8 | Frontmatter link format | structural | auto-fix |
-| 9 | OKF conformance | structural | confirm first |
+| 9 | Kind-folder conformance | structural | confirm first |
 | 10 | Stale synthesis | structural | report only |
 | 11 | Summary quality | retrievability | report only |
 | 12 | Under-typed edges | retrievability | confirm first |
