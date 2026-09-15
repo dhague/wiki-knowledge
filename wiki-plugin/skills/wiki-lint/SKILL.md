@@ -31,15 +31,7 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<sub
 
 `$WIKI_ROOT` if set, else the argument passed at invocation, else `cwd`. Verify: directory has a `wiki/` subdirectory, else stop and report "not a vault root."
 
-### 2. Walk all pages
-
-```bash
-find <vault-root>/wiki -name "*.md" | sort
-```
-
-Collect the full list. The mechanical checks (§3) handle their own page walking internally — this list is for §4's judgment checks, which iterate pages directly and use it to scope to pages not already flagged.
-
-### 3. Run mechanical checks
+### 2. Run mechanical checks
 
 Run all eight with `"$ENCHIRIDION" check <name> --json`. Each returns a JSON array of `{"pageRef": "...", "detail": "..."}` objects, or `[]` when clean. Run in parallel where the vault is large:
 
@@ -70,9 +62,13 @@ Run all eight with `"$ENCHIRIDION" check <name> --json`. Each returns a JSON arr
 
 **Check 8 — Orphans:** Pages with zero inbound links from other wiki pages (body or frontmatter edges). Fix level: **report only**.
 
-### 4. Run judgment checks
+### 3. Run judgment checks
 
-These require reading page content and applying semantic judgment. Run after the mechanical pass. Limit to pages not already flagged to avoid duplicate work.
+These require reading page content and applying semantic judgment. Run after the mechanical pass. Get the full page list first, then limit to pages not already flagged to avoid duplicate work:
+
+```bash
+find <vault-root>/wiki -name "*.md" | sort
+```
 
 **Check 9 — Stale claims:** For pages whose last git commit is > 90 days ago, check whether a newer source on the same topic (by title/tag overlap) has been ingested since. Use `enchiridion search` to find related pages with more recent commits:
 ```bash
@@ -98,7 +94,7 @@ Compare `git_date` of related pages. If a related page's `git_date` is substanti
 - `contradicts` if claims conflict.
 Finding: `related` edge could be `<specific-type>`. Fix level: **confirm first** (use `enchiridion page set` or `page merge` to retype).
 
-### 5. Apply auto-fixes
+### 4. Apply auto-fixes
 
 For each auto-fix finding, apply without asking:
 
@@ -112,7 +108,7 @@ Each command prints the vault-relative refs of files it modified (one per line),
 
 After running, note each changed ref in the summary (file, what changed).
 
-### 6. Confirm-first proposals
+### 5. Confirm-first proposals
 
 **If running as `wiki-linter` subagent:** Do not ask the user. Instead, add each confirm-first finding to the `confirm-first proposals` section of the report as a structured entry — the invoking session presents these to the user and applies the commands on yes.
 
@@ -143,7 +139,7 @@ Command on yes: `git -C <vault-root> rm <vault-relative-path> && git -C <vault-r
 **Merge duplicate pages:** "Pages `<path-a>` and `<path-b>` appear to cover the same topic. Merge `<path-b>` into `<path-a>`?"
 Command on yes: (1) incorporate `<path-b>`'s body into `<path-a>` via `Edit`; (2) `"$ENCHIRIDION" vault move <path-b> <path-a>` to rewrite all inbound links; (3) `git -C <vault-root> rm <path-b>` and commit.
 
-### 7. Report
+### 6. Report
 
 After auto-fixes and confirms, emit the final report. Structure:
 
