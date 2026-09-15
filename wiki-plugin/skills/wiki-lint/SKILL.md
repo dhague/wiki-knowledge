@@ -37,7 +37,7 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<sub
 find <vault-root>/wiki -name "*.md" | sort
 ```
 
-Collect the full list. No extra collection needed for specific check types — the check commands handle their own scoping internally.
+Collect the full list. The mechanical checks (§3) handle their own page walking internally — this list is for §4's judgment checks, which iterate pages directly and use it to scope to pages not already flagged.
 
 ### 3. Run mechanical checks
 
@@ -100,26 +100,17 @@ Finding: `related` edge could be `<specific-type>`. Fix level: **confirm first**
 
 ### 5. Apply auto-fixes
 
-For each auto-fix finding, apply without asking. Use `"$ENCHIRIDION" page set` for frontmatter changes where applicable; direct `Edit` for body-level link encoding.
+For each auto-fix finding, apply without asking:
 
-**Frontmatter link quoting:** For any unquoted link in a frontmatter edge key, wrap it in double quotes:
-```yaml
-# Before
-related:
-  - "[Target](../concepts/target.md)"   # fine — already quoted
-  - [Target](../concepts/target.md)     # unquoted — fix
-
-# After
-  - "[Target](../concepts/target.md)"
+```bash
+"$ENCHIRIDION" fix frontmatter-link-format
+"$ENCHIRIDION" fix ingestion-source-integrity
+"$ENCHIRIDION" fix missing-cross-references
 ```
 
-**Frontmatter link encoding:** For any link destination in frontmatter containing literal space, `%`, `#`, `(`, `)`, `<`, `>`, percent-encode those characters. Unicode stays literal.
+Each command prints the vault-relative refs of files it modified (one per line), or nothing if no changes were needed. `fix ingestion-source-integrity` only rewrites a source page when exactly one `raw/` link exists in the body; ambiguous pages are left for report-only. `fix missing-cross-references` only inserts a link when exactly one page bears the matching title; ambiguous or already-linked mentions are skipped.
 
-**Raw source field migration:** For a `wiki/sources/*.md` page missing `raw_source:` frontmatter but containing a `raw/` link in its body (`[filename](../../raw/...)`) — move the link to `raw_source:` in frontmatter, remove from body if it was the only occurrence. Only auto-fix when exactly one `raw/` link exists in the body; otherwise report only.
-
-**Body cross-reference links:** For check 11 unambiguous matches — page body mentions an existing page's exact title without a link — insert the relative markdown link inline. Verify the path resolves before writing.
-
-After auto-fixing, note each change in the summary (file, what changed).
+After running, note each changed ref in the summary (file, what changed).
 
 ### 6. Confirm-first proposals
 

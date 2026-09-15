@@ -1,4 +1,5 @@
-// Vault health checks for `enchiridion check <name>`. All async so staleSynthesis (git-backed) fits the same interface as the sync ones.
+// Vault health checks for `enchiridion check <name>` and auto-fixes for `enchiridion fix <name>`.
+// All async so staleSynthesis (git-backed) fits the same interface as the sync ones.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -235,4 +236,167 @@ export const CHECKS: Record<string, (root: string) => Promise<Finding[]>> = {
   "unresolved-supersession": unresolvedSupersession,
   "contradiction-callouts": contradictionCallouts,
   orphans,
+};
+
+// ---------------------------------------------------------------------------
+// Auto-fix implementations  (`enchiridion fix <name>`)
+// All return the list of page refs that were modified.
+// ---------------------------------------------------------------------------
+
+// Fix for check 3 — apply quoting and encoding corrections to frontmatter links in place.
+export async function fixFrontmatterLinkFormat(root: string): Promise<string[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const changed: string[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
+    if (!hasFrontmatter || frontmatter === "") continue;
+
+    // Pass 1: quote unquoted markdown links in YAML list items ("  - [Title](dest)")
+    let fm = frontmatter
+      .split("\n")
+      .map((line) => {
+        if (!/^\s*-\s+\[/.test(line)) return line;
+        const open = line.indexOf("[");
+        if (open < 0) return line;
+        const closeParenIdx = line.lastIndexOf(")");
+        if (closeParenIdx < 0) return line;
+        return (
+          line.slice(0, open) +
+          `"${line.slice(open, closeParenIdx + 1)}"` +
+          line.slice(closeParenIdx + 1)
+        );
+      })
+      .join("\n");
+
+    // Pass 2: re-encode link destinations in the (now-quoted) frontmatter text.
+    // Frontmatter edge links never carry genuine anchors, so a literal "#" in
+    // the dest (which causes the parser to split path/anchor) is always a
+    // filename character that needs %23 encoding — recombine and re-encode.
+    const edits: Array<{ start: number; end: number; dest: string }> = [];
+    for (const link of iterLinks(fm)) {
+      const fullDecoded =
+        link.decodedPath +
+        (link.decodedAnchor ? "#" + link.decodedAnchor : "");
+      const reencoded = percentEncode(fullDecoded);
+      if (link.dest !== reencoded)
+        edits.push({ start: link.start, end: link.end, dest: reencoded });
+    }
+    edits.sort((a, b) => b.start - a.start);
+    for (const e of edits) fm = fm.slice(0, e.start) + e.dest + fm.slice(e.end);
+
+    if (fm === frontmatter) continue;
+    fs.writeFileSync(path.join(root, ref), `---\n${fm}---\n${body}`, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
+
+// Fix for check 2 — move the one unambiguous raw/ body link to raw_source: frontmatter.
+export async function fixIngestionSourceIntegrity(root: string): Promise<string[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const changed: string[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    if (!ref.startsWith("wiki/sources/")) continue;
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
+    if (!hasFrontmatter) continue;
+    if (/^raw_source\s*:/m.test(frontmatter)) continue;
+
+    // Auto-fix only when exactly one raw/ link exists in the body
+    const rawLinkRe = /\[[^\]]+\]\(\.\.\/\.\.\/raw\/[^)]+\)/g;
+    const rawLinks = [...body.matchAll(rawLinkRe)];
+    if (rawLinks.length !== 1) continue;
+
+    const [m] = rawLinks;
+    const newFm = frontmatter.trimEnd() + `\nraw_source: "${m[0]}"\n`;
+    const newBody = body.slice(0, m.index!) + body.slice(m.index! + m[0].length);
+    fs.writeFileSync(
+      path.join(root, ref),
+      `---\n${newFm}---\n${newBody}`,
+      "utf8",
+    );
+    changed.push(ref);
+  }
+  return changed;
+}
+
+// Fix for check 11 (unambiguous case) — insert relative markdown links for exact title
+// matches that appear in body text without an existing link to that page.
+export async function fixMissingCrossReferences(root: string): Promise<string[]> {
+  const pagesWithText = new Vault(root).pagesWithText();
+
+  // Build title → ref map; drop titles shared by multiple pages (ambiguous)
+  const titleToRef = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const [ref, { record }] of Object.entries(pagesWithText)) {
+    if (!record.title) continue;
+    if (ambiguous.has(record.title)) continue;
+    if (titleToRef.has(record.title)) {
+      titleToRef.delete(record.title);
+      ambiguous.add(record.title);
+    } else {
+      titleToRef.set(record.title, ref);
+    }
+  }
+
+  const changed: string[] = [];
+  for (const [ref, { text }] of Object.entries(pagesWithText)) {
+    const { frontmatter, hasFrontmatter, body, bodyOffset } = splitFrontmatter(text);
+    const pageDir = ref.split("/").slice(0, -1).join("/");
+
+    // Collect refs already linked from this body
+    const linkedRefs = new Set<string>();
+    // Collect body link spans to detect "already inside a link"
+    const linkSpans: Array<[number, number]> = [];
+    for (const link of iterLinks(body)) {
+      linkedRefs.add(resolveLinkDest(link.decodedPath, pageDir));
+      // Estimate full link span: scan back from dest start to find opening [
+      let spanStart = link.start - 1; // at least the ( character
+      while (spanStart > 0 && body[spanStart] !== "[") spanStart--;
+      linkSpans.push([spanStart, link.end + 1]); // +1 to include closing )
+    }
+
+    let newBody = body;
+    let delta = 0; // offset shift from previous insertions
+    let anyEdit = false;
+
+    for (const [title, targetRef] of titleToRef) {
+      if (targetRef === ref) continue;
+      if (linkedRefs.has(targetRef)) continue;
+
+      const searchIn = newBody;
+      const idx = searchIn.indexOf(title);
+      if (idx < 0) continue;
+
+      // Skip if the mention falls inside an existing link span
+      const adjustedSpans = linkSpans.map(([s, e]) => [s + delta, e + delta] as [number, number]);
+      if (adjustedSpans.some(([s, e]) => idx >= s && idx + title.length <= e)) continue;
+
+      // Skip if preceded by [ (already a link label) or backtick (code span)
+      const ch = idx > 0 ? searchIn[idx - 1] : "";
+      if (ch === "[" || ch === "`") continue;
+
+      const relPath = path
+        .relative(pageDir, targetRef)
+        .split(path.sep)
+        .join("/");
+      const insertion = `[${title}](${percentEncode(relPath)})`;
+      newBody =
+        newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
+      delta += insertion.length - title.length;
+      linkedRefs.add(targetRef);
+      anyEdit = true;
+    }
+
+    if (!anyEdit) continue;
+    const newText = hasFrontmatter ? `---\n${frontmatter}---\n${newBody}` : newBody;
+    fs.writeFileSync(path.join(root, ref), newText, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
+
+export const FIXES: Record<string, (root: string) => Promise<string[]>> = {
+  "frontmatter-link-format": fixFrontmatterLinkFormat,
+  "ingestion-source-integrity": fixIngestionSourceIntegrity,
+  "missing-cross-references": fixMissingCrossReferences,
 };

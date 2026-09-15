@@ -22,6 +22,10 @@ import {
   contradictionCallouts,
   orphans,
   CHECKS,
+  fixFrontmatterLinkFormat,
+  fixIngestionSourceIntegrity,
+  fixMissingCrossReferences,
+  FIXES,
 } from "./check.js";
 
 // ---------------------------------------------------------------------------
@@ -397,4 +401,152 @@ test("CHECKS registry contains all eight check names", () => {
     assert.equal(typeof CHECKS[name], "function");
   }
   assert.equal(Object.keys(CHECKS).length, expected.length);
+});
+
+// ---------------------------------------------------------------------------
+// Fix — fixFrontmatterLinkFormat
+// ---------------------------------------------------------------------------
+
+test("fix frontmatter-link-format: quotes unquoted YAML list link", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      "---\ntitle: Foo\nrelated:\n  - [Bar](../entities/bar.md)\n---\nBody.\n",
+  });
+  const changed = await fixFrontmatterLinkFormat(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(
+    path.join(root, "wiki/concepts/foo.md"),
+    "utf8",
+  );
+  assert.match(text, /- "\[Bar\]/);
+  // After fix, check should be clean
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, []);
+});
+
+test("fix frontmatter-link-format: encodes # in link destination", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/bar#baz.md)"\n',
+    ),
+  });
+  const changed = await fixFrontmatterLinkFormat(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(
+    path.join(root, "wiki/concepts/foo.md"),
+    "utf8",
+  );
+  assert.match(text, /bar%23baz\.md/);
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, []);
+});
+
+test("fix frontmatter-link-format: clean file is not modified", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/bar.md)"\n',
+    ),
+  });
+  const changed = await fixFrontmatterLinkFormat(root);
+  assert.deepEqual(changed, []);
+});
+
+// ---------------------------------------------------------------------------
+// Fix — fixIngestionSourceIntegrity
+// ---------------------------------------------------------------------------
+
+test("fix ingestion-source-integrity: moves raw/ body link to raw_source frontmatter", async () => {
+  const root = writeVault({
+    "wiki/sources/doc.md":
+      "---\ntitle: Doc\n---\nSome body text.\n[doc.md](../../raw/doc.md)\nMore text.\n",
+  });
+  const changed = await fixIngestionSourceIntegrity(root);
+  assert.deepEqual(changed, ["wiki/sources/doc.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/sources/doc.md"), "utf8");
+  assert.match(text, /raw_source: "\[doc\.md\]\(\.\.\/\.\.\/raw\/doc\.md\)"/);
+  // raw/ link removed from body
+  assert.doesNotMatch(text.split("---\n").slice(2).join("---\n"), /raw\/doc\.md/);
+  // After fix, check should be clean
+  const findings = await ingestionSourceIntegrity(root);
+  assert.deepEqual(findings, []);
+});
+
+test("fix ingestion-source-integrity: skips if raw_source already present", async () => {
+  const root = writeVault({
+    "wiki/sources/doc.md": page(
+      "Doc",
+      'raw_source: "[doc.md](../../raw/doc.md)"\n',
+    ),
+  });
+  const changed = await fixIngestionSourceIntegrity(root);
+  assert.deepEqual(changed, []);
+});
+
+test("fix ingestion-source-integrity: skips if multiple raw/ links (ambiguous)", async () => {
+  const root = writeVault({
+    "wiki/sources/doc.md":
+      "---\ntitle: Doc\n---\n[a.md](../../raw/a.md)\n[b.md](../../raw/b.md)\n",
+  });
+  const changed = await fixIngestionSourceIntegrity(root);
+  assert.deepEqual(changed, []);
+});
+
+// ---------------------------------------------------------------------------
+// Fix — fixMissingCrossReferences
+// ---------------------------------------------------------------------------
+
+test("fix missing-cross-references: inserts link for unambiguous exact title mention", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md": page("Alpha", "", "Some text about Beta here.\n"),
+    "wiki/concepts/beta.md": page("Beta"),
+  });
+  const changed = await fixMissingCrossReferences(root);
+  assert.deepEqual(changed, ["wiki/concepts/alpha.md"]);
+  const text = fs.readFileSync(
+    path.join(root, "wiki/concepts/alpha.md"),
+    "utf8",
+  );
+  assert.match(text, /\[Beta\]\(beta\.md\)/);
+});
+
+test("fix missing-cross-references: skips title already linked", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md": page(
+      "Alpha",
+      "",
+      "Some [Beta](../concepts/beta.md) text.\n",
+    ),
+    "wiki/concepts/beta.md": page("Beta"),
+  });
+  const changed = await fixMissingCrossReferences(root);
+  assert.deepEqual(changed, []);
+});
+
+test("fix missing-cross-references: skips ambiguous titles (multiple pages same title)", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md": page("Alpha", "", "Gamma appears here.\n"),
+    "wiki/concepts/gamma1.md": page("Gamma"),
+    "wiki/entities/gamma2.md": page("Gamma"),
+  });
+  const changed = await fixMissingCrossReferences(root);
+  assert.deepEqual(changed, []);
+});
+
+// ---------------------------------------------------------------------------
+// FIXES registry
+// ---------------------------------------------------------------------------
+
+test("FIXES registry contains all three fix names", () => {
+  const expected = [
+    "frontmatter-link-format",
+    "ingestion-source-integrity",
+    "missing-cross-references",
+  ];
+  for (const name of expected) {
+    assert.ok(name in FIXES, `FIXES missing: ${name}`);
+    assert.equal(typeof FIXES[name], "function");
+  }
+  assert.equal(Object.keys(FIXES).length, expected.length);
 });

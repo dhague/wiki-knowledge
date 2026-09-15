@@ -51,7 +51,7 @@ import {
   runWatch,
 } from "./watch.js";
 import { canonicalSourceDate } from "./sourcedate.js";
-import { CHECKS } from "./check.js";
+import { CHECKS, FIXES } from "./check.js";
 
 /** Prints the standard stub message and marks the process failed. */
 function stub(command: Command, label: string): void {
@@ -695,6 +695,27 @@ export function buildProgram(): Command {
       }
     });
   void check; // referenced only for side effect of registering the command
+
+  // fix <name> — apply an auto-fix by name; prints each changed page ref.
+  const fixNames = Object.keys(FIXES).join(", ");
+  const fix = program
+    .command("fix")
+    .description(`Apply an auto-fix by name; names: ${fixNames}`)
+    .argument("<name>", "fix name")
+    .action(async (name: string) => {
+      const fn = FIXES[name];
+      if (!fn) {
+        console.error(
+          `enchiridion fix: unknown fix "${name}"; known: ${fixNames}`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const { root } = resolveRoot();
+      const changed = await fn(root);
+      for (const ref of changed) console.log(ref);
+    });
+  void fix; // referenced only for side effect of registering the command
 
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no
   // vault root (CLAUDE.md).
