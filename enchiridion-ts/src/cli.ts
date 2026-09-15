@@ -52,6 +52,13 @@ import {
 } from "./watch.js";
 import { canonicalSourceDate } from "./sourcedate.js";
 import { CHECKS, FIXES } from "./check.js";
+import {
+  runExport,
+  buildCandidates,
+  ExportDirtyError,
+  ExportTargetNotEmptyError,
+} from "./exportwriter.js";
+import type { StarterEntry } from "./exportaggregate.js";
 
 /** Prints the standard stub message and marks the process failed. */
 function stub(command: Command, label: string): void {
@@ -1162,6 +1169,78 @@ export function buildProgram(): Command {
         }
       });
   }
+
+  program
+    .command("export")
+    .description("Produce a static HTML site from the vault")
+    .option("--out <dir>", "output directory (default: web/ at vault root)")
+    .option("--raw", "include raw/ section")
+    .option("--force", "overwrite non-empty output directory")
+    .option("--allow-dirty", "skip dirty-tree check")
+    .option(
+      "--candidates",
+      "emit ranked candidate JSON to stdout and exit (writes nothing)",
+    )
+    .option(
+      "--starters <refs...>",
+      "page refs (optionally as ref=annotation) for the get-started block",
+    )
+    .action(
+      async (opts: {
+        out?: string;
+        raw?: boolean;
+        force?: boolean;
+        allowDirty?: boolean;
+        candidates?: boolean;
+        starters?: string[];
+      }) => {
+        const { root } = resolveRoot();
+
+        if (opts.candidates) {
+          const candidates = buildCandidates(root);
+          console.log(JSON.stringify(candidates, null, 2));
+          return;
+        }
+
+        const starters: StarterEntry[] = [];
+        for (const item of opts.starters ?? []) {
+          const eqIdx = item.indexOf("=");
+          if (eqIdx === -1) {
+            starters.push({ pageRef: item });
+          } else {
+            starters.push({
+              pageRef: item.slice(0, eqIdx),
+              annotation: item.slice(eqIdx + 1),
+            });
+          }
+        }
+
+        const outDir = opts.out
+          ? path.resolve(opts.out)
+          : path.join(root, "web");
+
+        try {
+          await runExport(root, {
+            out: outDir,
+            raw: opts.raw,
+            force: opts.force,
+            allowDirty: opts.allowDirty,
+            starters,
+          });
+          console.log(`Exported to ${outDir}`);
+        } catch (err) {
+          if (
+            err instanceof ExportDirtyError ||
+            err instanceof ExportTargetNotEmptyError
+          ) {
+            console.error(`enchiridion export: ${(err as Error).message}`);
+            process.exitCode = 1;
+          } else {
+            throw err;
+          }
+        }
+      },
+    );
 
   return program;
 }
