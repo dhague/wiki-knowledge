@@ -122,8 +122,7 @@ export function readKindMeta(
     const map = data as Record<string, unknown>;
     const kind = typeof map["kind"] === "string" ? map["kind"].trim() : "";
     if (!kind) return null;
-    const summary =
-      typeof map["summary"] === "string" ? map["summary"] : "";
+    const summary = typeof map["summary"] === "string" ? map["summary"] : "";
     return { kind, summary };
   } catch {
     return null;

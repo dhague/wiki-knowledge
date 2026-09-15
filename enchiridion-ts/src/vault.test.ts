@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Markers, Vault, hasMarker, readKindMeta, resolveRoot } from "./vault.js";
+import {
+  Markers,
+  Vault,
+  hasMarker,
+  readKindMeta,
+  resolveRoot,
+} from "./vault.js";
 import type { LookupEnv } from "./vault.js";
 import { Page } from "./wikipage.js";
 
@@ -240,7 +246,10 @@ test("readKindMeta returns null for a KIND.md without frontmatter", () => {
 
 test("readKindMeta returns null when frontmatter has no kind key", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
-  fs.writeFileSync(path.join(dir, "KIND.md"), "---\nsummary: Just a summary.\n---\n");
+  fs.writeFileSync(
+    path.join(dir, "KIND.md"),
+    "---\nsummary: Just a summary.\n---\n",
+  );
   assert.equal(readKindMeta(dir), null);
 });
 

@@ -161,11 +161,9 @@ test("newPageRecord uses kindByFolder override for custom folders", () => {
 
 test("newPageRecord: kindByFolder does not override canonical FolderKinds", () => {
   // Even if someone passes a wrong override for a canonical folder, FolderKinds wins.
-  const rec = newPageRecord(
-    "wiki/concepts/a.md",
-    "---\ntitle: A\n---\n",
-    { concepts: "wrong" },
-  );
+  const rec = newPageRecord("wiki/concepts/a.md", "---\ntitle: A\n---\n", {
+    concepts: "wrong",
+  });
   assert.equal(rec.kind, "concept");
 });
 

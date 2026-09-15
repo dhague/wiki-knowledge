@@ -96,7 +96,8 @@ export function newPageRecord(
   if (path.posix.dirname(pageDir) !== "wiki") {
     throw new Error(`"${pageRef}": not directly under a wiki kind-folder`);
   }
-  const kind = FolderKinds[folder] ?? kindByFolder?.[folder] ?? folderToKind(folder);
+  const kind =
+    FolderKinds[folder] ?? kindByFolder?.[folder] ?? folderToKind(folder);
 
   const data = frontmatterMap(text);
 
