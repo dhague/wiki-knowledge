@@ -146,6 +146,12 @@ Command on yes: invoke `/wiki-ingest` with the term and the context pages as inp
 **Edge retyping (check 14):** "In `<page>`, `related:` → `<target>` looks like `<specific-type>` because `<reason>`. Retype?"
 Command on yes: `"$ENCHIRIDION" page set <absolute-path> <specific-type> "<link-string>"` and remove the entry from `related:`.
 
+**Delete orphan page:** "Page `<path>` has no inbound links and no apparent purpose. Delete it?"
+Command on yes: `git -C <vault-root> rm <vault-relative-path> && git -C <vault-root> commit -m "chore: remove orphan page <path>"`
+
+**Merge duplicate pages:** "Pages `<path-a>` and `<path-b>` appear to cover the same topic. Merge `<path-b>` into `<path-a>`?"
+Command on yes: (1) incorporate `<path-b>`'s body into `<path-a>` via `Edit`; (2) `"$ENCHIRIDION" vault move <path-b> <path-a>` to rewrite all inbound links; (3) `git -C <vault-root> rm <path-b>` and commit.
+
 ### 7. Report
 
 After auto-fixes and confirms, emit the final report. Structure:

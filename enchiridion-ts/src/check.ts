@@ -1,10 +1,4 @@
-/**
- * Vault health checks for `enchiridion check <name>`.
- *
- * Each check function scans the vault at root and returns an array of Finding
- * objects. Empty array = clean. All eight functions are async so the
- * git-backed check (staleSynthesis) fits the same interface as sync ones.
- */
+// Vault health checks for `enchiridion check <name>`. All async so staleSynthesis (git-backed) fits the same interface as the sync ones.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -28,9 +22,7 @@ export interface Finding {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Walk wiki/ for ALL .md files, returning vault-relative refs including
- * those that fail isPageRef. Used by kindFolderConformance to surface
- * structural errors that enumeratePageRefs silently skips. */
+/** Walk wiki/ for ALL .md files including those that fail isPageRef — surfaces structural errors enumeratePageRefs silently skips. */
 function walkAllMd(root: string): string[] {
   const wikiDir = path.join(root, "wiki");
   const refs: string[] = [];
@@ -56,13 +48,7 @@ function walkAllMd(root: string): string[] {
 // The eight mechanical checks
 // ---------------------------------------------------------------------------
 
-/**
- * Check 1 — Kind-folder conformance.
- *
- * Every .md under wiki/ (excluding KIND.md and the generated _index.md) must
- * sit directly under a kind-folder. Pages at the wiki/ root or nested below a
- * kind-folder are violations. Custom kind-folders are valid.
- */
+// Check 1 — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
 export async function kindFolderConformance(root: string): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const ref of walkAllMd(root)) {
@@ -70,23 +56,18 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
     if (filename === "KIND.md") continue;
     if (ref === "wiki/_index.md") continue;
     if (!isPageRef(ref)) {
-      const depth = ref.split("/").length; // "wiki/foo.md"=2, "wiki/k/sub/p.md"=4
+      const segmentCount = ref.split("/").length; // "wiki/foo.md"=2, "wiki/k/sub/p.md"=4
       const detail =
-        depth === 2
+        segmentCount === 2
           ? "at wiki/ root — not under any kind-folder"
-          : `nested ${depth - 3} level(s) below a kind-folder — must be a direct child`;
+          : `nested ${segmentCount - 3} level(s) below a kind-folder — must be a direct child`;
       findings.push({ pageRef: ref, detail });
     }
   }
   return findings;
 }
 
-/**
- * Check 2 — Ingestion source integrity.
- *
- * Every wiki/sources/ page must carry a raw_source frontmatter field pointing
- * into raw/.
- */
+/** Check 2 — every wiki/sources/ page must carry raw_source pointing into raw/. */
 export async function ingestionSourceIntegrity(
   root: string,
 ): Promise<Finding[]> {
@@ -106,15 +87,7 @@ export async function ingestionSourceIntegrity(
   return findings;
 }
 
-/**
- * Check 3 — Frontmatter link format.
- *
- * Links in frontmatter edge keys must be (a) quoted YAML strings and
- * (b) have percent-encoded destinations (space, %, #, (), <> encoded).
- *
- * Uses raw text (not parsed records) so malformed YAML that would choke
- * the record parser is itself what this check surfaces.
- */
+// Check 3 — operates on raw text, not parsed records: malformed YAML that would choke the record parser is what this check surfaces.
 export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   const pages = new Vault(root).loadWikiPages();
   const findings: Finding[] = [];
@@ -150,11 +123,7 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/**
- * Check 4 — Stale synthesis.
- *
- * Synthesis pages whose last git commit is more than 30 days ago.
- */
+/** Check 4 — synthesis pages whose last git commit is more than 30 days ago. */
 export async function staleSynthesis(root: string): Promise<Finding[]> {
   const pages = new Vault(root).pages();
   const vaultGit = new VaultGit(root);
@@ -176,12 +145,7 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/**
- * Check 5 — Missing volatility / source_date.
- *
- * Every page should carry both fields; their absence degrades retrieval
- * (search ranking, temporal filtering).
- */
+/** Check 5 — pages missing volatility or source_date degrade search ranking and temporal filtering. */
 export async function missingVolatilitySourceDate(
   root: string,
 ): Promise<Finding[]> {
@@ -196,13 +160,8 @@ export async function missingVolatilitySourceDate(
   return findings;
 }
 
-/**
- * Check 6 — Unresolved supersession.
- *
- * A page with a `contradicts` edge but no `supersedes` edge AND no active
- * `> [!warning] Contradiction` callout in the body: the contradiction was
- * resolved by replacement but the supersession was never recorded.
- */
+// Check 6 — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
+// Pages with contradicts + active callout are live contradictions (check 7's domain), not a violation here.
 export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText();
   const findings: Finding[] = [];
@@ -216,7 +175,7 @@ export async function unresolvedSupersession(root: string): Promise<Finding[]> {
     );
     if (hasSupersedes) continue;
     const { body } = splitFrontmatter(text);
-    if (/>\s*\[!warning\]\s*Contradiction/i.test(body)) continue; // live contradiction (check 7)
+    if (/>\s*\[!warning\]\s*Contradiction/i.test(body)) continue;
     findings.push({
       pageRef: ref,
       detail:
@@ -226,11 +185,7 @@ export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/**
- * Check 7 — Contradiction callouts.
- *
- * Pages containing an active `> [!warning] Contradiction` callout in the body.
- */
+/** Check 7 — pages with an active `> [!warning] Contradiction` callout in the body. */
 export async function contradictionCallouts(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText();
   const findings: Finding[] = [];
@@ -242,11 +197,7 @@ export async function contradictionCallouts(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/**
- * Check 8 — Orphans.
- *
- * Pages with zero inbound links from other wiki pages (body or frontmatter).
- */
+/** Check 8 — pages with zero inbound links from other wiki pages (body or frontmatter). */
 export async function orphans(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText();
   const allRefs = new Set(Object.keys(pagesWithText));
