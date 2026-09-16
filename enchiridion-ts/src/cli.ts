@@ -58,6 +58,7 @@ import {
   ExportDirtyError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
+import { exportConfigPath, saveExportTitle } from "./exportconfig.js";
 import type { StarterEntry } from "./exportmeta.js";
 
 /** Prints the standard stub message and marks the process failed. */
@@ -1178,6 +1179,14 @@ export function buildProgram(): Command {
     .option("--force", "overwrite non-empty output directory")
     .option("--allow-dirty", "skip dirty-tree check")
     .option(
+      "--title <title>",
+      "wiki title for this run only (default: the saved title, else the vault directory name)",
+    )
+    .option(
+      "--save-title <title>",
+      "save the wiki title as the persistent default and exit (writes no site)",
+    )
+    .option(
       "--candidates",
       "emit ranked candidate JSON to stdout and exit (writes nothing)",
     )
@@ -1191,10 +1200,29 @@ export function buildProgram(): Command {
         raw?: boolean;
         force?: boolean;
         allowDirty?: boolean;
+        title?: string;
+        saveTitle?: string;
         candidates?: boolean;
         starters?: string[];
       }) => {
         const { root } = resolveRoot();
+
+        // Persist-and-exit, like --candidates: the skill shells out to save a
+        // title after an export has already been written, and a second full
+        // export (over a non-empty target, no less) is not what "save" means.
+        if (opts.saveTitle !== undefined) {
+          try {
+            saveExportTitle(root, opts.saveTitle);
+          } catch (err) {
+            console.error(`enchiridion export: ${(err as Error).message}`);
+            process.exitCode = 1;
+            return;
+          }
+          console.log(
+            `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`,
+          );
+          return;
+        }
 
         if (opts.candidates) {
           const candidates = buildCandidates(root);
@@ -1225,6 +1253,9 @@ export function buildProgram(): Command {
             raw: opts.raw,
             force: opts.force,
             allowDirty: opts.allowDirty,
+            // The per-run flag, not the resolved title: runExport owns the
+            // resolution order (flag → saved title → directory name).
+            title: opts.title,
             starters,
           });
           console.log(`Exported to ${outDir}`);

@@ -220,7 +220,7 @@ function renderFrontPage(
   }
 
   const main = [
-    `<h1>Wiki</h1>`,
+    `<h1>${escHtml(wikiTitle)}</h1>`,
     `<p>${totalPages} page${totalPages === 1 ? "" : "s"} · <a href="tags/index.html">Tags</a></p>`,
     `<section>`,
     `<h2>Browse by Kind</h2>`,

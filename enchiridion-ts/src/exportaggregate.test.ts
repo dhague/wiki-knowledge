@@ -262,6 +262,21 @@ test("renderAggregatePages: front page document title is the wiki title", () => 
   );
 });
 
+test("renderAggregatePages: the front page heading is the wiki title, escaped", () => {
+  const meta = buildExportMeta(wikiPages);
+  const opts = { title: "A & B <Vault>" };
+  const pages = [...renderAggregatePages(wikiPages, meta, opts)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  assert.ok(
+    front.content.includes("<h1>A &amp; B &lt;Vault&gt;</h1>"),
+    "the front page heading should be the escaped wiki title",
+  );
+  assert.ok(
+    !front.content.includes("<h1>Wiki</h1>"),
+    "no hardcoded heading where the vault's name belongs",
+  );
+});
+
 test("renderAggregatePages: front page shows total page count", () => {
   const meta = buildExportMeta(wikiPages);
   const pages = [...renderAggregatePages(wikiPages, meta)];

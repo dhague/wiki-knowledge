@@ -64,7 +64,27 @@ The script layer ships as a TypeScript bundle invoked through
 | `/wiki-ingest <path>` | Ingest one file, a folder, or sweep `raw/` |
 | `/wiki-watch` | Long-running auto-ingest watcher for `raw/` |
 | `/wiki-ask <question>` | Grounded, cited answer from the vault |
+| `/wiki-export ["Title"]` | Render the vault as a static HTML site |
 | `/save-conversation` | Capture and ingest the current session |
+
+### Export flags
+
+`/wiki-export` passes these through to `enchiridion export`:
+
+| Flag | Purpose |
+|---|---|
+| `--out <dir>` | Output directory (default `web/` at the vault root) |
+| `--raw` | Include `raw/` pages in the site |
+| `--force` | Overwrite a non-empty output directory |
+| `--allow-dirty` | Export with uncommitted changes in the exported subtree |
+| `--title <title>` | Wiki title for this run only |
+| `--save-title <title>` | Save the title as the persistent default (exports nothing) |
+
+The site's title — the sticky nav bar and the front page heading — resolves
+`--title` → the saved title → the vault root directory name. `/wiki-export
+"My Knowledge Base"` sets it for one run and then offers to save it; the saved
+title lives in `.wiki-knowledge/config.json` at the vault root, gitignored
+beside the search index ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)).
 
 ## Vault structure
 

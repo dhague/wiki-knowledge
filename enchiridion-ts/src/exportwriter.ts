@@ -9,6 +9,7 @@ import {
 } from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
+import { resolveExportTitle } from "./exportconfig.js";
 import {
   EXPORT_STYLESHEET,
   STYLESHEET_DIR,
@@ -32,9 +33,9 @@ export interface ExportWriterOptions {
   /** Supplied starters override fallback ranking on the front page. */
   starters?: StarterEntry[];
   /**
-   * Wiki title shown in every page's nav bar. Defaults to the vault root
-   * directory name — the one thing we know a vault calls itself without
-   * being told.
+   * Wiki title for this run only — the per-run flag, not a resolved title.
+   * Leave it unset to take the vault's saved title, or failing that the vault
+   * root directory name (see resolveExportTitle).
    */
   title?: string;
 }
@@ -166,11 +167,12 @@ export async function runExport(
   const allowDirty = opts.allowDirty ?? false;
   const force = opts.force ?? false;
   const starters = opts.starters ?? [];
-  // The one place a vault-derived wiki title is resolved. Everything
-  // downstream — the nav bar on every page — reads the result, never the
-  // inputs. (Renderers reached without a vault fall back to a neutral label
-  // rather than an empty nav; see exportTitle.)
-  const title = opts.title?.trim() || path.basename(path.resolve(root));
+  // The one place a vault-derived wiki title is resolved: flag → vault config
+  // → directory name. Everything downstream — the nav bar and front page
+  // heading — reads the result, never the inputs. (Renderers reached without a
+  // vault fall back to a neutral label rather than an empty nav; see
+  // exportTitle.)
+  const title = resolveExportTitle(root, opts.title);
 
   // 1. Dirty-tree check
   if (!allowDirty) {
