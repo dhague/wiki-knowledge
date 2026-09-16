@@ -9,6 +9,7 @@ import {
 } from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
+import { renderSingleFile, singleFileSizeWarning } from "./exportsingle.js";
 import { resolveExportTitle } from "./exportconfig.js";
 import {
   EXPORT_STYLESHEET,
@@ -22,11 +23,22 @@ import type { PageRecord } from "./pagerecord.js";
 // ---------------------------------------------------------------------------
 
 export interface ExportWriterOptions {
-  /** Output directory — absolute path. Defaults to `<vaultRoot>/web/`. */
+  /**
+   * Absolute path of what to write. In multi-page mode an output directory
+   * (default `<vaultRoot>/web/`); under `singleFile` the output *file* itself
+   * (default `<vaultRoot>/wiki.html`). The caller resolves the default —
+   * it is the layer that knows which mode was asked for.
+   */
   out: string;
   /** Include raw/ pages. Default false. */
   raw?: boolean;
-  /** Overwrite a non-empty output directory without error. Default false. */
+  /**
+   * Write the whole site as one self-contained HTML file at `out` instead of
+   * a directory tree. Default false.
+   */
+  singleFile?: boolean;
+  /** Overwrite a non-empty output directory without error. Default false.
+   *  Multi-page only: a single file is replaced in place either way. */
   force?: boolean;
   /** Skip the dirty-tree check. Default false. */
   allowDirty?: boolean;
@@ -54,6 +66,16 @@ export class ExportTargetNotEmptyError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ExportTargetNotEmptyError";
+  }
+}
+
+/** `--single-file` was pointed at an existing directory. Its own error rather
+ *  than a rename failing with EISDIR, which names the syscall and not the
+ *  mistake. */
+export class ExportTargetIsDirectoryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExportTargetIsDirectoryError";
   }
 }
 
@@ -148,15 +170,47 @@ function writeTempSite(
   }
 }
 
+/**
+ * Write the single-file document, through a temp file on the same filesystem
+ * and an atomic rename — the same reasoning as the multi-page write, with one
+ * file instead of a tree. The existing output is replaced outright: in this
+ * mode the target *is* the export, so re-running to refresh it is the normal
+ * case and needs no `--force`.
+ */
+function writeSingleFile(outFile: string, html: string): void {
+  const tempFile = path.join(
+    path.dirname(outFile),
+    `.export-tmp-${path.basename(outFile)}-${process.pid}`,
+  );
+  try {
+    fs.writeFileSync(tempFile, html, "utf8");
+    fs.renameSync(tempFile, outFile);
+  } catch (err) {
+    try {
+      fs.rmSync(tempFile, { force: true });
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
+
+  const warning = singleFileSizeWarning(fs.statSync(outFile).size, outFile);
+  if (warning) console.error(warning);
+}
+
 // ---------------------------------------------------------------------------
 // Main export runner
 // ---------------------------------------------------------------------------
 
 /**
  * Run the full export: dirty check → page load → render → write.
- * All writes go to a temp dir on the same filesystem as `opts.out`; the
- * temp dir is atomically renamed into place only after all writes succeed.
- * The existing `opts.out` is removed only after the temp build completes.
+ * All writes go to a temp path on the same filesystem as `opts.out`; it is
+ * atomically renamed into place only after all writes succeed. The existing
+ * `opts.out` is removed only after the temp build completes.
+ *
+ * The two output modes share everything up to the write: same dirty check,
+ * same page load, same metadata, same page parts. `singleFile` chooses only
+ * what shape those parts are assembled into and where they land.
  */
 export async function runExport(
   root: string,
@@ -164,6 +218,7 @@ export async function runExport(
 ): Promise<void> {
   const outDir = opts.out;
   const includeRaw = opts.raw ?? false;
+  const singleFile = opts.singleFile ?? false;
   const allowDirty = opts.allowDirty ?? false;
   const force = opts.force ?? false;
   const starters = opts.starters ?? [];
@@ -190,8 +245,16 @@ export async function runExport(
     }
   }
 
-  // 2. Check for non-empty target
-  if (!force && fs.existsSync(outDir)) {
+  // 2. Check the target. A single file is replaced without ceremony (re-running
+  // is how it is refreshed); a directory tree is only replaced under --force.
+  if (singleFile) {
+    if (fs.existsSync(outDir) && fs.statSync(outDir).isDirectory()) {
+      throw new ExportTargetIsDirectoryError(
+        `Output "${outDir}" is a directory, and --single-file writes one file. ` +
+          `Pass --out <file>, or drop --single-file to write a directory tree.`,
+      );
+    }
+  } else if (!force && fs.existsSync(outDir)) {
     let hasContents = false;
     try {
       const entries = fs.readdirSync(outDir);
@@ -240,9 +303,15 @@ export async function runExport(
     yield* renderAggregatePages(pagesMap, meta, exportOpts);
   }
 
-  // 6. Write to temp dir
+  // 6. Write
   const outParent = path.dirname(outDir);
   fs.mkdirSync(outParent, { recursive: true });
+
+  if (singleFile) {
+    writeSingleFile(outDir, renderSingleFile(pagesMap, meta, exportOpts));
+    return;
+  }
+
   const tempDir = fs.mkdtempSync(path.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());

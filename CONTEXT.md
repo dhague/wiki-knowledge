@@ -80,12 +80,20 @@ One `tool_use` invocation within a turn. Turns are not exactly recoverable from 
 _Avoid_: Turn (interchangeably) — a tool call is one invocation; a turn may contain several. #98 used the two loosely before this ADR pinned them apart.
 
 **Export**:
-Rendering the vault to a self-contained, offline static HTML site — `wiki/` always, `raw/` opt-in — via `enchiridion export`. A deterministic file transform that reads the working tree but refuses to run while the exported subtree is dirty, so the site never publishes uncommitted bytes ([ADR-0022](docs/adr/0022-static-html-export.md)). Distinct from ingestion (into the vault) and retrieval (out of it): export is a read-only projection of the whole vault into another format.
+Rendering the vault to a self-contained, offline static HTML artifact — `wiki/` always, `raw/` opt-in — via `enchiridion export`. A deterministic file transform that reads the working tree but refuses to run while the exported subtree is dirty, so the output never publishes uncommitted bytes ([ADR-0022](docs/adr/0022-static-html-export.md)). Distinct from ingestion (into the vault) and retrieval (out of it): export is a read-only projection of the whole vault into another format. The artifact takes one of two shapes — see **Output mode**.
 _Avoid_: Publish, build — "export" names specifically this markdown-to-HTML projection, not deployment or the TypeScript bundle build.
 
+**Output mode**:
+Which shape an export writes. **Multi-page** (the default) writes the **web tree**; **single-file** (`--single-file`) writes one self-contained HTML document whose pages are **sections**, for handing to someone who will open it on a phone. The mode is one decision rather than two, because it settles both how a link to a page is spelled and what becomes of a relative destination the export does not carry — a document with no second file to point at cannot leave either to the author ([ADR-0022](docs/adr/0022-static-html-export.md)).
+_Avoid_: Format, layout — and note `wiki.html` is an output *of* single-file mode, not a name for the mode.
+
 **Web tree**:
-The generated site, at `web/` under the vault root by default (`--out` overrides). A gitignored, reproducible artifact — never committed, never a source of truth. Mirrors the vault tree, `.md`→`.html`.
+The generated site in multi-page mode, at `web/` under the vault root by default (`--out` overrides). A gitignored, reproducible artifact — never committed, never a source of truth. Mirrors the vault tree, `.md`→`.html`. Single-file mode writes no tree at all; `--out` names its one file instead.
 _Avoid_: Site, output dir (informal — `web/` is the default, but the term is the tree it holds).
+
+**Section**:
+One page's worth of a single-file export: a `<section>` of the one document carrying that page's nav bar, frontmatter table and article, hidden until the hash names it. Its `id` is the page's vault-relative output path with the extension dropped and every other run of non-alphanumerics folded to `-`; the front page alone takes the reserved `__front`. Derived by the one function used both when writing a section and when rewriting a link to it, so a rewritten link cannot miss ([ADR-0022](docs/adr/0022-static-html-export.md)).
+_Avoid_: Page (a section is a page of the export — prose still says "page" for the thing itself; "section" names its form in the document), fragment (the `#id` that names a section).
 
 **Wiki title**:
 The name an exported site carries — in the sticky nav bar on every page, and as the front page heading. Resolves in one place: `--title` for this run, else the title saved in the vault config, else the vault root's directory name ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)). Naming the export is deployment-local presentation, not knowledge — hence the config file rather than a page.

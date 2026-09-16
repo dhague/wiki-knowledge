@@ -16,7 +16,6 @@
  * modules to get the full output set.
  */
 
-import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { PageRecord } from "./pagerecord.js";
 import {
@@ -27,10 +26,12 @@ import {
   exportTitle,
 } from "./exportmeta.js";
 import {
+  LinkMode,
   RenderedParts,
   RenderedPage,
   buildNavBar,
   escHtml,
+  hrefFor,
   mdToHtml,
   shellPages,
 } from "./exportrender.js";
@@ -79,10 +80,9 @@ function pageLink(
   fromHtmlPath: string,
   toPageRef: string,
   title: string,
+  mode: LinkMode,
 ): string {
-  const toHtml = mdToHtml(toPageRef);
-  const rel = path.posix.relative(path.posix.dirname(fromHtmlPath), toHtml);
-  return `<a href="${escHtml(rel)}">${escHtml(title)}</a>`;
+  return `<a href="${escHtml(hrefFor(mode)(fromHtmlPath, mdToHtml(toPageRef)))}">${escHtml(title)}</a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,13 +95,14 @@ function renderTagPage(
   pageRefs: string[],
   pages: Map<string, { record?: PageRecord; text: string }>,
   wikiTitle: string,
+  mode: LinkMode,
 ): RenderedParts {
   const htmlPath = `tags/${slug}.html`;
-  const nav = buildNavBar(htmlPath, wikiTitle);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
   const items = pageRefs
     .map((ref) => {
       const title = pages.get(ref)?.record?.title ?? ref;
-      const link = pageLink(htmlPath, ref, title);
+      const link = pageLink(htmlPath, ref, title, mode);
       return `<li>${link}</li>`;
     })
     .join("\n");
@@ -117,15 +118,17 @@ function renderTagIndex(
   tagSlugMap: Map<string, string>,
   meta: ExportMeta,
   wikiTitle: string,
+  mode: LinkMode,
 ): RenderedParts {
   const htmlPath = "tags/index.html";
-  const nav = buildNavBar(htmlPath, wikiTitle);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
 
   const sortedTags = [...tagSlugMap.keys()].sort();
   const rows = sortedTags.map((tag) => {
     const slug = tagSlugMap.get(tag)!;
     const count = meta.tagMap.get(tag)?.length ?? 0;
-    return `<li><a href="${escHtml(slug)}.html">${escHtml(tag)}</a> (${count})</li>`;
+    const href = escHtml(hrefFor(mode)(htmlPath, `tags/${slug}.html`));
+    return `<li><a href="${href}">${escHtml(tag)}</a> (${count})</li>`;
   });
 
   const main = `<h1>Tags</h1>\n<ul>\n${rows.join("\n")}\n</ul>`;
@@ -142,9 +145,10 @@ function renderKindIndex(
   pageRefs: string[],
   pages: Map<string, { record?: PageRecord; text: string }>,
   wikiTitle: string,
+  mode: LinkMode,
 ): RenderedParts {
   const htmlPath = `wiki/${folder}/index.html`;
-  const nav = buildNavBar(htmlPath, wikiTitle);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
 
   const label = folder.charAt(0).toUpperCase() + folder.slice(1);
   const items = pageRefs
@@ -152,7 +156,7 @@ function renderKindIndex(
       const record = pages.get(ref)?.record;
       const title = record?.title ?? ref;
       const summary = record?.summary ?? "";
-      const link = pageLink(htmlPath, ref, title);
+      const link = pageLink(htmlPath, ref, title, mode);
       const summaryHtml = summary ? ` — ${escHtml(summary)}` : "";
       return `<li>${link}${summaryHtml}</li>`;
     })
@@ -172,9 +176,10 @@ function renderFrontPage(
   pages: Map<string, { record?: PageRecord; text: string }>,
   tagSlugMap: Map<string, string>,
   wikiTitle: string,
+  mode: LinkMode,
 ): RenderedParts {
   const htmlPath = "index.html";
-  const nav = buildNavBar(htmlPath, wikiTitle);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
 
   // Total page count
   const totalPages = Array.from(meta.kindMap.values()).reduce(
@@ -190,7 +195,10 @@ function renderFrontPage(
       const blurb = kindBlurb(kind, pages);
       const label = folder.charAt(0).toUpperCase() + folder.slice(1);
       const blurbHtml = blurb ? ` — ${escHtml(blurb)}` : "";
-      return `<li><a href="${escHtml(`wiki/${folder}/index.html`)}">${escHtml(label)}</a> (${refs.length})${blurbHtml}</li>`;
+      const href = escHtml(
+        hrefFor(mode)(htmlPath, `wiki/${folder}/index.html`),
+      );
+      return `<li><a href="${href}">${escHtml(label)}</a> (${refs.length})${blurbHtml}</li>`;
     });
 
   // Get-started block
@@ -207,21 +215,22 @@ function renderFrontPage(
   if (suppliedStarters && suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef, annotation }) => {
       const title = pages.get(pageRef)?.record?.title ?? pageRef;
-      const link = pageLink(htmlPath, pageRef, title);
+      const link = pageLink(htmlPath, pageRef, title, mode);
       const annHtml = annotation ? ` — ${escHtml(annotation)}` : "";
       return `<li>${link}${annHtml}</li>`;
     });
   } else {
     startedItems = meta.getStarted.map((entry: GetStartedEntry) => {
-      const link = pageLink(htmlPath, entry.pageRef, entry.title);
+      const link = pageLink(htmlPath, entry.pageRef, entry.title, mode);
       const summaryHtml = entry.summary ? ` — ${escHtml(entry.summary)}` : "";
       return `<li>${link}${summaryHtml}</li>`;
     });
   }
 
+  const tagsHref = escHtml(hrefFor(mode)(htmlPath, "tags/index.html"));
   const main = [
     `<h1>${escHtml(wikiTitle)}</h1>`,
-    `<p>${totalPages} page${totalPages === 1 ? "" : "s"} · <a href="tags/index.html">Tags</a></p>`,
+    `<p>${totalPages} page${totalPages === 1 ? "" : "s"} · <a href="${tagsHref}">Tags</a></p>`,
     `<section>`,
     `<h2>Browse by Kind</h2>`,
     `<ul>`,
@@ -249,11 +258,17 @@ function renderFrontPage(
  *
  * Yields (in order): tag pages, tag index, per-kind index pages, front page.
  * Concatenate with renderPageParts for the complete set of page fragments.
+ *
+ * `mode` is the same choice renderPageParts takes: multi-page output (the
+ * default) links relative `.html` files, a single-file caller links sections
+ * by fragment. The aggregate pages link to each other and to every listed
+ * page, so they need it at least as much as the pages do.
  */
 export function* renderAggregateParts(
   pages: Map<string, { record?: PageRecord; text: string }>,
   meta: ExportMeta,
   opts: ExportOptions = {},
+  mode: LinkMode = "multi-page",
 ): Generator<RenderedParts> {
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
   const wikiTitle = exportTitle(opts);
@@ -261,20 +276,20 @@ export function* renderAggregateParts(
   // Tag pages
   for (const [tag, pageRefs] of meta.tagMap) {
     const slug = tagSlugMap.get(tag)!;
-    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle);
+    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle, mode);
   }
 
   // Tag index (always emit — nav on every page links to it)
-  yield renderTagIndex(tagSlugMap, meta, wikiTitle);
+  yield renderTagIndex(tagSlugMap, meta, wikiTitle, mode);
 
   // Per-kind index pages
   for (const [kind, pageRefs] of meta.kindMap) {
     const folder = kindFolder(kind, pageRefs);
-    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle);
+    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, mode);
   }
 
   // Front page
-  yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle);
+  yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode);
 }
 
 /**

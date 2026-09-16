@@ -1375,3 +1375,110 @@ test("export: a saved title persists across runs; --title overrides one run only
   runEnv(["export", "--force"], env);
   assert.equal(navTitle(), "Saved Wiki", "the saved title should survive");
 });
+
+// ---------------------------------------------------------------------------
+// export: single-file mode (#478)
+// ---------------------------------------------------------------------------
+
+test("export --single-file: defaults to wiki.html at the vault root", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(["export", "--single-file"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+
+  const outFile = path.join(root, "wiki.html");
+  assert.ok(fs.existsSync(outFile), "the export should write wiki.html");
+  assert.ok(
+    !fs.existsSync(path.join(root, "web")),
+    "single-file mode writes no site directory",
+  );
+  assert.ok(stdout.includes(outFile), "the run should report where it wrote");
+});
+
+test("export --single-file --out: names the file, and re-running replaces it", async () => {
+  const root = await buildCommittedVault();
+  const outFile = path.join(root, "share", "team.html");
+  const env = { cwd: root, env: { WIKI_ROOT: root } };
+
+  const first = runEnv(
+    ["export", "--single-file", "--out", outFile, "--allow-dirty"],
+    env,
+  );
+  assert.equal(first.status, 0, first.stderr);
+  assert.ok(fs.existsSync(outFile), "the named file should be written");
+  const before = fs.readFileSync(outFile, "utf8");
+
+  // A second run refreshes it — no --force, and no refusal for a non-empty
+  // parent directory.
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "new-page.md"),
+    "---\ntitle: A New Page\nkind: concept\n---\n\nBody.\n",
+  );
+  const second = runEnv(
+    ["export", "--single-file", "--out", outFile, "--allow-dirty"],
+    env,
+  );
+  assert.equal(second.status, 0, second.stderr);
+  const after = fs.readFileSync(outFile, "utf8");
+  assert.notEqual(after, before, "the file should be replaced");
+  assert.ok(
+    after.includes('id="wiki-concepts-new-page"'),
+    "the refreshed file should carry the new page's section",
+  );
+});
+
+test("export --single-file: the written file is self-contained", async () => {
+  const root = await buildCommittedVault();
+  const { status } = runEnv(["export", "--single-file"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0);
+
+  const html = fs.readFileSync(path.join(root, "wiki.html"), "utf8");
+  assert.ok(html.includes("<script>"), "the inline script should be present");
+  assert.ok(
+    html.includes("Sakura.css v"),
+    "the framework CSS should be inlined",
+  );
+  assert.ok(!html.includes("<link"), "nothing should be linked");
+  assert.ok(
+    /href="#wiki-concepts-connection-pooling"/.test(html),
+    "internal links should be fragment links",
+  );
+});
+
+test("export --single-file: a directory --out is refused with a clear message", async () => {
+  const root = await buildCommittedVault();
+  fs.mkdirSync(path.join(root, "web"));
+  const { status, stderr } = runEnv(
+    ["export", "--single-file", "--out", path.join(root, "web")],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0, "a directory target should fail");
+  assert.match(stderr, /directory/i, "the message should name the problem");
+  assert.ok(
+    !fs.existsSync(path.join(root, "wiki.html")),
+    "nothing should be written elsewhere either",
+  );
+});
+
+test("export --single-file: a vault with uncommitted changes is still refused", async () => {
+  const root = await buildCommittedVault();
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "sourdough-starter.md"),
+    "---\ntitle: Dirty\n---\n\nEdited.\n",
+  );
+  const { status, stderr } = runEnv(["export", "--single-file"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0, "the dirty-tree check applies in this mode too");
+  assert.match(stderr, /uncommitted/i);
+  assert.ok(
+    !fs.existsSync(path.join(root, "wiki.html")),
+    "no file should be written when the check fails",
+  );
+});

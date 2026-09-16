@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
 import { buildExportMeta, type ExportOptions } from "./exportmeta.js";
 import {
+  FRONT_SECTION_ID,
   assetsRootFor,
+  buildDocument,
   buildHtmlShell,
   renderPageParts,
   renderPages,
+  sectionIdFor,
 } from "./exportrender.js";
 
 // ---------------------------------------------------------------------------
@@ -599,12 +602,207 @@ test("buildHtmlShell: wraps parts around a shared-stylesheet link", () => {
   assert.ok(!html.includes("<style"), "shell must link, not inline");
 });
 
-test("buildHtmlShell: a null assetsRoot inlines (the single-file seam)", () => {
-  const html = buildHtmlShell({ title: "T", nav: "", main: "" }, null);
-  assert.ok(html.includes("<style>"), "null assetsRoot should inline CSS");
-  assert.ok(html.includes("Sakura.css v"), "inlined CSS is the framework");
+test("buildDocument: the skeleton both output shapes share", () => {
+  // Nothing mode-specific lives here — no nav, no stylesheet decision, no
+  // sections. Each shape supplies its own style element and body.
+  const html = buildDocument("A Title", "<style>x</style>", "<p>Body</p>");
+  assert.ok(html.startsWith("<!DOCTYPE html>"));
+  assert.ok(html.includes(VIEWPORT_META), "the viewport meta every mode wants");
+  assert.ok(html.includes("<title>A Title</title>"));
+  assert.ok(html.includes("<style>x</style>"));
+  assert.ok(html.includes("<body>\n<p>Body</p>\n</body>"));
+});
+
+// ---------------------------------------------------------------------------
+// 8. Single-file link seam — section ids and #fragment hrefs
+// ---------------------------------------------------------------------------
+
+test("sectionIdFor: flattens a page's output path into a section id", () => {
+  assert.equal(
+    sectionIdFor("wiki/concepts/alpha-concept.html"),
+    "wiki-concepts-alpha-concept",
+  );
+  assert.equal(sectionIdFor("tags/alpha.html"), "tags-alpha");
+  assert.equal(sectionIdFor("tags/index.html"), "tags-index");
+  assert.equal(sectionIdFor("wiki/concepts/index.html"), "wiki-concepts-index");
+  assert.equal(sectionIdFor("raw/2026/notes.html"), "raw-2026-notes");
+});
+
+test("sectionIdFor: the front page takes the reserved id, which nothing else can", () => {
+  assert.equal(FRONT_SECTION_ID, "__front");
+  assert.equal(sectionIdFor("index.html"), FRONT_SECTION_ID);
+  // Underscores never survive the derivation, so no page can claim the
+  // reserved id by accident.
+  for (const p of ["wiki/concepts/a_b.html", "raw/__front.html"]) {
+    assert.ok(!sectionIdFor(p).includes("_"), `${p} must not derive an _`);
+  }
+});
+
+test("sectionIdFor: a path with no extension still derives an id", () => {
+  assert.equal(sectionIdFor("raw/notes"), "raw-notes");
+});
+
+test("renderPageParts: single-file mode rewrites body links to #section", () => {
+  const meta = buildExportMeta(wikiPages);
+  const rendered = [
+    ...renderPageParts(wikiPages, meta, { title: "Test Vault" }, "single-file"),
+  ];
+  const alpha = rendered.find(
+    (p) => p.path === "wiki/concepts/alpha-concept.html",
+  )!;
   assert.ok(
-    !html.includes('rel="stylesheet"'),
-    "nothing should be linked in single-file shape",
+    alpha.parts.main.includes('href="#wiki-concepts-beta-concept"'),
+    "a body link should become the target's section fragment",
+  );
+  assert.ok(
+    alpha.parts.main.includes('href="#wiki-entities-alpha-entity"'),
+    "a link across folders should become a section fragment too",
+  );
+  assert.ok(
+    !alpha.parts.main.includes('href="beta-concept.html"'),
+    "no .html href should survive single-file rewriting",
+  );
+});
+
+test("renderPageParts: single-file mode rewrites nav, tag and frontmatter links", () => {
+  const meta = buildExportMeta(wikiPages);
+  const rendered = [
+    ...renderPageParts(wikiPages, meta, { title: "Test Vault" }, "single-file"),
+  ];
+  const alpha = rendered.find(
+    (p) => p.path === "wiki/concepts/alpha-concept.html",
+  )!;
+  assert.ok(
+    alpha.parts.nav.includes('href="#__front"') &&
+      alpha.parts.nav.includes('href="#tags-index"'),
+    "nav should point at the home and tag-index sections",
+  );
+  assert.ok(
+    alpha.parts.main.includes('href="#tags-alpha"'),
+    "a frontmatter tag should link to its tag section",
+  );
+  assert.ok(
+    alpha.parts.main.includes('href="#wiki-concepts-beta-concept"'),
+    "a frontmatter edge should link to its target's section",
+  );
+});
+
+// A raw artifact keeps its own extension, so the links that name one — the
+// body's, and the `raw_source` pointer in the frontmatter — are not `.md`
+// links. In single-file mode they are the mode's business all the same: a
+// relative destination there is a link out of the file.
+const rawLinkingSource = `---
+title: Source One
+kind: source
+raw_source: "[report.txt](../../raw/reports/report.txt)"
+---
+
+See [the report](../../raw/reports/report.txt).
+Also ![a picture](../assets/diagram.png) and [mail](mailto:someone@example.com).
+`;
+
+function renderOne(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  opts: ExportOptions,
+  mode: "multi-page" | "single-file",
+): string {
+  const meta = buildExportMeta(pages, opts);
+  const found = [...renderPageParts(pages, meta, opts, mode)].find(
+    (p) => p.path === "wiki/sources/source-one.html",
+  );
+  assert.ok(found, "fixture should render the source page");
+  return found.parts.main;
+}
+
+test("renderPageParts: single-file rewrites a link to a non-.md exported page", () => {
+  const pages = makePages([
+    ["wiki/sources/source-one.md", rawLinkingSource],
+    ["raw/reports/report.txt", "raw text"],
+  ]);
+  const main = renderOne(pages, { includeRaw: true }, "single-file");
+  assert.ok(
+    main.includes('href="#raw-reports-report-txt"'),
+    "a raw artifact's link should become its section's fragment",
+  );
+  assert.ok(
+    !main.includes("raw/reports/report.txt"),
+    "no relative destination should survive in a one-file document",
+  );
+});
+
+test("renderPageParts: single-file strips a link to a non-exported relative path", () => {
+  const pages = makePages([
+    ["wiki/sources/source-one.md", rawLinkingSource],
+    ["raw/reports/report.txt", "raw text"],
+  ]);
+  // Without --raw the artifact is not in the export, so there is nothing to
+  // link to — and a relative path would leave the file, so it goes.
+  const main = renderOne(pages, {}, "single-file");
+  assert.ok(
+    main.includes("the report"),
+    "the label should survive as plain text",
+  );
+  assert.ok(
+    !main.includes("raw/reports/report.txt"),
+    "the dangling destination should be gone, not left to be tapped",
+  );
+});
+
+test("renderPageParts: multi-page leaves a non-.md relative link alone", () => {
+  const pages = makePages([
+    ["wiki/sources/source-one.md", rawLinkingSource],
+    ["raw/reports/report.txt", "raw text"],
+  ]);
+  const main = renderOne(pages, { includeRaw: true }, "multi-page");
+  assert.ok(
+    main.includes('href="../../raw/reports/report.txt"'),
+    "multi-page output writes the file the link names, so it keeps the link",
+  );
+});
+
+test("renderPageParts: single-file leaves images and absolute URIs alone", () => {
+  const pages = makePages([
+    ["wiki/sources/source-one.md", rawLinkingSource],
+    ["raw/reports/report.txt", "raw text"],
+  ]);
+  const main = renderOne(pages, { includeRaw: true }, "single-file");
+  assert.ok(
+    main.includes('src="../assets/diagram.png"'),
+    "an image is not a link out of the file — it is left as the author wrote it",
+  );
+  assert.ok(
+    main.includes('href="mailto:someone@example.com"'),
+    "an absolute URI is not a relative destination",
+  );
+});
+
+test("renderPageParts: a bare in-page anchor is left alone in single-file mode", () => {
+  const meta = buildExportMeta(wikiPages);
+  const rendered = [
+    ...renderPageParts(wikiPages, meta, { title: "Test Vault" }, "single-file"),
+  ];
+  const entity = rendered.find(
+    (p) => p.path === "wiki/entities/alpha-entity.html",
+  )!;
+  // Same page, so the same section: the heading id is the right destination.
+  assert.ok(
+    entity.parts.main.includes('href="#section-two"'),
+    "an in-page anchor should survive as a heading anchor",
+  );
+  assert.ok(
+    entity.parts.main.includes("https://example.com"),
+    "an external URL should be untouched",
+  );
+});
+
+test("renderPageParts: the default is still multi-page relative links", () => {
+  const meta = buildExportMeta(wikiPages);
+  const rendered = [...renderPageParts(wikiPages, meta, { title: "T" })];
+  const alpha = rendered.find(
+    (p) => p.path === "wiki/concepts/alpha-concept.html",
+  )!;
+  assert.ok(
+    alpha.parts.main.includes('href="beta-concept.html"'),
+    "omitting the href strategy must leave multi-page output alone",
   );
 });
