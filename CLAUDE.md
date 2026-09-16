@@ -14,6 +14,10 @@ Canonical five-role vocabulary, each label string equal to its role name. See `d
 
 Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Render checks
+
+A render check judges generated HTML by eye — visual acceptance criteria, and CSS that markup cannot settle. See `docs/agents/render-check.md`. Its `chrome-devtools` MCP server is configured per machine, so `.mcp.json` does not list it.
+
 ## Project: the wiki-knowledge plugin
 
 This repo builds a Claude Code **wiki-knowledge plugin** (clean-room ingestion + retrieval over a git-backed markdown vault). Key resources, in order of authority:
