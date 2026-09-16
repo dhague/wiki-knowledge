@@ -21,6 +21,7 @@ import { PageRecord } from "./pagerecord.js";
 import { ExportMeta, ExportOptions, exportTitle } from "./exportmeta.js";
 import {
   PageParts,
+  buildDocument,
   renderPageParts,
   sectionIdFor,
   escHtml,
@@ -47,11 +48,11 @@ export const SINGLE_FILE_WARN_BYTES = 5 * 1024 * 1024;
  */
 export function singleFileSizeWarning(
   bytes: number,
-  label: string,
+  file: string,
 ): string | null {
   if (bytes <= SINGLE_FILE_WARN_BYTES) return null;
-  const mb = (bytes / (1024 * 1024)).toFixed(1);
-  return `Warning: ${label} is ${mb} MB — over the 5 MB that is comfortable to email. The file has been written; multi-page export (without --single-file) may suit a vault this size better.`;
+  const mb = (n: number) => (n / (1024 * 1024)).toFixed(1);
+  return `Warning: ${file} is ${mb(bytes)} MB — over the ${mb(SINGLE_FILE_WARN_BYTES)} MB that is comfortable to email. The file has been written; multi-page export (without --single-file) may suit a vault this size better.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,20 +109,23 @@ const SINGLE_FILE_SCRIPT = `(function () {
   }
 
   function go(isInitialLoad) {
-    var target = find(location.hash.slice(1));
-    if (target) {
-      show(target);
-      // Sections have no scroll position of their own, so a swap inherits
-      // whatever offset the previous page was read at. A navigation starts
-      // at the top; a heading anchor is left to the browser.
-      if (!isInitialLoad) window.scrollTo(0, 0);
+    var id = location.hash.slice(1);
+    // No hash means the front page — on a cold open, and on a Back that
+    // returned to the document root, which are the same destination.
+    var target = find(id) || (id === "" ? find(FRONT) : null);
+    if (!target) {
+      // A hash naming something that is not a section: an in-page heading
+      // anchor, or a dead link. A cold open with nothing to show lands on
+      // the front page; afterwards the section already on screen stays, so
+      // the browser can scroll to the heading itself.
+      if (isInitialLoad) show(find(FRONT));
       return;
     }
-    // The hash names no section: either there is none, or it is an in-page
-    // heading anchor (or a dead link). A cold open with nothing to show
-    // lands on the front page; afterwards the section already on screen
-    // stays there, so the browser can scroll to the heading itself.
-    if (isInitialLoad) show(find(FRONT));
+    show(target);
+    // Sections have no scroll position of their own, so a swap inherits
+    // whatever offset the previous page was read at. A navigation starts at
+    // the top; a heading anchor is left to the browser.
+    if (!isInitialLoad) window.scrollTo(0, 0);
   }
 
   window.addEventListener("hashchange", function () {
@@ -146,26 +150,21 @@ ${parts.main}
 </section>`;
 }
 
-function buildDocument(title: string, sections: string[]): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escHtml(title)}</title>
-<style>
+/**
+ * The one document: the shared skeleton, with this mode's styling inlined
+ * (there is no second file to link) and the navigation script at the end of
+ * the body, where the sections it switches between are already parsed.
+ */
+function buildSingleFileDocument(title: string, sections: string[]): string {
+  const style = `<style>
 ${EXPORT_STYLESHEET}
 ${SINGLE_FILE_CSS}
-</style>
-</head>
-<body>
-${sections.join("\n")}
+</style>`;
+  const body = `${sections.join("\n")}
 <script>
 ${SINGLE_FILE_SCRIPT}
-</script>
-</body>
-</html>
-`;
+</script>`;
+  return buildDocument(title, style, body);
 }
 
 /**
@@ -189,5 +188,5 @@ export function renderSingleFile(
   for (const { path, parts: pageParts } of parts) {
     sections.push(buildSection(path, pageParts));
   }
-  return buildDocument(exportTitle(opts), sections);
+  return buildSingleFileDocument(exportTitle(opts), sections);
 }

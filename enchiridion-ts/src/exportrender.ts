@@ -37,11 +37,7 @@ import {
 } from "./exportmeta.js";
 import { iterLinks, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
 import { slugify } from "./place.js";
-import {
-  EXPORT_STYLESHEET,
-  STYLESHEET_DIR,
-  STYLESHEET_FILE,
-} from "./exportstyle.js";
+import { STYLESHEET_DIR, STYLESHEET_FILE } from "./exportstyle.js";
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -244,7 +240,7 @@ export function hrefFor(mode: LinkMode): HrefFor {
  * absolute to the document that carries it.
  */
 function navHref(htmlPath: string, targetPath: string, mode: LinkMode): string {
-  if (mode === "single-file") return `#${sectionIdFor(targetPath)}`;
+  if (mode === "single-file") return hashHref(htmlPath, targetPath);
   return `${rootPrefix(htmlPath)}${targetPath}`;
 }
 
@@ -534,35 +530,45 @@ export function buildNavBar(
 }
 
 /**
- * Wrap a page's parts in a complete document.
+ * The skeleton every exported document shares: one HTML file, a title, the
+ * viewport meta a phone needs, one source of styling, and a body. Both output
+ * shapes are this and differ only in what fills `style` and `body` — the
+ * multi-page shell puts one page's parts in each file, the single-file
+ * builder puts every page's parts in one.
  *
- * `assetsRoot` is the relative path to the shared `assets/` directory from
- * this page's own location (see [assetsRootFor]) — the multi-page shape, one
- * stylesheet file linked from every page. `null` means there is no assets
- * directory to link and the stylesheet is inlined instead: the single-file
- * shape, where the whole site is one document.
+ * `style` is a whole element (`<link …>` or `<style>…</style>`), not a value:
+ * the two shapes do not merely spell the same thing differently, they carry
+ * different styling — one shared file linked from every page, versus one
+ * document with its own copy inlined.
  */
-export function buildHtmlShell(
-  parts: PageParts,
-  assetsRoot: string | null,
+export function buildDocument(
+  title: string,
+  style: string,
+  body: string,
 ): string {
-  const head =
-    assetsRoot === null
-      ? `<style>\n${EXPORT_STYLESHEET}</style>`
-      : `<link rel="stylesheet" href="${escHtml(assetsRoot)}/${STYLESHEET_FILE}">`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escHtml(parts.title)}</title>
-${head}
+<title>${escHtml(title)}</title>
+${style}
 </head>
 <body>
-${parts.nav}
-${parts.main}
+${body}
 </body>
 </html>`;
+}
+
+/**
+ * Wrap a page's parts in a complete document, pointing it at the shared
+ * stylesheet at its own depth — the multi-page shape. `assetsRoot` is the
+ * relative path to the `assets/` directory from this page's own location (see
+ * [assetsRootFor]).
+ */
+export function buildHtmlShell(parts: PageParts, assetsRoot: string): string {
+  const style = `<link rel="stylesheet" href="${escHtml(assetsRoot)}/${STYLESHEET_FILE}">`;
+  return buildDocument(parts.title, style, `${parts.nav}\n${parts.main}`);
 }
 
 function buildPageParts(

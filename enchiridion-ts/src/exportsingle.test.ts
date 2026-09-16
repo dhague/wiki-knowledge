@@ -436,6 +436,118 @@ test("singleFileSizeWarning: warns above it, and suggests multi-page", () => {
   assert.match(warning, /multi-page/i, "the warning suggests the alternative");
 });
 
+// ---------------------------------------------------------------------------
+// 6. The navigation script's state machine
+// ---------------------------------------------------------------------------
+
+/**
+ * The document's own inline script, run against a stub DOM, walking `hashes`
+ * one at a time (each a hashchange) and reporting which section ends up
+ * shown. A section is shown by carrying the `active` class the stylesheet
+ * gives a `display: block` to.
+ *
+ * Not a browser, but it is the whole of what the script touches — a list of
+ * sections with ids, `location.hash`, and one event listener — and the
+ * behaviours it decides are exactly the ones a string assertion cannot see:
+ * which section a hash shows, which one an empty hash shows, and which one a
+ * heading anchor leaves alone.
+ */
+function walkHasher(
+  html: string,
+  hashes: string[],
+  initialHash = "",
+): string[] {
+  const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+  assert.ok(script, "the document should carry the inline script");
+
+  const sections = sectionIds(html).map((id) => ({
+    id,
+    className: "wiki-page",
+  }));
+  const shown: string[] = [];
+  const active = (): string =>
+    sections.find((s) => s.className.includes("active"))?.id ?? "";
+
+  const location = { hash: initialHash };
+  const listeners: Array<() => void> = [];
+  const window = {
+    addEventListener: (event: string, fn: () => void) => {
+      if (event === "hashchange") listeners.push(fn);
+    },
+    scrollTo: () => {},
+  };
+  const document = { querySelectorAll: () => sections };
+
+  new Function("document", "location", "window", script)(
+    document,
+    location,
+    window,
+  );
+  shown.push(active()); // the cold open, before any hash change
+
+  for (const hash of hashes) {
+    location.hash = hash;
+    for (const fn of listeners) fn();
+    shown.push(active());
+  }
+  return shown;
+}
+
+test("the script: a cold open with no hash shows the front page", () => {
+  const html = render(wikiPages, { title: "Test Vault" });
+  assert.deepEqual(walkHasher(html, []), ["__front"]);
+});
+
+test("the script: a cold open on a #slug deep link shows that section", () => {
+  const html = render(wikiPages, { title: "Test Vault" });
+  assert.deepEqual(walkHasher(html, [], "#wiki-concepts-beta-concept"), [
+    "wiki-concepts-beta-concept",
+  ]);
+});
+
+test("the script: a cold open on a hash that names no section shows the front page", () => {
+  const html = render(wikiPages, { title: "Test Vault" });
+  assert.deepEqual(walkHasher(html, [], "#not-a-section"), ["__front"]);
+});
+
+test("the script: a link swaps the section, and Back swaps it back", () => {
+  const html = render(wikiPages, { title: "Test Vault" });
+  // Cold open, tap through to a tag index, then Back — which returns the URL
+  // to the document root, the same no-hash state a cold open starts in.
+  assert.deepEqual(walkHasher(html, ["#tags-index", ""]), [
+    "__front",
+    "tags-index",
+    "__front",
+  ]);
+});
+
+test("the script: Back through two pages retraces them", () => {
+  const html = render(wikiPages, { title: "Test Vault" });
+  assert.deepEqual(
+    walkHasher(html, [
+      "#wiki-concepts-alpha-concept",
+      "#wiki-concepts-beta-concept",
+      "#wiki-concepts-alpha-concept",
+    ]),
+    [
+      "__front",
+      "wiki-concepts-alpha-concept",
+      "wiki-concepts-beta-concept",
+      "wiki-concepts-alpha-concept",
+    ],
+  );
+});
+
+test("the script: a heading anchor leaves the section on screen alone", () => {
+  const html = render(wikiPages, { title: "Test Vault" });
+  // #section-two is a heading inside alpha-concept: the browser scrolls to it
+  // itself, and the script must not swap the page out from under it.
+  assert.deepEqual(
+    walkHasher(html, ["#wiki-concepts-alpha-concept", "#section-two"]),
+    ["__front", "wiki-concepts-alpha-concept", "wiki-concepts-alpha-concept"],
+  );
+});
+
 test("renderSingleFile: an empty vault still yields a front page", () => {
   const html = renderSingleFile(new Map(), buildExportMeta(new Map()), {});
   assert.ok(

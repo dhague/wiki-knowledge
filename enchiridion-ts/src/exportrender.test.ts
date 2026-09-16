@@ -5,6 +5,7 @@ import { buildExportMeta, type ExportOptions } from "./exportmeta.js";
 import {
   FRONT_SECTION_ID,
   assetsRootFor,
+  buildDocument,
   buildHtmlShell,
   renderPageParts,
   renderPages,
@@ -601,14 +602,15 @@ test("buildHtmlShell: wraps parts around a shared-stylesheet link", () => {
   assert.ok(!html.includes("<style"), "shell must link, not inline");
 });
 
-test("buildHtmlShell: a null assetsRoot inlines (the single-file seam)", () => {
-  const html = buildHtmlShell({ title: "T", nav: "", main: "" }, null);
-  assert.ok(html.includes("<style>"), "null assetsRoot should inline CSS");
-  assert.ok(html.includes("Sakura.css v"), "inlined CSS is the framework");
-  assert.ok(
-    !html.includes('rel="stylesheet"'),
-    "nothing should be linked in single-file shape",
-  );
+test("buildDocument: the skeleton both output shapes share", () => {
+  // Nothing mode-specific lives here — no nav, no stylesheet decision, no
+  // sections. Each shape supplies its own style element and body.
+  const html = buildDocument("A Title", "<style>x</style>", "<p>Body</p>");
+  assert.ok(html.startsWith("<!DOCTYPE html>"));
+  assert.ok(html.includes(VIEWPORT_META), "the viewport meta every mode wants");
+  assert.ok(html.includes("<title>A Title</title>"));
+  assert.ok(html.includes("<style>x</style>"));
+  assert.ok(html.includes("<body>\n<p>Body</p>\n</body>"));
 });
 
 // ---------------------------------------------------------------------------
