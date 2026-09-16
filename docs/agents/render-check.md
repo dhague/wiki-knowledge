@@ -58,7 +58,7 @@ Scroll first (`window.scrollTo(0, 4000)`), then read the box. That is the differ
 
 ## Gotchas
 
-- **Direct `chrome` CLI invocation is diagnostic only.** It needs `--headless --disable-gpu --no-sandbox --hide-scrollbars`, and it captures the *initial* viewport — a `#fragment` deep link gives you the top of the document or a blank frame, because the scroll lands after the capture. Use it to tell a broken Chrome from a broken server; use the MCP server to check a render. Its dbus, UPower and NetworkManager complaints on stderr are noise.
+- **Direct `chrome` CLI invocation is diagnostic only.** It needs `--headless --disable-gpu --no-sandbox --hide-scrollbars`. Use it to tell a broken Chrome from a broken server — whether the binary launches and resolves its libraries — then use the MCP server to check a render, because a screenshot on its own gives you no `pageId`, viewport control or computed style. Its dbus, UPower and NetworkManager complaints on stderr are noise.
 - **`claude mcp add -e` is variadic.** The server name goes *before* `-e`, or the name is swallowed as another env var: `claude mcp add --scope local <name> -e KEY=value -- npx …`.
 - **Usage statistics are off, deliberately.** The server reports usage to Google and sends trace URLs to the CrUX API by default; the config passes `--no-usage-statistics --no-performance-crux`.
 
