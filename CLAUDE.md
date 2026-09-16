@@ -16,7 +16,7 @@ Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/ag
 
 ### Render checks
 
-A render check judges generated HTML by eye — visual acceptance criteria, and CSS that markup cannot settle. See `docs/agents/render-check.md`. Its `chrome-devtools` MCP server is configured per machine, so `.mcp.json` does not list it.
+A render check judges generated HTML by eye — visual acceptance criteria, and CSS that markup cannot settle. See `docs/agents/render-check.md`. Its `chrome-devtools` MCP server is configured in the repo's `.mcp.json`.
 
 ## Project: the wiki-knowledge plugin
 

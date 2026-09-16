@@ -4,13 +4,23 @@ A **render check** is looking at what generated HTML actually draws — a real b
 
 ## The toolchain
 
-The `chrome-devtools` MCP server (Chrome DevTools MCP) drives a real Chrome. Three things sit where you would not look for them:
+The `chrome-devtools` MCP server (Chrome DevTools MCP) drives a real Chrome. Two things sit where you would not look for them:
 
-- **The server is local scope, not `.mcp.json`.** Its config lives in `~/.claude.json` under `projects["/home/dhague/Code/enchiridion"].mcpServers`. The repo's `.mcp.json` holds only the pyright server, so a grep there finds nothing. It is registered for the main checkout alone and is never committed.
-- **Chrome is Chrome for Testing.** `/home/dhague/.cache/puppeteer/chrome/linux-153.0.8010.47/chrome-linux64/chrome`. This WSL image has no system Chrome and no Windows-side one.
-- **Its shared libraries are unpacked in user space.** WSL ships without the `libnss3`, `libnspr4` and `libasound2t64` packages, and installing them wants a password. They were fetched with `apt-get download` and unpacked with `dpkg -x` into `/home/dhague/.local/share/chrome-deps/`, surfaced to the server via `LD_LIBRARY_PATH` in its env.
+- **The server is configured in `.mcp.json` at the repo root**, alongside the pyright server. It is gitignored, so each checkout has its own copy — the one in a worktree is not the one in the main checkout. A project-scoped server also needs approving once per project, which is a prompt only the user can answer: `claude mcp list` reports `⏸ Pending approval` until then, and no amount of editing `.mcp.json` gets past it.
+- **Chrome is installed system-wide, not downloaded.** WSL ships without a graphical browser, so:
 
-The toolchain is per-machine and per-checkout. A session that has not restarted since the server was added has no `chrome-devtools` tools: MCP servers load at session start.
+  ```
+  sudo apt install -y curl gnupg
+  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+    | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+  echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+    | sudo tee /etc/apt/sources.list.d/google-chrome.list
+  sudo apt update && sudo apt install -y google-chrome-stable
+  ```
+
+  The package is not in Ubuntu's own archive, which is why it needs the repository first, and it pulls in the shared libraries Chrome needs (`libnss3`, `libasound2`, …). The config names the result at `/opt/google/chrome/chrome` and runs it `--isolated`, on a throwaway profile, so the user's own Chrome data is untouched.
+
+A session that has not restarted since the server was added has no `chrome-devtools` tools: MCP servers load at session start.
 
 ## The workflow
 
@@ -48,15 +58,13 @@ Scroll first (`window.scrollTo(0, 4000)`), then read the box. That is the differ
 
 ## Gotchas
 
-- **Direct `chrome` CLI invocation is diagnostic only.** It needs `LD_LIBRARY_PATH` from the deps directory plus `--headless --disable-gpu --no-sandbox --hide-scrollbars`, and it captures the *initial* viewport — a `#fragment` deep link gives you the top of the document or a blank frame, because the scroll lands after the capture. Use it to tell a broken Chrome from a broken server; use the MCP server to check a render. Its dbus, UPower and NetworkManager complaints on stderr are noise.
+- **Direct `chrome` CLI invocation is diagnostic only.** It needs `--headless --disable-gpu --no-sandbox --hide-scrollbars`, and it captures the *initial* viewport — a `#fragment` deep link gives you the top of the document or a blank frame, because the scroll lands after the capture. Use it to tell a broken Chrome from a broken server; use the MCP server to check a render. Its dbus, UPower and NetworkManager complaints on stderr are noise.
 - **`claude mcp add -e` is variadic.** The server name goes *before* `-e`, or the name is swallowed as another env var: `claude mcp add --scope local <name> -e KEY=value -- npx …`.
-- **Usage statistics are off, deliberately.** The server reports usage to Google and sends trace URLs to the CrUX API by default; the config passes `--no-usage-statistics --no-performance-crux`. `--isolated` keeps it on a throwaway profile so the user's real Chrome data is untouched.
+- **Usage statistics are off, deliberately.** The server reports usage to Google and sends trace URLs to the CrUX API by default; the config passes `--no-usage-statistics --no-performance-crux`.
 
 ## When it breaks
 
-Both failures land as the server failing to start, and both are quick to fix.
+- **Chrome not found** — the config pins `/opt/google/chrome/chrome`, so a missing or moved Chrome is the cause. `ls -l /opt/google/chrome/chrome` tells you which; a bare WSL that never ran the install above is the common case.
+- **`error while loading shared libraries`** — the apt package's dependencies are missing or half-installed. `sudo apt install --reinstall google-chrome-stable` puts them back.
 
-- **Chrome not found** — the browser version directory is pinned in `--executablePath`, so a Chrome update orphans it. Re-point it at the version that exists: `ls /home/dhague/.cache/puppeteer/chrome/`, then `claude mcp remove --scope local chrome-devtools` and re-add (see the `-e` gotcha above).
-- **`error while loading shared libraries`** — the user-space libraries are gone or incomplete. Check `ldd <chrome> | grep "not found"`, then re-run the `apt-get download` + `dpkg -x` pair into `/home/dhague/.local/share/chrome-deps/`. Note that `dpkg -x` does not create the `libasound.so.2 → libasound.so.2.0.0` symlink that `ldconfig` would; create it by hand.
-
-After either fix, `claude mcp list` prints `✔ Connected` for `chrome-devtools` when the server is healthy again.
+After either fix, restart the session and let `claude mcp list` print `✔ Connected` for `chrome-devtools`.
