@@ -300,7 +300,7 @@ function renderFrontmatterTable(
 // CSS
 // ---------------------------------------------------------------------------
 
-export const CSS = `
+const CSS = `
 body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 0 auto; padding: 1rem 1.5rem; line-height: 1.6; }
 nav { margin-bottom: 1.5rem; font-size: 0.875rem; }
 nav a { color: inherit; }
