@@ -112,7 +112,7 @@ python -m pytest
 
 ## Architecture
 
-![wiki-knowledge Plugin — Runtime Architecture](https://dhague.github.io/wiki-knowledge/docs/architecture.html)
+![wiki-knowledge Plugin — Runtime Architecture](docs/architecture-share-card.png)
 
 Key decisions are documented in [docs/adr/](docs/adr/):
 - No MCP server — everything runs as skills + agents + Bash-invoked scripts
@@ -121,3 +121,5 @@ Key decisions are documented in [docs/adr/](docs/adr/):
 - Chain of evidence from every derived page back to its raw source
 
 See [CONTEXT.md](CONTEXT.md) for the domain glossary.
+
+Full architecture documentation is [here](https://dhague.github.io/wiki-knowledge/docs/architecture.html).
