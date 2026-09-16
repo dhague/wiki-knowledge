@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
-import { buildExportMeta } from "./exportmeta.js";
-import { renderPages } from "./exportrender.js";
+import { buildExportMeta, type ExportOptions } from "./exportmeta.js";
+import {
+  assetsRootFor,
+  buildHtmlShell,
+  renderPageParts,
+  renderPages,
+} from "./exportrender.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -102,7 +107,7 @@ const wikiPages = makePages([
 
 function collectPages(
   pages: Map<string, { record?: PageRecord; text: string }>,
-  opts = {},
+  opts: ExportOptions = {},
 ) {
   const meta = buildExportMeta(pages, opts);
   const result = new Map<string, string>();
@@ -469,4 +474,137 @@ test("renderPages: bare anchor links in body are preserved", () => {
 test("renderPages: empty pages yields nothing", () => {
   const rendered = collectPages(new Map());
   assert.equal(rendered.size, 0);
+});
+
+// ---------------------------------------------------------------------------
+// 7. Mobile-responsive shell — viewport meta, shared stylesheet, sticky nav
+// ---------------------------------------------------------------------------
+
+const VIEWPORT_META =
+  '<meta name="viewport" content="width=device-width, initial-scale=1">';
+
+test("assetsRootFor: resolves the shared assets directory at every depth", () => {
+  assert.equal(assetsRootFor("index.html"), "./assets");
+  assert.equal(assetsRootFor("tags/index.html"), "../assets");
+  assert.equal(assetsRootFor("raw/doc.html"), "../assets");
+  assert.equal(
+    assetsRootFor("wiki/concepts/alpha-concept.html"),
+    "../../assets",
+  );
+});
+
+test("renderPages: every page carries the viewport meta tag", () => {
+  const rendered = collectPages(wikiPages, { title: "Test Vault" });
+  assert.ok(rendered.size > 0, "fixture should render pages");
+  for (const [path, html] of rendered) {
+    assert.ok(
+      html.includes(VIEWPORT_META),
+      `page ${path} should carry the viewport meta tag`,
+    );
+  }
+});
+
+test("renderPages: every page links the shared stylesheet at its own depth", () => {
+  const rendered = collectPages(wikiPages, { title: "Test Vault" });
+  for (const [path, html] of rendered) {
+    const href = `${assetsRootFor(path)}/style.css`;
+    assert.ok(
+      html.includes(`<link rel="stylesheet" href="${href}">`),
+      `page ${path} should link the stylesheet as ${href}`,
+    );
+  }
+});
+
+test("renderPages: no page inlines the stylesheet", () => {
+  const rendered = collectPages(wikiPages, { title: "Test Vault" });
+  for (const [path, html] of rendered) {
+    assert.ok(
+      !html.includes("<style"),
+      `page ${path} must not carry an inline style block`,
+    );
+  }
+});
+
+test("renderPages: every page carries a sticky nav with the wiki title", () => {
+  const rendered = collectPages(wikiPages, { title: "Test Vault" });
+  for (const [path, html] of rendered) {
+    assert.ok(
+      html.includes('class="wiki-nav"'),
+      `page ${path} should carry the sticky nav bar`,
+    );
+    assert.ok(
+      html.includes('<span class="wiki-nav-title">Test Vault</span>'),
+      `page ${path} nav should show the wiki title`,
+    );
+  }
+});
+
+test("renderPages: the nav puts the title before the links", () => {
+  // "title left, Home right" is the bar's markup order; the layout that
+  // realises it on screen is the shared stylesheet's, asserted separately.
+  const rendered = collectPages(wikiPages, { title: "Test Vault" });
+  for (const [path, html] of rendered) {
+    const titleAt = html.indexOf('<span class="wiki-nav-title">');
+    const linksAt = html.indexOf('<span class="wiki-nav-links">');
+    assert.ok(titleAt !== -1 && linksAt !== -1, `${path} nav is well formed`);
+    assert.ok(titleAt < linksAt, `${path} nav leads with the title`);
+  }
+});
+
+test("renderPages: the nav title is HTML-escaped", () => {
+  const rendered = collectPages(wikiPages, { title: 'A & B "quoted"' });
+  const html = rendered.get("wiki/concepts/alpha-concept.html")!;
+  assert.ok(
+    html.includes("A &amp; B &quot;quoted&quot;"),
+    "wiki title should be escaped in the nav",
+  );
+});
+
+test("renderPageParts: a page's parts come back without the document shell", () => {
+  const meta = buildExportMeta(wikiPages);
+  const rendered = [
+    ...renderPageParts(wikiPages, meta, { title: "Test Vault" }),
+  ];
+  assert.equal(rendered.length, 4);
+
+  const alpha = rendered.find(
+    (p) => p.path === "wiki/concepts/alpha-concept.html",
+  )!;
+  assert.equal(alpha.parts.title, "Alpha Concept");
+  assert.ok(alpha.parts.nav.includes('class="wiki-nav"'));
+  assert.ok(alpha.parts.main.includes("<article>"));
+
+  for (const { path, parts } of rendered) {
+    const fragment = parts.nav + parts.main;
+    assert.ok(
+      !fragment.includes("<!DOCTYPE") && !fragment.includes("<head>"),
+      `parts for ${path} must not carry the document shell`,
+    );
+  }
+});
+
+test("buildHtmlShell: wraps parts around a shared-stylesheet link", () => {
+  const html = buildHtmlShell(
+    { title: "A Title", nav: "<nav>N</nav>", main: "<p>M</p>" },
+    "../assets",
+  );
+  assert.ok(html.startsWith("<!DOCTYPE html>"));
+  assert.ok(html.includes(VIEWPORT_META));
+  assert.ok(html.includes("<title>A Title</title>"));
+  assert.ok(
+    html.includes('<link rel="stylesheet" href="../assets/style.css">'),
+  );
+  assert.ok(html.includes("<nav>N</nav>"));
+  assert.ok(html.includes("<p>M</p>"));
+  assert.ok(!html.includes("<style"), "shell must link, not inline");
+});
+
+test("buildHtmlShell: a null assetsRoot inlines (the single-file seam)", () => {
+  const html = buildHtmlShell({ title: "T", nav: "", main: "" }, null);
+  assert.ok(html.includes("<style>"), "null assetsRoot should inline CSS");
+  assert.ok(html.includes("Sakura.css v"), "inlined CSS is the framework");
+  assert.ok(
+    !html.includes('rel="stylesheet"'),
+    "nothing should be linked in single-file shape",
+  );
 });

@@ -8,8 +8,12 @@
  *   - wiki/<folder>/index.html — per-kind listing pages
  *   - index.html         — front page (counts, kind summaries, get-started)
  *
- * Pure: no filesystem access, no model. The same RenderedPage type as
- * renderPages; callers concatenate both generators to get the full output set.
+ * Two layers, matching exportrender: renderAggregateParts yields pages with
+ * no document shell, renderAggregatePages wraps them in the multi-page shape.
+ *
+ * Pure: no filesystem access, no model. The same RenderedParts/RenderedPage
+ * types as exportrender; callers concatenate the matching generators from both
+ * modules to get the full output set.
  */
 
 import path from "node:path";
@@ -20,25 +24,18 @@ import {
   ExportOptions,
   GetStartedEntry,
   buildTagSlugMap,
+  exportTitle,
 } from "./exportmeta.js";
 import {
+  RenderedParts,
   RenderedPage,
+  buildNavBar,
   escHtml,
-  buildHtmlShell,
   mdToHtml,
+  shellPages,
 } from "./exportrender.js";
 import { KindFolders } from "./place.js";
 import { splitFrontmatter } from "./wikipage.js";
-
-// ---------------------------------------------------------------------------
-// Nav bar for aggregate pages (takes the html output path directly)
-// ---------------------------------------------------------------------------
-
-function navBar(htmlPath: string): string {
-  const depth = htmlPath.split("/").length - 1;
-  const prefix = depth === 0 ? "./" : "../".repeat(depth);
-  return `<nav><a href="${prefix}index.html">Home</a> · <a href="${prefix}tags/index.html">Tags</a></nav>`;
-}
 
 // ---------------------------------------------------------------------------
 // KIND.md summary blurb
@@ -97,9 +94,10 @@ function renderTagPage(
   slug: string,
   pageRefs: string[],
   pages: Map<string, { record?: PageRecord; text: string }>,
-): RenderedPage {
+  wikiTitle: string,
+): RenderedParts {
   const htmlPath = `tags/${slug}.html`;
-  const nav = navBar(htmlPath);
+  const nav = buildNavBar(htmlPath, wikiTitle);
   const items = pageRefs
     .map((ref) => {
       const title = pages.get(ref)?.record?.title ?? ref;
@@ -108,7 +106,7 @@ function renderTagPage(
     })
     .join("\n");
   const main = `<h1>${escHtml(tag)}</h1>\n<ul>\n${items}\n</ul>`;
-  return { path: htmlPath, content: buildHtmlShell(escHtml(tag), nav, main) };
+  return { path: htmlPath, parts: { title: tag, nav, main } };
 }
 
 // ---------------------------------------------------------------------------
@@ -118,9 +116,10 @@ function renderTagPage(
 function renderTagIndex(
   tagSlugMap: Map<string, string>,
   meta: ExportMeta,
-): RenderedPage {
+  wikiTitle: string,
+): RenderedParts {
   const htmlPath = "tags/index.html";
-  const nav = navBar(htmlPath);
+  const nav = buildNavBar(htmlPath, wikiTitle);
 
   const sortedTags = [...tagSlugMap.keys()].sort();
   const rows = sortedTags.map((tag) => {
@@ -130,7 +129,7 @@ function renderTagIndex(
   });
 
   const main = `<h1>Tags</h1>\n<ul>\n${rows.join("\n")}\n</ul>`;
-  return { path: htmlPath, content: buildHtmlShell("Tags", nav, main) };
+  return { path: htmlPath, parts: { title: "Tags", nav, main } };
 }
 
 // ---------------------------------------------------------------------------
@@ -142,9 +141,10 @@ function renderKindIndex(
   folder: string,
   pageRefs: string[],
   pages: Map<string, { record?: PageRecord; text: string }>,
-): RenderedPage {
+  wikiTitle: string,
+): RenderedParts {
   const htmlPath = `wiki/${folder}/index.html`;
-  const nav = navBar(htmlPath);
+  const nav = buildNavBar(htmlPath, wikiTitle);
 
   const label = folder.charAt(0).toUpperCase() + folder.slice(1);
   const items = pageRefs
@@ -159,10 +159,7 @@ function renderKindIndex(
     .join("\n");
 
   const main = `<h1>${escHtml(label)}</h1>\n<ul>\n${items}\n</ul>`;
-  return {
-    path: htmlPath,
-    content: buildHtmlShell(escHtml(label), nav, main),
-  };
+  return { path: htmlPath, parts: { title: label, nav, main } };
 }
 
 // ---------------------------------------------------------------------------
@@ -174,9 +171,10 @@ function renderFrontPage(
   opts: ExportOptions,
   pages: Map<string, { record?: PageRecord; text: string }>,
   tagSlugMap: Map<string, string>,
-): RenderedPage {
+  wikiTitle: string,
+): RenderedParts {
   const htmlPath = "index.html";
-  const nav = navBar(htmlPath);
+  const nav = buildNavBar(htmlPath, wikiTitle);
 
   // Total page count
   const totalPages = Array.from(meta.kindMap.values()).reduce(
@@ -238,7 +236,7 @@ function renderFrontPage(
     `</section>`,
   ].join("\n");
 
-  return { path: htmlPath, content: buildHtmlShell("Wiki", nav, main) };
+  return { path: htmlPath, parts: { title: wikiTitle, nav, main } };
 }
 
 // ---------------------------------------------------------------------------
@@ -246,33 +244,47 @@ function renderFrontPage(
 // ---------------------------------------------------------------------------
 
 /**
- * Lazy generator yielding aggregate HTML pages for the exported vault.
+ * Lazy generator yielding the aggregate pages' parts, with no document shell
+ * wrapped around them.
  *
  * Yields (in order): tag pages, tag index, per-kind index pages, front page.
- * Concatenate with renderPages to get the complete output set.
+ * Concatenate with renderPageParts for the complete set of page fragments.
+ */
+export function* renderAggregateParts(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  meta: ExportMeta,
+  opts: ExportOptions = {},
+): Generator<RenderedParts> {
+  const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
+  const wikiTitle = exportTitle(opts);
+
+  // Tag pages
+  for (const [tag, pageRefs] of meta.tagMap) {
+    const slug = tagSlugMap.get(tag)!;
+    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle);
+  }
+
+  // Tag index (always emit — nav on every page links to it)
+  yield renderTagIndex(tagSlugMap, meta, wikiTitle);
+
+  // Per-kind index pages
+  for (const [kind, pageRefs] of meta.kindMap) {
+    const folder = kindFolder(kind, pageRefs);
+    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle);
+  }
+
+  // Front page
+  yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle);
+}
+
+/**
+ * Lazy generator yielding aggregate HTML pages for the exported vault, in the
+ * multi-page shape. Concatenate with renderPages for the complete output set.
  */
 export function* renderAggregatePages(
   pages: Map<string, { record?: PageRecord; text: string }>,
   meta: ExportMeta,
   opts: ExportOptions = {},
 ): Generator<RenderedPage> {
-  const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
-
-  // Tag pages
-  for (const [tag, pageRefs] of meta.tagMap) {
-    const slug = tagSlugMap.get(tag)!;
-    yield renderTagPage(tag, slug, pageRefs, pages);
-  }
-
-  // Tag index (always emit — nav on every page links to it)
-  yield renderTagIndex(tagSlugMap, meta);
-
-  // Per-kind index pages
-  for (const [kind, pageRefs] of meta.kindMap) {
-    const folder = kindFolder(kind, pageRefs);
-    yield renderKindIndex(kind, folder, pageRefs, pages);
-  }
-
-  // Front page
-  yield renderFrontPage(meta, opts, pages, tagSlugMap);
+  yield* shellPages(renderAggregateParts(pages, meta, opts));
 }

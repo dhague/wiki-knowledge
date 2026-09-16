@@ -9,6 +9,11 @@ import {
 } from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
+import {
+  EXPORT_STYLESHEET,
+  STYLESHEET_DIR,
+  STYLESHEET_FILE,
+} from "./exportstyle.js";
 import type { PageRecord } from "./pagerecord.js";
 
 // ---------------------------------------------------------------------------
@@ -26,6 +31,12 @@ export interface ExportWriterOptions {
   allowDirty?: boolean;
   /** Supplied starters override fallback ranking on the front page. */
   starters?: StarterEntry[];
+  /**
+   * Wiki title shown in every page's nav bar. Defaults to the vault root
+   * directory name — the one thing we know a vault calls itself without
+   * being told.
+   */
+  title?: string;
 }
 
 export class ExportDirtyError extends Error {
@@ -120,14 +131,19 @@ function enumerateRawRefs(root: string): string[] {
 // Temp-dir write → atomic rename
 // ---------------------------------------------------------------------------
 
+/** Write one output file at a site-relative path, creating directories. */
+function writeFileIn(tempDir: string, relPath: string, content: string): void {
+  const abs = path.join(tempDir, ...relPath.split("/"));
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, "utf8");
+}
+
 function writeTempSite(
   tempDir: string,
   pages: IterableIterator<{ path: string; content: string }>,
 ): void {
   for (const { path: relPath, content } of pages) {
-    const abs = path.join(tempDir, ...relPath.split("/"));
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, content, "utf8");
+    writeFileIn(tempDir, relPath, content);
   }
 }
 
@@ -150,6 +166,11 @@ export async function runExport(
   const allowDirty = opts.allowDirty ?? false;
   const force = opts.force ?? false;
   const starters = opts.starters ?? [];
+  // The one place a vault-derived wiki title is resolved. Everything
+  // downstream — the nav bar on every page — reads the result, never the
+  // inputs. (Renderers reached without a vault fall back to a neutral label
+  // rather than an empty nav; see exportTitle.)
+  const title = opts.title?.trim() || path.basename(path.resolve(root));
 
   // 1. Dirty-tree check
   if (!allowDirty) {
@@ -208,7 +229,7 @@ export async function runExport(
   }
 
   // 4. Build metadata
-  const exportOpts: ExportOptions = { includeRaw, starters };
+  const exportOpts: ExportOptions = { includeRaw, starters, title };
   const meta = buildExportMeta(pagesMap, exportOpts);
 
   // 5. Render all pages
@@ -223,6 +244,14 @@ export async function runExport(
   const tempDir = fs.mkdtempSync(path.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());
+    // The shared stylesheet, written once at the output root. Every page
+    // links it at its own depth; no page carries a copy. Site-relative paths
+    // here are always "/"-separated, whichever platform we are on.
+    writeFileIn(
+      tempDir,
+      `${STYLESHEET_DIR}/${STYLESHEET_FILE}`,
+      EXPORT_STYLESHEET,
+    );
 
     // 7. Atomic swap: remove existing outDir, rename temp into place
     if (fs.existsSync(outDir)) {
