@@ -14,6 +14,7 @@ import {
   dirtyFiles,
   runExport,
   ExportDirtyError,
+  ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
 
@@ -572,4 +573,193 @@ test("runExport: the sticky nav reaches every page type", async () => {
       `${rel} should carry the sticky nav bar with a Home link`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// runExport — single-file mode
+// ---------------------------------------------------------------------------
+
+test("runExport: --single-file writes one file and no directory tree", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outFile = path.join(root, "wiki.html");
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+
+  assert.ok(fs.existsSync(outFile), "the output file should exist");
+  assert.ok(
+    fs.statSync(outFile).isFile(),
+    "the output should be a file, not a directory",
+  );
+  // Nothing else appeared beside it: no web/, no assets/.
+  assert.deepEqual(
+    fs.readdirSync(root).filter((n) => n.endsWith(".html")),
+    ["wiki.html"],
+    "the export should write exactly one HTML file",
+  );
+  assert.ok(
+    !fs.existsSync(path.join(root, "web")),
+    "single-file mode writes no site directory",
+  );
+  assert.ok(
+    !fs.existsSync(path.join(root, "assets")),
+    "single-file mode writes no assets directory",
+  );
+});
+
+test("runExport: the single file is self-contained and hash-linked", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outFile = path.join(root, "wiki.html");
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+
+  const html = fs.readFileSync(outFile, "utf8");
+  assert.ok(html.includes('id="wiki-concepts-alpha-concept"'), "sections");
+  assert.ok(html.includes("<style>"), "inlined stylesheet");
+  assert.ok(html.includes("<script>"), "inline script");
+  assert.ok(
+    !html.includes('href="wiki/concepts/'),
+    "internal links should be fragments, not paths",
+  );
+});
+
+test("runExport: re-running single-file replaces the previous file", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outFile = path.join(root, "wiki.html");
+
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+  const first = fs.readFileSync(outFile, "utf8");
+
+  // A page added between runs must show up in the second file — which is only
+  // observable if the previous output was replaced rather than kept.
+  writeFile(
+    root,
+    "wiki/concepts/gamma-concept.md",
+    `---\ntitle: Gamma Concept\nkind: concept\n---\n\nNew page.\n`,
+  );
+  await commitAll(root, "add gamma");
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+  const second = fs.readFileSync(outFile, "utf8");
+
+  assert.notEqual(second, first, "the second run should replace the first");
+  assert.ok(
+    second.includes('id="wiki-concepts-gamma-concept"'),
+    "the new page should be in the replaced file",
+  );
+});
+
+test("runExport: single-file leaves no temp file behind", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outFile = path.join(root, "wiki.html");
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+
+  assert.deepEqual(
+    fs.readdirSync(root).filter((n) => n.includes("export-tmp")),
+    [],
+    "the temp file used for the atomic write should be gone",
+  );
+});
+
+test("runExport: --raw adds raw sections to the single file too", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outFile = path.join(root, "wiki.html");
+
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+  assert.ok(
+    !fs.readFileSync(outFile, "utf8").includes('id="raw-transcript"'),
+    "raw pages stay out without --raw",
+  );
+
+  await runExport(root, {
+    out: outFile,
+    allowDirty: true,
+    singleFile: true,
+    raw: true,
+  });
+  assert.ok(
+    fs.readFileSync(outFile, "utf8").includes('id="raw-transcript"'),
+    "raw pages should be sections under --raw",
+  );
+});
+
+test("runExport: the title resolution is the same in both modes", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outFile = path.join(root, "wiki.html");
+  await runExport(root, {
+    out: outFile,
+    allowDirty: true,
+    singleFile: true,
+    title: "Team Wiki",
+  });
+
+  assert.ok(
+    fs
+      .readFileSync(outFile, "utf8")
+      .includes('<span class="wiki-nav-title">Team Wiki</span>'),
+    "the nav should carry the resolved title",
+  );
+});
+
+test("runExport: an oversized single file is still written, and warns", async (t) => {
+  const root = tmpDir();
+  await setupVault(root);
+  // One page whose rendered form clears the warning threshold.
+  writeFile(
+    root,
+    "wiki/concepts/huge-concept.md",
+    `---\ntitle: Huge Concept\nkind: concept\n---\n\n${"padding text ".repeat(480000)}\n`,
+  );
+  await commitAll(root, "add huge page");
+
+  const warnings: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  });
+
+  const outFile = path.join(root, "wiki.html");
+  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+
+  const bytes = fs.statSync(outFile).size;
+  assert.ok(bytes > 5 * 1024 * 1024, `fixture should be oversized (${bytes})`);
+  assert.equal(warnings.length, 1, "exactly one warning");
+  assert.match(warnings[0], /multi-page/i, "the warning suggests multi-page");
+});
+
+test("runExport: a comfortably-sized single file writes no warning", async (t) => {
+  const root = tmpDir();
+  await setupVault(root);
+
+  const warnings: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  });
+
+  await runExport(root, {
+    out: path.join(root, "wiki.html"),
+    allowDirty: true,
+    singleFile: true,
+  });
+  assert.deepEqual(warnings, [], "a small export should say nothing");
+});
+
+test("runExport: --single-file pointed at a directory fails clearly", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  fs.mkdirSync(outDir);
+
+  await assert.rejects(
+    () => runExport(root, { out: outDir, allowDirty: true, singleFile: true }),
+    (err: unknown) => {
+      assert.ok(err instanceof ExportTargetIsDirectoryError);
+      assert.match((err as Error).message, /director/i);
+      return true;
+    },
+    "a directory target should be refused with a message that says why",
+  );
+  // The directory is left alone.
+  assert.ok(fs.existsSync(outDir) && fs.statSync(outDir).isDirectory());
 });

@@ -64,21 +64,30 @@ The script layer ships as a TypeScript bundle invoked through
 | `/wiki-ingest <path>` | Ingest one file, a folder, or sweep `raw/` |
 | `/wiki-watch` | Long-running auto-ingest watcher for `raw/` |
 | `/wiki-ask <question>` | Grounded, cited answer from the vault |
-| `/wiki-export ["Title"]` | Render the vault as a static HTML site |
+| `/wiki-export ["Title"]` | Render the vault as a static HTML site — multi-page, or one self-contained file |
 | `/save-conversation` | Capture and ingest the current session |
 
 ### Export flags
 
-`/wiki-export` passes these through to `enchiridion export`:
+`/wiki-export` asks whether you want multi-page or a single file, then passes
+these through to `enchiridion export`. Multi-page is the default: a directory
+of linked HTML pages under `web/`. `--single-file` writes one self-contained
+HTML file instead — every page a section, navigated by hash — which is the
+form to attach to an email: the recipient opens it straight from the
+attachment, with no unzip, no server and no network.
 
 | Flag | Purpose |
 |---|---|
-| `--out <dir>` | Output directory (default `web/` at the vault root) |
+| `--single-file` | Write one self-contained HTML file instead of a directory tree |
+| `--out <path>` | Output directory — or, with `--single-file`, the output file (defaults: `web/`, or `wiki.html` at the vault root) |
 | `--raw` | Include `raw/` pages in the site |
-| `--force` | Overwrite a non-empty output directory |
+| `--force` | Overwrite a non-empty output directory (multi-page only) |
 | `--allow-dirty` | Export with uncommitted changes in the exported subtree |
 | `--title <title>` | Wiki title for this run only |
 | `--save-title <title>` | Save the title as the persistent default (exports nothing) |
+
+A single-file export over 5 MB is still written, with a note on stderr
+suggesting multi-page mode.
 
 The site's title — the sticky nav bar and the front page heading — resolves
 `--title` → the saved title → the vault root directory name. `/wiki-export

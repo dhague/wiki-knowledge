@@ -56,8 +56,10 @@ import {
   runExport,
   buildCandidates,
   ExportDirtyError,
+  ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
+import { SINGLE_FILE_DEFAULT_NAME } from "./exportsingle.js";
 import { exportConfigPath, saveExportTitle } from "./exportconfig.js";
 import type { StarterEntry } from "./exportmeta.js";
 
@@ -1174,7 +1176,11 @@ export function buildProgram(): Command {
   program
     .command("export")
     .description("Produce a static HTML site from the vault")
-    .option("--out <dir>", "output directory (default: web/ at vault root)")
+    .option(
+      "--single-file",
+      `write one self-contained HTML file instead of a directory tree (--out names that file, default: ${SINGLE_FILE_DEFAULT_NAME} at the vault root)`,
+    )
+    .option("--out <path>", "output directory, or file under --single-file")
     .option("--raw", "include raw/ section")
     .option("--force", "overwrite non-empty output directory")
     .option("--allow-dirty", "skip dirty-tree check")
@@ -1196,6 +1202,7 @@ export function buildProgram(): Command {
     )
     .action(
       async (opts: {
+        singleFile?: boolean;
         out?: string;
         raw?: boolean;
         force?: boolean;
@@ -1243,13 +1250,16 @@ export function buildProgram(): Command {
           }
         }
 
-        const outDir = opts.out
+        // `--out` names a directory in the default mode and the output file
+        // under --single-file, so the default it falls back to differs too.
+        const outPath = opts.out
           ? path.resolve(opts.out)
-          : path.join(root, "web");
+          : path.join(root, opts.singleFile ? SINGLE_FILE_DEFAULT_NAME : "web");
 
         try {
           await runExport(root, {
-            out: outDir,
+            out: outPath,
+            singleFile: opts.singleFile,
             raw: opts.raw,
             force: opts.force,
             allowDirty: opts.allowDirty,
@@ -1258,11 +1268,12 @@ export function buildProgram(): Command {
             title: opts.title,
             starters,
           });
-          console.log(`Exported to ${outDir}`);
+          console.log(`Exported to ${outPath}`);
         } catch (err) {
           if (
             err instanceof ExportDirtyError ||
-            err instanceof ExportTargetNotEmptyError
+            err instanceof ExportTargetNotEmptyError ||
+            err instanceof ExportTargetIsDirectoryError
           ) {
             console.error(`enchiridion export: ${(err as Error).message}`);
             process.exitCode = 1;
