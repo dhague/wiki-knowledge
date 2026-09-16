@@ -36,9 +36,11 @@ export interface ExportOptions {
    */
   starters?: StarterEntry[];
   /**
-   * Wiki title shown in every page's nav bar. Callers with a vault derive it
-   * and pass it in (`runExport` uses the vault root directory name); callers
-   * without one — pure render passes, tests — omit it.
+   * Wiki title shown in every page's nav bar and on the front page heading —
+   * already resolved, not the per-run flag. Callers with a vault resolve it
+   * first (`runExport` resolves flag → saved title → vault root directory
+   * name, via `resolveExportTitle`); callers without one — pure render
+   * passes, tests — omit it and get `exportTitle`'s neutral label.
    */
   title?: string;
 }

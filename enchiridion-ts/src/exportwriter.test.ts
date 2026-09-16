@@ -478,6 +478,77 @@ test("runExport: an explicit title is used instead of the directory name", async
   }
 });
 
+test("runExport: a saved title in the vault config is used when no flag is given", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  writeFile(
+    root,
+    ".wiki-knowledge/config.json",
+    JSON.stringify({ title: "Saved Wiki" }),
+  );
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+
+  assert.ok(
+    fs
+      .readFileSync(path.join(outDir, "index.html"), "utf8")
+      .includes('<span class="wiki-nav-title">Saved Wiki</span>'),
+    "nav should show the saved title",
+  );
+});
+
+test("runExport: an explicit title overrides the saved one", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  writeFile(
+    root,
+    ".wiki-knowledge/config.json",
+    JSON.stringify({ title: "Saved Wiki" }),
+  );
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, title: "This Run" });
+
+  const html = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
+  assert.ok(html.includes("This Run"), "nav should show the per-run title");
+  assert.ok(
+    !html.includes("Saved Wiki"),
+    "per-run title replaces the saved one",
+  );
+});
+
+test("runExport: an absent config leaves the directory name as the title", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+
+  assert.ok(
+    fs
+      .readFileSync(path.join(outDir, "index.html"), "utf8")
+      .includes(`<span class="wiki-nav-title">${path.basename(root)}</span>`),
+    "nav should fall back to the vault directory name",
+  );
+});
+
+test("runExport: the front page heading is the resolved title, not a hardcoded Wiki", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  writeFile(
+    root,
+    ".wiki-knowledge/config.json",
+    JSON.stringify({ title: "Saved Wiki" }),
+  );
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+
+  const html = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
+  assert.ok(
+    html.includes("<h1>Saved Wiki</h1>"),
+    "heading should be the title",
+  );
+  assert.ok(!html.includes("<h1>Wiki</h1>"), "no hardcoded heading");
+});
+
 test("runExport: the sticky nav reaches every page type", async () => {
   const root = tmpDir();
   await setupVaultWithRaw(root);

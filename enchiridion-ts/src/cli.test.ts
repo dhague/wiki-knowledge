@@ -1304,3 +1304,74 @@ test("vault kinds: respects WIKI_ROOT env var", () => {
   assert.equal(custom.length, 1);
   assert.equal(custom[0].kind, "person");
 });
+
+// ---------------------------------------------------------------------------
+// export: the wiki title (#477)
+// ---------------------------------------------------------------------------
+
+test("export --save-title: persists the title, writes no site", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["export", "--save-title", "Team Wiki"],
+    {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    },
+  );
+  assert.equal(status, 0, stderr);
+
+  const configPath = path.join(root, ".wiki-knowledge", "config.json");
+  assert.equal(
+    JSON.parse(fs.readFileSync(configPath, "utf8")).title,
+    "Team Wiki",
+    "the title should be persisted to the vault config",
+  );
+  assert.ok(stdout.includes("Team Wiki"), "confirmation should name the title");
+  assert.ok(
+    !fs.existsSync(path.join(root, "web")),
+    "saving a title must not export a site",
+  );
+});
+
+test("export --save-title: a blank title errors non-zero and writes nothing", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-cli-save-"));
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  const { status, stderr } = runEnv(["export", "--save-title", "  "], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /title/i);
+  assert.ok(!fs.existsSync(path.join(root, ".wiki-knowledge", "config.json")));
+});
+
+test("export: a saved title persists across runs; --title overrides one run only", async () => {
+  const root = await buildCommittedVault();
+  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  const navTitle = (): string => {
+    const html = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
+    const match = /<span class="wiki-nav-title">([^<]*)<\/span>/.exec(html);
+    assert.ok(match, "the exported front page should carry a nav title");
+    return match[1];
+  };
+
+  runEnv(["export", "--save-title", "Saved Wiki"], env);
+  runEnv(["export", "--force"], env);
+  assert.equal(navTitle(), "Saved Wiki", "the saved title should apply");
+
+  runEnv(["export", "--force", "--title", "One Off"], env);
+  assert.equal(navTitle(), "One Off", "--title should win for this run");
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, ".wiki-knowledge", "config.json"),
+        "utf8",
+      ),
+    ).title,
+    "Saved Wiki",
+    "--title must leave the saved default untouched",
+  );
+
+  runEnv(["export", "--force"], env);
+  assert.equal(navTitle(), "Saved Wiki", "the saved title should survive");
+});

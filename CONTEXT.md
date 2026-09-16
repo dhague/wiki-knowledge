@@ -87,6 +87,14 @@ _Avoid_: Publish, build — "export" names specifically this markdown-to-HTML pr
 The generated site, at `web/` under the vault root by default (`--out` overrides). A gitignored, reproducible artifact — never committed, never a source of truth. Mirrors the vault tree, `.md`→`.html`.
 _Avoid_: Site, output dir (informal — `web/` is the default, but the term is the tree it holds).
 
+**Wiki title**:
+The name an exported site carries — in the sticky nav bar on every page, and as the front page heading. Resolves in one place: `--title` for this run, else the title saved in the vault config, else the vault root's directory name ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)). Naming the export is deployment-local presentation, not knowledge — hence the config file rather than a page.
+_Avoid_: Wiki name, site name.
+
+**Vault config**:
+`.wiki-knowledge/config.json` at the vault root, beside the search index and the lock files — gitignored, absent until something writes it, and every kind of broken-or-missing read as "nothing configured" rather than an error. Holds the saved wiki title today; unknown keys survive a save ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)).
+_Avoid_: Settings, preferences (this is the vault's own state, not user configuration of the plugin).
+
 **Tag page**:
 One generated HTML page per tag (`web/tags/<slug>.html`) listing every page that carries the tag, plus a tag index (`web/tags/index.html`) of all tags with counts. Export-only — tags themselves are just a frontmatter list; the tag page is their materialised, browsable form.
 
