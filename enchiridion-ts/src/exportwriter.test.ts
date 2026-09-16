@@ -323,3 +323,182 @@ test("runExport: starters override front page get-started block", async () => {
   );
   assert.ok(idx.includes("Start here"), "should show annotation");
 });
+
+// ---------------------------------------------------------------------------
+// runExport — mobile-responsive output
+// ---------------------------------------------------------------------------
+
+/** Every .html file under `outDir`, as [output-relative path, content]. */
+function readHtmlTree(outDir: string): Array<[string, string]> {
+  const found: Array<[string, string]> = [];
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(abs);
+      else if (entry.name.endsWith(".html")) {
+        found.push([
+          path.relative(outDir, abs).split(path.sep).join("/"),
+          fs.readFileSync(abs, "utf8"),
+        ]);
+      }
+    }
+  };
+  walk(outDir);
+  return found;
+}
+
+/** Vault with a raw document too, for the --raw assertions. */
+async function setupVaultWithRaw(root: string): Promise<void> {
+  await setupVault(root);
+  writeFile(root, "raw/transcript.md", "# Raw transcript\n\nContent.\n");
+  await commitAll(root, "add raw");
+}
+
+test("runExport: writes the shared stylesheet once, at the output root", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+
+  const cssPath = path.join(outDir, "assets", "style.css");
+  assert.ok(fs.existsSync(cssPath), "assets/style.css should be written");
+  const css = fs.readFileSync(cssPath, "utf8");
+  assert.ok(
+    css.includes("/* Sakura.css v"),
+    "stylesheet should carry the vendored framework's licence header",
+  );
+  assert.ok(
+    css.includes("nav.wiki-nav"),
+    "stylesheet should carry the sticky-nav supplement",
+  );
+
+  // Once, at the root — nowhere else.
+  const cssFiles: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(abs);
+      else if (entry.name.endsWith(".css")) {
+        cssFiles.push(path.relative(outDir, abs).split(path.sep).join("/"));
+      }
+    }
+  };
+  walk(outDir);
+  assert.deepEqual(cssFiles, ["assets/style.css"]);
+});
+
+test("runExport: every generated page carries the viewport meta tag", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const pages = readHtmlTree(outDir);
+  assert.ok(pages.length >= 6, "fixture should produce a full site");
+  for (const [rel, html] of pages) {
+    assert.ok(
+      html.includes(
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      ),
+      `${rel} should carry the viewport meta tag`,
+    );
+  }
+});
+
+test("runExport: every page's stylesheet link resolves to the written file", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const pages = readHtmlTree(outDir);
+  const depths = new Set<number>();
+  for (const [rel, html] of pages) {
+    const href = /<link rel="stylesheet" href="([^"]+)">/.exec(html)?.[1];
+    assert.ok(href, `${rel} should link the shared stylesheet`);
+    assert.ok(!href.startsWith("/"), `${rel}: href must be relative`);
+    const resolved = path.join(
+      path.dirname(path.join(outDir, rel)),
+      href.split("/").join(path.sep),
+    );
+    assert.ok(
+      fs.existsSync(resolved),
+      `${rel}: href "${href}" should resolve to a real file`,
+    );
+    depths.add(rel.split("/").length - 1);
+  }
+  // The fixture spans the root, one level deep and two levels deep.
+  assert.deepEqual([...depths].sort(), [0, 1, 2]);
+});
+
+test("runExport: no page inlines the framework CSS", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  for (const [rel, html] of readHtmlTree(outDir)) {
+    assert.ok(
+      !html.includes("<style"),
+      `${rel} must link the shared stylesheet, not inline it`,
+    );
+  }
+});
+
+test("runExport: the default wiki title is the vault root directory name", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+
+  const expected = path.basename(root);
+  for (const [rel, html] of readHtmlTree(outDir)) {
+    assert.ok(
+      html.includes(`<span class="wiki-nav-title">${expected}</span>`),
+      `${rel} nav should show the vault directory name "${expected}"`,
+    );
+  }
+});
+
+test("runExport: an explicit title is used instead of the directory name", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, title: "Team Wiki" });
+
+  for (const [rel, html] of readHtmlTree(outDir)) {
+    assert.ok(
+      html.includes('<span class="wiki-nav-title">Team Wiki</span>'),
+      `${rel} nav should show the supplied title`,
+    );
+    assert.ok(
+      !html.includes(path.basename(root)),
+      `${rel} nav should not fall back to the directory name`,
+    );
+  }
+});
+
+test("runExport: the sticky nav reaches every page type", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const byPath = new Map(readHtmlTree(outDir));
+  const expected = [
+    "index.html", // front page
+    "tags/index.html", // tag index
+    "tags/alpha.html", // tag page
+    "wiki/concepts/index.html", // kind index
+    "wiki/concepts/alpha-concept.html", // wiki page
+    "raw/transcript.html", // raw page under --raw
+  ];
+  for (const rel of expected) {
+    const html = byPath.get(rel);
+    assert.ok(html, `${rel} should exist in the export`);
+    assert.ok(
+      html.includes('class="wiki-nav"') && html.includes(">Home<"),
+      `${rel} should carry the sticky nav bar with a Home link`,
+    );
+  }
+});

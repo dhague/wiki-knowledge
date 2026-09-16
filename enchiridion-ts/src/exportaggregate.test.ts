@@ -251,6 +251,17 @@ test("renderAggregatePages: always yields index.html", () => {
   assert.ok(front, "index.html must be emitted");
 });
 
+test("renderAggregatePages: front page document title is the wiki title", () => {
+  const meta = buildExportMeta(wikiPages);
+  const opts = { title: "Test Vault" };
+  const pages = [...renderAggregatePages(wikiPages, meta, opts)];
+  const front = pages.find((p) => p.path === "index.html")!;
+  assert.ok(
+    front.content.includes("<title>Test Vault</title>"),
+    "the wiki's front door is named after the wiki",
+  );
+});
+
 test("renderAggregatePages: front page shows total page count", () => {
   const meta = buildExportMeta(wikiPages);
   const pages = [...renderAggregatePages(wikiPages, meta)];

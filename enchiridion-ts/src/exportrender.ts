@@ -1,27 +1,44 @@
 /**
  * Per-page HTML render pass for `enchiridion export`.
  *
- * A lazy generator that, given page records + export metadata + options,
- * yields { path, content } entries for each exported page HTML file. Pure —
- * no filesystem access, no model. The path is vault-relative with .html
- * extension; the content is a self-contained HTML page.
+ * Two layers, deliberately separable:
+ *
+ *   1. renderPageParts — a page's parts (title, nav, main) with no document
+ *      shell around them. This is what a mode that assembles its own document
+ *      needs: single-file export nests the same fragments in its own sections.
+ *   2. renderPages — the multi-page shape, wrapping each page's parts in the
+ *      shared shell and pointing it at `assets/style.css`.
+ *
+ * Both are lazy generators over page records + export metadata + options, and
+ * both are pure — no filesystem access, no model. The path is vault-relative
+ * with .html extension.
  *
  * Link rewriting uses the iterLinks/offset-splice path from wikipage.ts:
  * .md destinations are rewritten to .html (anchors preserved); a link whose
  * target is outside the exported set is stripped to plain label text.
  *
  * Aggregate pages (tag pages, tag index, per-kind index pages, front page)
- * are a separate pass in exportaggregate.ts — concatenate the two generators
- * to get the full output set.
+ * are a separate pass in exportaggregate.ts, in the same two layers —
+ * concatenate the page generators to get the full output set.
  */
 
 import path from "node:path";
 import MarkdownIt from "markdown-it";
 import { parse as parseYaml } from "yaml";
 import { PageRecord, EdgeKeys } from "./pagerecord.js";
-import { ExportMeta, ExportOptions, buildTagSlugMap } from "./exportmeta.js";
+import {
+  ExportMeta,
+  ExportOptions,
+  buildTagSlugMap,
+  exportTitle,
+} from "./exportmeta.js";
 import { iterLinks, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
 import { slugify } from "./place.js";
+import {
+  EXPORT_STYLESHEET,
+  STYLESHEET_DIR,
+  STYLESHEET_FILE,
+} from "./exportstyle.js";
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -31,6 +48,28 @@ export interface RenderedPage {
   /** Vault-relative path of the output HTML file, e.g. wiki/concepts/foo.html */
   path: string;
   content: string;
+}
+
+/**
+ * A single page, disassembled: the document-independent pieces every export
+ * mode assembles for itself.
+ */
+export interface PageParts {
+  /** Text for the document's <title> — this page's own title (a tag name, a
+   *  kind's label, a page title); a page that *is* the wiki's front door
+   *  carries the wiki's title. Unescaped: the shell escapes it. */
+  title: string;
+  /** The sticky navigation bar, already positioned for this page's depth. */
+  nav: string;
+  /** Everything below the nav: frontmatter table then article. */
+  main: string;
+}
+
+/** One page's parts, at the path they would occupy in multi-page output. */
+export interface RenderedParts {
+  /** Vault-relative path of the output HTML file, e.g. wiki/concepts/foo.html */
+  path: string;
+  parts: PageParts;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,11 +128,21 @@ function relHtmlPath(
   return anchor ? `${rel}#${anchor}` : rel;
 }
 
-/** Relative path from a page's HTML file to the output root (e.g. "../../"). */
-function rootPrefix(pageRef: string): string {
-  const depth = mdToHtml(pageRef).split("/").length - 1;
+/** Relative path from an HTML file to the output root (e.g. "../../"). */
+function rootPrefix(htmlPath: string): string {
+  const depth = htmlPath.split("/").length - 1;
   if (depth === 0) return "./";
   return "../".repeat(depth);
+}
+
+/**
+ * Relative path to the shared stylesheet directory from a page's own HTML
+ * file — "./assets" at the root, "../assets" one level deep, and so on. Every
+ * page's stylesheet link is this plus the stylesheet's filename, so the href
+ * is right by construction rather than by a per-page hand-count.
+ */
+export function assetsRootFor(htmlPath: string): string {
+  return `${rootPrefix(htmlPath)}${STYLESHEET_DIR}`;
 }
 
 /** Vault-relative page directory for resolving relative markdown links. */
@@ -190,7 +239,7 @@ function renderTagLink(
   tagSlugMap: Map<string, string>,
 ): string {
   const slug = tagSlugMap.get(tag) ?? slugify(tag, 0);
-  const prefix = rootPrefix(pageRef);
+  const prefix = rootPrefix(mdToHtml(pageRef));
   return `<a href="${escHtml(`${prefix}tags/${slug}.html`)}">${escHtml(tag)}</a>`;
 }
 
@@ -297,62 +346,64 @@ function renderFrontmatterTable(
 }
 
 // ---------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------
-
-const CSS = `
-body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 0 auto; padding: 1rem 1.5rem; line-height: 1.6; }
-nav { margin-bottom: 1.5rem; font-size: 0.875rem; }
-nav a { color: inherit; }
-table.frontmatter { border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.875rem; width: 100%; }
-table.frontmatter td { border: 1px solid #ccc; padding: 0.25rem 0.5rem; vertical-align: top; }
-table.frontmatter td:first-child { font-weight: 600; white-space: nowrap; }
-tr.fm-divider td { border: none; border-top: 2px solid #888; padding: 0; height: 0; }
-ul { margin: 0; padding-left: 1.25rem; }
-@media (prefers-color-scheme: dark) {
-  body { background: #1a1a1a; color: #e0e0e0; }
-  table.frontmatter td { border-color: #555; }
-  tr.fm-divider td { border-top-color: #888; }
-}
-`.trim();
-
-// ---------------------------------------------------------------------------
 // Page assembly
 // ---------------------------------------------------------------------------
 
-function buildNavBar(pageRef: string): string {
-  const prefix = rootPrefix(pageRef);
-  return `<nav><a href="${prefix}index.html">Home</a> · <a href="${prefix}tags/index.html">Tags</a></nav>`;
+/**
+ * The sticky navigation bar every page carries: the wiki title on the left,
+ * the site's own links on the right. Styled in the shared stylesheet
+ * (`nav.wiki-nav`), never inline.
+ */
+export function buildNavBar(htmlPath: string, wikiTitle: string): string {
+  const prefix = rootPrefix(htmlPath);
+  return `<nav class="wiki-nav">
+<span class="wiki-nav-title">${escHtml(wikiTitle)}</span>
+<span class="wiki-nav-links"><a href="${prefix}index.html">Home</a> · <a href="${prefix}tags/index.html">Tags</a></span>
+</nav>`;
 }
 
+/**
+ * Wrap a page's parts in a complete document.
+ *
+ * `assetsRoot` is the relative path to the shared `assets/` directory from
+ * this page's own location (see [assetsRootFor]) — the multi-page shape, one
+ * stylesheet file linked from every page. `null` means there is no assets
+ * directory to link and the stylesheet is inlined instead: the single-file
+ * shape, where the whole site is one document.
+ */
 export function buildHtmlShell(
-  title: string,
-  nav: string,
-  main: string,
+  parts: PageParts,
+  assetsRoot: string | null,
 ): string {
+  const head =
+    assetsRoot === null
+      ? `<style>\n${EXPORT_STYLESHEET}</style>`
+      : `<link rel="stylesheet" href="${escHtml(assetsRoot)}/${STYLESHEET_FILE}">`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${title}</title>
-<style>${CSS}</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escHtml(parts.title)}</title>
+${head}
 </head>
 <body>
-${nav}
-${main}
+${parts.nav}
+${parts.main}
 </body>
 </html>`;
 }
 
-function buildPage(
+function buildPageParts(
   pageRef: string,
   record: PageRecord,
   text: string,
   exported: Set<string>,
   allPages: Map<string, { record?: PageRecord; text: string }>,
   tagSlugMap: Map<string, string>,
-): string {
-  const nav = buildNavBar(pageRef);
+  wikiTitle: string,
+): PageParts {
+  const nav = buildNavBar(mdToHtml(pageRef), wikiTitle);
   const fmTable = renderFrontmatterTable(
     pageRef,
     record,
@@ -364,16 +415,17 @@ function buildPage(
   const { body } = splitFrontmatter(text);
   const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef, exported));
   const main = `${fmTable}\n<article>\n${bodyHtml}</article>`;
-  return buildHtmlShell(escHtml(record.title || pageRef), nav, main);
+  return { title: record.title || pageRef, nav, main };
 }
 
 /** Minimal rendering for raw/ pages (no PageRecord). */
-function buildRawPage(
+function buildRawPageParts(
   pageRef: string,
   text: string,
   exported: Set<string>,
-): string {
-  const nav = buildNavBar(pageRef);
+  wikiTitle: string,
+): PageParts {
+  const nav = buildNavBar(mdToHtml(pageRef), wikiTitle);
   const { body, hasFrontmatter, frontmatter } = splitFrontmatter(text);
   let fmSection = "";
   if (hasFrontmatter && frontmatter.trim()) {
@@ -388,7 +440,7 @@ function buildRawPage(
   }
   const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef, exported));
   const main = `${fmSection}\n<article>\n${bodyHtml}</article>`;
-  return buildHtmlShell(escHtml(pageRef), nav, main);
+  return { title: pageRef, nav, main };
 }
 
 // ---------------------------------------------------------------------------
@@ -396,19 +448,21 @@ function buildRawPage(
 // ---------------------------------------------------------------------------
 
 /**
- * Lazy generator yielding one { path, content } entry per exported page.
+ * Lazy generator yielding one page's parts per exported page, with no
+ * document shell wrapped around them.
  *
  * `pages` is the same Map<pageRef, {record?, text}> fed to buildExportMeta.
  * `meta` carries pre-computed aggregate metadata; used by callers that also
  * generate index/tag pages from the same pass. `opts` controls which subtrees
- * are exported.
+ * are exported, and supplies the wiki title the nav bar shows.
  */
-export function* renderPages(
+export function* renderPageParts(
   pages: Map<string, { record?: PageRecord; text: string }>,
   meta: ExportMeta,
   opts: ExportOptions = {},
-): Generator<RenderedPage> {
+): Generator<RenderedParts> {
   const includeRaw = opts.includeRaw ?? false;
+  const wikiTitle = exportTitle(opts);
 
   const exported = new Set<string>();
   for (const ref of pages.keys()) {
@@ -424,12 +478,52 @@ export function* renderPages(
     const { record, text } = entry;
     const htmlPath = mdToHtml(pageRef);
     if (!record) {
-      yield { path: htmlPath, content: buildRawPage(pageRef, text, exported) };
+      yield {
+        path: htmlPath,
+        parts: buildRawPageParts(pageRef, text, exported, wikiTitle),
+      };
       continue;
     }
     yield {
       path: htmlPath,
-      content: buildPage(pageRef, record, text, exported, pages, tagSlugMap),
+      parts: buildPageParts(
+        pageRef,
+        record,
+        text,
+        exported,
+        pages,
+        tagSlugMap,
+        wikiTitle,
+      ),
     };
   }
+}
+
+/**
+ * Wrap a stream of page parts in the multi-page shape: each page's parts in
+ * the shared shell, pointed at the shared stylesheet at that page's own
+ * depth. The one place the multi-page output shape is spelled, so the
+ * per-page and aggregate passes cannot drift.
+ */
+export function* shellPages(
+  parts: Iterable<RenderedParts>,
+): Generator<RenderedPage> {
+  for (const { path: htmlPath, parts: pageParts } of parts) {
+    yield {
+      path: htmlPath,
+      content: buildHtmlShell(pageParts, assetsRootFor(htmlPath)),
+    };
+  }
+}
+
+/**
+ * Lazy generator yielding one { path, content } entry per exported page, in
+ * the multi-page shape.
+ */
+export function* renderPages(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  meta: ExportMeta,
+  opts: ExportOptions = {},
+): Generator<RenderedPage> {
+  yield* shellPages(renderPageParts(pages, meta, opts));
 }

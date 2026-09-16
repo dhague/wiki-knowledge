@@ -35,6 +35,21 @@ export interface ExportOptions {
    * silently skipped.
    */
   starters?: StarterEntry[];
+  /**
+   * Wiki title shown in every page's nav bar. Callers with a vault derive it
+   * and pass it in (`runExport` uses the vault root directory name); callers
+   * without one — pure render passes, tests — omit it.
+   */
+  title?: string;
+}
+
+/** The nav bar title for a caller that has no vault to name. A neutral label
+ *  beats an empty nav bar; the writer always supplies a real one. */
+const UNNAMED_VAULT_TITLE = "Wiki";
+
+/** The wiki title to render, from already-resolved options. */
+export function exportTitle(opts: ExportOptions): string {
+  return opts.title?.trim() || UNNAMED_VAULT_TITLE;
 }
 
 /** One entry in the get-started ranking. */
