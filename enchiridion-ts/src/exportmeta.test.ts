@@ -218,6 +218,38 @@ test("buildExportMeta: raw/ pages not in tagMap or kindMap", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The exported set — the one owner of "which refs are in the export"
+// ---------------------------------------------------------------------------
+
+test("buildExportMeta: exported set is wiki/ always, raw/ only under includeRaw", () => {
+  const pagesWithRaw = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["raw/raw-doc.md", rawDoc],
+  ]);
+
+  const byDefault = buildExportMeta(pagesWithRaw);
+  assert.deepEqual(
+    [...byDefault.exported],
+    ["wiki/concepts/alpha-concept.md"],
+    "wiki/ is always exported; raw/ is not without includeRaw",
+  );
+
+  const noRaw = buildExportMeta(pagesWithRaw, { includeRaw: false });
+  assert.deepEqual(
+    [...noRaw.exported],
+    [...byDefault.exported],
+    "includeRaw:false is the default, spelled the same either way",
+  );
+
+  const withRaw = buildExportMeta(pagesWithRaw, { includeRaw: true });
+  assert.deepEqual(
+    [...withRaw.exported],
+    ["wiki/concepts/alpha-concept.md", "raw/raw-doc.md"],
+    "includeRaw adds the raw/ refs to the exported set",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Fallback get-started ranking
 // ---------------------------------------------------------------------------
 

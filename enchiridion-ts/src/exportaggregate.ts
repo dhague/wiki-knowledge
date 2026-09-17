@@ -201,16 +201,14 @@ function renderFrontPage(
       return `<li><a href="${href}">${escHtml(label)}</a> (${refs.length})${blurbHtml}</li>`;
     });
 
-  // Get-started block
-  const exported = new Set<string>();
-  for (const ref of pages.keys()) {
-    if (ref.startsWith("wiki/")) exported.add(ref);
-    if ((opts.includeRaw ?? false) && ref.startsWith("raw/")) exported.add(ref);
-  }
-
+  // Get-started block. An explicitly supplied starter is admitted when the
+  // export carries it — `meta.exported` is that set, raw/ included under
+  // includeRaw, so a raw starter the operator named is emitted. The fallback
+  // list below is the ranked candidates, which are wiki-only by their own
+  // construction (see buildExportMeta); nothing here re-derives either rule.
   let startedItems: string[];
   const suppliedStarters = opts.starters?.filter((s) =>
-    exported.has(s.pageRef),
+    meta.exported.has(s.pageRef),
   );
   if (suppliedStarters && suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef, annotation }) => {
