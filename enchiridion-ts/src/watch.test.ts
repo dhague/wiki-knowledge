@@ -21,13 +21,62 @@ import {
   removeFromQueue,
   removeLock,
   runWatch,
+  withExclusiveLock,
   writeLock,
+  type StalePolicy,
+  type StopSignal,
   type Watcher,
 } from "./watch.js";
 
 function tmpRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "watch-test-"));
 }
+
+/** A pid no live process on this machine can have. */
+const DeadPID = 1 << 30;
+
+/** Runs fn and returns the error it threw, failing the test if it didn't. */
+function thrownBy(fn: () => void): Error {
+  try {
+    fn();
+  } catch (err) {
+    return err as Error;
+  }
+  assert.fail("expected fn to throw");
+}
+
+/** Writes a lock file stamped with pid and an age, creating its directory —
+ * what a killed holder, or an undecidable one, leaves behind. */
+function strandLock(lockPath: string, pid: number, ageSeconds = 0): void {
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  writeLock(lockPath, pid, new Date(Date.now() - ageSeconds * 1000));
+}
+
+/** The lock files that do not decide anything on their own: an unparsable
+ * file, and one whose holder is alive but has outlived [StaleLockSeconds].
+ * The `.mutex` reclaims both; the `.writelock` stops on both. */
+const undecidableLocks: { name: string; strand: (lockPath: string) => void }[] =
+  [
+    {
+      name: "unparsable",
+      strand: (lockPath) => {
+        fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+        fs.writeFileSync(lockPath, "not json");
+      },
+    },
+    {
+      name: "parseable as JSON but not as a lock payload",
+      strand: (lockPath) => {
+        fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+        fs.writeFileSync(lockPath, "null");
+      },
+    },
+    {
+      name: "held by a live pid past StaleLockSeconds",
+      strand: (lockPath) =>
+        strandLock(lockPath, process.pid, StaleLockSeconds + 60),
+    },
+  ];
 
 // --- debounce timing ---------------------------------------------------------
 
@@ -134,6 +183,120 @@ test("acquire lock: dead PID is stale, reports the removed pid", () => {
   assert.equal(acquired, true);
   assert.equal(stalePID, deadPID);
 });
+
+// --- the exclusive locks: one wait, two policies -------------------------------
+
+test("exclusive lock: a dead pid's lock is reclaimed and the critical section runs", () => {
+  for (const policy of ["reclaim", "fail"] as StalePolicy[]) {
+    const lockPath = path.join(tmpRoot(), "watch.lock.mutex");
+    strandLock(lockPath, DeadPID);
+
+    let ran = false;
+    withExclusiveLock(lockPath, () => (ran = true), policy);
+    assert.equal(ran, true, `${policy}: a provably dead holder is reclaimed`);
+    assert.ok(!fs.existsSync(lockPath), `${policy}: the lock is released`);
+  }
+});
+
+for (const { name, strand } of undecidableLocks) {
+  test(`exclusive lock: ${name} is reclaimed under the mutex policy`, () => {
+    const lockPath = path.join(tmpRoot(), "watch.lock.mutex");
+    strand(lockPath);
+
+    let ran = false;
+    withExclusiveLock(lockPath, () => (ran = true), "reclaim");
+    assert.equal(ran, true);
+    assert.ok(!fs.existsSync(lockPath), "the reclaimed lock is released");
+  });
+
+  test(`exclusive lock: ${name} fails loudly under the writelock policy`, () => {
+    const lockPath = path.join(tmpRoot(), "watch-queue.jsonl.writelock");
+    strand(lockPath);
+
+    let ran = false;
+    const err = thrownBy(() =>
+      withExclusiveLock(lockPath, () => (ran = true), "fail"),
+    );
+    assert.match(
+      err.message,
+      /watch-queue\.jsonl\.writelock/,
+      "names the lock",
+    );
+    assert.equal(ran, false, "the critical section did not run");
+  });
+}
+
+test("exclusive lock: a live, fresh lock is waited out under either policy", () => {
+  for (const policy of ["reclaim", "fail"] as StalePolicy[]) {
+    const lockPath = path.join(tmpRoot(), "watch.lock.mutex");
+    strandLock(lockPath, process.pid);
+
+    let slept = 0;
+    let ran = false;
+    withExclusiveLock(lockPath, () => (ran = true), policy, {
+      sleep: () => {
+        slept++;
+        if (slept === 3) removeLock(lockPath); // the holder lets go
+      },
+    });
+    assert.equal(ran, true, `${policy}: it took the lock once released`);
+    assert.equal(slept, 3, `${policy}: it waited rather than reclaiming`);
+  }
+});
+
+test("acquire lock: a mutex stranded by a dead pid is reclaimed, not spun on", () => {
+  const lockPath = path.join(tmpRoot(), ".wiki-knowledge", "watch.lock");
+  strandLock(lockPath + ".mutex", DeadPID);
+
+  // Before the shared reclaim path, this call never returned: the watcher
+  // printed nothing at all, rather than reporting a stuck lock.
+  const { acquired } = acquireLock(lockPath);
+  assert.equal(acquired, true);
+  assert.ok(fs.existsSync(lockPath), "the lock was taken inside the mutex");
+  assert.ok(!fs.existsSync(lockPath + ".mutex"), "the mutex was released");
+});
+
+test("acquire lock: a live fresh mutex is waited out, not reclaimed", () => {
+  const lockPath = path.join(tmpRoot(), ".wiki-knowledge", "watch.lock");
+  strandLock(lockPath + ".mutex", process.pid);
+
+  let slept = 0;
+  const { acquired } = acquireLock(lockPath, {
+    sleep: () => {
+      slept++;
+      if (slept === 2) removeLock(lockPath + ".mutex");
+    },
+  });
+  assert.equal(acquired, true);
+  assert.equal(slept, 2, "it waited for the mutex rather than reclaiming it");
+});
+
+test("queue: a writelock stranded by a dead pid is reclaimed", () => {
+  const queuePath = path.join(
+    tmpRoot(),
+    ".wiki-knowledge",
+    "watch-queue.jsonl",
+  );
+  strandLock(queuePath + ".writelock", DeadPID);
+
+  appendQueue(queuePath, "raw/a.md");
+  assert.deepEqual(readQueue(queuePath), ["raw/a.md"]);
+});
+
+for (const { name, strand } of undecidableLocks) {
+  test(`queue: a writelock ${name} fails loudly and leaves the queue alone`, () => {
+    const queuePath = path.join(
+      tmpRoot(),
+      ".wiki-knowledge",
+      "watch-queue.jsonl",
+    );
+    strand(queuePath + ".writelock");
+
+    const err = thrownBy(() => appendQueue(queuePath, "raw/a.md"));
+    assert.match(err.message, /watch-queue\.jsonl\.writelock/);
+    assert.ok(!fs.existsSync(queuePath), "the queue was not written");
+  });
+}
 
 // --- queue -------------------------------------------------------------------
 
@@ -263,8 +426,8 @@ async function flush(): Promise<void> {
 /** A fake signal hub: runWatch's onSignal/offSignal pair, so a test can fire
  * SIGINT/SIGTERM without touching the process. */
 function recordSignals(): {
-  onSignal: (sig: "SIGINT" | "SIGTERM", cb: () => void) => void;
-  offSignal: (sig: "SIGINT" | "SIGTERM", cb: () => void) => void;
+  onSignal: (sig: StopSignal, cb: () => void) => void;
+  offSignal: (sig: StopSignal, cb: () => void) => void;
   signals: Record<string, (() => void)[]>;
 } {
   const signals: Record<string, (() => void)[]> = {};
@@ -343,6 +506,36 @@ test("run-watch: settle, sweep, enqueue end to end; a signal stops and cleans up
   assert.equal(watcher.closed, true);
   assert.deepEqual(signals.SIGINT, []);
   assert.deepEqual(signals.SIGTERM, []);
+  assert.deepEqual(signals.SIGHUP, []);
+});
+
+test("run-watch: SIGHUP stops the watcher and removes the lock", async () => {
+  const root = tmpRoot();
+  const paths = forRoot(root);
+
+  const watcher = new FakeWatcher();
+  const { onSignal, offSignal, signals } = recordSignals();
+  const lines: string[] = [];
+
+  const done = runWatch(paths, {
+    makeWatcher: () => watcher,
+    onSignal,
+    offSignal,
+    schedule: () => () => {},
+    log: (l) => lines.push(l),
+  });
+
+  // Closing the terminal must run the same stop as Ctrl-C: a SIGKILL mid
+  // critical section is what strands a `.mutex` for the next watcher.
+  assert.equal(signals.SIGHUP?.length, 1);
+  writeLock(paths.lock, 999, new Date());
+  signals.SIGHUP?.[0]();
+  await done;
+
+  assert.equal(lines[lines.length - 1], "watcher stopped");
+  assert.ok(!fs.existsSync(paths.lock), "lock removed on stop");
+  assert.equal(watcher.closed, true);
+  assert.deepEqual(signals.SIGHUP, []);
 });
 
 test("run-watch: an eligibility miss settles without enqueuing", async () => {
