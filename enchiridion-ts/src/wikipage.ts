@@ -498,7 +498,7 @@ export function composeLink(
 export function normalizeBodyLinks(src: string): string {
   const edits: Edit[] = [];
   for (const link of iterLinks(src)) {
-    if (!isRelativeDest(link.decodedPath)) continue;
+    if (!isVaultRelativeDest(link.decodedPath)) continue;
     const dest = encodeDest(link.decodedPath, link.decodedAnchor);
     if (dest !== link.dest)
       edits.push({ start: link.start, end: link.end, dest });
@@ -530,13 +530,45 @@ function encodeDest(p: string, anchor: string): string {
   return dest;
 }
 
-/** Report whether path (the pre-anchor part of a destination) is a
- * vault-relative reference. Excludes the empty destination, absolute paths,
- * bare anchors, and any scheme-qualified URL. */
-function isRelativeDest(p: string): boolean {
-  return (
-    p !== "" && !p.startsWith("/") && !p.startsWith("#") && !p.includes("://")
-  );
+/**
+ * A URI scheme at the start of a destination (`https:`, `mailto:`, `data:`).
+ *
+ * What makes such a destination absolute is the scheme, not the `//` — the two
+ * are independent, and a scheme with no authority to name carries none:
+ * `mailto:x@y.z` is as absolute as `https://example.com`, and reads as a
+ * vault-relative path to a test that only knows `://`.
+ */
+const SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+/** Report whether dest begins with a URI scheme. */
+function hasScheme(dest: string): boolean {
+  return SCHEME_RE.test(dest);
+}
+
+/**
+ * Report whether path (the pre-anchor part of a decoded destination) is a
+ * vault-relative reference — the only destinations [Page.retarget] rewrites
+ * and [normalizeBodyLinks] re-encodes.
+ *
+ * Not one: the empty destination, an absolute path (`/…`), any destination
+ * carrying `://` — no vault-relative path does, and this test has to come
+ * *before* the `.md` one below, or an `https://…/x.md` destination would read
+ * as a page link — and a URI with a scheme.
+ *
+ * A bare anchor needs no test of its own: splitting the anchor off is what
+ * makes path pre-anchor, so `#a-section` arrives here as the empty string.
+ * A path can still *begin* with `#` — `%23notes.md`, a file whose own name
+ * starts with one — and that is a page link like any other, which is why a
+ * `#` test here would be wrong rather than merely redundant.
+ *
+ * The `.md` test comes before the scheme test, so a page whose filename
+ * carries a colon (`C:notes.md`) is still a page link: ending in the vault's
+ * extension is what being one means, whatever precedes it.
+ */
+export function isVaultRelativeDest(p: string): boolean {
+  if (p === "" || p.startsWith("/") || p.includes("://")) return false;
+  if (p.endsWith(".md")) return true;
+  return !hasScheme(p);
 }
 
 /** Return text with its links fixed for the move oldRel -> newRel. */
@@ -553,7 +585,7 @@ function rewriteText(
 
   const edits: Edit[] = [];
   for (const link of iterLinks(text)) {
-    if (!isRelativeDest(link.decodedPath)) continue;
+    if (!isVaultRelativeDest(link.decodedPath)) continue;
     // Where this link pointed, resolved from the file's original location.
     const target = resolveLinkDest(link.decodedPath, oldDir);
     // For pages other than the moved one, only links at the moved page change.
