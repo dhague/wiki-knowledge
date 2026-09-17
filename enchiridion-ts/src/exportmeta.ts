@@ -8,9 +8,11 @@
  * deterministic from its inputs.
  *
  * "Exported set" is determined by ExportOptions: wiki/ pages are always
- * included; raw/ pages only when includeRaw is true. Inbound-link counts
- * only count links whose sources and targets are both within the exported
- * set.
+ * included; raw/ pages only when includeRaw is true. This is the one place
+ * that rule is applied: the set is published on ExportMeta as `exported`, and
+ * the parts generators read it there rather than re-deriving it from the ref
+ * prefixes. Inbound-link counts only count links whose sources and targets are
+ * both within the exported set.
  */
 
 import path from "node:path";
@@ -66,6 +68,14 @@ export interface GetStartedEntry {
 
 /** All aggregate metadata produced by the pure metadata pass. */
 export interface ExportMeta {
+  /**
+   * Which pageRefs the export carries — `wiki/` always, `raw/` only when
+   * includeRaw is true. **The one owner of that fact**: a consumer asks this
+   * set whether a ref is exported rather than rebuilding the rule from the
+   * ref's prefix, so the per-page pass, the aggregate pass and the inbound
+   * counts cannot come to disagree about what "exported" means.
+   */
+  exported: Set<string>;
   /** Map from tag string to sorted list of pageRefs carrying that tag. */
   tagMap: Map<string, string[]>;
   /** Map from kind string to sorted list of pageRefs of that kind. */
@@ -146,7 +156,9 @@ export function buildExportMeta(
 ): ExportMeta {
   const includeRaw = opts.includeRaw ?? false;
 
-  // Build the exported set — which pageRefs are included.
+  // Build the exported set — which pageRefs are included. This is the single
+  // spelling of the rule (wiki/ always, raw/ under includeRaw); it goes out on
+  // the returned ExportMeta so no reader has to spell it again.
   const exported = new Set<string>();
   for (const pageRef of pages.keys()) {
     if (
@@ -198,12 +210,18 @@ export function buildExportMeta(
   for (const list of tagMap.values()) list.sort();
   for (const list of kindMap.values()) list.sort();
 
-  // Build get-started ranking — wiki/ pages only, ranked by inbound count
-  // desc, title asc as tie-break.
+  // Build the get-started fallback ranking: wiki/ pages only, ranked by
+  // inbound count desc, title asc as tie-break.
+  //
+  // Wiki-only is this list's own rule, *not* a consequence of the exported
+  // set: under includeRaw the export carries raw/ pages too, and the fallback
+  // never ranks them. It therefore walks the wiki/ refs of `pages` rather than
+  // filtering `exported`, so that the two facts — "which refs are in the
+  // export" and "which refs the fallback may rank" — cannot be conflated by an
+  // edit that unifies the sets.
   const wikiEntries: GetStartedEntry[] = [];
-  for (const pageRef of exported) {
+  for (const [pageRef, entry] of pages) {
     if (!pageRef.startsWith("wiki/")) continue;
-    const entry = pages.get(pageRef)!;
     const { record } = entry;
     if (!record) continue;
     wikiEntries.push({
@@ -224,5 +242,5 @@ export function buildExportMeta(
 
   const getStarted = wikiEntries.slice(0, GET_STARTED_COUNT);
 
-  return { tagMap, kindMap, inboundCounts, getStarted };
+  return { exported, tagMap, kindMap, inboundCounts, getStarted };
 }

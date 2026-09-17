@@ -12,7 +12,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import fc from "fast-check";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
-import { buildExportMeta, buildTagSlugMap } from "./exportmeta.js";
+import {
+  buildExportMeta,
+  buildTagSlugMap,
+  type ExportOptions,
+} from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
 
@@ -359,6 +363,111 @@ test("renderAggregatePages: supplied starters with non-exported pageRef are sile
   assert.ok(
     !front.content.includes("nonexistent"),
     "invalid starter should not appear",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The two get-started rules: supplied starters follow the exported set,
+// the fallback ranking stays wiki-only
+// ---------------------------------------------------------------------------
+
+const rawDoc = `---
+title: Raw Document
+---
+
+Raw content.
+`;
+
+/**
+ * A page set whose raw/ entry carries a parsed record. Production loads raw
+ * pages as text only, but the type allows a record — and a raw page *with* one
+ * is exactly what a fallback ranking re-derived from the exported set would
+ * emit, so pinning the wiki-only rule against a record-bearing raw page is
+ * what makes the guard bite.
+ */
+function pagesWithRecordBearingRaw(): Map<
+  string,
+  { record?: PageRecord; text: string }
+> {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["wiki/concepts/beta-concept.md", conceptB],
+    ["raw/notes/transcript.md", rawDoc],
+  ]);
+  pages.set("raw/notes/transcript.md", {
+    record: {
+      pageRef: "raw/notes/transcript.md",
+      kind: "",
+      title: "Raw Transcript",
+      summary: "A raw artifact carrying a record.",
+      tags: [],
+      sourceDate: "",
+      volatility: "",
+      edges: [],
+      supersededBy: [],
+    },
+    text: rawDoc,
+  });
+  return pages;
+}
+
+/** The front page's get-started block — the one list these two rules govern. */
+function getStartedBlock(frontPageHtml: string): string {
+  const start = frontPageHtml.indexOf("<h2>Get Started</h2>");
+  assert.ok(start >= 0, "the front page should carry a get-started block");
+  const end = frontPageHtml.indexOf("</section>", start);
+  assert.ok(end > start, "the get-started block should close with </section>");
+  return frontPageHtml.slice(start, end);
+}
+
+function frontPage(
+  pages: Map<string, { record?: PageRecord; text: string }>,
+  opts: ExportOptions,
+): string {
+  const meta = buildExportMeta(pages, opts);
+  const front = [...renderAggregatePages(pages, meta, opts)].find(
+    (p) => p.path === "index.html",
+  );
+  assert.ok(front, "the aggregate pass should emit a front page");
+  return front.content;
+}
+
+test("renderAggregatePages: a raw/ ref named in --starters is emitted on the front page under --raw", () => {
+  const pages = pagesWithRecordBearingRaw();
+  const block = getStartedBlock(
+    frontPage(pages, {
+      includeRaw: true,
+      starters: [
+        {
+          pageRef: "raw/notes/transcript.md",
+          annotation: "The artifact this vault is about",
+        },
+      ],
+    }),
+  );
+
+  assert.ok(
+    block.includes('href="raw/notes/transcript.html"'),
+    "the operator named this starter and --raw put it in the export, so it belongs on the front page",
+  );
+  assert.ok(block.includes("Raw Transcript"), "the starter's title is shown");
+  assert.ok(
+    block.includes("The artifact this vault is about"),
+    "the starter's annotation is shown",
+  );
+});
+
+test("renderAggregatePages: the fallback get-started list stays wiki-only under --raw", () => {
+  const pages = pagesWithRecordBearingRaw();
+  const block = getStartedBlock(frontPage(pages, { includeRaw: true }));
+
+  assert.ok(
+    block.includes("Alpha Concept"),
+    "the fallback list should still rank wiki/ pages",
+  );
+  assert.ok(
+    !block.includes("raw/"),
+    "the fallback ranking is wiki-only by its own rule — the exported set admitting raw/ must not leak onto it",
   );
 });
 

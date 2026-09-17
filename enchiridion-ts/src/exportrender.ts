@@ -635,9 +635,10 @@ function buildRawPageParts(
  * document shell wrapped around them.
  *
  * `pages` is the same Map<pageRef, {record?, text}> fed to buildExportMeta.
- * `meta` carries pre-computed aggregate metadata; used by callers that also
- * generate index/tag pages from the same pass. `opts` controls which subtrees
- * are exported, and supplies the wiki title the nav bar shows.
+ * `meta` carries pre-computed aggregate metadata, including which refs the
+ * export carries (`meta.exported` — the one owner of that rule; this pass
+ * neither re-derives it nor takes opts.includeRaw as a second opinion).
+ * `opts` supplies the wiki title the nav bar shows.
  *
  * `mode` decides how each link names its target and what becomes of a
  * relative destination the export does not carry — multi-page output (the
@@ -651,26 +652,18 @@ export function* renderPageParts(
   opts: ExportOptions = {},
   mode: LinkMode = "multi-page",
 ): Generator<RenderedParts> {
-  const includeRaw = opts.includeRaw ?? false;
   const wikiTitle = exportTitle(opts);
-
-  const exported = new Set<string>();
-  for (const ref of pages.keys()) {
-    if (ref.startsWith("wiki/") || (includeRaw && ref.startsWith("raw/"))) {
-      exported.add(ref);
-    }
-  }
 
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
 
-  for (const pageRef of exported) {
+  for (const pageRef of meta.exported) {
     const entry = pages.get(pageRef)!;
     const { record, text } = entry;
     const htmlPath = mdToHtml(pageRef);
     if (!record) {
       yield {
         path: htmlPath,
-        parts: buildRawPageParts(pageRef, text, exported, wikiTitle, mode),
+        parts: buildRawPageParts(pageRef, text, meta.exported, wikiTitle, mode),
       };
       continue;
     }
@@ -680,7 +673,7 @@ export function* renderPageParts(
         pageRef,
         record,
         text,
-        exported,
+        meta.exported,
         pages,
         tagSlugMap,
         wikiTitle,
