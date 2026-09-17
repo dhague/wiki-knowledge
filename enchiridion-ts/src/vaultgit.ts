@@ -263,20 +263,36 @@ export class VaultGit implements Git {
    * The last commit date of `rel` (YYYY-MM-DD), or "" when root isn't a work
    * tree, rel was never committed, or the history can't be walked.
    * Lenient: "" is the default, never an error.
+   *
+   * Deliberately not `git.log({ filepath: rel })`: isomorphic-git's per-file
+   * log stops at the first commit whose tree lacks the path, and a merge looks
+   * exactly like that from the side whose branch never had it — so the per-file
+   * log can neither skip a merge nor see the non-merge commit behind one
+   * (#491). This is the single-path form of [latestCommitDates], the one
+   * implementation of the rule; a caller dating many paths at once wants
+   * [scanFacts], which batches the same walk.
    */
   async lastCommitDate(rel: string): Promise<string> {
+    let headOid: string;
     try {
-      const commits = await git.log({
-        fs,
-        dir: this.root,
-        ref: "HEAD",
-        filepath: rel,
-      });
-      if (commits.length === 0) return "";
-      return formatDate(commits[0].commit.author.timestamp);
+      headOid = await git.resolveRef({ fs, dir: this.root, ref: "HEAD" });
     } catch {
       return "";
     }
+    return this.lastCommitDateAt(headOid, rel);
+  }
+
+  /**
+   * [lastCommitDate] against a caller-supplied head — the form the range
+   * walk's fallback needs, dating a page against the head that walk already
+   * resolved rather than whatever HEAD points at by then.
+   */
+  private async lastCommitDateAt(
+    headOid: string,
+    rel: string,
+  ): Promise<string> {
+    const dates = await this.latestCommitDates(headOid, (p) => p === rel);
+    return dates.get(rel) ?? "";
   }
 
   /**
@@ -393,7 +409,7 @@ export class VaultGit implements Git {
     headOid: string,
     cache: object = {},
   ): Promise<Map<string, string>> {
-    return this.latestCommitDates(headOid, () => true, cache);
+    return this.latestCommitDates(headOid, KEEP_ALL, cache);
   }
 
   // -------------------------------------------------------------------------
@@ -474,14 +490,8 @@ export class VaultGit implements Git {
       for (const p of paths) changed.add(p);
       // Merge commits contribute to path enumeration above (so a path touched
       // only by a conflict resolution is still enumerated) but not to date
-      // attribution (non-merge-only dates keep git_date semantics stable).
-      if (commit.commit.parent.length <= 1) {
-        const when = commit.commit.author.timestamp * 1000;
-        for (const p of paths) {
-          const prev = latest.get(p);
-          if (prev === undefined || when > prev) latest.set(p, when);
-        }
-      }
+      // attribution — [attributeDate] carries that half of the rule.
+      await attributeDate(commit, () => paths, KEEP_ALL, latest);
     }
 
     if (!found) return { pages: [], found: false };
@@ -498,7 +508,7 @@ export class VaultGit implements Git {
       const date =
         when !== undefined
           ? formatDate(when / 1000)
-          : await this.pathDate(headOid, filePath);
+          : await this.lastCommitDateAt(headOid, filePath);
       pages.push({
         pageRef: filePath,
         content: result ?? "",
@@ -530,7 +540,8 @@ export class VaultGit implements Git {
   /**
    * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per
    * `wiki/**.md` path over every commit reachable from head. Used by the full
-   * read; the range-walk counterpart is inlined in `rangeSnapshot`.
+   * read; the range walk is the bounded counterpart, applying the same
+   * [attributeDate] step as it goes.
    */
   private async commitDates(headOid: string): Promise<Map<string, string>> {
     return this.latestCommitDates(headOid, isPageRef);
@@ -538,13 +549,16 @@ export class VaultGit implements Git {
 
   /**
    * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
-   * accepted by `keep`, over every commit reachable from head. Merge commits
-   * are skipped before any diff so date attribution stays stable (ADR-0015),
-   * and the newest timestamp wins, not log order.
+   * accepted by `keep`, over every commit reachable from head. The one
+   * implementation of the rule: [VaultGit.lastCommitDate] is this walk
+   * narrowed to a single path, and the range walk applies the same
+   * [attributeDate] step to its own bounded walk. Newest timestamp wins, not
+   * log order.
    *
    * Uses [changedBlobPaths] instead of `includeChanges` so unchanged subtrees
    * are pruned — per-commit cost is proportional to what actually changed, not
-   * to total vault size (#419).
+   * to total vault size (#419) — and [attributeDate] takes the paths as a
+   * thunk, so a merge is rejected before that diff is even computed.
    *
    * Lenient: empty dates when the history can't be walked.
    */
@@ -562,20 +576,13 @@ export class VaultGit implements Git {
         cache,
       });
       for (const commit of commits) {
-        if (commit.commit.parent.length > 1) continue;
         const parentOid = commit.commit.parent[0] ?? EMPTY_TREE;
-        const paths = await changedBlobPaths(
-          this.root,
-          commit.oid,
-          parentOid,
-          cache,
+        await attributeDate(
+          commit,
+          () => changedBlobPaths(this.root, commit.oid, parentOid, cache),
+          keep,
+          latest,
         );
-        const when = commit.commit.author.timestamp * 1000;
-        for (const p of paths) {
-          if (!keep(p)) continue;
-          const prev = latest.get(p);
-          if (prev === undefined || when > prev) latest.set(p, when);
-        }
       }
     } catch {
       // Lenient: empty dates when the history can't be walked.
@@ -583,29 +590,6 @@ export class VaultGit implements Git {
     const out = new Map<string, string>();
     for (const [path, when] of latest) out.set(path, formatDate(when / 1000));
     return out;
-  }
-
-  /**
-   * Latest non-merge commit date touching `path`, walking back from head with
-   * no stopping point short of the root commit — the per-path fallback the
-   * range walk uses when its bounded walk can't attribute a date.
-   */
-  private async pathDate(headOid: string, path: string): Promise<string> {
-    try {
-      const commits = await git.log({
-        fs,
-        dir: this.root,
-        ref: headOid,
-        filepath: path,
-      });
-      for (const commit of commits) {
-        if (commit.commit.parent.length > 1) continue;
-        return formatDate(commit.commit.author.timestamp);
-      }
-    } catch {
-      // Lenient fallthrough to "".
-    }
-    return "";
   }
 
   /** Read `filePath` from head's tree, or null when it's deleted there. */
@@ -656,6 +640,11 @@ export class VaultGit implements Git {
  * lenient per-file questions from in-memory maps built in one tree walk + one
  * history walk (#415). Structurally satisfies the sweep's `Git` interface in
  * `ingestscan.ts`, so it drops straight into `scan()`.
+ *
+ * An adapter over the one date rule, not a second opinion on it: `dates` is
+ * [VaultGit.latestCommitDates]' output, so a path answers here exactly as
+ * [VaultGit.lastCommitDate] answers it — the difference between the two is
+ * only that this reads a map instead of walking (#491).
  */
 export class ScanFacts {
   constructor(
@@ -735,6 +724,47 @@ async function porcelainDiff(
 
 /** SHA-1 of the empty tree — used as the parent oid for root commits. */
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/** The `keep` of a walk that wants every path it finds. */
+const KEEP_ALL = (): boolean => true;
+
+/**
+ * Whether a commit sets a path's commit date. CONTEXT.md, **Commit date**: the
+ * date of the latest commit touching a page, and *merge commits don't set it*.
+ *
+ * One predicate, because a path's date is read four ways in this module — the
+ * per-file [VaultGit.lastCommitDate], the range walk, the batched walk behind
+ * the full read, and the map [ScanFacts] answers from — and a rule restated at
+ * each site is a rule free to disagree with itself about the same path (#491).
+ */
+function setsCommitDate(commit: git.ReadCommitResult): boolean {
+  return commit.commit.parent.length <= 1;
+}
+
+/**
+ * The one application of that rule: attribute `commit`'s date to the paths it
+ * touched, or to nothing at all when the commit is a merge. `into` maps a path
+ * to the newest timestamp (ms) that set its date — newest wins, never log
+ * order, so a walk's ordering can't decide a date.
+ *
+ * `touched` is a thunk so a merge is rejected before the tree diff behind the
+ * paths is computed, and `keep` narrows a caller's walk to the paths it wants
+ * (all of them, or one).
+ */
+async function attributeDate(
+  commit: git.ReadCommitResult,
+  touched: () => string[] | Promise<string[]>,
+  keep: (p: string) => boolean,
+  into: Map<string, number>,
+): Promise<void> {
+  if (!setsCommitDate(commit)) return;
+  const when = commit.commit.author.timestamp * 1000;
+  for (const p of await touched()) {
+    if (!keep(p)) continue;
+    const prev = into.get(p);
+    if (prev === undefined || when > prev) into.set(p, when);
+  }
+}
 
 /**
  * The blob (leaf) paths that differ between `commitOid` and `parentOid`,

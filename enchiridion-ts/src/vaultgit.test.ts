@@ -500,10 +500,71 @@ test("committedPages attributes a date across a merge second parent", async () =
   );
 });
 
+test("committedPages range falls back behind a merge for a page it can't date (#491)", async () => {
+  // A page the bounded walk surfaces but can't date: only the merge touches it
+  // inside the range, and the commit that introduced it sits on a side branch
+  // older than the watermark — so the walk stops at `since` before reaching
+  // it. The fallback must find that commit through the shared rule, whose
+  // whole point is that a merge is skipped *over*, never read as "no date".
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await repo.init();
+  writeFile(root, "wiki/concepts/seed.md", "seed\n");
+  await commitAll(root, "seed", deterministicSignature(1));
+
+  // Feature branch (off hour 1) adds the page at hour 1.5 — older than the
+  // watermark below, so the range walk never credits it.
+  const featureHead = await mergeBranch(
+    root,
+    "feature-fallback",
+    "wiki/concepts/aged.md",
+    "aged\n",
+    "feature add aged",
+    deterministicSignature(1.5),
+  );
+
+  // Watermark: hour 2. Then a master commit inside the range, so the merge has
+  // a non-empty range to walk.
+  writeFile(root, "wiki/concepts/noted.md", "noted\n");
+  await commitAll(root, "main add noted", deterministicSignature(2));
+  const watermark = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
+  writeFile(root, "wiki/concepts/other.md", "other\n");
+  await commitAll(root, "main add other", deterministicSignature(3));
+  const rangeHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
+
+  // The merge brings aged.md across (checkout to master removed it), so its
+  // own diff against its first parent surfaces the page.
+  writeFile(root, "wiki/concepts/aged.md", "aged\n");
+  await git.add({ fs, dir: root, filepath: "." });
+  const mergeHash = await git.commit({
+    fs,
+    dir: root,
+    message: "merge feature-fallback",
+    parent: [rangeHead, featureHead],
+    author: deterministicSignature(25),
+    committer: deterministicSignature(25),
+  });
+  await git.writeRef({
+    fs,
+    dir: root,
+    ref: "refs/heads/master",
+    value: mergeHash,
+    force: true,
+  });
+
+  const snap = await repo.committedPages(watermark);
+  const aged = pagesByRef(snap).get("wiki/concepts/aged.md");
+  assert.ok(aged, "aged.md enumerated from the merge's own diff");
+  assert.equal(
+    aged!.date,
+    "2026-01-01",
+    "dated from the commit behind the merge, not the merge and not empty",
+  );
+});
+
 // ---------------------------------------------------------------------------
 // LastCommitDate
 // ---------------------------------------------------------------------------
-
 test("lastCommitDate returns a date for a committed path", async () => {
   const root = tmpRepo();
   const repo = new VaultGit(root);
@@ -544,22 +605,40 @@ test("lastCommitDate is lenient on a non-repo", async () => {
   );
 });
 
-test("lastCommitDate does not attribute a merge commit (pruning rewrite, #419)", async () => {
+/**
+ * A repo whose newest commit touching `wiki/concepts/merge-only.md` is a
+ * merge. The feature branch adds the page at hour 2 (2026-01-01); master gains
+ * an unrelated page; the two-parent merge at `mergeHours` writes the page back
+ * — the shape `git merge` leaves for a page only one side ever had, and for a
+ * conflict resolution both sides touched. The page's only non-merge
+ * contributor is therefore the feature commit.
+ *
+ * `mergeHours` is the test's whole point: pass one on a *different day* from
+ * hour 2 and the merge commit's own diff touches the page, so a
+ * merge-inclusive read is distinguishable from a merge-excluded one.
+ */
+async function newestTouchingCommitIsAMerge(mergeHours: number): Promise<{
+  repo: VaultGit;
+  pageRef: string;
+}> {
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
   writeFile(root, "wiki/concepts/base.md", "base\n");
   await commitAll(root, "base", deterministicSignature(1));
 
-  // Feature branch adds merge-only.md
   const featureHead = await mergeBranch(
     root,
-    "feature-419",
+    "feature-merge",
     "wiki/concepts/merge-only.md",
     "merge-only\n",
     "feature add merge-only",
     deterministicSignature(2),
   );
+  // master's own commit, so the merge is a genuine two-sided merge rather
+  // than a fast-forwardable one.
+  writeFile(root, "wiki/concepts/other.md", "other\n");
+  await commitAll(root, "main add other", deterministicSignature(10));
   const mainHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
 
   // Merge: write merge-only.md back (checkout to master removed it), commit
@@ -569,10 +648,10 @@ test("lastCommitDate does not attribute a merge commit (pruning rewrite, #419)",
   const mergeHash = await git.commit({
     fs,
     dir: root,
-    message: "merge feature-419",
+    message: "merge feature-merge",
     parent: [mainHead, featureHead],
-    author: deterministicSignature(3),
-    committer: deterministicSignature(3),
+    author: deterministicSignature(mergeHours),
+    committer: deterministicSignature(mergeHours),
   });
   await git.writeRef({
     fs,
@@ -581,12 +660,34 @@ test("lastCommitDate does not attribute a merge commit (pruning rewrite, #419)",
     value: mergeHash,
     force: true,
   });
+  return { repo, pageRef: "wiki/concepts/merge-only.md" };
+}
 
+test("lastCommitDate does not attribute a merge commit (pruning rewrite, #419)", async () => {
   // merge-only.md first appeared on the feature branch (non-merge commit at
-  // hour 2), but HEAD points to the merge commit. The merge commit must not
-  // attribute the date; the feature-branch non-merge commit must.
-  const date = await repo.lastCommitDate("wiki/concepts/merge-only.md");
+  // hour 2), but HEAD points to a merge commit a day later (hour 25). The
+  // merge's own diff against its first parent touches the page, so an
+  // unfiltered read returns 2026-01-02: the merge must not attribute a date,
+  // and the feature-branch non-merge commit must.
+  const { repo, pageRef } = await newestTouchingCommitIsAMerge(25);
+  const date = await repo.lastCommitDate(pageRef);
   assert.equal(date, "2026-01-01", "date from non-merge feature commit");
+});
+
+test("lastCommitDate and the sweep's ScanFacts agree on a merge-only path (#491)", async () => {
+  // The same path read two ways: the sweep reads precomputed maps
+  // (ScanFacts, batched by #415), check.ts's staleSynthesis walks per call.
+  // They must answer from the one rule — a merge sets no date, and the
+  // non-merge commit behind it does (#491).
+  const { repo, pageRef } = await newestTouchingCommitIsAMerge(25);
+  const viaRepo = await repo.lastCommitDate(pageRef);
+  const viaFacts = await (await repo.scanFacts()).lastCommitDate(pageRef);
+  assert.equal(viaRepo, viaFacts, "the per-file read and the sweep must agree");
+  assert.equal(
+    viaFacts,
+    "2026-01-01",
+    "the merge is skipped over, not treated as no date",
+  );
 });
 
 // ---------------------------------------------------------------------------
