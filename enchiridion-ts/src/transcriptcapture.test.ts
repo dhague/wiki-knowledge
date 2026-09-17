@@ -378,6 +378,104 @@ test("writeCapture reuses an existing capture by short id instead of the new fil
     !first.includes("second"),
     "no second-named file should be created",
   );
+  assert.deepEqual(
+    fs.readdirSync(path.join(wikiRoot, "raw", "conversations")),
+    [path.basename(second)],
+    "exactly one raw file for the session",
+  );
+});
+
+/** An fs error stand-in carrying the `code` a real syscall failure carries. */
+function fsError(code: string, message: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(message), { code });
+}
+
+test("writeCapture surfaces a listing failure that is not ENOENT (#498)", () => {
+  const wikiRoot = tmp();
+  const first = writeCapture(
+    wikiRoot,
+    "2026-01-02-0304-first-sess.md",
+    "old",
+    "sess",
+  );
+  const boom = fsError("EACCES", "EACCES: permission denied, scandir 'x'");
+  const conversationsDir = path.join(wikiRoot, "raw", "conversations");
+
+  assert.throws(
+    () =>
+      writeCapture(
+        wikiRoot,
+        "2026-01-03-0506-second-sess.md",
+        "new",
+        "sess",
+        () => {
+          throw boom;
+        },
+      ),
+    (err: unknown) =>
+      err instanceof CaptureError &&
+      err.message.includes(conversationsDir) &&
+      err.message.includes("EACCES") &&
+      err.cause === boom,
+  );
+
+  // The point of refusing: silently reading the failure as "no prior capture"
+  // would have written a second raw file and orphaned the first.
+  assert.deepEqual(
+    fs.readdirSync(conversationsDir),
+    [path.basename(first)],
+    "no orphaned second capture",
+  );
+  assert.equal(fs.readFileSync(path.join(wikiRoot, first), "utf8"), "old");
+});
+
+test("writeCapture reads an ENOENT listing failure as no prior capture (#498)", () => {
+  const wikiRoot = tmp();
+  const rel = writeCapture(
+    wikiRoot,
+    "2026-01-02-0304-foo-sess.md",
+    "content",
+    "sess",
+    () => {
+      throw fsError("ENOENT", "ENOENT: no such file or directory, scandir 'x'");
+    },
+  );
+
+  assert.equal(rel, "raw/conversations/2026-01-02-0304-foo-sess.md");
+  assert.equal(fs.readFileSync(path.join(wikiRoot, rel), "utf8"), "content");
+});
+
+test("re-saving a session rewrites its one raw file rather than adding a second", async () => {
+  const { wikiRoot, lookupEnv } = claudeEnvAndState();
+  const first = await captureSession(
+    wikiRoot,
+    "Connection Pooling",
+    wikiRoot,
+    lookupEnv,
+    NOW,
+  );
+  // A re-save under a different slug and timestamp: the name was bound at the
+  // first save, so the second must reuse it rather than bind a new one (#33).
+  const second = await captureSession(
+    wikiRoot,
+    "Something Else Entirely",
+    wikiRoot,
+    lookupEnv,
+    new Date("2026-02-03T04:05:00"),
+  );
+
+  assert.equal(second, first, "the re-save rewrites the first file's path");
+  const conversationsDir = path.join(wikiRoot, "raw", "conversations");
+  assert.deepEqual(
+    fs.readdirSync(conversationsDir),
+    [path.basename(first)],
+    "exactly one raw file for the session",
+  );
+  assert.match(
+    fs.readFileSync(path.join(wikiRoot, second), "utf8"),
+    /\*\*Saved:\*\* 2026-02-03 04:05 {2}/,
+    "contents are the re-save's",
+  );
 });
 
 // ---------------------------------------------------------------------------
