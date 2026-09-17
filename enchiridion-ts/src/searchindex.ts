@@ -454,11 +454,21 @@ export class Index {
 
     let uncommittedPages = 0;
     if (this.root !== ":memory:") {
-      // The on-disk count uses the same page enumeration as the git walk, so
+      // The on-disk walk uses the same page enumeration as the git walk, so
       // the diagnostic reports exactly the pages search could return if they
-      // were committed (pagepredicate, #310).
-      const onDisk = enumeratePageRefs(this.root).length;
-      uncommittedPages = Math.max(onDisk - pages, 0);
+      // were committed: the pages on disk the index does not hold
+      // (pagepredicate, #310). Deliberately that one-sided set difference and
+      // not a subtraction of the two counts — a committed deletion (indexed,
+      // no longer on disk) would then cancel an uncommitted addition and
+      // report 0, the very state this number exists to surface (#496).
+      const indexed = new Set(
+        (
+          this.db.all("SELECT page_ref FROM page") as { page_ref: string }[]
+        ).map((row) => row.page_ref),
+      );
+      uncommittedPages = enumeratePageRefs(this.root).filter(
+        (ref) => !indexed.has(ref),
+      ).length;
     }
 
     return {
