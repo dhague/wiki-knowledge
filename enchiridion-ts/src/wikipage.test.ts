@@ -23,6 +23,9 @@ import {
   planMove,
 } from "./wikipage.js";
 import type { LinkMatch } from "./wikipage.js";
+// The reader that finds frontmatter links through the YAML parser rather than
+// by scanning raw text — the oracle for what a move did to them (#489).
+import { newPageRecord } from "./pagerecord.js";
 
 // ---------------------------------------------------------------------------
 // splitFrontmatter
@@ -474,13 +477,26 @@ describe("PlanMove", () => {
 // ---------------------------------------------------------------------------
 
 // vaultDirs are the directories a generated page may live in — enough shape
-// variation (sibling, cousin, vault root) to exercise every `../` case.
-const vaultDirs = [
+// variation (sibling, cousin, vault root) to exercise every `../` case. The
+// kind-folders are named separately: the YAML oracle can only read a page that
+// lives in one, so the generator has to guarantee one.
+const kindDirs = [
   "wiki/concepts",
   "wiki/entities",
   "wiki/sources",
   "wiki/synthesis",
-  "",
+];
+const vaultDirs = [...kindDirs, ""];
+
+// The names the generator draws pages from. The long ones are load-bearing: a
+// destination that outgrows the writer's line width folds across two lines, and
+// a fold is the one shape where the raw-text link scan and the YAML parser can
+// disagree — the disagreement #486 was. Each is long enough that its own
+// basename, the shortest destination any page can carry, still folds.
+const shortNames = ["a", "b", "c", "d"];
+const longNames = [
+  "a-rather-long-target-page-title-that-will-definitely-wrap-across-two-lines",
+  "the-second-long-page-name-that-the-writer-will-certainly-have-to-fold-away",
 ];
 
 function posixBasename(ref: string): string {
@@ -494,16 +510,24 @@ function posixDirname(ref: string): string {
 // old/new ref of a move to plan over it.
 const genVaultArb = fc
   .record({
-    names: fc.shuffledSubarray(["a", "b", "c", "d"], {
-      minLength: 2,
-      maxLength: 4,
-    }),
-    dirs: fc.array(fc.constantFrom(...vaultDirs), {
-      minLength: 1,
-      maxLength: 4,
-    }),
+    // One long name is always drawn, so every generated vault folds.
+    names: fc
+      .tuple(
+        fc.shuffledSubarray(shortNames, { minLength: 1, maxLength: 3 }),
+        fc.constantFrom(...longNames),
+      )
+      .map(([short, long]) => [...short, long]),
+    // The first page always lands in a kind-folder and is never the one moved,
+    // so the YAML oracle has a page it can read both before and after the move
+    // — and one whose every link to the long-named page folds.
+    dirs: fc
+      .tuple(
+        fc.constantFrom(...kindDirs),
+        fc.array(fc.constantFrom(...vaultDirs), { minLength: 0, maxLength: 3 }),
+      )
+      .map(([first, rest]) => [first, ...rest]),
     newDir: fc.constantFrom(...vaultDirs),
-    oldIdx: fc.integer({ min: 0, max: 3 }),
+    oldIdx: fc.integer({ min: 1, max: 3 }),
   })
   .map(({ names, dirs, newDir, oldIdx }) => {
     const refs = names.map((name, i) =>
@@ -520,22 +544,26 @@ const genVaultArb = fc
   );
 
 /** Build a small vault of pages that link to each other, plus a frozen link
- * inside a code block. */
+ * inside a code block.
+ *
+ * The frontmatter is rendered by [Page.set] rather than hand-written, so a
+ * destination the writer folds is a fold the fixture really has: a hand-written
+ * `related:` block would be free to drift from what the writer emits, and the
+ * fold is precisely what the YAML oracle exists to catch. */
 function buildVault(refs: string[]): Record<string, string> {
   const pages: Record<string, string> = {};
   for (const ref of refs) {
-    const base = posixBasename(ref);
     const dir = posixDirname(ref);
-    let b = `---\ntitle: ${base}\nrelated:\n`;
-    for (const target of refs) {
-      b += `  - "[t](${percentEncode(relPathForTest(target, dir))})"\n`;
-    }
-    b += "---\n\n";
-    for (const target of refs) {
-      b += `Body link [t](${percentEncode(relPathForTest(target, dir))})\n`;
-    }
-    b += "\n```\n[frozen](never-touched.md)\n```\n";
-    pages[ref] = b;
+    const dests = refs.map((target) =>
+      percentEncode(relPathForTest(target, dir)),
+    );
+    const links = dests.map((dest) => `[t](${dest})`);
+    let body = "";
+    for (const dest of dests) body += `Body link [t](${dest})\n`;
+    body += "\n```\n[frozen](never-touched.md)\n```\n";
+    pages[ref] = new Page(body)
+      .set("title", posixBasename(ref))
+      .set("related", links).text;
   }
   return pages;
 }
@@ -584,6 +612,82 @@ function isRelativeDestForTest(link: LinkMatch): boolean {
   );
 }
 
+/** Where a ref — a page's or a link's target — points after the move. */
+function movedRef(ref: string, oldRel: string, newRel: string): string {
+  return ref === oldRel ? newRel : ref;
+}
+
+/** Whether the writer folded a link destination in text's frontmatter across
+ * two lines.
+ *
+ * Read from raw bytes and the YAML parser, never through [iterLinks]: a guard
+ * built on that scan would go blind exactly when the fold it guards went blind,
+ * and report "the fixture stopped folding" for "the scan stopped seeing". */
+function hasFoldedDestination(text: string): boolean {
+  const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
+  if (!hasFrontmatter) return false;
+  // A fold is an escaped line break, and it is inside a link scalar when the
+  // parser reads that scalar back in a form the raw block does not hold.
+  if (!frontmatter.includes("\\\n")) return false;
+  const data = parseYaml(frontmatter) as { related?: unknown } | null;
+  if (!Array.isArray(data?.related)) return false;
+  return data.related.some(
+    (link) => typeof link === "string" && !frontmatter.includes(link),
+  );
+}
+
+/** Whether ref sits directly under a `wiki/` kind-folder — the depth
+ * [newPageRecord] requires before it will describe a page at all. */
+function underKindFolder(ref: string): boolean {
+  return path.posix.dirname(path.posix.dirname(ref)) === "wiki";
+}
+
+/** A page's frontmatter edges, keyed by edge key, each target resolved
+ * vault-relative — read by [newPageRecord] through the YAML parser.
+ *
+ * What that buys is the *link set*: it comes from the parser, so a fold cannot
+ * hide a link from this oracle the way it hid one from the raw-text scan
+ * (#486). Below that the two do meet — [newPageRecord] resolves each scalar
+ * with [linkDest], which is [iterLinks] again — so this is an oracle for a
+ * fold, not for a blind spot in the link grammar itself.
+ *
+ * Null for a page outside a kind-folder, the depth [newPageRecord] requires:
+ * the frontmatter schema has nothing to say about such a page, so this oracle
+ * says nothing about it either. */
+function frontmatterEdges(
+  ref: string,
+  text: string,
+): Record<string, string[]> | null {
+  if (!underKindFolder(ref)) return null;
+  const edges: Record<string, string[]> = {};
+  for (const edge of newPageRecord(ref, text).edges) {
+    edges[edge.key] = edge.targets;
+  }
+  return edges;
+}
+
+/** The runs of text between links, in order: every byte a move is not allowed
+ * to touch, cut at each link's whole `[label](dest)` span.
+ *
+ * A folded destination's span covers the fold, so flattening one takes the
+ * line break and indentation out of the link's own span rather than out of a
+ * gap — which is what lets a correct move flatten a fold and still leave every
+ * gap alone.
+ *
+ * A list rather than one concatenated remainder, because concatenation is blind
+ * to where the cuts fell: a line break migrating across a link boundary leaves
+ * the joined remainder identical while reflowing the document. */
+function textBetweenLinks(text: string): string[] {
+  const gaps: string[] = [];
+  let at = 0;
+  for (const link of iterLinks(text)) {
+    gaps.push(text.slice(at, link.fullStart));
+    at = link.fullEnd;
+  }
+  gaps.push(text.slice(at));
+  return gaps;
+}
+
 const MOVE_NUM_RUNS = 100;
 
 describe("move preserves every link target", () => {
@@ -591,14 +695,21 @@ describe("move preserves every link target", () => {
     fc.assert(
       fc.property(genVaultArb, ({ pages, oldRel, newRel }) => {
         const moved = planMove(pages, oldRel, newRel);
+        // Guards the oracle below rather than the move: an edit that stopped
+        // the fixture folding would leave it comparing edges it reads
+        // perfectly well against each other, silently and forever.
+        let oracleReadAFold = false;
+
         for (const [ref, before] of Object.entries(pages)) {
-          const afterRef = ref === oldRel ? newRel : ref;
+          const afterRef = movedRef(ref, oldRel, newRel);
           const after = moved[afterRef];
           assert.ok(
             after !== undefined,
             `page ${afterRef} missing after the move`,
           );
 
+          // Oracle 1 — the raw-text link scan: every link, body links
+          // included, still resolves where it did before.
           const wantTargets = resolvedTargets(before, posixDirname(ref));
           const gotTargets = resolvedTargets(after, posixDirname(afterRef));
           assert.equal(
@@ -607,42 +718,105 @@ describe("move preserves every link target", () => {
             `${ref}: link count changed`,
           );
           for (let i = 0; i < wantTargets.length; i++) {
-            let want = wantTargets[i];
-            if (want === oldRel) want = newRel;
-            assert.equal(gotTargets[i], want, `${ref}: link ${i}`);
+            assert.equal(
+              gotTargets[i],
+              movedRef(wantTargets[i], oldRel, newRel),
+              `${ref}: link ${i}`,
+            );
           }
+
+          // Oracle 2 — the YAML parser. Its link set comes from the parser, so
+          // a link the raw-text scan went blind to cannot make both sides of
+          // this comparison agree: the scan alone is failing while the parser
+          // still reads where the edge really points (#489, the #486 fold).
+          const wantEdges = frontmatterEdges(ref, before);
+          if (wantEdges === null) continue;
+          const gotEdges = frontmatterEdges(afterRef, after);
+          if (gotEdges === null) continue; // moved to the vault root
+          const wantMoved: Record<string, string[]> = {};
+          for (const [key, targets] of Object.entries(wantEdges)) {
+            wantMoved[key] = targets.map((t) => movedRef(t, oldRel, newRel));
+          }
+          assert.deepEqual(gotEdges, wantMoved, `${ref}: frontmatter edges`);
+          oracleReadAFold ||=
+            hasFoldedDestination(before) && Object.keys(wantEdges).length > 0;
         }
+
+        assert.ok(
+          oracleReadAFold,
+          "the YAML oracle compared no folded edge — it has nothing the raw-text scan could miss",
+        );
       }),
       { numRuns: MOVE_NUM_RUNS },
     );
   });
 });
 
-describe("move touches only link lines", () => {
-  it("every line that changed must have held a link whose destination moved", () => {
+describe("textBetweenLinks", () => {
+  const folded =
+    '---\nrelated:\n  - "[t](../entities/a-rather-long-tar\\\n    get-page-title-that-will-definitely-wrap.md)"\n---\nBody.\n';
+  const flat =
+    '---\nrelated:\n  - "[t](../entities/a-rather-long-target-page-title-that-will-definitely-wrap.md)"\n---\nBody.\n';
+
+  it("tolerates a flattened fold but not a changed non-link byte", () => {
+    // A retarget splices a flat destination over a folded span: one line
+    // fewer, the same text either side of the link.
+    assert.deepEqual(textBetweenLinks(flat), textBetweenLinks(folded));
+    assert.deepEqual(textBetweenLinks(folded), [
+      '---\nrelated:\n  - "',
+      '"\n---\nBody.\n',
+    ]);
+    assert.notDeepEqual(
+      textBetweenLinks(flat.replace("Body.", "Body!")),
+      textBetweenLinks(folded),
+    );
+  });
+
+  it("sees a line break that moves across a link boundary", () => {
+    // The same bytes outside links in either text; only the cut between them
+    // differs, as a splice that reflowed the line would leave them.
+    const before = "A\n[x](b.md)\nB\n";
+    const reflowed = "A[x](b.md)\n\nB\n";
+    assert.notDeepEqual(textBetweenLinks(reflowed), textBetweenLinks(before));
+  });
+});
+
+describe("move changes nothing outside a link", () => {
+  it("holds for a flattened fold, and for a move to the same ref", () => {
     fc.assert(
       fc.property(genVaultArb, ({ pages, oldRel, newRel }) => {
         const moved = planMove(pages, oldRel, newRel);
         for (const [ref, before] of Object.entries(pages)) {
-          const afterRef = ref === oldRel ? newRel : ref;
+          const afterRef = movedRef(ref, oldRel, newRel);
           const after = moved[afterRef];
-
-          const beforeLines = before.split("\n");
-          const afterLines = after.split("\n");
-          assert.equal(
-            beforeLines.length,
-            afterLines.length,
-            `${ref}: line count changed`,
+          assert.ok(
+            after !== undefined,
+            `page ${afterRef} missing after the move`,
           );
 
-          const linkLines = new Set(iterLinks(before).map((l) => l.line));
-          for (let i = 0; i < beforeLines.length; i++) {
-            if (beforeLines[i] !== afterLines[i]) {
-              assert.ok(
-                linkLines.has(i),
-                `${ref}: line ${i} changed but held no link:\n${beforeLines[i]}\n${afterLines[i]}`,
-              );
-            }
+          // A splice replaces a span with a flat destination, so a move can
+          // cost a line (flattening a fold) but never add one. Re-folding a
+          // destination would, and in a body link it would break the link
+          // outright, the fold being YAML's and not markdown's.
+          assert.ok(
+            after.split("\n").length <= before.split("\n").length,
+            `${ref}: the move added a line`,
+          );
+
+          assert.deepEqual(
+            textBetweenLinks(after),
+            textBetweenLinks(before),
+            `${ref}: bytes outside a link changed`,
+          );
+
+          // A move to where the page already is has nothing to rewrite, folds
+          // included, so it must come back byte-identical.
+          if (oldRel === newRel) {
+            assert.equal(
+              after,
+              before,
+              `${ref}: a move to the same ref rewrote the page`,
+            );
           }
         }
       }),
