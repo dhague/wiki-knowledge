@@ -152,7 +152,7 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 
 Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else nearest ancestor holding `wiki/` directory or `.wiki-root` marker, else cwd). Set `WIKI_ROOT` before invoking any. `page` and `place` exceptions: operate only on what you hand them, no root resolved.
 
-**One `enchiridion` executable, nothing to install** ([ADR-0017](../../../docs/adr/0017-bundled-typescript-on-installed-interpreter.md)) — the script layer is a TypeScript bundle (`enchiridion-ts/dist/cli.cjs`), and `<plugin-root>/bin/enchiridion` is a thin shim that execs `node` against it.
+**One `enchiridion` executable, nothing to install** — the script layer is a TypeScript bundle (`enchiridion-ts/dist/cli.cjs`), and `<plugin-root>/bin/enchiridion` is a thin shim that execs `node` against it.
 
 **Invocation differs by host:**
 

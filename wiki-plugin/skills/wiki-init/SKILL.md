@@ -18,7 +18,7 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["init
 
 Given target dir `<vault>` (path arg, or `cwd` if omitted):
 
-1. **Ask user which deployment mode** per `docs/adr/0004-deployment-modes-and-vault-root-resolution.md`, unless already stated:
+1. **Ask user which deployment mode**, unless already stated:
    - **query-from-anywhere** — common for personal/dogfooding vault: plugin stays installed user-scope elsewhere, new vault just needs registration.
    - **dedicated** — vault *is* a Claude Code project with plugin installed project-scope inside it. `enchiridion init` won't attempt that install (not its job) — only skips writing `settings.json`; tell user to install plugin into `<vault>` and launch Claude Code from `<vault>` root after.
 
