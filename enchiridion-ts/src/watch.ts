@@ -22,7 +22,11 @@
  * file (`.mutex` / `.writelock` created with the `wx` flag, removed on
  * release). The module is pure-JS only (ADR-0017 — a native flock addon
  * would break Bun, the OpenCode runtime), and the atomic `wx` create gives
- * the same cross-process mutual exclusion a blocking flock provides.
+ * the same cross-process mutual exclusion a blocking flock provides. Both
+ * consult one liveness rule ([lockState]) before they wait, so the two cannot
+ * drift apart on what "nobody owns this" means, and differ only in what they
+ * do with a lock that rule cannot call gone — the `.mutex` reclaims it, the
+ * `.writelock` stops and says why (see [StalePolicy]).
  */
 
 import fs from "node:fs";
@@ -93,11 +97,15 @@ export function writeLock(
   mkdirSafe(path.dirname(lockPath), 0o755);
   if (!pid) pid = process.pid;
   const started = startedAt ? startedAt : new Date();
-  const payload = {
-    pid,
-    started_at: started.toISOString(),
-  };
-  fs.writeFileSync(lockPath, JSON.stringify(payload), { mode: 0o644 });
+  fs.writeFileSync(lockPath, lockPayload(pid, started), { mode: 0o644 });
+}
+
+/** The payload a lock file carries: the holder's pid, and when it took the
+ * lock. One shape for all three lock files — the watcher's own lock, and the
+ * `.mutex`/`.writelock` companions — so [lockState] reads whichever it is
+ * handed. */
+function lockPayload(pid: number, startedAt: Date): string {
+  return JSON.stringify({ pid, started_at: startedAt.toISOString() });
 }
 
 /** Unlinks lockPath; a no-op when absent. */
@@ -109,40 +117,89 @@ export function removeLock(lockPath: string): void {
   }
 }
 
-/** Reports (isStale, pid) for the lock at lockPath. pid is null when the lock
- * file is unparsable.
+/** True when a lock stamped at startedAtMs has outlived [StaleLockSeconds]. */
+function pastStaleWindow(startedAtMs: number, now: Date): boolean {
+  return (now.getTime() - startedAtMs) / 1000 > StaleLockSeconds;
+}
+
+/** What a lock file says about the process that owns it — the return of
+ * [lockState], the module's one liveness rule. */
+export type LockState =
+  /** No lock file: nothing to wait for. */
+  | { kind: "free" }
+  /** A live holder stamped inside [StaleLockSeconds]: wait for it. pid is null
+   * for a file caught between the exclusive create and the holder's stamp. */
+  | { kind: "held"; pid: number | null }
+  /** The holder is provably gone — its recorded pid is not alive. */
+  | { kind: "dead"; pid: number }
+  /** The holder's pid is alive, but its stamp has outlived [StaleLockSeconds]:
+   * a real holder that may be stuck, which only a [StalePolicy] can price. */
+  | { kind: "expired"; pid: number }
+  /** The file exists but decides nothing: unreadable, stranded in the create
+   * window, or not a lock payload. Also the policy's to answer. */
+  | { kind: "unparsable" };
+
+/**
+ * The one liveness rule: what the lock file at lockPath says about its holder.
+ * Every lock consults it before waiting, so none of them can drift on what
+ * "nobody owns this" means.
  *
- * An unparsable lock file counts as stale (fails toward proceeding, not toward
- * a permanent bail). */
-function lockIsStale(
+ * Four signals, in descending order of how much they prove: a pid that is not
+ * alive (governed by either policy), a pid that is alive with a stamp inside
+ * [StaleLockSeconds] (held), a pid that is alive with a stamp outside it
+ * (expired), and a file that says nothing at all (unparsable).
+ *
+ * An empty file is not "says nothing" on the way in: the exclusive create
+ * publishes the file a syscall before its holder can stamp it, so an empty
+ * file is a holder mid-acquire while it is fresh — reading that as gone would
+ * hand the lock to two processes at once. It is read off its own mtime instead,
+ * and only counts as unparsable once that has aged out, so a file stranded in
+ * the window still comes to a decision rather than waiting forever.
+ */
+export function lockState(
   lockPath: string,
   now: Date,
   pidAlive: (pid: number) => boolean,
-): { isStale: boolean; pid: number | null } {
+): LockState {
+  let info: fs.Stats;
+  try {
+    info = fs.statSync(lockPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { kind: "free" };
+    }
+    return { kind: "unparsable" };
+  }
   let data: string;
   try {
     data = fs.readFileSync(lockPath, "utf8");
   } catch {
-    return { isStale: true, pid: null };
+    return { kind: "unparsable" };
   }
-  let payload: { pid?: number; started_at?: string };
+  if (data === "") {
+    return pastStaleWindow(info.mtime.getTime(), now)
+      ? { kind: "unparsable" }
+      : { kind: "held", pid: null };
+  }
+  let raw: unknown;
   try {
-    payload = JSON.parse(data);
+    raw = JSON.parse(data);
   } catch {
-    return { isStale: true, pid: null };
+    return { kind: "unparsable" };
   }
+  if (typeof raw !== "object" || raw === null) return { kind: "unparsable" };
+  const payload = raw as { pid?: number; started_at?: string };
   const startedAt = Date.parse(payload.started_at ?? "");
-  if (Number.isNaN(startedAt)) return { isStale: true, pid: null };
+  if (Number.isNaN(startedAt)) return { kind: "unparsable" };
   const pid = payload.pid ?? 0;
-  if (!pidAlive(pid)) return { isStale: true, pid };
-  if ((now.getTime() - startedAt) / 1000 > StaleLockSeconds) {
-    return { isStale: true, pid };
-  }
-  return { isStale: false, pid };
+  if (!pidAlive(pid)) return { kind: "dead", pid };
+  if (pastStaleWindow(startedAt, now)) return { kind: "expired", pid };
+  return { kind: "held", pid };
 }
 
 /** Probes whether pid names a live process via `kill(pid, 0)`: ESRCH means
- * dead, EPERM means alive-but-not-ours. */
+ * dead, EPERM means alive-but-not-ours. The production answer [lockState]
+ * judges holders with, unless a caller injects its own. */
 export function defaultPIDAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -150,6 +207,34 @@ export function defaultPIDAlive(pid: number): boolean {
   } catch (err) {
     return (err as NodeJS.ErrnoException).code !== "ESRCH";
   }
+}
+
+/** The wall clock staleness is judged at. Not [defaultClock] — that one is the
+ * debouncer's monotonic seconds. */
+function defaultNow(): Date {
+  return new Date();
+}
+
+/** The seams a lock reads before it waits. Every field defaults to the
+ * production implementation; tests inject fakes for all of them. */
+export interface LockSeams {
+  /** Current time, called once per attempt so a wait can outlive the moment it
+   * began (default: the real clock). */
+  clock?: () => Date;
+  /** Probes whether a holder is alive (default: [defaultPIDAlive]). */
+  pidAlive?: (pid: number) => boolean;
+  /** Waits ms between attempts (default: [LockRetryMillis]). */
+  sleep?: (ms: number) => void;
+}
+
+/** Resolves the seams a lock was handed, filling in the production defaults —
+ * the one place the module says who answers "is that holder still there?". */
+function lockDefaults(seams: LockSeams): Required<LockSeams> {
+  return {
+    clock: seams.clock ?? defaultNow,
+    pidAlive: seams.pidAlive ?? defaultPIDAlive,
+    sleep: seams.sleep ?? sleep,
+  };
 }
 
 /**
@@ -161,36 +246,37 @@ export function defaultPIDAlive(pid: number): boolean {
  * file was unparsable), so the caller can log the takeover. Check, unlink and
  * write all happen under a companion `.mutex` file held exclusively, so two
  * processes racing a stale takeover can't both pass the staleness check before
- * either writes.
+ * either writes — and that `.mutex` is reclaimed rather than stopped on, so a
+ * watcher killed while holding it strands neither it nor its successor (see
+ * [withExclusiveLock]).
  */
 export function acquireLock(
   lockPath: string,
-  now?: Date,
-  pidAlive?: (pid: number) => boolean,
+  seams: LockSeams = {},
 ): { acquired: boolean; stalePID: number | null } {
-  const nowDate = now ? now : new Date();
-  const alive = pidAlive ?? defaultPIDAlive;
+  const { clock, pidAlive } = lockDefaults(seams);
   const result: { acquired: boolean; stalePID: number | null } = {
     acquired: false,
     stalePID: null,
   };
-  const mutexPath = lockPath + ".mutex";
-  withExclusiveLock(mutexPath, () => {
-    if (fs.existsSync(lockPath)) {
-      const { isStale, pid } = lockIsStale(lockPath, nowDate, alive);
-      if (!isStale) {
+  withExclusiveLock(
+    lockPath + ".mutex",
+    () => {
+      const now = clock();
+      const state = lockState(lockPath, now, pidAlive);
+      if (state.kind === "held") {
         result.acquired = false;
         return;
       }
-      fs.unlinkSync(lockPath);
-      writeLock(lockPath, 0, nowDate);
+      if (state.kind !== "free") removeLock(lockPath);
+      writeLock(lockPath, 0, now);
       result.acquired = true;
-      result.stalePID = pid;
-      return;
-    }
-    writeLock(lockPath, 0, nowDate);
-    result.acquired = true;
-  });
+      result.stalePID =
+        state.kind === "dead" || state.kind === "expired" ? state.pid : null;
+    },
+    "reclaim",
+    seams,
+  );
   return result;
 }
 
@@ -227,14 +313,20 @@ function withQueueLock(
 ): void {
   mkdirSafe(path.dirname(queuePath), 0o755);
   const writelockPath = queuePath + ".writelock";
-  withExclusiveLock(writelockPath, () => {
-    const newLines = fn(readQueue(queuePath));
-    let body = "";
-    for (const line of newLines) body += line + "\n";
-    const tmpPath = queuePath + ".tmp";
-    fs.writeFileSync(tmpPath, body, { mode: 0o644 });
-    fs.renameSync(tmpPath, queuePath);
-  });
+  withExclusiveLock(
+    writelockPath,
+    () => {
+      const newLines = fn(readQueue(queuePath));
+      let body = "";
+      for (const line of newLines) body += line + "\n";
+      const tmpPath = queuePath + ".tmp";
+      fs.writeFileSync(tmpPath, body, { mode: 0o644 });
+      fs.renameSync(tmpPath, queuePath);
+    },
+    // "fail", never "reclaim": two writers each believing they hold the queue
+    // corrupts it. See [StalePolicy].
+    "fail",
+  );
 }
 
 /** Appends rel to the queue, unless it's already there (idempotent). */
@@ -306,23 +398,67 @@ export function relForEvent(root: string, abs: string): string | null {
 
 // --- exclusive-create lock file (ADR-0017: pure JS, no native addons) ---------
 
-/** Runs critical under an exclusive lock on lockPath, created atomically with
- * the `wx` flag and removed on release.
+/** How long an exclusive lock waits between attempts. */
+const LockRetryMillis = 5;
+
+/**
+ * What a lock does about a holder it cannot call gone: a file that says nothing
+ * usable, or a pid that is alive but whose stamp has outlived
+ * [StaleLockSeconds].
  *
- * Replaces a blocking flock: an atomic exclusive create gives the same cross-process
- * mutual exclusion without a native addon. When another process holds the
- * lock, blocks (retrying) until it is released. */
-function withExclusiveLock(lockPath: string, critical: () => void): void {
+ * Not a knob to set per call site on a whim — it is what the two locks
+ * genuinely differ by. `.mutex` guards a check-then-write around the lock file,
+ * so reclaiming matches the fail-toward-proceeding posture [acquireLock]
+ * already takes toward a lock file it cannot parse. `.writelock` guards queue
+ * integrity, where two writers each believing they hold it is worse than
+ * stopping, so it stops and says what was wrong.
+ *
+ * A dead pid is provably gone, and is reclaimed under either policy.
+ */
+export type StalePolicy = "reclaim" | "fail";
+
+/**
+ * Runs critical under an exclusive lock on lockPath, created atomically with
+ * the `wx` flag, stamped with its holder, and removed on release.
+ *
+ * Replaces a blocking flock: an atomic exclusive create gives the same
+ * cross-process mutual exclusion without a native addon (ADR-0017). A holder
+ * is waited out, but only for as long as [lockState] gives it credit: a lock
+ * whose stamp has outlived [StaleLockSeconds] is not waited on forever — what
+ * happens then is stalePolicy (see [StalePolicy]), so a `.mutex` stranded by a
+ * killed process is taken over rather than spun on, and the spin is bounded in
+ * either case.
+ *
+ * Reclaiming unlinks and retries the exclusive create in this same loop: no
+ * recursion, and nothing half-made, since either the one `wx` call took the
+ * lock or it never existed.
+ */
+export function withExclusiveLock(
+  lockPath: string,
+  critical: () => void,
+  stalePolicy: StalePolicy,
+  seams: LockSeams = {},
+): void {
+  const { clock, pidAlive, sleep: wait } = lockDefaults(seams);
   mkdirSafe(path.dirname(lockPath), 0o755);
   let fd: number;
   for (;;) {
     try {
-      fd = fs.openSync(lockPath, "wx");
+      fd = createLockFile(lockPath, clock());
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      sleep(5);
     }
+    const state = lockState(lockPath, clock(), pidAlive);
+    if (state.kind === "held") {
+      wait(LockRetryMillis);
+      continue;
+    }
+    if (state.kind === "free") continue; // released between the two calls
+    if (state.kind !== "dead" && stalePolicy === "fail") {
+      throw lockStuckError(lockPath, state);
+    }
+    removeLock(lockPath);
   }
   let criticalErr: unknown = null;
   try {
@@ -332,14 +468,50 @@ function withExclusiveLock(lockPath: string, critical: () => void): void {
   } finally {
     fs.closeSync(fd);
     try {
-      fs.unlinkSync(lockPath);
+      removeLock(lockPath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        if (criticalErr === null) criticalErr = err;
-      }
+      if (criticalErr === null) criticalErr = err;
     }
   }
   if (criticalErr !== null) throw criticalErr;
+}
+
+/** Creates lockPath exclusively and stamps its holder into it, returning the
+ * open fd; throws the EEXIST of an already-held lock.
+ *
+ * The exclusive create *is* the mutual exclusion; the stamp is what [lockState]
+ * reads later to tell a live holder from a stranded one. They are two calls, so
+ * for the width of one syscall a holder is visible as an empty file — which
+ * [lockState] reads as held, never as gone. */
+function createLockFile(lockPath: string, now: Date): number {
+  const fd = fs.openSync(lockPath, "wx");
+  try {
+    fs.writeSync(fd, lockPayload(process.pid, now));
+  } catch (err) {
+    // A lock file that says nothing is worse than none: drop what we made.
+    fs.closeSync(fd);
+    removeLock(lockPath);
+    throw err;
+  }
+  return fd;
+}
+
+/** The error a `"fail"` lock stops with: which lock, and what [lockState] found
+ * wrong with it, so a person can act — these files sit in a vault's
+ * `.wiki-knowledge/`, which is not somewhere anyone thinks to look. */
+function lockStuckError(lockPath: string, state: LockState): Error {
+  if (state.kind === "unparsable") {
+    return new Error(
+      `lock ${lockPath} says nothing about its holder (unreadable, or not a ` +
+        `lock payload); if no other process is writing to this vault, remove it`,
+    );
+  }
+  const pid = state.kind === "expired" ? ` by pid ${state.pid}` : "";
+  return new Error(
+    `lock ${lockPath} is held${pid}, that pid is still alive, and the lock ` +
+      `has outlived ${StaleLockSeconds}s; if that process is no longer ` +
+      `writing to this vault, remove it`,
+  );
 }
 
 function sleep(ms: number): void {
@@ -375,6 +547,15 @@ export type Sweep = () => Promise<Set<string>>;
  * tick for manual driving, so no real sleeps are needed. */
 export type Scheduler = (tick: () => void, ms: number) => () => void;
 
+/** The signals a watch run stops on. SIGINT and SIGTERM are what a person
+ * sends the foreground command; SIGHUP is what closing the terminal sends, and
+ * unhandled it kills the process wherever it stands — mid critical section,
+ * stranding a `.mutex` for the next watcher. */
+export type StopSignal = "SIGINT" | "SIGTERM" | "SIGHUP";
+
+/** Every [StopSignal], so the loop registers and drops them in one pass. */
+const StopSignals: StopSignal[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+
 /** The injectable seams [runWatch] composes. Every field defaults to the
  * production implementation; tests inject fakes for all of them. */
 export interface WatchOptions {
@@ -390,10 +571,11 @@ export interface WatchOptions {
   sweep?: Sweep;
   /** Monotonic-seconds clock for the debouncer (default: real time). */
   clock?: () => number;
-  /** Registers a signal handler (default: process.on). */
-  onSignal?: (signal: "SIGINT" | "SIGTERM", cb: () => void) => void;
-  /** Removes a signal handler (default: process.removeListener). */
-  offSignal?: (signal: "SIGINT" | "SIGTERM", cb: () => void) => void;
+  /** Registers a stop-signal handler, one per [StopSignal] (default:
+   * process.on). */
+  onSignal?: (signal: StopSignal, cb: () => void) => void;
+  /** Removes a stop-signal handler (default: process.removeListener). */
+  offSignal?: (signal: StopSignal, cb: () => void) => void;
   /** Schedules the per-poll-tick sweep (default: setInterval). */
   schedule?: Scheduler;
   /** The pid printed in the "watching …" banner (default: process.pid). */
@@ -405,7 +587,8 @@ export interface WatchOptions {
 /**
  * runWatch runs the long-lived watch loop: a file watcher over root/raw/
  * records events into the debouncer; on each poll tick settled files are
- * swept for eligibility and enqueued. SIGINT/SIGTERM logs "watcher stopped",
+ * swept for eligibility and enqueued. Any [StopSignal] — SIGINT and SIGTERM
+ * from a person, SIGHUP from a closing terminal — logs "watcher stopped",
  * cancels the poll, closes the watcher, removes the lock, and resolves the
  * returned promise.
  *
@@ -443,14 +626,12 @@ export function runWatch(
       stopped = true;
       log("watcher stopped");
       cancel();
-      offSignal("SIGINT", stop);
-      offSignal("SIGTERM", stop);
+      for (const signal of StopSignals) offSignal(signal, stop);
       void watcher.close();
       removeLock(paths.lock);
       resolve();
     };
-    onSignal("SIGINT", stop);
-    onSignal("SIGTERM", stop);
+    for (const signal of StopSignals) onSignal(signal, stop);
 
     watcher.on("all", (_eventName: string, p: string) => {
       const rel = relForEvent(paths.root, p);
@@ -496,10 +677,10 @@ function defaultSchedule(tick: () => void, ms: number): () => void {
   return () => clearInterval(id);
 }
 
-function defaultOnSignal(signal: "SIGINT" | "SIGTERM", cb: () => void): void {
+function defaultOnSignal(signal: StopSignal, cb: () => void): void {
   process.on(signal, cb);
 }
 
-function defaultOffSignal(signal: "SIGINT" | "SIGTERM", cb: () => void): void {
+function defaultOffSignal(signal: StopSignal, cb: () => void): void {
   process.removeListener(signal, cb);
 }
