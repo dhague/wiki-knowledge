@@ -14,6 +14,7 @@ import {
   percentEncode,
   percentDecode,
   splitDest,
+  encodeDest,
   splitFrontmatter,
   iterLinks,
   linkDest,
@@ -142,6 +143,50 @@ describe("splitDest", () => {
       path: "wiki/concepts/a.md",
       anchor: "some heading",
     });
+  });
+});
+
+describe("encodeDest", () => {
+  it("keeps the anchor separator literal and a filename's hash encoded", () => {
+    // The other half of the decode boundary, and the one rule both the
+    // frontmatter check and its fix now go through (#492): a heading fragment
+    // stays `#ttl`, never `%23ttl`, and a filename's own `#` can only be `%23`.
+    assert.equal(
+      encodeDest("wiki/concepts/a.md", "ttl"),
+      "wiki/concepts/a.md#ttl",
+    );
+    assert.equal(encodeDest("raw/notes #1.md", ""), "raw/notes%20%231.md");
+    assert.equal(
+      encodeDest("wiki/concepts/a.md", "some heading"),
+      "wiki/concepts/a.md#some%20heading",
+    );
+  });
+
+  it("round-trips a well-formed destination through splitDest", () => {
+    for (const dest of [
+      "wiki/concepts/a.md",
+      "wiki/concepts/a.md#ttl",
+      "raw/notes%20%231.md",
+      "wiki/concepts/a.md#some%20heading",
+    ]) {
+      const { path: p, anchor } = splitDest(dest);
+      assert.equal(encodeDest(p, anchor), dest);
+    }
+  });
+
+  it("round-trips any decoded path and anchor", () => {
+    // The two are the module's single encode/decode boundary, so an encoded
+    // destination split back apart must give exactly what was encoded —
+    // whatever the path holds, a `#` or `%` of its own included.
+    fc.assert(
+      fc.property(fc.string(), fc.string(), (p, anchor) => {
+        const { path: decodedPath, anchor: decodedAnchor } = splitDest(
+          encodeDest(p, anchor),
+        );
+        assert.equal(decodedPath, p);
+        assert.equal(decodedAnchor, anchor);
+      }),
+    );
   });
 });
 

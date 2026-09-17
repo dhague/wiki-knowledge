@@ -10,6 +10,7 @@ import {
   iterLinks,
   percentEncode,
   resolveLinkDest,
+  encodeDest,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
 
@@ -43,6 +44,32 @@ function walkAllMd(root: string): string[] {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
   return refs.sort();
+}
+
+/**
+ * A YAML list item whose value begins with a bare `[` — an unquoted markdown
+ * link, which YAML reads as a flow sequence rather than as the link string the
+ * schema wants. The one test decides both what check 3 reports and what its
+ * fix quotes, so the two cannot drift apart.
+ */
+const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
+
+/**
+ * The sources kind-folder, and the route from one of its pages down into the
+ * `raw/` inbox.
+ *
+ * Both are fixed by the plugin (ADR-0008), and the fix below is scoped to
+ * `wiki/sources/` pages — which is the *only* reason `../../raw/` is the right
+ * prefix for a body link found there. Deriving the prefix from the folder
+ * keeps that coupling in one expression instead of leaving a hard-coded
+ * `../../raw/` in a regex that reads as general when it is not.
+ */
+const SOURCES_DIR = "wiki/sources";
+const RAW_HREF_PREFIX = path.posix.relative(SOURCES_DIR, "raw");
+
+/** Escape a literal string for use inside a RegExp source. */
+function regexEscape(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +129,7 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
     const unquotedLines = new Set<number>();
     const fmLines = frontmatter.split("\n");
     for (let i = 0; i < fmLines.length; i++) {
-      if (/^\s*-\s+\[/.test(fmLines[i])) {
+      if (UNQUOTED_LIST_LINK_RE.test(fmLines[i])) {
         unquotedLines.add(i); // 0-based to match link.line from iterLinks
         findings.push({
           pageRef: ref,
@@ -112,9 +139,14 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
     }
 
     // Unencoded link destinations (skip lines already flagged as unquoted).
+    // A frontmatter relationship link is the same link form as a body link,
+    // anchors included (wiki-conventions, "Links"): `#` introducing an anchor
+    // is literal, and only a filename's own `#` — decoded from `%23` — needs
+    // encoding. So path and anchor are re-encoded through the one seam that
+    // knows that, never by recombining them first (#492 §1).
     for (const link of iterLinks(frontmatter)) {
       if (unquotedLines.has(link.line)) continue;
-      const reencoded = percentEncode(link.decodedPath);
+      const reencoded = encodeDest(link.decodedPath, link.decodedAnchor);
       if (link.dest !== reencoded)
         findings.push({
           pageRef: ref,
@@ -258,7 +290,7 @@ export async function fixFrontmatterLinkFormat(
     let fm = frontmatter
       .split("\n")
       .map((line) => {
-        if (!/^\s*-\s+\[/.test(line)) return line;
+        if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
         const open = line.indexOf("[");
         if (open < 0) return line;
         const closeParenIdx = line.lastIndexOf(")");
@@ -272,14 +304,15 @@ export async function fixFrontmatterLinkFormat(
       .join("\n");
 
     // Pass 2: re-encode link destinations in the (now-quoted) frontmatter text.
-    // Frontmatter edge links never carry genuine anchors, so a literal "#" in
-    // the dest (which causes the parser to split path/anchor) is always a
-    // filename character that needs %23 encoding — recombine and re-encode.
+    // Frontmatter relationships use the same link form as body links, anchors
+    // included, so a destination carrying a heading fragment keeps it: the
+    // path and the anchor are re-encoded separately by the one seam that owns
+    // the rule (#492 §1). Recombining them first — the shape this replaced —
+    // encoded the anchor's own `#` and rewrote a working
+    // `../concepts/caching.md#ttl` into a dangling `…caching.md%23ttl`.
     const edits: Array<{ start: number; end: number; dest: string }> = [];
     for (const link of iterLinks(fm)) {
-      const fullDecoded =
-        link.decodedPath + (link.decodedAnchor ? "#" + link.decodedAnchor : "");
-      const reencoded = percentEncode(fullDecoded);
+      const reencoded = encodeDest(link.decodedPath, link.decodedAnchor);
       if (link.dest !== reencoded)
         edits.push({ start: link.start, end: link.end, dest: reencoded });
     }
@@ -300,13 +333,17 @@ export async function fixIngestionSourceIntegrity(
   const pages = new Vault(root).loadWikiPages();
   const changed: string[] = [];
   for (const [ref, text] of Object.entries(pages)) {
-    if (!ref.startsWith("wiki/sources/")) continue;
+    if (!ref.startsWith(SOURCES_DIR + "/")) continue;
     const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
     if (!hasFrontmatter) continue;
     if (/^raw_source\s*:/m.test(frontmatter)) continue;
 
-    // Auto-fix only when exactly one raw/ link exists in the body
-    const rawLinkRe = /\[[^\]]+\]\(\.\.\/\.\.\/raw\/[^)]+\)/g;
+    // Auto-fix only when exactly one raw/ link exists in the body. The prefix
+    // is the route from *this* folder into `raw/` — see [RAW_HREF_PREFIX].
+    const rawLinkRe = new RegExp(
+      `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
+      "g",
+    );
     const rawLinks = [...body.matchAll(rawLinkRe)];
     if (rawLinks.length !== 1) continue;
 

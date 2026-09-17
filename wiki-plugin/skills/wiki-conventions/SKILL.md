@@ -121,7 +121,13 @@ Links between pages are **relative markdown links — not wikilinks.**
 
 All links **position-spliced** on move/rename by `enchiridion vault move` (both inbound links across vault and outbound links inside moved page). Links into `raw/` are **percent-encoded**: encode space, `#`, `%`, `(`, `)`, `<`, `>`; everything else (unicode, `&`, `'`, `,`, `+`) stays literal. Obsidian cannot follow destination containing literal space, so encoding is essential for interoperability.
 
+- **`#` is the anchor separator, written literal.** First literal `#` in a destination always begins the heading fragment; a *filename's* own hash can therefore only be spelled `%23`. Unencoded `#` never means part of a path.
+
 **Frontmatter relationships use the same link form.** `raw_source` field, `supersedes` key, and every typed-edge key hold `[title](relative/path.md)` markdown, always **quoted** (`"[…](…)"`) so YAML doesn't parse leading `[` as flow sequence. `raw_source` holds **single** link; `supersedes` and typed-edge keys hold **list** (`- "[…](…)"`). Real markdown links keep every relationship clickable in plain markdown viewers and in Obsidian's Properties panel, and lets a move rewrite frontmatter and body links by same rule.
+
+**Same link form means same anchors.** A frontmatter destination may carry a heading fragment exactly as a body link does — `related:` → `- "[cache TTL](../concepts/caching.md#ttl)"`. The `#` stays literal there too; only a hash in the *filename* is `%23`. A frontmatter link is not a separate dialect with anchors forbidden.
+
+**The anchor is a fragment of the target page, never part of its name.** So the edge points at the page: `related:` → `- "[cache TTL](../concepts/caching.md#ttl)"` records an edge to `wiki/concepts/caching.md`, and `#ttl` is only where a reader lands once there. Edge targets are page refs and carry no fragment — the one `page_ref` spelling, unchanged by an anchor.
 
 **A link is never split across lines** — no column limit, no hard wrap, frontmatter or body. Every link the plugin writes sits on one line however long its destination is. A page written by an older version may still carry a destination split mid-slug with a trailing `\`, or a label split at a space: legal YAML both, folded back to the same value by any conforming parser and by `enchiridion` itself. Read them, never hand-edit one — the join looks obvious and a wrong join silently repoints the link.
 
