@@ -1,5 +1,5 @@
 /**
- * Tests for the eight mechanical vault health checks.
+ * Tests for the nine mechanical vault health checks.
  *
  * Strategy: build minimal on-disk vault fixtures with writeVault(); for
  * staleSynthesis (check 4) also initialise a real git repo so that
@@ -21,10 +21,12 @@ import {
   unresolvedSupersession,
   contradictionCallouts,
   orphans,
+  splitLinks,
   CHECKS,
   fixFrontmatterLinkFormat,
   fixIngestionSourceIntegrity,
   fixMissingCrossReferences,
+  fixSplitLinks,
   FIXES,
 } from "./check.js";
 import { newPageRecord } from "./pagerecord.js";
@@ -466,10 +468,139 @@ test("check 8: folded frontmatter edge counts as inbound link", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Check 9 — splitLinks
+// ---------------------------------------------------------------------------
+//
+// Every fixture here is hand-written: the writer emits no fold at all since
+// `docs/adr/0024-emitted-lines-are-not-folded.md`, so the only way to build a
+// folded page is to write the bytes by hand — which is also the shape every
+// page written before that ADR carries.
+
+test("check 9: folded destination is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-l\\\n    ines.md)"\n',
+    ),
+  });
+  const findings = await splitLinks(root);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
+  // The link starts on the file's fourth line: the opening fence, `title:`,
+  // `related:`.
+  assert.match(findings[0].detail, /destination/);
+  assert.match(findings[0].detail, /line 4/);
+  assert.match(
+    findings[0].detail,
+    /a-really-long-slug-that-wraps-across-lines\.md/,
+  );
+});
+
+test("check 9: folded label is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[RBWM Council Political\n    Composition](../concepts/rbwm.md)"\n',
+    ),
+  });
+  const findings = await splitLinks(root);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
+  assert.match(findings[0].detail, /label/);
+  assert.match(findings[0].detail, /RBWM Council Political Composition/);
+});
+
+test("check 9: a well-formed link on one line is not a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'raw_source: "[notes.md](../../raw/notes.md)"\nrelated:\n  - "[Bar](../entities/bar.md)"\n',
+      "Body links: [Bar](../entities/bar.md) and [x](x.md#ttl).\n",
+    ),
+  });
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("check 9: a fold inside a block scalar is not a finding", async () => {
+  // The documented blind spot (wikipage.ts, `ESCAPED_LINE_BREAK_RE`): a `\` at
+  // the end of a literal block scalar is content, not a fold, and raw text
+  // cannot tell the two apart. It must not be reported — and, above all, not
+  // joined, which would corrupt the literal.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "related: |\n" +
+        '  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-l\\\n' +
+        '    ines.md)"\n' +
+        '  - "[A folded label\n' +
+        '    continued](../concepts/other.md)"\n',
+    ),
+  });
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("check 9: a fold inside a single-quoted scalar is not a finding", async () => {
+  // A single-quoted scalar folds a line break to a space but keeps a `\`
+  // literal, so joining there is not semantics-preserving either. Only
+  // double-quoted scalars are in scope.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "related:\n  - '[Some long title](../sources/a-really-long-slug\\\n    -that-wraps.md)'\n",
+    ),
+  });
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("check 9: body destination split across a line break is a finding", async () => {
+  // Not a link at all under CommonMark — a destination cannot span lines — so
+  // `iterLinks` never sees it and `vault move` would leave it dangling.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "",
+      "See [composition](../concepts/rbwm-council-political-\ncomposition.md) for details.\n",
+    ),
+  });
+  const findings = await splitLinks(root);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
+  assert.match(findings[0].detail, /body/);
+  // The fourth line: the opening fence, `title:`, the closing fence.
+  assert.match(findings[0].detail, /line 4/);
+});
+
+test("check 9: a break after a destination is legal markdown, not a finding", async () => {
+  // `[T](path.md` / `"title")` is a legal link, and the one shape a fixer
+  // joining on sight would silently repoint.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "",
+      '[Bar](../entities/bar.md\n"the title") and [Baz](../entities/baz.md\n)\n',
+    ),
+  });
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("check 9: a split inside a fenced code block is not a finding", async () => {
+  // `iterLinks` skips code blocks; a split destination there is not a link
+  // either, so reporting it would be noise no reader shares.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "",
+      "```\n[a](../concepts/rbwm-council-political-\ncomposition.md)\n```\n",
+    ),
+  });
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+// ---------------------------------------------------------------------------
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all eight check names", () => {
+test("CHECKS registry contains all nine check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
@@ -479,6 +610,7 @@ test("CHECKS registry contains all eight check names", () => {
     "unresolved-supersession",
     "contradiction-callouts",
     "orphans",
+    "split-links",
   ];
   for (const name of expected) {
     assert.ok(name in CHECKS, `CHECKS missing: ${name}`);
@@ -686,14 +818,150 @@ test("fix missing-cross-references: skips ambiguous titles (multiple pages same 
 });
 
 // ---------------------------------------------------------------------------
+// Fix — fixSplitLinks
+// ---------------------------------------------------------------------------
+
+test("fix split-links: joins a folded destination with nothing", async () => {
+  const src = page(
+    "Foo",
+    'related:\n  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-l\\\n    ines.md)"\n',
+  );
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
+
+  // The backslash and the continuation's indentation are not content, so the
+  // join inserts nothing — exactly what a YAML reader already made of it.
+  assert.equal(
+    text,
+    src.replace(
+      "../sources/a-really-long-slug-that-wraps-across-l\\\n    ines.md",
+      "../sources/a-really-long-slug-that-wraps-across-lines.md",
+    ),
+  );
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("fix split-links: joins a folded label with a single space", async () => {
+  const src = page(
+    "Foo",
+    'related:\n  - "[RBWM Council Political\n    Composition](../concepts/rbwm.md)"\n',
+  );
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
+
+  // YAML folds a line break inside a quoted scalar to a space, so the join
+  // inserts exactly one.
+  assert.equal(
+    text,
+    src.replace(
+      "RBWM Council Political\n    Composition",
+      "RBWM Council Political Composition",
+    ),
+  );
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("fix split-links: both folds on one link, every other byte untouched", async () => {
+  // ADR-0012: frontmatter round-trip is relaxed, not byte-identical — but only
+  // the spliced regions may differ. Nothing here re-serialises the block, so
+  // key order, quote styles and spacing all survive.
+  const src =
+    "---\n" +
+    "title: Foo\n" +
+    'summary: "A summary: with a colon, a comma and (parens)"\n' +
+    "tags: [alpha, beta]\n" +
+    "source_date: 2026-01-02\n" +
+    "volatility: stable\n" +
+    "related:\n" +
+    '  - "[A rather long label\n    continued](../entities/a-rather-long-tar\\\n    get-page-title.md)"\n' +
+    "---\nBody.\n";
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
+  assert.equal(
+    text,
+    "---\n" +
+      "title: Foo\n" +
+      'summary: "A summary: with a colon, a comma and (parens)"\n' +
+      "tags: [alpha, beta]\n" +
+      "source_date: 2026-01-02\n" +
+      "volatility: stable\n" +
+      "related:\n" +
+      '  - "[A rather long label continued](../entities/a-rather-long-target-page-title.md)"\n' +
+      "---\nBody.\n",
+  );
+
+  // The edge reads back through the YAML parser as it did before the fix: the
+  // join is semantics-preserving, not merely tidy.
+  assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
+    {
+      key: "related",
+      targets: ["wiki/entities/a-rather-long-target-page-title.md"],
+    },
+  ]);
+  assert.deepEqual(await splitLinks(root), []);
+});
+
+test("fix split-links: never touches a body split", async () => {
+  // A break after a destination is legal markdown, so a fixer that joins on
+  // sight can silently repoint a path at the wrong page. Body findings are
+  // report-only, and the fixer must leave the file byte-identical.
+  const src = page(
+    "Foo",
+    "",
+    "See [composition](../concepts/rbwm-council-political-\ncomposition.md) for details.\n",
+  );
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, []);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    src,
+  );
+});
+
+test("fix split-links: leaves a block scalar alone", async () => {
+  const src = page(
+    "Foo",
+    "related: |\n" +
+      '  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-l\\\n' +
+      '    ines.md)"\n',
+  );
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, []);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    src,
+  );
+});
+
+test("fix split-links: clean page is not modified", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/bar.md)"\n',
+    ),
+  });
+  assert.deepEqual(await fixSplitLinks(root), []);
+});
+
+// ---------------------------------------------------------------------------
 // FIXES registry
 // ---------------------------------------------------------------------------
 
-test("FIXES registry contains all three fix names", () => {
+test("FIXES registry contains all four fix names", () => {
   const expected = [
     "frontmatter-link-format",
     "ingestion-source-integrity",
     "missing-cross-references",
+    "split-links",
   ];
   for (const name of expected) {
     assert.ok(name in FIXES, `FIXES missing: ${name}`);
