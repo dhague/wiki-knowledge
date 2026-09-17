@@ -52,6 +52,7 @@ import {
 } from "./watch.js";
 import { canonicalSourceDate } from "./sourcedate.js";
 import { CHECKS, FIXES } from "./check.js";
+import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
   runExport,
   buildCandidates,
@@ -65,10 +66,7 @@ import type { StarterEntry } from "./exportmeta.js";
 
 /** Prints the standard stub message and marks the process failed. */
 function stub(command: Command, label: string): void {
-  command.action(() => {
-    console.error(`enchiridion ${label}: not yet implemented`);
-    process.exitCode = 1;
-  });
+  command.action(() => fail(`enchiridion ${label}: not yet implemented`));
 }
 
 function loadPage(file: string): Page {
@@ -172,29 +170,22 @@ function printToolCallSummary(): void {
   console.log(formatSummary(summarize(events)));
 }
 
+/** The tag vocabulary, in the two shapes discover reports it: the full dump,
+ * or — when the draft already named its candidate tags — only the matches
+ * (`--tags-containing`) and per-tag counts (`--tag-count`) it asked for. The
+ * selected form rides in the one JSON document, so a caller parses discover
+ * once whatever flags it passed. */
+interface VocabularyFields {
+  vocabulary?: { tag: string; count: number }[];
+  tag_matches?: string[];
+  tag_counts?: { tag: string; count: number }[];
+}
+
 /** The JSON shape discover --plan emits: one entry per planned page with its
- * classified candidates. */
-interface PagesPayload {
+ * classified candidates, plus whichever vocabulary form was asked for. */
+type PlanPayload = {
   pages: { title: string; candidates: unknown[] }[];
-}
-
-/** The full plan payload: the pages plus the tag vocabulary, the no-flag form. */
-interface PlanPayload {
-  pages: { title: string; candidates: unknown[] }[];
-  vocabulary: { tag: string; count: number }[];
-}
-
-/** Write value as two-space-indented JSON, the shape discover emits. */
-function printIndentedJSON(value: unknown): void {
-  console.log(JSON.stringify(value, null, 2));
-}
-
-/** Render a []string as `['a', 'b']` — the plain-text form --tags-containing
- * emits. */
-function bracketListRepr(items: string[]): string {
-  if (items.length === 0) return "[]";
-  return "[" + items.map((item) => `'${item}'`).join(", ") + "]";
-}
+} & VocabularyFields;
 
 /** Split a comma-separated flag value into its parts, trimming whitespace and
  * dropping empties. */
@@ -223,9 +214,9 @@ function orDashPtr(s: string | null): string {
   return orDash(s);
 }
 
-/** Render one Hit as a JSON object line. */
-function hitJSON(hit: Hit): string {
-  return JSON.stringify({
+/** One Hit as its output row. */
+function hitRow(hit: Hit): Record<string, unknown> {
+  return {
     page_ref: hit.pageRef,
     score: hit.score,
     title: hit.title,
@@ -237,13 +228,13 @@ function hitJSON(hit: Hit): string {
     volatility: hit.volatility,
     superseded_by: hit.supersededBy,
     snippet: hit.snippet,
-  });
+  };
 }
 
 /** Render hits: JSON Lines when asJSON, else the compact one-per-hit table. */
 function renderHits(hits: Hit[], asJSON: boolean): void {
   if (asJSON) {
-    for (const hit of hits) console.log(hitJSON(hit));
+    emitRows(hits.map(hitRow));
     return;
   }
   let width = 0;
@@ -270,16 +261,14 @@ function renderStatus(
   asJSON: boolean,
 ): void {
   if (asJSON) {
-    console.log(
-      JSON.stringify({
-        pages: st.pages,
-        db_size_bytes: st.dbSizeBytes,
-        backend: st.backend,
-        schema_version: st.schemaVersion,
-        git_head: st.gitHead,
-        uncommitted_pages: st.uncommittedPages,
-      }),
-    );
+    emitDocument({
+      pages: st.pages,
+      db_size_bytes: st.dbSizeBytes,
+      backend: st.backend,
+      schema_version: st.schemaVersion,
+      git_head: st.gitHead,
+      uncommitted_pages: st.uncommittedPages,
+    });
     return;
   }
   console.log(`pages:             ${st.pages}`);
@@ -309,15 +298,13 @@ function renderReindex(
   asJSON: boolean,
 ): void {
   if (asJSON) {
-    console.log(
-      JSON.stringify({
-        pages: stats.pages,
-        inserted: stats.inserted,
-        updated: stats.updated,
-        removed: stats.removed,
-        duration_ms: stats.durationMs,
-      }),
-    );
+    emitDocument({
+      pages: stats.pages,
+      inserted: stats.inserted,
+      updated: stats.updated,
+      removed: stats.removed,
+      duration_ms: stats.durationMs,
+    });
     return;
   }
   const action = full ? "full reindex" : "reindex";
@@ -327,8 +314,14 @@ function renderReindex(
 }
 
 /** Execute the --plan mode of discover: classify every planned page and emit
- * the pages payload, optionally replacing the full vocabulary dump with the
- * plain-text tag results. */
+ * the pages payload, with the tag vocabulary in whichever form was asked for —
+ * the full dump, or the candidate tags the draft named.
+ *
+ * The filtered forms ride in the same JSON document as named fields rather
+ * than trailing it as plain text. They used to be plain text after the blob,
+ * which meant a caller reading stdout as JSON saw only the first line and
+ * silently lost the tag vocabulary it needs to mint tags — and a caller
+ * reading it as text could not parse the candidates at all. */
 async function runDiscoverPlan(
   index: Index,
   planPath: string,
@@ -357,24 +350,18 @@ async function runDiscoverPlan(
 
   const vocab = await index.tagCounts();
 
+  const payload: PlanPayload = { pages };
   if (tagsContain === "" && tagCount === "") {
-    console.log(
-      JSON.stringify({ pages, vocabulary: vocab } satisfies PlanPayload),
-    );
-    return;
-  }
-
-  console.log(JSON.stringify({ pages } satisfies PagesPayload));
-  if (tagsContain !== "") {
-    const matches = tagsContaining(vocab, splitCommaList(tagsContain));
-    console.log(bracketListRepr(matches));
-  }
-  if (tagCount !== "") {
-    const counts = tagCounts(vocab, splitCommaList(tagCount));
-    for (const tc of counts) {
-      console.log(`${tc.tag} count: ${tc.count}`);
+    payload.vocabulary = vocab;
+  } else {
+    if (tagsContain !== "") {
+      payload.tag_matches = tagsContaining(vocab, splitCommaList(tagsContain));
+    }
+    if (tagCount !== "") {
+      payload.tag_counts = tagCounts(vocab, splitCommaList(tagCount));
     }
   }
+  emitDocument(payload);
 }
 
 /** Appends rawRel to its own folder's `.ingestignore`.
@@ -384,7 +371,7 @@ async function runDiscoverPlan(
 function ignoreRawFile(root: string, rawRel: string, comment: string): void {
   const rel = path.posix.normalize(rawRel);
   if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
-    throw new Error(
+    fail(
       `--ignore takes a vault-relative path under raw/, got ${JSON.stringify(rawRel)}`,
     );
   }
@@ -445,9 +432,7 @@ export function buildProgram(): Command {
       "which date the --since/--until bounds apply to (source_date|git_date)",
       (value: string) => {
         if (value !== "source_date" && value !== "git_date") {
-          throw new Error(
-            `must be 'source_date' or 'git_date', got "${value}"`,
-          );
+          fail(`must be 'source_date' or 'git_date', got "${value}"`);
         }
         return value;
       },
@@ -604,13 +589,13 @@ export function buildProgram(): Command {
       let id = opts.sessionId ?? "";
       if (id === "") id = process.env.CLAUDE_CODE_SESSION_ID ?? "";
       if (id === "") {
-        throw new Error(
+        fail(
           "no session_id — pass --session-id or set $CLAUDE_CODE_SESSION_ID",
         );
       }
       const events = readLog(id, "");
       if (events.length === 0) {
-        throw new Error(`no log found at ${logPath(id, "")}`);
+        fail(`no log found at ${logPath(id, "")}`);
       }
       console.log(formatSummary(summarize(events)));
     });
@@ -676,30 +661,28 @@ export function buildProgram(): Command {
         const meta = readKindMeta(path.join(root, "wiki", folder));
         result.push({ kind, folder, canonical: false, definition: meta });
       }
-      console.log(JSON.stringify(result));
+      emitDocument(result);
     });
 
   // check <name> [--json] — run one vault health check by name; print
-  // findings as plain text (one per line) or as a JSON array with --json.
+  // findings as plain text or JSON Lines, one finding per line either way.
   const checkNames = Object.keys(CHECKS).join(", ");
   const check = program
     .command("check")
     .description(`Run a vault health check by name; names: ${checkNames}`)
     .argument("<name>", "check name")
-    .option("--json", "emit findings as a JSON array")
+    .option("--json", "emit findings as JSON Lines (one object per line)")
     .action(async (name: string, opts: { json?: boolean }) => {
       const fn = CHECKS[name];
       if (!fn) {
-        console.error(
+        fail(
           `enchiridion check: unknown check "${name}"; known: ${checkNames}`,
         );
-        process.exitCode = 1;
-        return;
       }
       const { root } = resolveRoot();
       const findings = await fn(root);
       if (opts.json) {
-        console.log(JSON.stringify(findings));
+        emitRows(findings);
       } else {
         for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
       }
@@ -715,11 +698,7 @@ export function buildProgram(): Command {
     .action(async (name: string) => {
       const fn = FIXES[name];
       if (!fn) {
-        console.error(
-          `enchiridion fix: unknown fix "${name}"; known: ${fixNames}`,
-        );
-        process.exitCode = 1;
-        return;
+        fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
       }
       const { root } = resolveRoot();
       const changed = await fn(root);
@@ -742,9 +721,7 @@ export function buildProgram(): Command {
       const p = loadPage(file);
       const { value, ok } = p.get(key);
       if (!ok || value === null || value === undefined) {
-        console.error(`no frontmatter key "${key}" in ${file}`);
-        process.exitCode = 1;
-        return;
+        fail(`no frontmatter key "${key}" in ${file}`);
       }
       console.log(formatFrontmatterValue(value));
     });
@@ -764,7 +741,7 @@ export function buildProgram(): Command {
           try {
             value = JSON.parse(raw);
           } catch {
-            throw new Error(`parsing ${key} as JSON: invalid JSON`);
+            fail(`parsing ${key} as JSON: invalid JSON`);
           }
         }
         if (key === "source_date") value = canonicalSourceDate(value);
@@ -785,10 +762,10 @@ export function buildProgram(): Command {
       try {
         values = JSON.parse(raw);
       } catch {
-        throw new Error(`merge expects a JSON list for ${key}`);
+        fail(`merge expects a JSON list for ${key}`);
       }
       if (!Array.isArray(values)) {
-        throw new Error(`merge expects a JSON list for ${key}`);
+        fail(`merge expects a JSON list for ${key}`);
       }
       const updated = p.merge(key, values);
       writePageFile(file, updated);
@@ -802,16 +779,16 @@ export function buildProgram(): Command {
   program
     .command("read-page <ref>")
     .description("Print a page's full content by vault-relative ref")
-    .option("--json", "emit {page_ref, frontmatter, body} as JSON")
+    .option("--json", "emit {page_ref, frontmatter, body} as one JSON line")
     .action((ref: string, opts: { json?: boolean }) => {
       const { root } = resolveRoot();
       const vault = new Vault(root);
       if (!vault.exists(ref)) {
-        throw new Error(`page not found: ${ref}`);
+        fail(`page not found: ${ref}`);
       }
       const page = vault.load(ref);
       if (opts.json) {
-        printIndentedJSON({
+        emitDocument({
           page_ref: ref,
           frontmatter: page.frontmatter(),
           body: page.body(),
@@ -833,7 +810,7 @@ export function buildProgram(): Command {
       const resolutions = resolveSuperseded(pageRefs, records);
 
       if (opts.json) {
-        for (const res of resolutions) console.log(JSON.stringify(res));
+        emitRows(resolutions);
         return;
       }
       for (const res of resolutions) {
@@ -865,19 +842,19 @@ export function buildProgram(): Command {
       // walk) rather than the per-file VaultGit surface (#415).
       const result = await scanIngest(root, folder, null);
       if (opts.json) {
+        const rows: Record<string, unknown>[] = [];
         for (const c of result.eligible) {
-          console.log(
-            JSON.stringify({
-              kind: "eligible",
-              raw_rel: c.rawRel,
-              reason: c.reason,
-              back_pointers: c.backPointers,
-            }),
-          );
+          rows.push({
+            kind: "eligible",
+            raw_rel: c.rawRel,
+            reason: c.reason,
+            back_pointers: c.backPointers,
+          });
         }
         for (const rawRel of result.ignored) {
-          console.log(JSON.stringify({ kind: "ignored", raw_rel: rawRel }));
+          rows.push({ kind: "ignored", raw_rel: rawRel });
         }
+        emitRows(rows);
         return;
       }
       renderScanTable(result);
@@ -932,9 +909,7 @@ export function buildProgram(): Command {
 
         const { acquired, stalePID } = acquireLock(paths.lock);
         if (!acquired) {
-          throw new Error(
-            `another watcher is already running (lock at ${paths.lock})`,
-          );
+          fail(`another watcher is already running (lock at ${paths.lock})`);
         }
         if (stalePID !== null) {
           console.log(
@@ -982,12 +957,10 @@ export function buildProgram(): Command {
         const planPath = opts.plan ?? "";
         const ignoreRels = opts.ignore ?? [];
         if (opts.dryRun && planPath === "") {
-          throw new Error(
-            "--dry-run only applies to --plan; --ignore always writes",
-          );
+          fail("--dry-run only applies to --plan; --ignore always writes");
         }
         if ((planPath === "") === (ignoreRels.length === 0)) {
-          throw new Error("exactly one of --plan or --ignore is required");
+          fail("exactly one of --plan or --ignore is required");
         }
         const { root } = resolveRoot();
         if (ignoreRels.length > 0) {
@@ -1013,7 +986,7 @@ export function buildProgram(): Command {
     )
     .action(async (opts: { manifest?: string }) => {
       if (!opts.manifest) {
-        throw new Error("required option '--manifest <file>' not specified");
+        fail("required option '--manifest <file>' not specified");
       }
       const { root } = resolveRoot();
       let text: string;
@@ -1075,11 +1048,11 @@ export function buildProgram(): Command {
     )
     .option(
       "--tags-containing <substrings>",
-      "comma-separated substrings (case-insensitive OR match); with --plan, replaces the full tag-vocabulary JSON dump with the plain-text list of matching vault tags",
+      "comma-separated substrings (case-insensitive OR match); with --plan, selects the tag_matches field in place of the full tag-vocabulary dump",
     )
     .option(
       "--tag-count <tags>",
-      "comma-separated exact tag names; with --plan, replaces the full tag-vocabulary JSON dump with plain-text per-tag page counts (0 if the tag doesn't exist yet)",
+      "comma-separated exact tag names; with --plan, selects the tag_counts field (per-tag page counts, 0 if the tag doesn't exist yet) in place of the full tag-vocabulary dump",
     )
     .action(
       async (opts: {
@@ -1127,9 +1100,7 @@ export function buildProgram(): Command {
             body,
             discoverOpts,
           );
-          for (const c of candidates) {
-            console.log(JSON.stringify(c));
-          }
+          emitRows(candidates);
         } finally {
           index.close();
         }
@@ -1148,7 +1119,7 @@ export function buildProgram(): Command {
       // A bare `hook`, or an unrecognised event name, is an error rather than
       // commander's default "print help, exit 0" — a hooks.json typo must not
       // look like it worked.
-      throw new Error(
+      fail(
         `hook: name the event, one of ${["session-start", "post-tool-use"].join(", ")}`,
       );
     });
@@ -1194,7 +1165,7 @@ export function buildProgram(): Command {
     )
     .option(
       "--candidates",
-      "emit ranked candidate JSON to stdout and exit (writes nothing)",
+      "emit the ranked candidate list as one JSON line to stdout and exit (writes nothing)",
     )
     .option(
       "--starters <refs...>",
@@ -1221,9 +1192,7 @@ export function buildProgram(): Command {
           try {
             saveExportTitle(root, opts.saveTitle);
           } catch (err) {
-            console.error(`enchiridion export: ${(err as Error).message}`);
-            process.exitCode = 1;
-            return;
+            fail(`enchiridion export: ${(err as Error).message}`);
           }
           console.log(
             `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`,
@@ -1232,8 +1201,7 @@ export function buildProgram(): Command {
         }
 
         if (opts.candidates) {
-          const candidates = buildCandidates(root);
-          console.log(JSON.stringify(candidates, null, 2));
+          emitDocument(buildCandidates(root));
           return;
         }
 
@@ -1275,8 +1243,7 @@ export function buildProgram(): Command {
             err instanceof ExportTargetNotEmptyError ||
             err instanceof ExportTargetIsDirectoryError
           ) {
-            console.error(`enchiridion export: ${(err as Error).message}`);
-            process.exitCode = 1;
+            fail(`enchiridion export: ${(err as Error).message}`);
           } else {
             throw err;
           }
@@ -1371,16 +1338,18 @@ export async function run(argv: string[]): Promise<RunResult> {
           exitCode: (err as { exitCode: number }).exitCode,
         };
       }
-      // An action handler threw a raw Error (commander rejects parseAsync
-      // with it, rather than wrapping it in a CommanderError — e.g. place
-      // with an unknown kind). Report it the way a bare CLI invocation would
-      // — message on stderr, non-zero exit — but as data, never an exit.
-      const message = err instanceof Error ? err.message : String(err);
-      stderr.push(message.endsWith("\n") ? message : message + "\n");
+      // An action handler failed — `fail`, or an error it didn't own
+      // (commander rejects parseAsync with it rather than wrapping it in a
+      // CommanderError — e.g. place with an unknown kind). Report it the way
+      // main() does, through the one renderer: message on stderr, exit 1, as
+      // data rather than an exit.
+      stderr.push(failureMessage(err));
       return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 1 };
     }
-    // parseAsync's own handlers set process.exitCode on failure (e.g. page get
-    // with a missing key); read it but never leave it set on the host process.
+    // Nothing should have set process.exitCode — commands signal failure by
+    // throwing, not by setting it. Read it anyway so a leaked value is
+    // reported rather than swallowed, but never leave it set on the host
+    // process.
     const exitCode = Number(process.exitCode ?? 0);
     process.exitCode = 0;
     return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode };
@@ -1403,7 +1372,14 @@ function main(): void {
     program.help();
     return;
   }
-  program.parse(process.argv);
+  // A failed command rejects (`fail` from a sync handler too — parseAsync
+  // makes the throw a rejection). Render it exactly as run() does, so a
+  // failure reads the same however the CLI was entered: the message on
+  // stderr, exit 1, and no stack trace standing in for a diagnostic.
+  void program.parseAsync(process.argv).catch((err: unknown) => {
+    process.stderr.write(failureMessage(err));
+    process.exitCode = 1;
+  });
 }
 
 // Only run as a direct CLI invocation; importing the module must be inert so
