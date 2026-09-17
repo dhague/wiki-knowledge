@@ -3,6 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { Vault } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
 import {
@@ -11,6 +12,7 @@ import {
   percentEncode,
   resolveLinkDest,
   encodeDest,
+  codeLineRanges,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
 
@@ -73,7 +75,7 @@ function regexEscape(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// The eight mechanical checks
+// The nine mechanical checks
 // ---------------------------------------------------------------------------
 
 // Check 1 — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
@@ -257,6 +259,222 @@ export async function orphans(root: string): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Check 9 — splitLinks
+// ---------------------------------------------------------------------------
+
+/**
+ * One raw region of a frontmatter link that a line break splits, and what a
+ * conforming YAML reader makes of the same bytes.
+ */
+interface FrontmatterSplit {
+  /** source offsets into the frontmatter block */
+  start: number;
+  end: number;
+  /** the value a YAML reader reads for that region — what a fix splices in */
+  joined: string;
+  kind: "destination" | "label";
+  /** the link's first line, 1-based in the file */
+  line: number;
+}
+
+/**
+ * The source spans of every double-quoted scalar in a frontmatter block.
+ *
+ * This is what keeps the check inside the one shape it may act on. Raw text
+ * cannot tell a fold in a quoted scalar from a `\` that is *content* in a
+ * block scalar (`related: |`), nor from a single-quoted scalar, where a
+ * backslash is literal and a line break folds to a space rather than joining
+ * with nothing — so the parser answers which scalar a link sits in, and
+ * nothing is guessed from the bytes. A block that does not parse yields no
+ * spans: nothing in it is reported, and nothing in it is joined.
+ */
+function doubleQuotedSpans(frontmatter: string): Array<[number, number]> {
+  let doc;
+  try {
+    doc = parseDocument(frontmatter);
+  } catch {
+    return [];
+  }
+  if (doc.errors.length > 0) return [];
+
+  const spans: Array<[number, number]> = [];
+  const walk = (node: unknown): void => {
+    if (isScalar(node)) {
+      if (node.type === "QUOTE_DOUBLE" && node.range)
+        spans.push([node.range[0], node.range[2]]);
+    } else if (isSeq(node)) {
+      for (const item of node.items) walk(item);
+    } else if (isMap(node)) {
+      for (const pair of node.items) walk(pair.value);
+    }
+  };
+  walk(doc.contents);
+  return spans;
+}
+
+/** Report whether the raw span [start, end) sits inside one of spans. */
+function insideAny(
+  spans: Array<[number, number]>,
+  start: number,
+  end: number,
+): boolean {
+  return spans.some(([s, e]) => s <= start && end <= e);
+}
+
+/** Join a label the way YAML folds one: a space per line break, with the
+ * indentation and any space before the break dropped. */
+function joinLabel(raw: string): string {
+  return raw.replace(/[ \t]*\r?\n[ \t]*/g, " ");
+}
+
+/**
+ * Every line-break split in one frontmatter block's double-quoted link
+ * scalars, in source order.
+ *
+ * The two shapes are told apart by *where* the break falls in the link, not by
+ * where the link lives: a break inside the destination joins with nothing (the
+ * backslash and the continuation's indentation are not content), and a break
+ * inside the label joins with a single space (YAML folds one there). One
+ * enumeration decides both what [splitLinks] reports and what [fixSplitLinks]
+ * splices, so the two cannot drift apart.
+ */
+function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
+  const spans = doubleQuotedSpans(frontmatter);
+  const splits: FrontmatterSplit[] = [];
+  for (const link of iterLinks(frontmatter)) {
+    // The line the link opens on. The frontmatter block's own line 0 is the
+    // file's line 2, since `---` opens it on line 1.
+    const line = link.line + 2;
+
+    // Label first: it opens the scalar, so source order is label, destination.
+    const labelStart = link.fullStart + (link.isImage ? 2 : 1);
+    const labelEnd = labelStart + link.label.length;
+    const rawLabel = frontmatter.slice(labelStart, labelEnd);
+    if (rawLabel.includes("\n") && insideAny(spans, labelStart, labelEnd)) {
+      splits.push({
+        start: labelStart,
+        end: labelEnd,
+        joined: joinLabel(rawLabel),
+        kind: "label",
+        line,
+      });
+    }
+
+    const rawDest = frontmatter.slice(link.start, link.end);
+    if (rawDest.includes("\n") && insideAny(spans, link.start, link.end)) {
+      splits.push({
+        start: link.start,
+        end: link.end,
+        // iterLinks joins escaped line breaks out of the destination, so its
+        // `dest` *is* the joined value — a fold is spliced as it is read.
+        joined: link.dest,
+        kind: "destination",
+        line,
+      });
+    }
+  }
+  return splits;
+}
+
+/**
+ * A destination run left open at the end of a line: `](` followed by the start
+ * of a destination — no whitespace, no closing paren — and then the line ends.
+ * The same characters a CommonMark destination is made of, so the run is
+ * exactly the part of one that fits on this line.
+ */
+const OPEN_DEST_RE = /\]\(([^\s)]+)$/;
+
+/**
+ * The line that finishes a split destination: the run picks up at column zero
+ * and closes with the `)`.
+ *
+ * A continuation opening with a quote, `(` or `)` is not one: a title may
+ * follow a line ending, and so may the destination's own close, so
+ * `[T](path.md` / `"title")` is a legal link and must not read as a split.
+ */
+const DEST_CONTINUATION_RE = /^[^\s"'()][^\s)]*\)/;
+
+/**
+ * Body destinations split across a line break — the third shape, and the one
+ * no fix may touch.
+ *
+ * This split is the crux of the check: the same bytes mean different things in
+ * the two halves of a page. A `\`-continuation in frontmatter is a YAML fold,
+ * one value spelled on two lines; in a body it is a CommonMark hard line
+ * break, which leaves `[T](path` and `.md)` as literal text — not a link at
+ * all, so [iterLinks] never sees it and `vault move` never rewrites it.
+ *
+ * Lines inside code blocks are skipped, as [iterLinks] skips them: a split
+ * there is not a link either, and no reader resolves it.
+ */
+function bodySplits(
+  pageRef: string,
+  text: string,
+  body: string,
+  bodyOffset: number,
+): Finding[] {
+  const lines = body.split("\n");
+  const code = codeLineRanges(body);
+  const firstLine = text.slice(0, bodyOffset).split("\n").length;
+  const findings: Finding[] = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (code.has(i) || code.has(i + 1)) continue;
+    const open = OPEN_DEST_RE.exec(lines[i]);
+    if (!open) continue;
+    const cont = DEST_CONTINUATION_RE.exec(lines[i + 1]);
+    if (!cont) continue;
+    findings.push({
+      pageRef,
+      detail:
+        `body destination split across lines (line ${firstLine + i}): ` +
+        `"${open[1]}" + "${cont[0].slice(0, -1)}" — CommonMark reads no link ` +
+        `here, so vault move never rewrites it`,
+    });
+  }
+  return findings;
+}
+
+/**
+ * Check 9 — no link is split across lines.
+ *
+ * Three shapes, one vocabulary (`wiki-conventions`, "Links";
+ * docs/adr/0024-emitted-lines-are-not-folded.md):
+ *
+ *   1. a destination fold — a YAML escaped line break inside a frontmatter
+ *      link scalar, the writer's mid-token break before #502;
+ *   2. a label fold — a plain newline inside a quoted frontmatter link scalar,
+ *      which YAML folds to a space;
+ *   3. a body almost-link — a destination broken across a line break in a
+ *      body, which CommonMark does not read as a link at all.
+ *
+ * Shapes 1 and 2 are auto-fixed by [fixSplitLinks], each join
+ * semantics-preserving; shape 3 is reported only, because a break after a
+ * destination is legal markdown and joining on sight can silently repoint the
+ * link. Nothing is reported outside a double-quoted scalar, where raw text
+ * cannot tell a fold from content.
+ */
+export async function splitLinks(root: string): Promise<Finding[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const findings: Finding[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    const { frontmatter, hasFrontmatter, body, bodyOffset } =
+      splitFrontmatter(text);
+    if (hasFrontmatter && frontmatter !== "") {
+      for (const split of frontmatterSplits(frontmatter)) {
+        findings.push({
+          pageRef: ref,
+          detail:
+            `frontmatter link ${split.kind} split across lines ` +
+            `(line ${split.line}): joins to "${split.joined}"`,
+        });
+      }
+    }
+    findings.push(...bodySplits(ref, text, body, bodyOffset));
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Check registry
 // ---------------------------------------------------------------------------
 
@@ -269,6 +487,7 @@ export const CHECKS: Record<string, (root: string) => Promise<Finding[]>> = {
   "unresolved-supersession": unresolvedSupersession,
   "contradiction-callouts": contradictionCallouts,
   orphans,
+  "split-links": splitLinks,
 };
 
 // ---------------------------------------------------------------------------
@@ -448,8 +667,38 @@ export async function fixMissingCrossReferences(
   return changed;
 }
 
+// Fix for check 9 — join the two frontmatter shapes in place. Body splits are
+// never joined (a break after a destination is legal markdown, so a join on
+// sight can silently repoint the link); they stay a report-only finding.
+export async function fixSplitLinks(root: string): Promise<string[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const changed: string[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
+    if (!hasFrontmatter || frontmatter === "") continue;
+
+    const splits = frontmatterSplits(frontmatter);
+    if (splits.length === 0) continue;
+
+    // Splice the raw frontmatter text, back-to-front by source offset, so
+    // every untouched byte survives — key order, quote styles and spacing
+    // alike (ADR-0012's relaxed round-trip allows only the join itself to
+    // differ). Joining with the reader's own value is what makes each edit
+    // semantics-preserving: nothing but the fold's bytes move.
+    let fm = frontmatter;
+    for (const s of splits.sort((a, b) => b.start - a.start)) {
+      fm = fm.slice(0, s.start) + s.joined + fm.slice(s.end);
+    }
+
+    fs.writeFileSync(path.join(root, ref), `---\n${fm}---\n${body}`, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
+
 export const FIXES: Record<string, (root: string) => Promise<string[]>> = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
   "missing-cross-references": fixMissingCrossReferences,
+  "split-links": fixSplitLinks,
 };

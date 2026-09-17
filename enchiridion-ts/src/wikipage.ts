@@ -228,8 +228,12 @@ const md = new MarkdownIt();
  * markdown-it's `map` includes a fence's delimiter lines, not just its content
  * lines — immaterial here, since a fence delimiter line is a fence marker plus
  * an info string, which cannot contain a markdown link.
+ *
+ * Exported for the readers' sake rather than this module's: `check split-links`
+ * scans body text for a link-shaped construct no reader resolves, and it has to
+ * skip exactly what [iterLinks] skips.
  */
-function codeLineRanges(src: string): Set<number> {
+export function codeLineRanges(src: string): Set<number> {
   const lines = new Set<number>();
   const tokens = md.parse(src, {});
   for (const token of tokens) {
