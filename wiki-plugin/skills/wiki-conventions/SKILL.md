@@ -123,6 +123,8 @@ All links **position-spliced** on move/rename by `enchiridion vault move` (both 
 
 **Frontmatter relationships use the same link form.** `raw_source` field, `supersedes` key, and every typed-edge key hold `[title](relative/path.md)` markdown, always **quoted** (`"[…](…)"`) so YAML doesn't parse leading `[` as flow sequence. `raw_source` holds **single** link; `supersedes` and typed-edge keys hold **list** (`- "[…](…)"`). Real markdown links keep every relationship clickable in plain markdown viewers and in Obsidian's Properties panel, and lets a move rewrite frontmatter and body links by same rule.
 
+**A link is never split across lines** — no column limit, no hard wrap, frontmatter or body. Every link the plugin writes sits on one line however long its destination is. A page written by an older version may still carry a destination split mid-slug with a trailing `\`, or a label split at a space: legal YAML both, folded back to the same value by any conforming parser and by `enchiridion` itself. Read them, never hand-edit one — the join looks obvious and a wrong join silently repoints the link.
+
 ## Typed edges
 
 Typed edges are **highest-leverage output of ingestion** — retrieval cannot recover an edge type never recorded. **Each edge type is its own frontmatter key**, holding list of markdown links to target pages:
@@ -150,7 +152,7 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 
 Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else nearest ancestor holding `wiki/` directory or `.wiki-root` marker, else cwd). Set `WIKI_ROOT` before invoking any. `page` and `place` exceptions: operate only on what you hand them, no root resolved.
 
-**One `enchiridion` executable, nothing to install** ([ADR-0017](../../../docs/adr/0017-bundled-typescript-on-installed-interpreter.md)) — the script layer is a TypeScript bundle (`enchiridion-ts/dist/cli.cjs`), and `<plugin-root>/bin/enchiridion` is a thin shim that execs `node` against it.
+**One `enchiridion` executable, nothing to install** — the script layer is a TypeScript bundle (`enchiridion-ts/dist/cli.cjs`), and `<plugin-root>/bin/enchiridion` is a thin shim that execs `node` against it.
 
 **Invocation differs by host:**
 

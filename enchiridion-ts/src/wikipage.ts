@@ -51,10 +51,13 @@ const FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
  *
  * Frontmatter is YAML, so a markdown-link scalar there is a doubly-encoded
  * value — the link's own percent-encoding, then YAML's quoting. The writer
- * folds any scalar that outgrows the line width, breaking mid-token with an
- * escaped line break when it finds no space to break at. A percent-encoded
- * destination has no space, so a long slug folds this way as a matter of
- * course, not as an edge case.
+ * *used* to fold any scalar that outgrew the emitter's line width, breaking
+ * mid-token with an escaped line break when it found no space to break at —
+ * and a percent-encoded destination has no space, so a long slug folded this
+ * way as a matter of course, not as an edge case. Since
+ * `docs/adr/0024-emitted-lines-are-not-folded.md` it emits no fold at all;
+ * this reader still resolves one, because every page written before that
+ * carries them.
  *
  * The matched span covers the raw fold, so a destination splice replaces the
  * continuation wholesale instead of leaving a stray `\` behind. Whitespace
@@ -651,6 +654,23 @@ function quoteLinks(node: Scalar | YAMLSeq): void {
   }
 }
 
+/**
+ * Render the frontmatter mapping back to YAML, folding nothing.
+ *
+ * `lineWidth: 0` disables the emitter's folding outright, so a link scalar
+ * stays on one line however long its destination is. This is a restoration
+ * rather than a decision: the Python writer that preceded this layer set
+ * `y.width = 4096  # never line-wrap long scalars`, the Go rewrite could not
+ * carry the setting across (`gopkg.in/yaml.v3` exposes no width knob), and
+ * this port took the emitter's default of 80 without anyone choosing it —
+ * see `docs/adr/0024-emitted-lines-are-not-folded.md`.
+ *
+ * What folding costs is not bytes but readers: a destination broken
+ * mid-token, or a label broken at a space, is a link no longer on one line,
+ * and every raw-text reader has to be taught the shape (#486). Readers keep
+ * that tolerance — pages written before this change still carry folds — but
+ * nothing new writes one.
+ */
 function renderFrontmatter(node: YAMLMap): string {
-  return stringify(node, { indent: YAML_INDENT });
+  return stringify(node, { indent: YAML_INDENT, lineWidth: 0 });
 }

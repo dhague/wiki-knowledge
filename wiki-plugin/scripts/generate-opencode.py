@@ -216,7 +216,7 @@ def _render_frontmatter(frontmatter: dict) -> str:
     """The ``---``-delimited frontmatter block for a generated file, with the
     trailing delimiter newline already in place."""
     yaml = YAML()
-    yaml.width = 4096  # never line-wrap long scalars (matches wikipage.py)
+    yaml.width = 4096  # never line-wrap long scalars — the vault writer folds nothing either (ADR-0024)
     yaml.indent(mapping=2, sequence=4, offset=2)
     stream = StringIO()
     yaml.dump(frontmatter, stream)

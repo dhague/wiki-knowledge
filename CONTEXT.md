@@ -48,12 +48,12 @@ _Avoid_: Link (a typed edge is a specific relationship; "link" alone means any m
 A recorded fact that one page replaces another, distinct from a `newer wins` recency guess. On a contradiction, ingestion appends a new page and records `supersedes` — it never overwrites the superseded page.
 
 **Concept fragmentation**:
-A cluster of small, closely-related concept pages whose knowledge is better expressed as one page with sections. The degenerate two-member case is a pair of near-duplicate pages. Distinct from concepts that are merely *related*: distinct-but-related concepts are joined by a typed edge, not folded.
+A cluster of small, closely-related concept pages whose knowledge is better expressed as one page with sections. The degenerate two-member case is a pair of near-duplicate pages. Distinct from concepts that are merely *related*: distinct-but-related concepts are joined by a typed edge, not consolidated.
 _Avoid_: Duplication (too narrow — fragmentation is scatter across pages, not only exact copies).
 
-**Fold**:
-The operation that resolves concept fragmentation by absorbing a cluster of pages into one survivor page, each folded page's content becoming a section of the survivor, and every inbound link repointed to the survivor. Lossless by construction — no knowledge is dropped — which is why the folded pages are deleted rather than recorded as superseded ([ADR-0021](docs/adr/0021-fold-is-lossless-delete-not-supersede.md)).
-_Avoid_: Merge (generic), Supersede (a fold is lossless and deletes the losers; supersession preserves both pages to keep a conflicting claim).
+**Consolidation**:
+The operation that resolves concept fragmentation by absorbing a cluster of pages into one survivor page, each consolidated page's content becoming a section of the survivor, and every inbound link repointed to the survivor. Lossless by construction — no knowledge is dropped — which is why the consolidated pages are deleted rather than recorded as superseded ([ADR-0021](docs/adr/0021-consolidation-is-lossless-delete-not-supersede.md)).
+_Avoid_: Merge (that is `enchiridion page merge`, a frontmatter list union — and git's), Fold (line folding in YAML, the emitter's business: [ADR-0024](docs/adr/0024-emitted-lines-are-not-folded.md)), Supersede (a consolidation is lossless and deletes the losers; supersession preserves both pages to keep a conflicting claim).
 
 **Volatility**:
 A page's authored judgment of how likely its content is to go stale: `stable`, `evolving`, or `volatile`. Drives whether retrieval discounts a page's age.
@@ -92,7 +92,7 @@ The generated site in multi-page mode, at `web/` under the vault root by default
 _Avoid_: Site, output dir (informal — `web/` is the default, but the term is the tree it holds).
 
 **Section**:
-One page's worth of a single-file export: a `<section>` of the one document carrying that page's nav bar, frontmatter table and article, hidden until the hash names it. Its `id` is the page's vault-relative output path with the extension dropped and every other run of non-alphanumerics folded to `-`; the front page alone takes the reserved `__front`. Derived by the one function used both when writing a section and when rewriting a link to it, so a rewritten link cannot miss ([ADR-0022](docs/adr/0022-static-html-export.md)).
+One page's worth of a single-file export: a `<section>` of the one document carrying that page's nav bar, frontmatter table and article, hidden until the hash names it. Its `id` is the page's vault-relative output path with the extension dropped and every other run of non-alphanumerics collapsed to `-`; the front page alone takes the reserved `__front`. Derived by the one function used both when writing a section and when rewriting a link to it, so a rewritten link cannot miss ([ADR-0022](docs/adr/0022-static-html-export.md)).
 _Avoid_: Page (a section is a page of the export — prose still says "page" for the thing itself; "section" names its form in the document), fragment (the `#id` that names a section).
 
 **Wiki title**:
