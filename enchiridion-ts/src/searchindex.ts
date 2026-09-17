@@ -94,6 +94,27 @@ export interface TagCount {
   count: number;
 }
 
+/** One indexed page with its tag set folded in — the read surface a check that
+ * reasons across the whole vault needs, without re-parsing frontmatter. */
+export interface IndexedPage {
+  pageRef: string;
+  title: string;
+  kind: string;
+  tags: string[];
+}
+
+/** A pair of indexed pages sharing at least one tag, with the shared tags. */
+export interface SharedTagPair {
+  a: string;
+  b: string;
+  sharedTags: string[];
+}
+
+/** Separator for the SQL `GROUP_CONCAT` lists this module unpacks — a unit
+ * separator, which no tag or page ref can contain. */
+const GROUP_SEPARATOR = String.fromCharCode(31);
+const GROUP_SEPARATOR_SQL = "char(31)";
+
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -487,6 +508,74 @@ export class Index {
       "SELECT tag, COUNT(*) AS n FROM page_tag GROUP BY tag ORDER BY n DESC, tag ASC",
     ) as { tag: string; n: number }[];
     return rows.map((r) => ({ tag: r.tag, count: r.n }));
+  }
+
+  /**
+   * Every indexed page whose kind is not in `excludeKinds`, with its tag set —
+   * one query over `page` and `page_tag`, never a frontmatter re-parse. A
+   * materialised view of HEAD (ADR-0015), so an uncommitted page is invisible,
+   * which is what ADR-0021's fragmentation consequence requires.
+   */
+  async indexedPages(excludeKinds: string[] = []): Promise<IndexedPage[]> {
+    await this.sync();
+    const scope =
+      excludeKinds.length > 0
+        ? `WHERE p.kind NOT IN (${placeholders(excludeKinds.length)})`
+        : "";
+    const rows = this.db.all(
+      `SELECT p.page_ref, p.title, p.kind,
+              (SELECT GROUP_CONCAT(t.tag, ${GROUP_SEPARATOR_SQL})
+                 FROM page_tag t WHERE t.page_ref = p.page_ref) AS tags
+       FROM page p ${scope} ORDER BY p.page_ref`,
+      excludeKinds as import("node-sqlite3-wasm").JSValue[],
+    ) as unknown as {
+      page_ref: string;
+      title: string | null;
+      kind: string | null;
+      tags: string | null;
+    }[];
+    return rows.map((r) => ({
+      pageRef: r.page_ref,
+      title: r.title ?? "",
+      kind: r.kind ?? "",
+      tags: r.tags ? r.tags.split(GROUP_SEPARATOR).sort() : [],
+    }));
+  }
+
+  /**
+   * Pairs of in-scope pages sharing at least one tag, most-shared first — the
+   * tag self-join ADR-0021 names as the concept-fragmentation check's
+   * candidate generator. Scope is applied in SQL so an excluded kind never
+   * enters the pairing, and the join is over `page_tag` alone (not the FTS5
+   * content column), so the ranking is an exact-match shared-tag count.
+   */
+  async sharedTagPairs(excludeKinds: string[] = []): Promise<SharedTagPair[]> {
+    await this.sync();
+    const scope =
+      excludeKinds.length > 0
+        ? `AND p1.kind NOT IN (${placeholders(excludeKinds.length)})
+             AND p2.kind NOT IN (${placeholders(excludeKinds.length)})`
+        : "";
+    const rows = this.db.all(
+      `SELECT t1.page_ref AS a, t2.page_ref AS b,
+              GROUP_CONCAT(t1.tag, ${GROUP_SEPARATOR_SQL}) AS tags
+       FROM page_tag t1
+       JOIN page_tag t2 ON t1.tag = t2.tag AND t1.page_ref < t2.page_ref
+       JOIN page p1 ON p1.page_ref = t1.page_ref
+       JOIN page p2 ON p2.page_ref = t2.page_ref
+       WHERE 1=1 ${scope}
+       GROUP BY t1.page_ref, t2.page_ref
+       ORDER BY COUNT(*) DESC, a, b`,
+      [
+        ...excludeKinds,
+        ...excludeKinds,
+      ] as import("node-sqlite3-wasm").JSValue[],
+    ) as unknown as { a: string; b: string; tags: string }[];
+    return rows.map((r) => ({
+      a: r.a,
+      b: r.b,
+      sharedTags: r.tags.split(GROUP_SEPARATOR).sort(),
+    }));
   }
 
   async search(q: Query): Promise<Hit[]> {

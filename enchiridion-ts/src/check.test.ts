@@ -1,9 +1,11 @@
 /**
- * Tests for the nine mechanical vault health checks.
+ * Tests for the ten mechanical vault health checks.
  *
  * Strategy: build minimal on-disk vault fixtures with writeVault(); for
  * staleSynthesis (check 4) also initialise a real git repo so that
- * VaultGit.lastCommitDate can return a controlled past/recent date.
+ * VaultGit.lastCommitDate can return a controlled past/recent date, and for
+ * conceptFragmentation (check 10) commit the fixture so the search index —
+ * a view of HEAD (ADR-0015) — has pages to score.
  */
 
 import { test } from "node:test";
@@ -22,6 +24,9 @@ import {
   contradictionCallouts,
   orphans,
   splitLinks,
+  conceptFragmentation,
+  DefaultMinSimilarity,
+  titleTokens,
   CHECKS,
   fixFrontmatterLinkFormat,
   fixIngestionSourceIntegrity,
@@ -600,7 +605,7 @@ test("check 9: a split inside a fenced code block is not a finding", async () =>
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all nine check names", () => {
+test("CHECKS registry contains all ten check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
@@ -611,6 +616,7 @@ test("CHECKS registry contains all nine check names", () => {
     "contradiction-callouts",
     "orphans",
     "split-links",
+    "concept-fragmentation",
   ];
   for (const name of expected) {
     assert.ok(name in CHECKS, `CHECKS missing: ${name}`);
@@ -968,4 +974,207 @@ test("FIXES registry contains all four fix names", () => {
     assert.equal(typeof FIXES[name], "function");
   }
   assert.equal(Object.keys(FIXES).length, expected.length);
+});
+
+// ---------------------------------------------------------------------------
+// Check 10 — conceptFragmentation
+// ---------------------------------------------------------------------------
+
+/** Minimal page with tags, for the fragmentation fixtures. */
+function taggedPage(
+  title: string,
+  tags: string[],
+  body = "Body text.\n",
+): string {
+  const lines = tags.map((t) => `  - ${t}`).join("\n");
+  return `---\ntitle: ${title}\ntags:\n${lines}\n---\n${body}`;
+}
+
+/** A committed vault: [writeVault] plus a real git commit, so the index has a
+ * HEAD to read (ADR-0015) and every page has a committed byte size. */
+async function writeCommittedVault(
+  pages: Record<string, string>,
+): Promise<string> {
+  const root = writeVault(pages);
+  await gitCommit(root, 1700000000);
+  return root;
+}
+
+/**
+ * The check-10 fixture. Two clusters sit above the default bar — a concept
+ * pair and a custom-kind pair — and a third pair (a shared tag, nothing else)
+ * sits between the default bar and 0.3, so the cutoff has something to move.
+ * Three pages of the excluded kinds are near-identical to the concept pair.
+ */
+const FRAGMENTATION_FIXTURE: Record<string, string> = {
+  "wiki/concepts/cache-eviction.md": taggedPage(
+    "Cache eviction",
+    ["caching", "performance"],
+    "See [cache invalidation](cache-invalidation.md).\n",
+  ),
+  "wiki/concepts/cache-invalidation.md": taggedPage("Cache invalidation", [
+    "caching",
+    "performance",
+  ]),
+  "wiki/tools/redis.md": taggedPage("Redis cache", ["caching", "datastore"]),
+  "wiki/tools/memcached.md": taggedPage("Memcached cache", [
+    "caching",
+    "datastore",
+  ]),
+  "wiki/concepts/throughput.md": taggedPage("Throughput", ["resilience"]),
+  "wiki/concepts/latency.md": taggedPage("Latency", ["resilience"]),
+  "wiki/entities/cache.md": taggedPage("Cache eviction", [
+    "caching",
+    "performance",
+  ]),
+  "wiki/sources/cache.md": taggedPage("Cache invalidation", [
+    "caching",
+    "performance",
+  ]),
+  "wiki/synthesis/cache.md": taggedPage("Cache strategy", [
+    "caching",
+    "performance",
+  ]),
+};
+
+type Findings = Awaited<ReturnType<typeof conceptFragmentation>>;
+
+/** The cluster a finding belongs to, found by one of its member refs. */
+function clusterWith(findings: Findings, ref: string) {
+  const finding = findings.find((f) =>
+    f.cluster?.members.some((m) => m.pageRef === ref),
+  );
+  assert.ok(finding, `no cluster contains ${ref}`);
+  return finding.cluster;
+}
+
+/** Every page ref any finding names as a member. */
+function memberRefs(findings: Findings): string[] {
+  return findings.flatMap(
+    (f) => f.cluster?.members.map((m) => m.pageRef) ?? [],
+  );
+}
+
+test("check 10: clusters closely-related concept pages at the default bar", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  const findings = await conceptFragmentation(root);
+
+  // One proposal per cluster, anchored on the suggested survivor.
+  assert.deepEqual(
+    findings.map((f) => f.pageRef),
+    ["wiki/concepts/cache-invalidation.md", "wiki/tools/memcached.md"],
+  );
+  assert.deepEqual(
+    clusterWith(findings, "wiki/concepts/cache-eviction.md")!.members.map(
+      (m) => m.pageRef,
+    ),
+    ["wiki/concepts/cache-eviction.md", "wiki/concepts/cache-invalidation.md"],
+  );
+});
+
+test("check 10: a finding carries member sizes, inbound counts, basis and a survivor", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  const cluster = clusterWith(
+    await conceptFragmentation(root),
+    "wiki/concepts/cache-eviction.md",
+  )!;
+  const members = new Map(cluster.members.map((m) => [m.pageRef, m]));
+
+  assert.equal(
+    members.get("wiki/concepts/cache-eviction.md")!.bytes,
+    Buffer.byteLength(
+      FRAGMENTATION_FIXTURE["wiki/concepts/cache-eviction.md"],
+      "utf8",
+    ),
+  );
+  assert.equal(members.get("wiki/concepts/cache-eviction.md")!.inbound, 0);
+  assert.equal(members.get("wiki/concepts/cache-invalidation.md")!.inbound, 1);
+  // Most inbound links wins, so the survivor is the linked-to page, not the
+  // larger one.
+  assert.equal(
+    cluster.suggestedSurvivor,
+    "wiki/concepts/cache-invalidation.md",
+  );
+  assert.deepEqual(cluster.basis, {
+    tags: ["caching", "performance"],
+    titleTokens: ["cache"],
+  });
+  // Combined Jaccard: 2 shared tags + 1 shared title word over 2 + 3 union.
+  assert.ok(Math.abs(cluster.similarity - 0.6) < 1e-9);
+});
+
+test("check 10: custom-kind pages are in scope", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  const cluster = clusterWith(
+    await conceptFragmentation(root),
+    "wiki/tools/redis.md",
+  )!;
+  assert.deepEqual(
+    cluster.members.map((m) => m.pageRef),
+    ["wiki/tools/memcached.md", "wiki/tools/redis.md"],
+  );
+});
+
+test("check 10: entity, source and synthesis pages are never members", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  // At 0.3 every in-scope near-duplicate is clustered, so an excluded kind
+  // leaking in would show up here.
+  const findings = await conceptFragmentation(root, { minSimilarity: 0.3 });
+  for (const ref of memberRefs(findings)) {
+    assert.ok(
+      !/^wiki\/(entities|sources|synthesis)\//.test(ref),
+      `${ref} is out of scope`,
+    );
+  }
+  assert.ok(memberRefs(findings).includes("wiki/concepts/cache-eviction.md"));
+});
+
+test("check 10: --min-similarity moves the Consolidation/link boundary", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+
+  const byDefault = memberRefs(await conceptFragmentation(root));
+  assert.deepEqual(
+    memberRefs(
+      await conceptFragmentation(root, {
+        minSimilarity: DefaultMinSimilarity,
+      }),
+    ),
+    byDefault,
+  );
+  // One shared tag and no shared title word is 1/3 — a link, not a
+  // Consolidation, at the default bar.
+  assert.ok(!byDefault.includes("wiki/concepts/throughput.md"));
+  assert.ok(!byDefault.includes("wiki/concepts/latency.md"));
+
+  const relaxed = memberRefs(
+    await conceptFragmentation(root, { minSimilarity: 0.3 }),
+  );
+  assert.ok(relaxed.includes("wiki/concepts/throughput.md"));
+  assert.ok(relaxed.includes("wiki/concepts/latency.md"));
+});
+
+test("check 10: detection is a view of HEAD — an uncommitted draft is invisible", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  fs.writeFileSync(
+    path.join(root, "wiki/concepts/cache-eviction-draft.md"),
+    taggedPage("Cache eviction", ["caching", "performance"]),
+  );
+  const refs = memberRefs(await conceptFragmentation(root));
+  assert.ok(!refs.includes("wiki/concepts/cache-eviction-draft.md"));
+  assert.ok(refs.includes("wiki/concepts/cache-eviction.md"));
+});
+
+test("check 10: a vault with no clusters is silent", async () => {
+  const root = await writeCommittedVault({
+    "wiki/concepts/alpha.md": taggedPage("Alpha", ["one"]),
+    "wiki/concepts/beta.md": taggedPage("Beta", ["two"]),
+  });
+  assert.deepEqual(await conceptFragmentation(root), []);
+});
+
+test("titleTokens: lowercases, drops stopwords and one-character words", () => {
+  assert.deepEqual([...titleTokens("A/B Testing of the Caching")].sort(), [
+    "caching",
+    "testing",
+  ]);
 });

@@ -6,6 +6,7 @@ import path from "node:path";
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { Vault } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
+import { Index } from "./searchindex.js";
 import {
   splitFrontmatter,
   iterLinks,
@@ -16,10 +17,21 @@ import {
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
 
+/** Options the CLI threads into a check. Only `concept-fragmentation` reads
+ * `minSimilarity`; every other check ignores the bag. */
+export interface CheckOptions {
+  /** The Consolidation-vs-link cutoff, in [0, 1]. */
+  minSimilarity?: number;
+}
+
 /** One problem found by a check. */
 export interface Finding {
   pageRef: string;
   detail: string;
+  /** Structured payload, set only by checks that report a proposal spanning
+   * several pages rather than one page's problem. `concept-fragmentation`
+   * sets it; the JSONL consumer reads it, the text renderer ignores it. */
+  cluster?: FragmentationCluster;
 }
 
 // ---------------------------------------------------------------------------
@@ -475,10 +487,372 @@ export async function splitLinks(root: string): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Check 10 — conceptFragmentation
+// ---------------------------------------------------------------------------
+
+/**
+ * Default `--min-similarity`: the bar at or above which two pages are one
+ * concept (a Consolidation) rather than two merely-related ones (a link, owned
+ * by check 12). One number, so the two checks partition.
+ */
+export const DefaultMinSimilarity = 0.5;
+
+/** Kinds fragmentation detection never considers: their one-per-thing or
+ * one-per-artifact identity forbids consolidation (#454, ADR-0021). */
+const NonConsolidatableKinds = ["entity", "source", "synthesis"];
+
+/** Cap on the FTS5 title hits one page may contribute as candidates. A title
+ * word common enough to blow past this is not an identity signal anyway. */
+const TitleMatchLimit = 200;
+
+/** One member of a candidate cluster, as the proposal reports it. */
+export interface ClusterMember {
+  pageRef: string;
+  /** UTF-8 byte length of the page's committed text at HEAD. */
+  bytes: number;
+  /** Inbound links from other committed pages. */
+  inbound: number;
+}
+
+/** The structured payload a `concept-fragmentation` finding carries — the whole
+ * proposal, not just a per-page problem. */
+export interface FragmentationCluster {
+  members: ClusterMember[];
+  /** The signals the members share — why they were clustered. */
+  basis: { tags: string[]; titleTokens: string[] };
+  /** Weakest pairwise similarity holding the cluster together, in [0, 1] —
+   * the transitive closure can join pairs that are individually below the
+   * bar, and this is how far below the cluster dips. */
+  similarity: number;
+  /** The member with the most inbound links, largest body on a tie, then
+   * pageRef. A hint only: the Consolidation step may override it. */
+  suggestedSurvivor: string;
+}
+
+/** Title words that carry no identity signal on their own. One-character
+ * words are dropped by length, but stay listed so the set reads as the whole
+ * rule. */
+const TitleStopwords = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "been",
+  "but",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "how",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "not",
+  "of",
+  "on",
+  "or",
+  "per",
+  "that",
+  "the",
+  "their",
+  "these",
+  "they",
+  "this",
+  "those",
+  "to",
+  "via",
+  "vs",
+  "was",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "why",
+  "with",
+  "you",
+  "your",
+]);
+
+/**
+ * The significant words of a title: lowercased `[a-z0-9]+`, stopwords and
+ * one-character tokens dropped. A set, because similarity is over *which*
+ * signals two pages share, not how often each appears.
+ */
+export function titleTokens(title: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const word of title.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+    if (word.length > 1 && !TitleStopwords.has(word)) tokens.add(word);
+  }
+  return tokens;
+}
+
+/** The two signal sets a page contributes to fragmentation similarity. */
+interface Signals {
+  tags: Set<string>;
+  titleTokens: Set<string>;
+}
+
+/** The values both sets hold, sorted — the basis a cluster reports. */
+function intersection(a: Set<string>, b: Set<string>): string[] {
+  const shared: string[] = [];
+  for (const value of a) if (b.has(value)) shared.push(value);
+  return shared.sort();
+}
+
+/**
+ * Combined Jaccard over both signals: shared tags plus shared title words,
+ * over the union of the two pages' tags and title words.
+ *
+ * One ratio rather than a rule per signal, because a shared tag and a shared
+ * title word are each one piece of evidence that two pages are the same
+ * concept — counting them in the same numerator lets a strongly-tagged stub
+ * pair with a larger page whose title only partly overlaps (user story 3)
+ * without a second threshold. 0 when the two share no vocabulary at all.
+ */
+export function similarity(a: Signals, b: Signals): number {
+  const sharedTags = intersection(a.tags, b.tags).length;
+  const sharedTitle = intersection(a.titleTokens, b.titleTokens).length;
+  const unionTags = a.tags.size + b.tags.size - sharedTags;
+  const unionTitle = a.titleTokens.size + b.titleTokens.size - sharedTitle;
+  const union = unionTags + unionTitle;
+  return union === 0 ? 0 : (sharedTags + sharedTitle) / union;
+}
+
+/** An FTS5 MATCH expression scoped to the indexed `title` column, OR-joined
+ * from the page's own significant title words. Raw, like `discover.orQuery`:
+ * an AND of a whole title demands every word be present and finds nothing. */
+function titleMatch(title: string): string {
+  const words = [...titleTokens(title)];
+  if (words.length === 0) return "";
+  return `{title} : (${words.map((w) => `"${w}"`).join(" OR ")})`;
+}
+
+/** Inbound link count per page ref across one HEAD snapshot, counting only
+ * links from *other* pages to pages the snapshot holds — check 8's rule. */
+function inboundCounts(text: Map<string, string>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const [ref, content] of text) {
+    const dir = ref.split("/").slice(0, -1).join("/");
+    for (const link of iterLinks(content)) {
+      const target = resolveLinkDest(link.decodedPath, dir);
+      if (target === ref || !text.has(target)) continue;
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/** The one-line, human-readable form of a cluster — what the text renderer
+ * prints and the report relays. The structured detail rides in `cluster`. */
+function fragmentationDetail(cluster: FragmentationCluster): string {
+  const basis: string[] = [];
+  if (cluster.basis.tags.length > 0)
+    basis.push(`shared tags: ${cluster.basis.tags.join(", ")}`);
+  if (cluster.basis.titleTokens.length > 0)
+    basis.push(`shared title terms: ${cluster.basis.titleTokens.join(", ")}`);
+  const why = basis.length > 0 ? basis.join("; ") : "similar titles";
+  return (
+    `${cluster.members.length} closely-related pages (${why}) — ` +
+    `consider consolidating into ${cluster.suggestedSurvivor}`
+  );
+}
+
+/**
+ * Check 10 — concept fragmentation (#452/#454, ADR-0021).
+ *
+ * Finds clusters of small, closely-related concept (and custom-kind) pages
+ * that would read better as one page with sections, and proposes a
+ * Consolidation per cluster: a confirm-first, lossless merge. This check only
+ * *surfaces* candidates — the judgment that a cluster truly consolidates, and
+ * the merged body, belong to the Sonnet `/wiki-ingest` flow it routes to.
+ *
+ * Candidate generation is ADR-0021's pair: a SQL self-join over `page_tag`
+ * (strongest shared-tag count first) unioned with an FTS5 `MATCH` on the
+ * indexed titles. Both halves read the index — a view of HEAD (ADR-0015) — so
+ * an uncommitted fragmented draft is invisible until committed, which the
+ * ticket's user story 15 asks for. Each surviving pair is scored by
+ * [similarity] against `minSimilarity`; pairs below the bar are left to check
+ * 12 (`missing-cross-references`), which renders them as a typed edge.
+ *
+ * `entity`, `source` and `synthesis` pages are excluded: their one-per-thing
+ * or one-per-artifact identity forbids consolidation.
+ */
+export async function conceptFragmentation(
+  root: string,
+  opts: CheckOptions = {},
+): Promise<Finding[]> {
+  const minSimilarity = opts.minSimilarity ?? DefaultMinSimilarity;
+  const index = await Index.open(root);
+  try {
+    const pages = await index.indexedPages(NonConsolidatableKinds);
+    const signals = new Map<string, Signals>();
+    for (const page of pages) {
+      signals.set(page.pageRef, {
+        tags: new Set(page.tags),
+        titleTokens: titleTokens(page.title),
+      });
+    }
+
+    // Candidate pairs: the union of the two generators, deduplicated by an
+    // ordered key so a pair found by both is scored once.
+    const candidates = new Set<string>();
+    const addPair = (a: string, b: string): void => {
+      if (a === b || !signals.has(a) || !signals.has(b)) return;
+      candidates.add(a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+    };
+
+    for (const pair of await index.sharedTagPairs(NonConsolidatableKinds)) {
+      addPair(pair.a, pair.b);
+    }
+
+    const scopeKinds = [...new Set(pages.map((p) => p.kind))];
+    if (scopeKinds.length > 0) {
+      for (const page of pages) {
+        const match = titleMatch(page.title);
+        if (match === "") continue;
+        const hits = await index.search({
+          text: match,
+          raw: true,
+          kinds: scopeKinds,
+          // Supersession is not a reason to skip a page here: a superseded
+          // page is still a page, and the tag self-join does not skip it
+          // either — the two generators must see the same scope.
+          includeSuperseded: true,
+          limit: TitleMatchLimit,
+        });
+        for (const hit of hits) addPair(page.pageRef, hit.pageRef);
+      }
+    }
+
+    // Score every candidate, keep the pairs at or above the bar, and union
+    // them into clusters.
+    const scored: Array<{ a: string; b: string; sim: number }> = [];
+    for (const key of [...candidates].sort()) {
+      const [a, b] = key.split("\u0000");
+      const sim = similarity(signals.get(a)!, signals.get(b)!);
+      if (sim >= minSimilarity) scored.push({ a, b, sim });
+    }
+    if (scored.length === 0) return [];
+
+    const parent = new Map<string, string>();
+    const find = (x: string): string => {
+      const path: string[] = [];
+      let cur = x;
+      while (parent.get(cur) !== cur) {
+        path.push(cur);
+        cur = parent.get(cur)!;
+      }
+      // Path compression — the clusters are small, but a long transitive
+      // chain would otherwise re-walk the same spine per lookup.
+      for (const node of path) parent.set(node, cur);
+      return cur;
+    };
+    const union = (a: string, b: string): void => {
+      for (const ref of [a, b]) if (!parent.has(ref)) parent.set(ref, ref);
+      const rootA = find(a);
+      const rootB = find(b);
+      if (rootA === rootB) return;
+      // Smaller ref wins, so the root — and therefore cluster order — does
+      // not depend on the order pairs happened to be visited.
+      if (rootA < rootB) parent.set(rootB, rootA);
+      else parent.set(rootA, rootB);
+    };
+    for (const { a, b } of scored) union(a, b);
+
+    const clusters = new Map<string, string[]>();
+    for (const ref of parent.keys()) {
+      const root = find(ref);
+      const members = clusters.get(root);
+      if (members) members.push(ref);
+      else clusters.set(root, [ref]);
+    }
+    const basisByRoot = new Map<
+      string,
+      { tags: Set<string>; titleTokens: Set<string> }
+    >();
+    const minSimByRoot = new Map<string, number>();
+    for (const { a, b, sim } of scored) {
+      const root = find(a);
+      let basis = basisByRoot.get(root);
+      if (!basis) {
+        basis = { tags: new Set(), titleTokens: new Set() };
+        basisByRoot.set(root, basis);
+      }
+      const sharedTags = intersection(
+        signals.get(a)!.tags,
+        signals.get(b)!.tags,
+      );
+      const sharedTitle = intersection(
+        signals.get(a)!.titleTokens,
+        signals.get(b)!.titleTokens,
+      );
+      for (const tag of sharedTags) basis.tags.add(tag);
+      for (const word of sharedTitle) basis.titleTokens.add(word);
+      const previous = minSimByRoot.get(root);
+      if (previous === undefined || sim < previous) minSimByRoot.set(root, sim);
+    }
+
+    // Sizes and inbound counts come from HEAD too, so the proposal describes
+    // the same committed pages the index scored (ADR-0015).
+    const head = await new VaultGit(root).committedPages("");
+    const text = new Map<string, string>();
+    for (const change of head.pages) {
+      if (!change.deleted) text.set(change.pageRef, change.content);
+    }
+    const inbound = inboundCounts(text);
+
+    const findings: Finding[] = [];
+    for (const [root, refs] of clusters) {
+      if (refs.length < 2) continue;
+      const members: ClusterMember[] = refs.sort().map((ref) => ({
+        pageRef: ref,
+        bytes: Buffer.byteLength(text.get(ref) ?? "", "utf8"),
+        inbound: inbound.get(ref) ?? 0,
+      }));
+      const suggestedSurvivor = [...members].sort(
+        (x, y) =>
+          y.inbound - x.inbound ||
+          y.bytes - x.bytes ||
+          x.pageRef.localeCompare(y.pageRef),
+      )[0].pageRef;
+      const basis = basisByRoot.get(root);
+      const cluster: FragmentationCluster = {
+        members,
+        basis: {
+          tags: [...(basis?.tags ?? [])].sort(),
+          titleTokens: [...(basis?.titleTokens ?? [])].sort(),
+        },
+        similarity: minSimByRoot.get(root) ?? minSimilarity,
+        suggestedSurvivor,
+      };
+      findings.push({
+        pageRef: suggestedSurvivor,
+        detail: fragmentationDetail(cluster),
+        cluster,
+      });
+    }
+    return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+  } finally {
+    index.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Check registry
 // ---------------------------------------------------------------------------
 
-export const CHECKS: Record<string, (root: string) => Promise<Finding[]>> = {
+/** A check: its vault root, plus the optional options bag the CLI threads
+ * through. Only `concept-fragmentation` reads anything from it today. */
+export type CheckFn = (root: string, opts?: CheckOptions) => Promise<Finding[]>;
+
+export const CHECKS: Record<string, CheckFn> = {
   "kind-folder-conformance": kindFolderConformance,
   "ingestion-source-integrity": ingestionSourceIntegrity,
   "frontmatter-link-format": frontmatterLinkFormat,
@@ -488,6 +862,7 @@ export const CHECKS: Record<string, (root: string) => Promise<Finding[]>> = {
   "contradiction-callouts": contradictionCallouts,
   orphans,
   "split-links": splitLinks,
+  "concept-fragmentation": conceptFragmentation,
 };
 
 // ---------------------------------------------------------------------------

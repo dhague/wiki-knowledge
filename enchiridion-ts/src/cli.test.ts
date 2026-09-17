@@ -1129,6 +1129,91 @@ test("check: an unknown name errors non-zero, naming the known ones", () => {
   assert.match(stderr, /unknown check "nope"/);
 });
 
+/** A committed vault with one fragmented concept pair, for check 10 at the
+ * CLI seam. Committed because the check reads the search index, which is a
+ * view of HEAD (ADR-0015). */
+async function buildFragmentedVault(): Promise<string> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-frag-"));
+  const files = {
+    "wiki/concepts/cache-eviction.md":
+      "---\ntitle: Cache eviction\ntags:\n  - caching\n  - performance\n---\n" +
+      "See [cache invalidation](cache-invalidation.md).\n",
+    "wiki/concepts/cache-invalidation.md":
+      "---\ntitle: Cache invalidation\ntags:\n  - caching\n  - performance\n---\n" +
+      "Body.\n",
+  };
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  }
+  await git.init({ fs, dir: root });
+  for (const filepath of Object.keys(files)) {
+    await git.add({ fs, dir: root, filepath });
+  }
+  const author = {
+    name: "t",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.commit({
+    fs,
+    dir: root,
+    message: "init",
+    author,
+    committer: author,
+  });
+  return root;
+}
+
+test("check concept-fragmentation --json: a cluster carries the structured proposal", async () => {
+  const root = await buildFragmentedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["check", "concept-fragmentation", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].pageRef, "wiki/concepts/cache-invalidation.md");
+  assert.equal(
+    rows[0].cluster.suggestedSurvivor,
+    "wiki/concepts/cache-invalidation.md",
+  );
+  assert.deepEqual(
+    rows[0].cluster.members.map((m: { pageRef: string }) => m.pageRef),
+    ["wiki/concepts/cache-eviction.md", "wiki/concepts/cache-invalidation.md"],
+  );
+  assert.deepEqual(rows[0].cluster.basis, {
+    tags: ["caching", "performance"],
+    titleTokens: ["cache"],
+  });
+});
+
+test("check --min-similarity: a value above every pair scores is silent", async () => {
+  const root = await buildFragmentedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["check", "concept-fragmentation", "--min-similarity", "0.9", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+});
+
+test("check --min-similarity: rejects a value outside [0, 1]", () => {
+  const root = buildLintableVault();
+  const { status, stderr } = runEnv(
+    ["check", "concept-fragmentation", "--min-similarity", "1.5"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /min-similarity/);
+});
+
 test("fix: prints each changed page ref, one per line", () => {
   const root = buildQuotelessVault();
   const { status, stdout, stderr } = runEnv(
