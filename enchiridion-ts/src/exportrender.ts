@@ -35,7 +35,12 @@ import {
   buildTagSlugMap,
   exportTitle,
 } from "./exportmeta.js";
-import { iterLinks, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
+import {
+  isVaultRelativeDest,
+  iterLinks,
+  resolveLinkDest,
+  splitFrontmatter,
+} from "./wikipage.js";
 import { slugify } from "./place.js";
 import { STYLESHEET_DIR, STYLESHEET_FILE } from "./exportstyle.js";
 
@@ -244,15 +249,6 @@ function navHref(htmlPath: string, targetPath: string, mode: LinkMode): string {
   return `${rootPrefix(htmlPath)}${targetPath}`;
 }
 
-/**
- * A URI scheme at the start of a destination (`https:`, `mailto:`, `data:`).
- * Only single-file mode needs to ask: it claims every relative destination,
- * so it has to be able to tell one from an absolute URI that merely lacks
- * `//`. Multi-page output keeps the narrower test it has always used, so its
- * output does not move.
- */
-const SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-
 /** Vault-relative page directory for resolving relative markdown links. */
 function vaultPageDir(pageRef: string): string {
   const d = path.posix.dirname(pageRef);
@@ -289,13 +285,16 @@ function applyEdits(src: string, edits: Edit[]): string {
  *
  * Nobody's to rewrite, in either mode: a bare in-page anchor (it names a
  * heading of the page it is on), an absolute destination (`/…` or a URL), and
- * a URI with a scheme (`mailto:`, `data:`), which merely looks relative to a
- * test that only knows `://`.
+ * a URI with a scheme (`mailto:`, `data:`) — which is exactly the question
+ * [isVaultRelativeDest] answers, asked of the same destinations in the same
+ * words, so that the export and a page move cannot disagree about one. What
+ * is *not* shared is the mode-dependent half below it, which is the export's
+ * own business and stays as it has always been.
  */
 function claimsDest(dest: string, mode: LinkMode): boolean {
-  if (dest === "" || dest.startsWith("/") || dest.includes("://")) return false;
+  if (!isVaultRelativeDest(dest)) return false;
   if (dest.endsWith(".md")) return true;
-  return mode === "single-file" && !SCHEME_RE.test(dest);
+  return mode === "single-file";
 }
 
 /**

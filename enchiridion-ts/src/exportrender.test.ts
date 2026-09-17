@@ -10,7 +10,11 @@ import {
   renderPageParts,
   renderPages,
   sectionIdFor,
+  type LinkMode,
 } from "./exportrender.js";
+// The other module that has to read an author's destination — the one a page
+// move rewrites links for.
+import { planMove } from "./wikipage.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -774,6 +778,95 @@ test("renderPageParts: single-file leaves images and absolute URIs alone", () =>
     main.includes('href="mailto:someone@example.com"'),
     "an absolute URI is not a relative destination",
   );
+});
+
+// ---------------------------------------------------------------------------
+// One question, two modules: is this destination a vault-relative reference?
+// ---------------------------------------------------------------------------
+
+/** An author's destination, and what that question answers for it. The four
+ * schemes are the rows #500 was about — a URI whose scheme carries no `//`,
+ * which merely looks relative to a test that only knows `://`. The rest pin
+ * the edges of the same rule: the vault's own extension, an external URL, an
+ * absolute path, and a relative destination that is neither. */
+const destCases: Array<[dest: string, vaultRelative: boolean]> = [
+  ["beta-concept.md", true],
+  ["C:notes.md", true],
+  ["assets/diagram.png", true],
+  ["mailto:x@y.z", false],
+  ["mailto:x@y.z?subject=(hi)", false],
+  ["tel:+441234567", false],
+  ["data:text/plain,hi", false],
+  ["urn:isbn:0451450523", false],
+  ["https://example.com/b.md", false],
+  ["/absolute/b.md", false],
+];
+
+/** Whether a mode claims dest — the export rewrites a claimed destination to
+ * the output's own spelling of its target, or strips it to plain label text,
+ * so a claimed one never survives as written; an unclaimed one is left exactly
+ * as the author wrote it. (Markdown-it renders a `data:` URL as text of its
+ * own accord, and an unclaimed destination is one the export did not touch —
+ * which is the fact the assertion reads either way.) */
+function exportClaims(dest: string, mode: LinkMode): boolean {
+  const pages = makePages([
+    [
+      "wiki/concepts/alpha-concept.md",
+      `---\ntitle: Alpha Concept\nkind: concept\n---\n\nSee [x](${dest}).\n`,
+    ],
+    ["wiki/concepts/beta-concept.md", conceptB],
+  ]);
+  const meta = buildExportMeta(pages, {});
+  const found = [...renderPageParts(pages, meta, {}, mode)].find(
+    (p) => p.path === "wiki/concepts/alpha-concept.html",
+  );
+  assert.ok(found, "fixture should render the linking page");
+  return !found.parts.main.includes(dest);
+}
+
+/** Whether a page move re-spells dest: whether wikipage reads it as a
+ * vault-relative reference. The page carrying it is moved across folders, so
+ * every destination it does read that way is re-spelled against a different
+ * directory and cannot come back byte-identical — while one it does not read
+ * that way is untouched, whether or not a page exists at the path it names. */
+function moveRespells(dest: string): boolean {
+  const text = `# A\n\nSee [x](${dest}).\n`;
+  const moved = planMove(
+    { "wiki/concepts/a.md": text, "wiki/entities/b.md": "# B\n" },
+    "wiki/concepts/a.md",
+    "wiki/entities/a.md",
+  );
+  return moved["wiki/entities/a.md"] !== text;
+}
+
+test("export and wikipage agree on which destinations are vault-relative", () => {
+  for (const [dest, vaultRelative] of destCases) {
+    assert.equal(
+      exportClaims(dest, "single-file"),
+      vaultRelative,
+      `${dest}: single-file export claims it?`,
+    );
+    assert.equal(
+      moveRespells(dest),
+      vaultRelative,
+      `${dest}: move respells it?`,
+    );
+  }
+});
+
+test("multi-page output is the narrower test, and its half is deliberate", () => {
+  // Multi-page output is a directory of files: it claims the export's own
+  // `.md` destinations and leaves everything else where the author put it,
+  // relative paths included. wikipage owns every vault-relative destination,
+  // so this is the one column where the two are meant to differ — and the
+  // schemes agree in it all the same.
+  for (const [dest, vaultRelative] of destCases) {
+    assert.equal(
+      exportClaims(dest, "multi-page"),
+      vaultRelative && dest.endsWith(".md"),
+      `${dest}: multi-page export claims it?`,
+    );
+  }
 });
 
 test("renderPageParts: a bare in-page anchor is left alone in single-file mode", () => {

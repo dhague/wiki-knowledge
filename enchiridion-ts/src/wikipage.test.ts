@@ -403,6 +403,24 @@ describe("normalizeBodyLinks", () => {
     assert.ok(once.includes("](#anchor)"));
     assert.equal(normalizeBodyLinks(once), once);
   });
+
+  it("leaves a scheme-qualified destination alone, parens and all", () => {
+    // A scheme is what makes this absolute. Parens are not: they are ordinary
+    // destination characters, and this is where treating a scheme-qualified
+    // destination as relative showed up as damage rather than as a no-op.
+    for (const dest of [
+      "mailto:x@y.z?subject=(hi)",
+      "tel:+441234567",
+      "data:text/plain,(hi)",
+      "urn:isbn:0451450523",
+    ]) {
+      assert.equal(
+        normalizeBodyLinks(`[q](${dest})\n`),
+        `[q](${dest})\n`,
+        `${dest} is absolute — its encoding is the author's, not ours`,
+      );
+    }
+  });
 });
 
 describe("PlanMove", () => {
@@ -469,6 +487,89 @@ describe("PlanMove", () => {
       moved["wiki/concepts/a.md"] &&
         new Page(moved["wiki/concepts/a.md"]).frontmatter()?.["related"],
       ["[A rather long target page title](../entities/b.md)"],
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A scheme-qualified destination is absolute, not relative (#500)
+// ---------------------------------------------------------------------------
+
+// Destinations naming something outside the vault. Every one is a URI with a
+// scheme: what makes it absolute is the scheme, and none of these carries a
+// `//` — the one shape a classifier that only knows `://` reads as a
+// vault-relative path, and then re-spells against the moved page's folder.
+const schemeDests = [
+  "mailto:x@y.z",
+  "mailto:x@y.z?subject=(hi)",
+  "tel:+441234567",
+  "data:text/plain,hi",
+  "urn:isbn:0451450523",
+];
+
+describe("a scheme-qualified destination is absolute, not relative", () => {
+  it("keeps a body link byte-identical across a folder change", () => {
+    for (const dest of schemeDests) {
+      const moved = planMove(
+        {
+          "wiki/concepts/a.md": `# A\n\nContact [me](${dest}), see [B](../entities/b.md).\n`,
+          "wiki/entities/b.md": "# B\n",
+        },
+        "wiki/concepts/a.md",
+        "wiki/entities/a.md",
+      );
+      // Whole-document byte equality, so a link the move damaged cannot hide
+      // behind a substring that happens to survive. The sibling link is here
+      // to prove the move ran: it is re-spelled, the scheme is not.
+      assert.equal(
+        moved["wiki/entities/a.md"],
+        `# A\n\nContact [me](${dest}), see [B](b.md).\n`,
+        `${dest} is absolute — a move must not respell it`,
+      );
+    }
+  });
+
+  it("keeps a frontmatter link byte-identical across a folder change", () => {
+    for (const dest of schemeDests) {
+      const text =
+        "---\n" +
+        "title: A\n" +
+        "source:\n" +
+        `  - "[spec](${dest})"\n` +
+        "related:\n" +
+        '  - "[B](../entities/b.md)"\n' +
+        "---\n" +
+        "Body.\n";
+      const moved = planMove(
+        { "wiki/concepts/a.md": text, "wiki/entities/b.md": "# B\n" },
+        "wiki/concepts/a.md",
+        "wiki/entities/a.md",
+      );
+      // The edge key that holds it is immaterial — the same whole-document
+      // scan and the same splice carry every frontmatter link.
+      assert.equal(
+        moved["wiki/entities/a.md"],
+        text.replace("../entities/b.md", "b.md"),
+        `${dest} is absolute — a move must not respell it`,
+      );
+    }
+  });
+
+  it("still rewrites a page link whose own filename carries a colon", () => {
+    // The counterexample the `.md`-first ordering exists for: `C:notes.md`
+    // looks like a scheme, and is a page of the vault all the same.
+    const moved = planMove(
+      {
+        "wiki/concepts/a.md":
+          "# A\n\nSee [C](C:notes.md) and [me](mailto:x@y.z).\n",
+        "wiki/concepts/C:notes.md": "# C\n",
+      },
+      "wiki/concepts/a.md",
+      "wiki/entities/a.md",
+    );
+    assert.equal(
+      moved["wiki/entities/a.md"],
+      "# A\n\nSee [C](../concepts/C:notes.md) and [me](mailto:x@y.z).\n",
     );
   });
 });
