@@ -127,6 +127,8 @@ All links **position-spliced** on move/rename by `enchiridion vault move` (both 
 
 **Same link form means same anchors.** A frontmatter destination may carry a heading fragment exactly as a body link does — `related:` → `- "[cache TTL](../concepts/caching.md#ttl)"`. The `#` stays literal there too; only a hash in the *filename* is `%23`. A frontmatter link is not a separate dialect with anchors forbidden.
 
+**The anchor is a fragment of the target page, never part of its name.** So the edge points at the page: `related:` → `- "[cache TTL](../concepts/caching.md#ttl)"` records an edge to `wiki/concepts/caching.md`, and `#ttl` is only where a reader lands once there. Edge targets are page refs and carry no fragment — the one `page_ref` spelling, unchanged by an anchor.
+
 **A link is never split across lines** — no column limit, no hard wrap, frontmatter or body. Every link the plugin writes sits on one line however long its destination is. A page written by an older version may still carry a destination split mid-slug with a trailing `\`, or a label split at a space: legal YAML both, folded back to the same value by any conforming parser and by `enchiridion` itself. Read them, never hand-edit one — the join looks obvious and a wrong join silently repoints the link.
 
 ## Typed edges
