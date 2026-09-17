@@ -123,7 +123,7 @@ All links **position-spliced** on move/rename by `enchiridion vault move` (both 
 
 **Frontmatter relationships use the same link form.** `raw_source` field, `supersedes` key, and every typed-edge key hold `[title](relative/path.md)` markdown, always **quoted** (`"[…](…)"`) so YAML doesn't parse leading `[` as flow sequence. `raw_source` holds **single** link; `supersedes` and typed-edge keys hold **list** (`- "[…](…)"`). Real markdown links keep every relationship clickable in plain markdown viewers and in Obsidian's Properties panel, and lets a move rewrite frontmatter and body links by same rule.
 
-**A link is never split across lines** ([ADR-0024](../../../docs/adr/0024-emitted-lines-are-not-folded.md)) — no column limit, no hard wrap, frontmatter or body. Every link the plugin writes sits on one line however long its destination is. A page written by an older version may still carry a destination split mid-slug with a trailing `\`, or a label split at a space: legal YAML both, folded back to the same value by any conforming parser and by `enchiridion` itself. Read them, never hand-edit one — the join looks obvious and a wrong join silently repoints the link.
+**A link is never split across lines** — no column limit, no hard wrap, frontmatter or body. Every link the plugin writes sits on one line however long its destination is. A page written by an older version may still carry a destination split mid-slug with a trailing `\`, or a label split at a space: legal YAML both, folded back to the same value by any conforming parser and by `enchiridion` itself. Read them, never hand-edit one — the join looks obvious and a wrong join silently repoints the link.
 
 ## Typed edges
 
