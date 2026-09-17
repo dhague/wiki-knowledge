@@ -45,8 +45,12 @@ test("init writes the standard gitignore", async () => {
   const content = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
   for (const line of [
     "*.rsls",
-    ".claude/wiki-knowledge/sessions/",
-    ".opencode/wiki-knowledge/sessions/",
+    // `**/`-prefixed so a session-state tree lands gitignored wherever it was
+    // written: a pattern containing a `/` is anchored to the directory holding
+    // the .gitignore, which would leave a nested copy one `git add -A` from
+    // being committed (#485).
+    "**/.claude/wiki-knowledge/sessions/",
+    "**/.opencode/wiki-knowledge/sessions/",
     ".wiki-knowledge/",
     // LLM-wiki/Obsidian navigation scaffolding is not knowledge (#323).
     "log.md",

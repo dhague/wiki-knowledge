@@ -42,8 +42,14 @@ export const Modes = [ModeQueryFromAnywhere, ModeDedicated];
  */
 export const gitignore =
   "*.rsls\n" +
-  ".claude/wiki-knowledge/sessions/\n" +
-  ".opencode/wiki-knowledge/sessions/\n" +
+  // `**/`-prefixed: a pattern containing a `/` is anchored to the directory
+  // holding the .gitignore, so the un-prefixed form would ignore only the root
+  // copy of a state tree and leave a nested one untracked-but-committable
+  // (#485). No writer scatters state any more, but the #323 conversion path
+  // runs over a tree that may predate the fix — and a fresh vault has nothing
+  // to ignore, so the prefix costs nothing either way.
+  "**/.claude/wiki-knowledge/sessions/\n" +
+  "**/.opencode/wiki-knowledge/sessions/\n" +
   // Search index, gitignored per ADR-0006. Must ALSO be added to Resilio
   // Sync's own ignore list — a gitignore doesn't propagate to the syncer,
   // and a synced SQLite sidecar corrupts.
