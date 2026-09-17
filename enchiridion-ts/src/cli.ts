@@ -13,7 +13,7 @@
  * logic into an already-correct surface instead of reshaping the CLI.
  */
 
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -51,7 +51,7 @@ import {
   runWatch,
 } from "./watch.js";
 import { canonicalSourceDate } from "./sourcedate.js";
-import { CHECKS, FIXES } from "./check.js";
+import { CHECKS, DefaultMinSimilarity, FIXES } from "./check.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
   runExport,
@@ -672,21 +672,39 @@ export function buildProgram(): Command {
     .description(`Run a vault health check by name; names: ${checkNames}`)
     .argument("<name>", "check name")
     .option("--json", "emit findings as JSON Lines (one object per line)")
-    .action(async (name: string, opts: { json?: boolean }) => {
-      const fn = CHECKS[name];
-      if (!fn) {
-        fail(
-          `enchiridion check: unknown check "${name}"; known: ${checkNames}`,
-        );
-      }
-      const { root } = resolveRoot();
-      const findings = await fn(root);
-      if (opts.json) {
-        emitRows(findings);
-      } else {
-        for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
-      }
-    });
+    .option(
+      "--min-similarity <n>",
+      `concept-fragmentation cutoff, 0-1 (default ${DefaultMinSimilarity})`,
+      (v: string) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < 0 || n > 1) {
+          throw new InvalidArgumentError(
+            `must be a number in [0, 1], got "${v}"`,
+          );
+        }
+        return n;
+      },
+    )
+    .action(
+      async (
+        name: string,
+        opts: { json?: boolean; minSimilarity?: number },
+      ) => {
+        const fn = CHECKS[name];
+        if (!fn) {
+          fail(
+            `enchiridion check: unknown check "${name}"; known: ${checkNames}`,
+          );
+        }
+        const { root } = resolveRoot();
+        const findings = await fn(root, { minSimilarity: opts.minSimilarity });
+        if (opts.json) {
+          emitRows(findings);
+        } else {
+          for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+        }
+      },
+    );
   void check; // referenced only for side effect of registering the command
 
   // fix <name> — apply an auto-fix by name; prints each changed page ref.

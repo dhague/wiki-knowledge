@@ -1213,6 +1213,99 @@ describe("tagCounts", () => {
 });
 
 // ---------------------------------------------------------------------------
+// whole-vault read surface (#454)
+// ---------------------------------------------------------------------------
+
+describe("indexedPages", () => {
+  it("folds tags in and drops the excluded kinds", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange(
+        "wiki/concepts/a.md",
+        "A",
+        "s",
+        "body",
+        ["one", "two"],
+        "",
+        "",
+      ),
+      pageChange("wiki/entities/b.md", "B", "s", "body", ["one"], "", ""),
+      pageChange("wiki/tools/c.md", "C", "s", "body", [], "", ""),
+    );
+    const index = await openIndex(fake);
+    try {
+      const pages = await index.indexedPages(["entity", "source", "synthesis"]);
+      assert.deepEqual(pages, [
+        {
+          pageRef: "wiki/concepts/a.md",
+          title: "A",
+          kind: "concept",
+          tags: ["one", "two"],
+        },
+        { pageRef: "wiki/tools/c.md", title: "C", kind: "tool", tags: [] },
+      ]);
+    } finally {
+      index.close();
+    }
+  });
+});
+
+describe("sharedTagPairs", () => {
+  it("ranks pairs by shared-tag count and honours the kind scope", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "A", "s", "body", ["x", "y"], "", ""),
+      pageChange("wiki/concepts/b.md", "B", "s", "body", ["x", "y"], "", ""),
+      pageChange("wiki/concepts/c.md", "C", "s", "body", ["z"], "", ""),
+      pageChange("wiki/concepts/e.md", "E", "s", "body", ["z"], "", ""),
+      pageChange("wiki/concepts/f.md", "F", "s", "body", ["z"], "", ""),
+      // Overlaps every concept but is out of scope.
+      pageChange(
+        "wiki/entities/d.md",
+        "D",
+        "s",
+        "body",
+        ["x", "y", "z"],
+        "",
+        "",
+      ),
+    );
+    const index = await openIndex(fake);
+    try {
+      const pairs = await index.sharedTagPairs([
+        "entity",
+        "source",
+        "synthesis",
+      ]);
+      assert.deepEqual(pairs, [
+        {
+          a: "wiki/concepts/a.md",
+          b: "wiki/concepts/b.md",
+          sharedTags: ["x", "y"],
+        },
+        {
+          a: "wiki/concepts/c.md",
+          b: "wiki/concepts/e.md",
+          sharedTags: ["z"],
+        },
+        {
+          a: "wiki/concepts/c.md",
+          b: "wiki/concepts/f.md",
+          sharedTags: ["z"],
+        },
+        {
+          a: "wiki/concepts/e.md",
+          b: "wiki/concepts/f.md",
+          sharedTags: ["z"],
+        },
+      ]);
+    } finally {
+      index.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // git_date filter
 // ---------------------------------------------------------------------------
 
