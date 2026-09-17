@@ -27,6 +27,7 @@ import {
   fixMissingCrossReferences,
   FIXES,
 } from "./check.js";
+import { newPageRecord } from "./pagerecord.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -219,6 +220,23 @@ test("check 3: unencoded # in filename destination is a violation", async () => 
   );
 });
 
+test("check 3: a folded destination is checked, not skipped", async () => {
+  // Before the fold was joined, this link was invisible to the raw-text scan
+  // and its unencoded `#` went unreported.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/some-rather-long-bar-page-name-here#baz\\\n    .md)"\n',
+    ),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.ok(
+    findings.some(
+      (f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail),
+    ),
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Check 4 — staleSynthesis (requires real git)
 // ---------------------------------------------------------------------------
@@ -381,6 +399,28 @@ test("check 8: frontmatter edge counts as inbound link", async () => {
   assert.ok(!findings.some((f) => f.pageRef === "wiki/entities/bar.md"));
 });
 
+test("check 8: folded frontmatter edge counts as inbound link", async () => {
+  // The writer folds a destination that outgrows the line width with a
+  // trailing backslash (YAML escaped line break), which is exactly what
+  // `enchiridion ingest` and `enchiridion page merge` emit for a long slug.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[A rather long target page title](../entities/a-rather-long-tar\\\n    get-page-title-that-will-definitely-wrap.md)"\n',
+    ),
+    "wiki/entities/a-rather-long-target-page-title-that-will-definitely-wrap.md":
+      page("A rather long target page title"),
+  });
+  const findings = await orphans(root);
+  assert.ok(
+    !findings.some(
+      (f) =>
+        f.pageRef ===
+        "wiki/entities/a-rather-long-target-page-title-that-will-definitely-wrap.md",
+    ),
+  );
+});
+
 // ---------------------------------------------------------------------------
 // CHECKS registry
 // ---------------------------------------------------------------------------
@@ -434,6 +474,28 @@ test("fix frontmatter-link-format: encodes # in link destination", async () => {
   assert.match(text, /bar%23baz\.md/);
   const findings = await frontmatterLinkFormat(root);
   assert.deepEqual(findings, []);
+});
+
+test("fix frontmatter-link-format: repairs a folded destination whole", async () => {
+  // The splice must consume the backslash continuation with the destination:
+  // a partial replacement would leave a stray `\` and break the YAML.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/bar#baz\\\n    .md)"\n',
+    ),
+  });
+  const changed = await fixFrontmatterLinkFormat(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
+  assert.match(text, /- "\[Bar\]\(\.\.\/entities\/bar%23baz\.md\)"/);
+  // The page still parses, and the edge still points where it did — read back
+  // through the YAML parser, not the raw-text link scan.
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, []);
+  assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
+    { key: "related", targets: ["wiki/entities/bar#baz.md"] },
+  ]);
 });
 
 test("fix frontmatter-link-format: clean file is not modified", async () => {
