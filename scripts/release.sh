@@ -12,7 +12,7 @@
 # This script bumps plugin.json; assemble-opencode-package.py then reads it and
 # writes the version into wiki-plugin/opencode-npm/package.json, so one bump
 # drives both artifacts. `npm publish` runs automatically in tag-release.yml
-# after merge (requires NPM_TOKEN secret in the repo).
+# after merge via npm Trusted Publishing (OIDC) — no NPM_TOKEN secret.
 #
 # Must be run from the repo root, on a worktree/PR branch (never main, which
 # is protected). Commits the version bump plus the regenerated artifacts, then
@@ -21,8 +21,9 @@
 # PR that the committed bundle equals a fresh build.
 #
 # Do NOT manually tag or run `gh release create`: tag-release.yml derives the
-# tag from plugin.json on merge to main, and release.yml creates the GitHub
-# Release from that tag.
+# tag from plugin.json on merge to main and creates the GitHub Release from it
+# in the same workflow — a separate release.yml was inlined because a
+# fine-grained PAT cannot trigger a downstream on:push workflow.
 
 set -euo pipefail
 
@@ -59,7 +60,11 @@ jq --arg v "$new_version" '.version = $v' "$plugin_json" > "$plugin_json.tmp"
 mv "$plugin_json.tmp" "$plugin_json"
 
 # 1b. Patch the "Plugin version" line in CLAUDE.md so it stays in sync.
-sed -i "s/\*\*Plugin version: \`[0-9]*\.[0-9]*\.[0-9]*\`\*\*/**Plugin version: \`$new_version\`**/" CLAUDE.md
+#     `-i.bak` then removing the backup is the portable spelling: BSD sed
+#     (macOS) rejects a bare `-i` followed by the script, and aborts the
+#     release after plugin.json has already been bumped.
+sed -i.bak "s/\*\*Plugin version: \`[0-9]*\.[0-9]*\.[0-9]*\`\*\*/**Plugin version: \`$new_version\`**/" CLAUDE.md
+rm -f CLAUDE.md.bak
 
 # 2. Rebuild the bundle + wasm from source (fresh, no stale dist/).
 (cd enchiridion-ts && npm ci && npm run build)
