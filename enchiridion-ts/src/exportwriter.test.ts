@@ -11,7 +11,6 @@ import os from "node:os";
 import path from "node:path";
 import * as git from "isomorphic-git";
 import {
-  dirtyFiles,
   runExport,
   ExportDirtyError,
   ExportTargetIsDirectoryError,
@@ -86,82 +85,6 @@ async function setupVault(root: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// dirtyFiles
-// ---------------------------------------------------------------------------
-
-test("dirtyFiles: empty when repo is clean", async () => {
-  const root = tmpDir();
-  await setupVault(root);
-  const dirty = await dirtyFiles(root, ["wiki"]);
-  assert.deepEqual(dirty, []);
-});
-
-test("dirtyFiles: detects modified tracked file", async () => {
-  const root = tmpDir();
-  await setupVault(root);
-  // Modify a tracked file
-  writeFile(root, "wiki/concepts/alpha-concept.md", "modified");
-  const dirty = await dirtyFiles(root, ["wiki"]);
-  assert.ok(dirty.length > 0, "should detect modified file");
-  assert.ok(
-    dirty.some((f) => f.includes("alpha-concept")),
-    "should include modified file",
-  );
-});
-
-test("dirtyFiles: detects new untracked file", async () => {
-  const root = tmpDir();
-  await setupVault(root);
-  writeFile(root, "wiki/concepts/new-page.md", "new content");
-  const dirty = await dirtyFiles(root, ["wiki"]);
-  assert.ok(dirty.length > 0, "should detect untracked file");
-  assert.ok(
-    dirty.some((f) => f.includes("new-page")),
-    "should include new untracked file",
-  );
-});
-
-test("dirtyFiles: detects staged new file", async () => {
-  const root = tmpDir();
-  await setupVault(root);
-  writeFile(root, "wiki/concepts/staged-page.md", "staged content");
-  await git.add({ fs, dir: root, filepath: "wiki/concepts/staged-page.md" });
-  const dirty = await dirtyFiles(root, ["wiki"]);
-  assert.ok(dirty.length > 0, "should detect staged file");
-});
-
-test("dirtyFiles: raw/ files not counted when subtreePaths excludes raw", async () => {
-  const root = tmpDir();
-  await setupVault(root);
-  writeFile(root, "raw/doc.md", "raw content");
-  // Only check wiki/
-  const dirty = await dirtyFiles(root, ["wiki"]);
-  assert.ok(
-    !dirty.some((f) => f.startsWith("raw/")),
-    "raw files should not appear",
-  );
-});
-
-test("dirtyFiles: raw/ files counted when subtreePaths includes raw", async () => {
-  const root = tmpDir();
-  await setupVault(root);
-  writeFile(root, "raw/doc.md", "raw content");
-  const dirty = await dirtyFiles(root, ["wiki", "raw"]);
-  assert.ok(
-    dirty.some((f) => f.startsWith("raw/")),
-    "raw files should appear",
-  );
-});
-
-test("dirtyFiles: returns empty for non-git directory", async () => {
-  const root = tmpDir();
-  // No git init
-  writeFile(root, "wiki/concepts/page.md", "content");
-  const dirty = await dirtyFiles(root, ["wiki"]);
-  assert.deepEqual(dirty, []);
-});
-
-// ---------------------------------------------------------------------------
 // runExport — basic output
 // ---------------------------------------------------------------------------
 
@@ -202,14 +125,30 @@ test("runExport: index.html mentions total page count", async () => {
 // runExport — dirty-tree check
 // ---------------------------------------------------------------------------
 
-test("runExport: throws ExportDirtyError when wiki/ has modified files", async () => {
+test("runExport: refuses a dirty exported subtree, naming the files", async () => {
   const root = tmpDir();
   await setupVault(root);
-  writeFile(root, "wiki/concepts/alpha-concept.md", "dirty");
+  writeFile(root, "wiki/concepts/alpha-concept.md", "dirty"); // tracked, modified
+  writeFile(root, "wiki/concepts/new-page.md", "untracked"); // untracked
   await assert.rejects(
     () => runExport(root, { out: path.join(root, "web") }),
-    (err: unknown) => err instanceof ExportDirtyError,
-    "should throw ExportDirtyError",
+    (err: unknown) => {
+      if (!(err instanceof ExportDirtyError)) {
+        assert.fail(`expected ExportDirtyError, got ${String(err)}`);
+      }
+      assert.deepEqual(
+        [...err.dirtyFiles].sort(),
+        ["wiki/concepts/alpha-concept.md", "wiki/concepts/new-page.md"],
+        "the error carries every dirty path in the exported subtree",
+      );
+      for (const file of err.dirtyFiles) {
+        assert.ok(
+          err.message.includes(file),
+          `the refusal message names ${file}`,
+        );
+      }
+      return true;
+    },
   );
 });
 

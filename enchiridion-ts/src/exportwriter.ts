@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import * as git from "isomorphic-git";
 import { Vault } from "./vault.js";
+import { VaultGit } from "./vaultgit.js";
 import {
   buildExportMeta,
   type ExportOptions,
@@ -76,45 +76,6 @@ export class ExportTargetIsDirectoryError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ExportTargetIsDirectoryError";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Dirty-tree check
-// ---------------------------------------------------------------------------
-
-/**
- * Return vault-relative paths of dirty files under `subtreePaths` (relative
- * to `root`). A file is dirty when it is staged, modified, or untracked.
- * Returns an empty array when the directory doesn't exist or isn't a git repo.
- */
-export async function dirtyFiles(
-  root: string,
-  subtreePaths: string[],
-): Promise<string[]> {
-  if (subtreePaths.length === 0) return [];
-  // Short-circuit: not a git repo
-  try {
-    await git.findRoot({ fs, filepath: root });
-  } catch {
-    return [];
-  }
-  try {
-    const matrix = await git.statusMatrix({
-      fs,
-      dir: root,
-      filter: (f) => subtreePaths.some((s) => f === s || f.startsWith(s + "/")),
-    });
-    const dirty: string[] = [];
-    for (const [filepath, head, workdir, stage] of matrix) {
-      // [1, 1, 1] = clean tracked file; [0, 0, 0] = absent/ignored
-      if (head === 1 && workdir === 1 && stage === 1) continue;
-      if (head === 0 && workdir === 0 && stage === 0) continue;
-      dirty.push(filepath);
-    }
-    return dirty;
-  } catch {
-    return [];
   }
 }
 
@@ -229,11 +190,13 @@ export async function runExport(
   // exportTitle.)
   const title = resolveExportTitle(root, opts.title);
 
-  // 1. Dirty-tree check
+  // 1. Dirty-tree check. The fact comes from vaultgit, the module that owns
+  // every git question about a vault — this module has no git opinion of its
+  // own, only this refusal.
   if (!allowDirty) {
     const subtrees = ["wiki"];
     if (includeRaw) subtrees.push("raw");
-    const dirty = await dirtyFiles(root, subtrees);
+    const dirty = await new VaultGit(root).dirtyFiles(subtrees);
     if (dirty.length > 0) {
       throw new ExportDirtyError(
         `Exported subtree has uncommitted changes (${dirty.length} file${dirty.length === 1 ? "" : "s"}). ` +
