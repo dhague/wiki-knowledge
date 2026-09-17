@@ -47,10 +47,10 @@ var require_identity = __commonJS({
     var NODE_TYPE = Symbol.for("yaml.node.type");
     var isAlias = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === ALIAS;
     var isDocument = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === DOC;
-    var isMap2 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === MAP;
+    var isMap3 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === MAP;
     var isPair = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === PAIR;
-    var isScalar = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SCALAR;
-    var isSeq = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SEQ;
+    var isScalar2 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SCALAR;
+    var isSeq2 = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SEQ;
     function isCollection(node) {
       if (node && typeof node === "object")
         switch (node[NODE_TYPE]) {
@@ -71,7 +71,7 @@ var require_identity = __commonJS({
         }
       return false;
     }
-    var hasAnchor = (node) => (isScalar(node) || isCollection(node)) && !!node.anchor;
+    var hasAnchor = (node) => (isScalar2(node) || isCollection(node)) && !!node.anchor;
     exports2.ALIAS = ALIAS;
     exports2.DOC = DOC;
     exports2.MAP = MAP;
@@ -83,11 +83,11 @@ var require_identity = __commonJS({
     exports2.isAlias = isAlias;
     exports2.isCollection = isCollection;
     exports2.isDocument = isDocument;
-    exports2.isMap = isMap2;
+    exports2.isMap = isMap3;
     exports2.isNode = isNode;
     exports2.isPair = isPair;
-    exports2.isScalar = isScalar;
-    exports2.isSeq = isSeq;
+    exports2.isScalar = isScalar2;
+    exports2.isSeq = isSeq2;
   }
 });
 
@@ -4193,9 +4193,9 @@ var require_resolve_flow_collection = __commonJS({
     var blockMsg = "Block collections are not allowed within flow collections";
     var isBlock = (token) => token && (token.type === "block-map" || token.type === "block-seq");
     function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onError, tag) {
-      const isMap2 = fc.start.source === "{";
-      const fcName = isMap2 ? "flow map" : "flow sequence";
-      const NodeClass = tag?.nodeClass ?? (isMap2 ? YAMLMap2.YAMLMap : YAMLSeq2.YAMLSeq);
+      const isMap3 = fc.start.source === "{";
+      const fcName = isMap3 ? "flow map" : "flow sequence";
+      const NodeClass = tag?.nodeClass ?? (isMap3 ? YAMLMap2.YAMLMap : YAMLSeq2.YAMLSeq);
       const coll = new NodeClass(ctx.schema);
       coll.flow = true;
       const atRoot = ctx.atRoot;
@@ -4231,7 +4231,7 @@ var require_resolve_flow_collection = __commonJS({
             offset = props.end;
             continue;
           }
-          if (!isMap2 && ctx.options.strict && utilContainsNewline.containsNewline(key))
+          if (!isMap3 && ctx.options.strict && utilContainsNewline.containsNewline(key))
             onError(
               key,
               // checked by containsNewline()
@@ -4271,7 +4271,7 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap2 && !sep && !props.found) {
+        if (!isMap3 && !sep && !props.found) {
           const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
@@ -4294,7 +4294,7 @@ var require_resolve_flow_collection = __commonJS({
             startOnNewline: false
           });
           if (valueProps.found) {
-            if (!isMap2 && !props.found && ctx.options.strict) {
+            if (!isMap3 && !props.found && ctx.options.strict) {
               if (sep)
                 for (const st of sep) {
                   if (st === valueProps.found)
@@ -4326,7 +4326,7 @@ var require_resolve_flow_collection = __commonJS({
           const pair = new Pair.Pair(keyNode, valueNode);
           if (ctx.options.keepSourceTokens)
             pair.srcToken = collItem;
-          if (isMap2) {
+          if (isMap3) {
             const map = coll;
             if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
               onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
@@ -4342,7 +4342,7 @@ var require_resolve_flow_collection = __commonJS({
           offset = valueNode ? valueNode.range[2] : valueProps.end;
         }
       }
-      const expectedEnd = isMap2 ? "}" : "]";
+      const expectedEnd = isMap3 ? "}" : "]";
       const [ce, ...ee] = fc.end;
       let cePos = offset;
       if (ce?.source === expectedEnd)
@@ -5628,7 +5628,7 @@ var require_cst = __commonJS({
     var FLOW_END = "";
     var SCALAR = "";
     var isCollection = (token) => !!token && "items" in token;
-    var isScalar = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
+    var isScalar2 = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
     function prettyToken(token) {
       switch (token) {
         case BOM:
@@ -5712,7 +5712,7 @@ var require_cst = __commonJS({
     exports2.FLOW_END = FLOW_END;
     exports2.SCALAR = SCALAR;
     exports2.isCollection = isCollection;
-    exports2.isScalar = isScalar;
+    exports2.isScalar = isScalar2;
     exports2.prettyToken = prettyToken;
     exports2.tokenType = tokenType;
   }
@@ -7242,7 +7242,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument2(source, options = {}) {
+    function parseDocument3(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -7268,7 +7268,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument2(src, options);
+      const doc = parseDocument3(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log2.warn(doc.options.logLevel, warning));
@@ -7304,7 +7304,7 @@ var require_public_api = __commonJS({
     }
     exports2.parse = parse2;
     exports2.parseAllDocuments = parseAllDocuments;
-    exports2.parseDocument = parseDocument2;
+    exports2.parseDocument = parseDocument3;
     exports2.stringify = stringify2;
   }
 });
@@ -7614,7 +7614,7 @@ function enumeratePageRefs(root) {
   try {
     entries = import_node_fs6.default.readdirSync(wikiDir, { withFileTypes: true });
   } catch (err) {
-    if (isENOENT(err)) return [];
+    if (isENOENT2(err)) return [];
     throw err;
   }
   const refs = [];
@@ -7635,7 +7635,7 @@ function enumeratePageRefs(root) {
 function toSlash(p) {
   return p.split(import_node_path7.default.sep).join("/");
 }
-function isENOENT(err) {
+function isENOENT2(err) {
   return err.code === "ENOENT";
 }
 var import_node_fs6, import_node_path7, GeneratedIndexRef, KindMetaFilename;
@@ -23036,7 +23036,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return _findRoot({ fs: fs20, filepath: parent });
       }
     }
-    async function findRoot3({ fs: fs20, filepath }) {
+    async function findRoot2({ fs: fs20, filepath }) {
       try {
         assertParameter("fs", fs20);
         assertParameter("filepath", filepath);
@@ -25756,7 +25756,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const { tree } = await _readTree({ fs: fs20, cache, gitdir: updatedGitdir, oid });
       return tree;
     }
-    async function statusMatrix3({
+    async function statusMatrix2({
       fs: _fs,
       dir,
       gitdir = join3(dir, ".git"),
@@ -26202,7 +26202,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fastForward,
       fetch,
       findMergeBase,
-      findRoot: findRoot3,
+      findRoot: findRoot2,
       getRemoteInfo,
       getRemoteInfo2,
       hashBlob,
@@ -26235,7 +26235,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       updateIndex: updateIndex$1,
       resolveRef: resolveRef2,
       status,
-      statusMatrix: statusMatrix3,
+      statusMatrix: statusMatrix2,
       tag,
       version,
       walk: walk2,
@@ -26272,7 +26272,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     exports2.fastForward = fastForward;
     exports2.fetch = fetch;
     exports2.findMergeBase = findMergeBase;
-    exports2.findRoot = findRoot3;
+    exports2.findRoot = findRoot2;
     exports2.getConfig = getConfig2;
     exports2.getConfigAll = getConfigAll;
     exports2.getRemoteInfo = getRemoteInfo;
@@ -26308,7 +26308,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     exports2.setConfig = setConfig;
     exports2.stash = stash;
     exports2.status = status;
-    exports2.statusMatrix = statusMatrix3;
+    exports2.statusMatrix = statusMatrix2;
     exports2.tag = tag;
     exports2.updateIndex = updateIndex$1;
     exports2.version = version;
@@ -26348,6 +26348,18 @@ async function porcelainDiff(diskPath, headBlob) {
     }
   }
   return true;
+}
+function setsCommitDate(commit3) {
+  return commit3.commit.parent.length <= 1;
+}
+async function attributeDate(commit3, touched, keep, into) {
+  if (!setsCommitDate(commit3)) return;
+  const when = commit3.commit.author.timestamp * 1e3;
+  for (const p of await touched()) {
+    if (!keep(p)) continue;
+    const prev = into.get(p);
+    if (prev === void 0 || when > prev) into.set(p, when);
+  }
 }
 async function changedBlobPaths(root, commitOid, parentOid, cache) {
   const out = [];
@@ -26406,14 +26418,14 @@ function normalizeEol(s) {
 }
 function fallbackUser() {
   try {
-    const u = import_node_os2.default.userInfo();
+    const u = import_node_os3.default.userInfo();
     if (u.username) return u.username;
   } catch {
   }
   return "enchiridion";
 }
 function fallbackHost() {
-  const host = import_node_os2.default.hostname();
+  const host = import_node_os3.default.hostname();
   return host || "localhost";
 }
 function messageOf(err) {
@@ -26471,13 +26483,13 @@ async function resolveFilePath(root, headOid, filePath) {
   if (!foundOid) throw new Error(`${filePath} not found in HEAD`);
   return foundOid;
 }
-var git, import_node_fs8, import_node_os2, import_node_path9, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE;
+var git, import_node_fs8, import_node_os3, import_node_path9, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE, KEEP_ALL;
 var init_vaultgit = __esm({
   "src/vaultgit.ts"() {
     "use strict";
     git = __toESM(require_isomorphic_git(), 1);
     import_node_fs8 = __toESM(require("node:fs"), 1);
-    import_node_os2 = __toESM(require("node:os"), 1);
+    import_node_os3 = __toESM(require("node:os"), 1);
     import_node_path9 = __toESM(require("node:path"), 1);
     init_pagepredicate();
     VaultGitError = class extends Error {
@@ -26629,20 +26641,32 @@ var init_vaultgit = __esm({
        * The last commit date of `rel` (YYYY-MM-DD), or "" when root isn't a work
        * tree, rel was never committed, or the history can't be walked.
        * Lenient: "" is the default, never an error.
+       *
+       * Deliberately not `git.log({ filepath: rel })`: isomorphic-git's per-file
+       * log stops at the first commit whose tree lacks the path, and a merge looks
+       * exactly like that from the side whose branch never had it — so the per-file
+       * log can neither skip a merge nor see the non-merge commit behind one
+       * (#491). This is the single-path form of [latestCommitDates], the one
+       * implementation of the rule; a caller dating many paths at once wants
+       * [scanFacts], which batches the same walk.
        */
       async lastCommitDate(rel) {
+        let headOid;
         try {
-          const commits = await git.log({
-            fs: import_node_fs8.default,
-            dir: this.root,
-            ref: "HEAD",
-            filepath: rel
-          });
-          if (commits.length === 0) return "";
-          return formatDate(commits[0].commit.author.timestamp);
+          headOid = await git.resolveRef({ fs: import_node_fs8.default, dir: this.root, ref: "HEAD" });
         } catch {
           return "";
         }
+        return this.lastCommitDateAt(headOid, rel);
+      }
+      /**
+       * [lastCommitDate] against a caller-supplied head — the form the range
+       * walk's fallback needs, dating a page against the head that walk already
+       * resolved rather than whatever HEAD points at by then.
+       */
+      async lastCommitDateAt(headOid, rel) {
+        const dates = await this.latestCommitDates(headOid, (p) => p === rel);
+        return dates.get(rel) ?? "";
       }
       /**
        * Whether `rel` is modified or untracked in the working tree — the
@@ -26748,7 +26772,7 @@ var init_vaultgit = __esm({
        * back-pointer page at once.
        */
       async allCommitDates(headOid, cache = {}) {
-        return this.latestCommitDates(headOid, () => true, cache);
+        return this.latestCommitDates(headOid, KEEP_ALL, cache);
       }
       // -------------------------------------------------------------------------
       /**
@@ -26810,13 +26834,7 @@ var init_vaultgit = __esm({
           const paths = changedWikiPaths(commit3);
           if (paths.length === 0) continue;
           for (const p of paths) changed.add(p);
-          if (commit3.commit.parent.length <= 1) {
-            const when = commit3.commit.author.timestamp * 1e3;
-            for (const p of paths) {
-              const prev = latest.get(p);
-              if (prev === void 0 || when > prev) latest.set(p, when);
-            }
-          }
+          await attributeDate(commit3, () => paths, KEEP_ALL, latest);
         }
         if (!found) return { pages: [], found: false };
         if (changed.size === 0) return { pages: [], found: true };
@@ -26824,7 +26842,7 @@ var init_vaultgit = __esm({
         for (const filePath of changed) {
           const result = await this.tryReadFromHead(headOid, filePath);
           const when = latest.get(filePath);
-          const date = when !== void 0 ? formatDate(when / 1e3) : await this.pathDate(headOid, filePath);
+          const date = when !== void 0 ? formatDate(when / 1e3) : await this.lastCommitDateAt(headOid, filePath);
           pages.push({
             pageRef: filePath,
             content: result ?? "",
@@ -26854,20 +26872,24 @@ var init_vaultgit = __esm({
       /**
        * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per
        * `wiki/**.md` path over every commit reachable from head. Used by the full
-       * read; the range-walk counterpart is inlined in `rangeSnapshot`.
+       * read; the range walk is the bounded counterpart, applying the same
+       * [attributeDate] step as it goes.
        */
       async commitDates(headOid) {
         return this.latestCommitDates(headOid, isPageRef);
       }
       /**
        * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
-       * accepted by `keep`, over every commit reachable from head. Merge commits
-       * are skipped before any diff so date attribution stays stable (ADR-0015),
-       * and the newest timestamp wins, not log order.
+       * accepted by `keep`, over every commit reachable from head. The one
+       * implementation of the rule: [VaultGit.lastCommitDate] is this walk
+       * narrowed to a single path, and the range walk applies the same
+       * [attributeDate] step to its own bounded walk. Newest timestamp wins, not
+       * log order.
        *
        * Uses [changedBlobPaths] instead of `includeChanges` so unchanged subtrees
        * are pruned — per-commit cost is proportional to what actually changed, not
-       * to total vault size (#419).
+       * to total vault size (#419) — and [attributeDate] takes the paths as a
+       * thunk, so a merge is rejected before that diff is even computed.
        *
        * Lenient: empty dates when the history can't be walked.
        */
@@ -26881,47 +26903,19 @@ var init_vaultgit = __esm({
             cache
           });
           for (const commit3 of commits) {
-            if (commit3.commit.parent.length > 1) continue;
             const parentOid = commit3.commit.parent[0] ?? EMPTY_TREE;
-            const paths = await changedBlobPaths(
-              this.root,
-              commit3.oid,
-              parentOid,
-              cache
+            await attributeDate(
+              commit3,
+              () => changedBlobPaths(this.root, commit3.oid, parentOid, cache),
+              keep,
+              latest
             );
-            const when = commit3.commit.author.timestamp * 1e3;
-            for (const p of paths) {
-              if (!keep(p)) continue;
-              const prev = latest.get(p);
-              if (prev === void 0 || when > prev) latest.set(p, when);
-            }
           }
         } catch {
         }
         const out = /* @__PURE__ */ new Map();
         for (const [path26, when] of latest) out.set(path26, formatDate(when / 1e3));
         return out;
-      }
-      /**
-       * Latest non-merge commit date touching `path`, walking back from head with
-       * no stopping point short of the root commit — the per-path fallback the
-       * range walk uses when its bounded walk can't attribute a date.
-       */
-      async pathDate(headOid, path26) {
-        try {
-          const commits = await git.log({
-            fs: import_node_fs8.default,
-            dir: this.root,
-            ref: headOid,
-            filepath: path26
-          });
-          for (const commit3 of commits) {
-            if (commit3.commit.parent.length > 1) continue;
-            return formatDate(commit3.commit.author.timestamp);
-          }
-        } catch {
-        }
-        return "";
       }
       /** Read `filePath` from head's tree, or null when it's deleted there. */
       async tryReadFromHead(headOid, filePath) {
@@ -26979,6 +26973,7 @@ var init_vaultgit = __esm({
       }
     };
     EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    KEEP_ALL = () => true;
   }
 });
 
@@ -36747,18 +36742,78 @@ _defineProperty(MarkdownIt, "ParserInline", ParserInline);
 _defineProperty(MarkdownIt, "StateInline", StateInline);
 var MarkdownItCallable = callable(MarkdownIt);
 
+// src/sourcedate.ts
+var CANONICAL_DATE_FORMAT = "YYYY-MM-DD";
+function parseSourceDate(value) {
+  if (value instanceof Date) {
+    return formatDateOnly(
+      value.getUTCFullYear(),
+      value.getUTCMonth() + 1,
+      value.getUTCDate()
+    );
+  }
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  const dateOnly = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [y, mo, d] = [
+      Number(dateOnly[1]),
+      Number(dateOnly[2]),
+      Number(dateOnly[3])
+    ];
+    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
+  }
+  const stamp = s.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/
+  );
+  if (stamp) {
+    const [y, mo, d] = [Number(stamp[1]), Number(stamp[2]), Number(stamp[3])];
+    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
+  }
+  return null;
+}
+function canonicalSourceDate(value) {
+  if (value === null || value === void 0) return value;
+  const date = parseSourceDate(value);
+  if (date === null) {
+    throw new Error(
+      `source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(value)}`
+    );
+  }
+  return date;
+}
+function truncateSourceDate(value) {
+  const date = parseSourceDate(value);
+  return date !== null ? date : value;
+}
+function validDate(y, mo, d) {
+  if (mo < 1 || mo > 12 || d < 1) return false;
+  const leap = y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return d <= days[mo - 1];
+}
+function formatDateOnly(y, mo, d) {
+  return `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 // src/wikipage.ts
 var ENCODE_CHARS = " #%()<>";
 var FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
+var ESCAPED_LINE_BREAK_RE = /\\\r?\n[ \t]*/g;
+function joinEscapedLineBreaks(dest) {
+  return dest.replace(ESCAPED_LINE_BREAK_RE, "");
+}
+var DEST_ATOM = `(?:[^()\\s]|${ESCAPED_LINE_BREAK_RE.source})`;
 function nestedParenDest(depth) {
-  let frag = "[^()\\s]*";
+  let frag = `${DEST_ATOM}*`;
   for (let i = 0; i < depth; i++) {
-    frag = `(?:[^()\\s]|\\(${frag}\\))*`;
+    frag = `(?:${DEST_ATOM}|\\(${frag}\\))*`;
   }
   return frag;
 }
+var ANGLE_DEST = `<[^<>\\n]*(?:${ESCAPED_LINE_BREAK_RE.source}[^<>\\n]*)*>`;
 var LINK_RE = new RegExp(
-  `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]\\([ \\t]*(<[^<>\\n]*>|${nestedParenDest(4)})(?:[ \\t]+(?:"[^"]*"|'[^']*'|\\([^)]*\\)))?[ \\t]*\\)`,
+  `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]\\([ \\t]*(${ANGLE_DEST}|${nestedParenDest(4)})(?:[ \\t]+(?:"[^"]*"|'[^']*'|\\([^)]*\\)))?[ \\t]*\\)`,
   "gd"
 );
 function percentEncode(p) {
@@ -36838,7 +36893,7 @@ function iterLinks(src) {
     const idx = m.indices[3];
     let start = idx[0];
     let end = idx[1];
-    let dest = m[3];
+    let dest = joinEscapedLineBreaks(m[3]);
     if (dest.startsWith("<") && dest.endsWith(">")) {
       start += 1;
       end -= 1;
@@ -36929,10 +36984,12 @@ var Page = class _Page {
    *
    * Mints a frontmatter block when the page has none. Only the block is
    * re-serialised; the body is spliced back verbatim.
+   *
+   * The value is canonicalised first — see [canonicalForWrite].
    */
   set(key, value) {
     const node = this.frontmatterNode();
-    const valueNode = newValueNode(value);
+    const valueNode = newValueNode(canonicalForWrite(key, value));
     setKey(node, key, valueNode);
     const rendered = renderFrontmatter(node);
     const { body } = splitFrontmatter(this.text);
@@ -36993,7 +37050,7 @@ function composeLink(title, targetRel, pageDir) {
 function normalizeBodyLinks(src) {
   const edits = [];
   for (const link2 of iterLinks(src)) {
-    if (!isRelativeDest(link2.decodedPath)) continue;
+    if (!isVaultRelativeDest(link2.decodedPath)) continue;
     const dest = encodeDest(link2.decodedPath, link2.decodedAnchor);
     if (dest !== link2.dest)
       edits.push({ start: link2.start, end: link2.end, dest });
@@ -37012,8 +37069,14 @@ function encodeDest(p, anchor) {
   if (anchor !== "") dest += "#" + percentEncode(anchor);
   return dest;
 }
-function isRelativeDest(p) {
-  return p !== "" && !p.startsWith("/") && !p.startsWith("#") && !p.includes("://");
+var SCHEME_RE2 = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+function hasScheme(dest) {
+  return SCHEME_RE2.test(dest);
+}
+function isVaultRelativeDest(p) {
+  if (p === "" || p.startsWith("/") || p.includes("://")) return false;
+  if (p.endsWith(".md")) return true;
+  return !hasScheme(p);
 }
 function rewriteText(text2, fileRel, oldRel, newRel) {
   const isMovedFile = fileRel === oldRel;
@@ -37022,7 +37085,7 @@ function rewriteText(text2, fileRel, oldRel, newRel) {
   if (isMovedFile) newDir = import_node_path2.default.posix.dirname(newRel);
   const edits = [];
   for (const link2 of iterLinks(text2)) {
-    if (!isRelativeDest(link2.decodedPath)) continue;
+    if (!isVaultRelativeDest(link2.decodedPath)) continue;
     const target = resolveLinkDest(link2.decodedPath, oldDir);
     if (!isMovedFile && target !== oldRel) continue;
     const movedTarget = target === oldRel ? newRel : target;
@@ -37062,6 +37125,10 @@ function setKey(mapping, key, value) {
   }
   mapping.add({ key, value });
 }
+function canonicalForWrite(key, value) {
+  if (key !== "source_date") return value;
+  return truncateSourceDate(value);
+}
 function newValueNode(value) {
   const node = toYamlNode(value);
   quoteLinks(node);
@@ -37087,7 +37154,7 @@ function quoteLinks(node) {
   }
 }
 function renderFrontmatter(node) {
-  return (0, import_yaml.stringify)(node, { indent: YAML_INDENT });
+  return (0, import_yaml.stringify)(node, { indent: YAML_INDENT, lineWidth: 0 });
 }
 
 // src/transcriptcapture.ts
@@ -37118,42 +37185,64 @@ function mkdirSafe(dir, mode) {
 }
 
 // src/transcriptcapture.ts
-var import_node_os = __toESM(require("node:os"), 1);
+var import_node_os2 = __toESM(require("node:os"), 1);
 
 // src/sessionstate.ts
 var import_node_fs3 = __toESM(require("node:fs"), 1);
+var import_node_os = __toESM(require("node:os"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
 function processLookupEnv(key) {
   const value = process.env[key];
   return [value, value !== void 0];
 }
-function sessionsDir(root, cwd, lookupEnv = processLookupEnv) {
-  let base = "";
-  if (root !== "") {
-    base = root;
-  } else {
-    const [projectDir, ok] = lookupEnv("CLAUDE_PROJECT_DIR");
-    if (ok && projectDir) {
-      base = projectDir;
-    } else {
-      let dir = cwd === "" ? process.cwd() : cwd;
-      const start = dir;
-      for (; ; ) {
-        try {
-          if (import_node_fs3.default.statSync(import_node_path3.default.join(dir, ".claude")).isDirectory()) {
-            base = dir;
-            break;
-          }
-        } catch {
-        }
-        const parent = import_node_path3.default.dirname(dir);
-        if (parent === dir) break;
-        dir = parent;
-      }
-      if (base === "") base = start;
-    }
+var ClaudeCode = {
+  marker: ".claude",
+  projectDirEnv: "CLAUDE_PROJECT_DIR",
+  stateDir: import_node_path3.default.join(".claude", "wiki-knowledge", "sessions")
+};
+function findProjectRoot(cwd, layout, lookupEnv) {
+  if (layout.projectDirEnv !== "") {
+    const [projectDir, ok] = lookupEnv(layout.projectDirEnv);
+    if (ok && projectDir) return projectDir;
   }
-  return import_node_path3.default.join(base, ".claude", "wiki-knowledge", "sessions");
+  return markerAncestor(cwd, layout.marker, lookupEnv);
+}
+function findProjectSessionsDir(cwd, layout, lookupEnv) {
+  const root = findProjectRoot(cwd, layout, lookupEnv);
+  return root === void 0 ? void 0 : sessionsUnder(root, layout);
+}
+function projectSessionsDir(cwd, layout, lookupEnv) {
+  return findProjectSessionsDir(cwd, layout, lookupEnv) ?? sessionsUnder(startDir(cwd), layout);
+}
+function findSessionsDir(cwd, lookupEnv = processLookupEnv) {
+  return findProjectSessionsDir(cwd, ClaudeCode, lookupEnv);
+}
+function sessionsDir(cwd, lookupEnv = processLookupEnv) {
+  return projectSessionsDir(cwd, ClaudeCode, lookupEnv);
+}
+function sessionsUnder(base, layout) {
+  return import_node_path3.default.join(base, layout.stateDir);
+}
+function startDir(cwd) {
+  return cwd === "" ? process.cwd() : cwd;
+}
+function markerAncestor(cwd, marker, lookupEnv) {
+  let dir = startDir(cwd);
+  for (; ; ) {
+    if (isHomeDir(dir, lookupEnv)) return void 0;
+    try {
+      if (import_node_fs3.default.statSync(import_node_path3.default.join(dir, marker)).isDirectory()) return dir;
+    } catch {
+    }
+    const parent = import_node_path3.default.dirname(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+}
+function isHomeDir(dir, lookupEnv) {
+  const [home, ok] = lookupEnv("HOME");
+  const homeDir = ok && home ? home : import_node_os.default.homedir();
+  return homeDir !== "" && import_node_path3.default.resolve(dir) === import_node_path3.default.resolve(homeDir);
 }
 function statePath(sessionID, stateDir) {
   return import_node_path3.default.join(stateDir, `${sessionID}.json`);
@@ -37284,8 +37373,8 @@ function fmtDate(d, template) {
   return template.replace(/YYYY|MM|DD|hh|mm/g, (m) => map[m]);
 }
 var CaptureError = class extends Error {
-  constructor(msg) {
-    super(msg);
+  constructor(msg, options) {
+    super(msg, options);
     this.name = "CaptureError";
   }
 };
@@ -37297,7 +37386,7 @@ function findTranscriptPath(cwd, lookupEnv = processLookupEnv) {
       "$CLAUDE_CODE_SESSION_ID is not set in this environment."
     );
   }
-  const stateDir = sessionsDir("", cwd, lookupEnv);
+  const stateDir = sessionsDir(cwd, lookupEnv);
   let stateStat;
   try {
     stateStat = import_node_fs4.default.statSync(stateDir);
@@ -37330,16 +37419,23 @@ function findTranscriptPath(cwd, lookupEnv = processLookupEnv) {
 }
 function stateDirNotLocated(cwd) {
   return new CaptureError(
-    "Could not locate a session state directory. Searched $CLAUDE_PROJECT_DIR, then walked up from " + cwd + " for a '.claude/' ancestor, and did not find one. (Has the SessionStart hook ever run in this project? Start a new session in the project root and try again.)"
+    "Could not locate a session state directory. Searched $CLAUDE_PROJECT_DIR, then walked up from " + cwd + " as far as the home directory for a '.claude/' ancestor, and did not find one. (Has the SessionStart hook ever run in this project? Start a new session in the project root and try again.)"
   );
 }
-function writeCapture(wikiRoot, filename, markdown, shortID) {
+function writeCapture(wikiRoot, filename, markdown, shortID, listDir) {
   const conversationsDir = import_node_path4.default.join(wikiRoot, "raw", "conversations");
   mkdirSafe(conversationsDir);
+  const list2 = listDir ?? ((dir) => import_node_fs4.default.readdirSync(dir));
   let matches = [];
   try {
-    matches = import_node_fs4.default.readdirSync(conversationsDir).filter((f) => f.endsWith(`-${shortID}.md`)).sort();
-  } catch {
+    matches = list2(conversationsDir).filter((f) => f.endsWith(`-${shortID}.md`)).sort();
+  } catch (err) {
+    if (!isENOENT(err)) {
+      throw new CaptureError(
+        `Could not list ${conversationsDir} to find an existing capture of this session: ${errMsg(err)}. (Refusing to guess which file a re-save should rewrite, because a failed listing read as "no prior capture" writes a second raw file instead, orphaning the first.)`,
+        { cause: err }
+      );
+    }
   }
   let outPath = import_node_path4.default.join(conversationsDir, filename);
   if (matches.length > 0) {
@@ -37352,25 +37448,11 @@ async function captureSession(wikiRoot, slug, cwd, lookupEnv = processLookupEnv,
   const [claudeCodeID] = lookupEnv("CLAUDE_CODE_SESSION_ID");
   const [openCodeID] = lookupEnv("OPENCODE_SESSION_ID");
   if (openCodeID && !claudeCodeID) {
-    return captureOpenCodeSession(
-      wikiRoot,
-      slug,
-      cwd,
-      lookupEnv,
-      now,
-      exportSeam
-    );
+    return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
   }
   if (openCodeID) {
     if (isOpenCodeSessionTracked(cwd, lookupEnv)) {
-      return captureOpenCodeSession(
-        wikiRoot,
-        slug,
-        cwd,
-        lookupEnv,
-        now,
-        exportSeam
-      );
+      return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
     }
     return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
   }
@@ -37416,27 +37498,16 @@ function captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now) {
 function errMsg(err) {
   return err instanceof Error ? err.message : String(err);
 }
-var OPEN_CODE_SESSIONS_SUBDIR = import_node_path4.default.join(
-  ".opencode",
-  "wiki-knowledge",
-  "sessions"
-);
-function openCodeSessionsDir(cwd) {
-  let dir = cwd === "" ? process.cwd() : cwd;
-  let base = dir;
-  for (; ; ) {
-    try {
-      if (import_node_fs4.default.statSync(import_node_path4.default.join(dir, ".opencode")).isDirectory()) {
-        base = dir;
-        break;
-      }
-    } catch {
-    }
-    const parent = import_node_path4.default.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return import_node_path4.default.join(base, OPEN_CODE_SESSIONS_SUBDIR);
+function isENOENT(err) {
+  return err.code === "ENOENT";
+}
+var OpenCode = {
+  marker: ".opencode",
+  projectDirEnv: "",
+  stateDir: import_node_path4.default.join(".opencode", "wiki-knowledge", "sessions")
+};
+function findOpenCodeSessionsDir(cwd, lookupEnv = processLookupEnv) {
+  return findProjectSessionsDir(cwd, OpenCode, lookupEnv);
 }
 function openCodeSessionIsTracked(sessionID, stateDir) {
   let data;
@@ -37466,7 +37537,8 @@ function isOpenCodeSessionTracked(cwd, lookupEnv = processLookupEnv) {
   const [sessionIDRaw, ok] = lookupEnv("OPENCODE_SESSION_ID");
   const sessionID = sessionIDRaw ?? "";
   if (!ok || sessionID === "") return false;
-  const stateDir = openCodeSessionsDir(cwd);
+  const stateDir = findOpenCodeSessionsDir(cwd, lookupEnv);
+  if (stateDir === void 0) return false;
   try {
     if (!import_node_fs4.default.statSync(stateDir).isDirectory()) return false;
   } catch {
@@ -37483,7 +37555,7 @@ async function exportTranscript(sessionID, command) {
   }
   bin = resolved;
   const tmp = import_node_path4.default.join(
-    import_node_os.default.tmpdir(),
+    import_node_os2.default.tmpdir(),
     `opencode-export-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
   );
   let stderr = "";
@@ -37598,8 +37670,7 @@ function normalizeExport(exportDoc) {
   }
   return turns;
 }
-async function captureOpenCodeSession(wikiRoot, slug, cwd, lookupEnv, now, exportSeam) {
-  void cwd;
+async function captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam) {
   const sessionID = openCodeSessionIDFromEnv(lookupEnv);
   const timestamp = now.getTime() === 0 ? /* @__PURE__ */ new Date() : now;
   const fetch = exportSeam ?? ((id) => exportTranscript(id, "opencode"));
@@ -37629,7 +37700,7 @@ async function captureOpenCodeSession(wikiRoot, slug, cwd, lookupEnv, now, expor
 var import_node_fs5 = __toESM(require("node:fs"), 1);
 var import_node_path5 = __toESM(require("node:path"), 1);
 function logPath(sessionID, stateDir) {
-  const dir = stateDir === "" ? sessionsDir("", "", processLookupEnv) : stateDir;
+  const dir = stateDir === "" ? sessionsDir("", processLookupEnv) : stateDir;
   return import_node_path5.default.join(dir, `${sessionID}-tool-calls.jsonl`);
 }
 function readLog(sessionID, stateDir) {
@@ -37744,62 +37815,6 @@ var import_yaml3 = __toESM(require_dist(), 1);
 // src/pagerecord.ts
 var import_node_path6 = __toESM(require("node:path"), 1);
 var import_yaml2 = __toESM(require_dist(), 1);
-
-// src/sourcedate.ts
-var CANONICAL_DATE_FORMAT = "YYYY-MM-DD";
-function parseSourceDate(value) {
-  if (value instanceof Date) {
-    return formatDateOnly(
-      value.getUTCFullYear(),
-      value.getUTCMonth() + 1,
-      value.getUTCDate()
-    );
-  }
-  if (typeof value !== "string") return null;
-  const s = value.trim();
-  const dateOnly = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) {
-    const [y, mo, d] = [
-      Number(dateOnly[1]),
-      Number(dateOnly[2]),
-      Number(dateOnly[3])
-    ];
-    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
-  }
-  const stamp = s.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/
-  );
-  if (stamp) {
-    const [y, mo, d] = [Number(stamp[1]), Number(stamp[2]), Number(stamp[3])];
-    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
-  }
-  return null;
-}
-function canonicalSourceDate(value) {
-  if (value === null || value === void 0) return value;
-  const date = parseSourceDate(value);
-  if (date === null) {
-    throw new Error(
-      `source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(value)}`
-    );
-  }
-  return date;
-}
-function truncateSourceDate(value) {
-  const date = parseSourceDate(value);
-  return date !== null ? date : value;
-}
-function validDate(y, mo, d) {
-  if (mo < 1 || mo > 12 || d < 1) return false;
-  const leap = y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return d <= days[mo - 1];
-}
-function formatDateOnly(y, mo, d) {
-  return `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-}
-
-// src/pagerecord.ts
 var EdgeKeys = [
   "raw_source",
   "supersedes",
@@ -37964,7 +37979,7 @@ function resolve(p) {
     return abs;
   }
 }
-function isENOENT2(err) {
+function isENOENT3(err) {
   return err.code === "ENOENT";
 }
 function readKindMeta(folderAbsPath) {
@@ -38007,7 +38022,7 @@ var Vault = class {
         withFileTypes: true
       });
     } catch (err) {
-      if (isENOENT2(err)) return [];
+      if (isENOENT3(err)) return [];
       throw err;
     }
     const legacy = [];
@@ -38066,7 +38081,7 @@ var Vault = class {
         withFileTypes: true
       });
     } catch (err) {
-      if (isENOENT2(err)) return {};
+      if (isENOENT3(err)) return {};
       throw err;
     }
     const out = {};
@@ -38246,7 +38261,7 @@ function append(folder, pattern, comment) {
   try {
     existing = import_node_fs9.default.readFileSync(filePath, "utf8");
   } catch (err) {
-    if (!isENOENT3(err)) throw err;
+    if (!isENOENT4(err)) throw err;
   }
   if (existing !== null) {
     const patterns = parse(existing);
@@ -38261,7 +38276,7 @@ function append(folder, pattern, comment) {
     import_node_fs9.default.closeSync(fd);
   }
 }
-function isENOENT3(err) {
+function isENOENT4(err) {
   return err.code === "ENOENT";
 }
 
@@ -38276,7 +38291,7 @@ function walkRaw(root, folder) {
   try {
     info = import_node_fs10.default.statSync(rawRoot);
   } catch (err) {
-    if (isENOENT4(err)) return [];
+    if (isENOENT5(err)) return [];
     throw err;
   }
   if (!info.isDirectory()) return [];
@@ -38301,7 +38316,7 @@ function loadIngestignore(folder) {
   try {
     text2 = import_node_fs10.default.readFileSync(filePath, "utf8");
   } catch (err) {
-    if (isENOENT4(err)) return [];
+    if (isENOENT5(err)) return [];
     throw err;
   }
   return parse(text2);
@@ -38323,11 +38338,11 @@ function strictlyNewer(rawDate, pageDate) {
   if (rawDate === "") return false;
   return rawDate > pageDate;
 }
-async function scan(root, folder, git3) {
+async function scan(root, folder, git2) {
   const vault = new Vault(root);
   const pages = vault.pagesWithText();
   const backPointers = backPointersByRaw(pages);
-  if (git3 === null) git3 = await new VaultGit(root).scanFacts();
+  if (git2 === null) git2 = await new VaultGit(root).scanFacts();
   const rels = walkRaw(root, folder);
   const result = { eligible: [], ignored: [] };
   const matcherCache = /* @__PURE__ */ new Map();
@@ -38357,7 +38372,7 @@ async function scan(root, folder, git3) {
       });
       continue;
     }
-    if (await git3.porcelainMentions(rel)) {
+    if (await git2.porcelainMentions(rel)) {
       result.eligible.push({
         rawRel: rel,
         reason: ReasonChangedSinceIngestion,
@@ -38365,9 +38380,9 @@ async function scan(root, folder, git3) {
       });
       continue;
     }
-    const rawDate = await git3.lastCommitDate(rel);
+    const rawDate = await git2.lastCommitDate(rel);
     for (const pageRel of pointing) {
-      if (strictlyNewer(rawDate, await git3.lastCommitDate(pageRel))) {
+      if (strictlyNewer(rawDate, await git2.lastCommitDate(pageRel))) {
         result.eligible.push({
           rawRel: rel,
           reason: ReasonChangedSinceIngestion,
@@ -38382,7 +38397,7 @@ async function scan(root, folder, git3) {
 function toSlash2(p) {
   return p.split(import_node_path11.default.sep).join("/");
 }
-function isENOENT4(err) {
+function isENOENT5(err) {
   return err.code === "ENOENT";
 }
 
@@ -38487,15 +38502,15 @@ async function checkChainOfEvidence(root, m) {
     throw new ErrGate(`commit gated: ${problems.join("; ")}`);
   }
 }
-async function commit2(root, m, git3) {
-  if (!await git3.isWorkTree()) {
+async function commit2(root, m, git2) {
+  if (!await git2.isWorkTree()) {
     throw new Error(
       `${root} is not a git work tree; the vault's history is not optional`
     );
   }
   await checkChainOfEvidence(root, m);
   const paths = stagedPaths(m);
-  return git3.stageAndCommit(paths, buildMessage(m));
+  return git2.stageAndCommit(paths, buildMessage(m));
 }
 
 // src/initwiki.ts
@@ -38505,7 +38520,7 @@ init_vaultgit();
 var ModeQueryFromAnywhere = "query-from-anywhere";
 var ModeDedicated = "dedicated";
 var Modes = [ModeQueryFromAnywhere, ModeDedicated];
-var gitignore = "*.rsls\n.claude/wiki-knowledge/sessions/\n.opencode/wiki-knowledge/sessions/\n.wiki-knowledge/\nlog.md\nindex.md\n_index.md\n";
+var gitignore = "*.rsls\n**/.claude/wiki-knowledge/sessions/\n**/.opencode/wiki-knowledge/sessions/\n.wiki-knowledge/\nlog.md\nindex.md\n_index.md\n";
 async function isVault(root) {
   if (!hasMarker(root)) return false;
   return await new VaultGit(root).isWorkTree();
@@ -38588,18 +38603,20 @@ function touch(file) {
 // src/hooks.ts
 var import_node_fs13 = __toESM(require("node:fs"), 1);
 var import_node_path15 = __toESM(require("node:path"), 1);
-function sessionStart(payload) {
+function sessionStart(payload, lookupEnv = processLookupEnv) {
   const p = payload ?? {};
   if (!p.session_id || !p.transcript_path) return;
   writeTranscriptPath(
     p.session_id,
     p.transcript_path,
-    sessionsDir(p.cwd ?? "", "", processLookupEnv)
+    sessionsDir(p.cwd ?? "", lookupEnv)
   );
 }
-function postToolUse(payload) {
+function postToolUse(payload, lookupEnv = processLookupEnv) {
   const p = payload ?? {};
   if (!p.session_id) return;
+  const stateDir = findSessionsDir(p.cwd ?? "", lookupEnv);
+  if (stateDir === void 0) return;
   const line = JSON.stringify({
     tool: p.tool_name ?? null,
     tool_use_id: p.tool_use_id ?? null,
@@ -38608,10 +38625,7 @@ function postToolUse(payload) {
     agent_type: p.agent_type ?? null,
     duration_ms: p.duration_ms ?? null
   });
-  const logFile = logPath(
-    p.session_id,
-    sessionsDir(p.cwd ?? "", "", processLookupEnv)
-  );
+  const logFile = logPath(p.session_id, stateDir);
   mkdirSafe(import_node_path15.default.dirname(logFile), 493);
   import_node_fs13.default.appendFileSync(logFile, line + "\n", { mode: 420 });
 }
@@ -38845,7 +38859,7 @@ var Resolved = class {
    * Assumes [Resolved.validate] has already passed. No rollback on failure.
    * git is injectable for tests; pass a [VaultGit] over the vault root in
    * production. */
-  async execute(git3) {
+  async execute(git2) {
     if (this.root === "") {
       throw new ErrPlan(
         "invalid plan: cannot execute a plan resolved without a vault root"
@@ -38888,7 +38902,7 @@ var Resolved = class {
         source_date: manifestSourceDate(this.plan.source_date),
         raw_source: this.plan.raw
       },
-      git3
+      git2
     );
   }
   /** A human-readable summary of what [Resolved.execute] would write. */
@@ -38995,9 +39009,6 @@ function applyFrontmatter(page, planPage, pageDir, plan, titles, v) {
       }
       v_ = composeLink(import_node_path16.default.posix.basename(plan.raw), plan.raw, pageDir);
     }
-    if (key === "source_date") {
-      v_ = truncateSourceDate(value);
-    }
     if (Array.isArray(v_) && merging) {
       page = page.merge(key, v_);
     } else {
@@ -39076,11 +39087,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS page_fts USING fts5(
 );
 `;
 var Index = class _Index {
-  constructor(root, dbPath, db, git3) {
+  constructor(root, dbPath, db, git2) {
     this.root = root;
     this.dbPath = dbPath;
     this.db = db;
-    this.git = git3;
+    this.git = git2;
   }
   /**
    * Open (creating if needed) the index at root, using the real git repo
@@ -39094,24 +39105,24 @@ var Index = class _Index {
    */
   static async open(root) {
     const { VaultGit: VaultGit2 } = await Promise.resolve().then(() => (init_vaultgit(), vaultgit_exports));
-    const git3 = new VaultGit2(root);
-    if (!await git3.isWorkTree()) {
+    const git2 = new VaultGit2(root);
+    if (!await git2.isWorkTree()) {
       throw new Error(
         `${root} is not a git work tree; a vault is a git repository \u2014 run \`enchiridion init <root> --mode \u2026\` to convert it`
       );
     }
-    return _Index.openWithGit(root, git3);
+    return _Index.openWithGit(root, git2);
   }
   /**
    * Open with a substituted Git surface — the test seam. The real
    * entrypoint is `open()`.
    */
-  static async openWithGit(root, git3) {
+  static async openWithGit(root, git2) {
     const indexDir = import_node_path17.default.join(root, ".wiki-knowledge");
     mkdirSafe(indexDir);
     const dbPath = import_node_path17.default.join(indexDir, "index.db");
     const db = new Database(dbPath);
-    const index = new _Index(root, dbPath, db, git3);
+    const index = new _Index(root, dbPath, db, git2);
     index.createSchema();
     if (!index.schemaOk()) {
       await index.rebuildFull();
@@ -39119,9 +39130,9 @@ var Index = class _Index {
     return index;
   }
   /** Open an in-memory index (for tests). */
-  static async openInMemory(git3) {
+  static async openInMemory(git2) {
     const db = new Database();
-    const index = new _Index(":memory:", ":memory:", db, git3);
+    const index = new _Index(":memory:", ":memory:", db, git2);
     index.createSchema();
     if (!index.schemaOk()) {
       await index.rebuildFull();
@@ -39360,8 +39371,12 @@ var Index = class _Index {
     const gitHead = this.watermark();
     let uncommittedPages = 0;
     if (this.root !== ":memory:") {
-      const onDisk = enumeratePageRefs(this.root).length;
-      uncommittedPages = Math.max(onDisk - pages, 0);
+      const indexed = new Set(
+        this.db.all("SELECT page_ref FROM page").map((row) => row.page_ref)
+      );
+      uncommittedPages = enumeratePageRefs(this.root).filter(
+        (ref) => !indexed.has(ref)
+      ).length;
     }
     return {
       pages,
@@ -39924,7 +39939,7 @@ function readdirp(root, options = {}) {
 // node_modules/chokidar/handler.js
 var import_node_fs15 = require("node:fs");
 var import_promises2 = require("node:fs/promises");
-var import_node_os3 = require("node:os");
+var import_node_os4 = require("node:os");
 var sp = __toESM(require("node:path"), 1);
 var STR_DATA = "data";
 var STR_END = "end";
@@ -39936,7 +39951,7 @@ var isWindows = pl === "win32";
 var isMacos = pl === "darwin";
 var isLinux = pl === "linux";
 var isFreeBSD = pl === "freebsd";
-var isIBMi = (0, import_node_os3.type)() === "OS400";
+var isIBMi = (0, import_node_os4.type)() === "OS400";
 var EVENTS = {
   ALL: "all",
   READY: "ready",
@@ -41452,11 +41467,10 @@ function writeLock(lockPath, pid, startedAt) {
   mkdirSafe(import_node_path19.default.dirname(lockPath), 493);
   if (!pid) pid = process.pid;
   const started = startedAt ? startedAt : /* @__PURE__ */ new Date();
-  const payload = {
-    pid,
-    started_at: started.toISOString()
-  };
-  import_node_fs17.default.writeFileSync(lockPath, JSON.stringify(payload), { mode: 420 });
+  import_node_fs17.default.writeFileSync(lockPath, lockPayload(pid, started), { mode: 420 });
+}
+function lockPayload(pid, startedAt) {
+  return JSON.stringify({ pid, started_at: startedAt.toISOString() });
 }
 function removeLock(lockPath) {
   try {
@@ -41465,27 +41479,42 @@ function removeLock(lockPath) {
     if (err.code !== "ENOENT") throw err;
   }
 }
-function lockIsStale(lockPath, now, pidAlive) {
+function pastStaleWindow(startedAtMs, now) {
+  return (now.getTime() - startedAtMs) / 1e3 > StaleLockSeconds;
+}
+function lockState(lockPath, now, pidAlive) {
+  let info;
+  try {
+    info = import_node_fs17.default.statSync(lockPath);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return { kind: "free" };
+    }
+    return { kind: "unparsable" };
+  }
   let data;
   try {
     data = import_node_fs17.default.readFileSync(lockPath, "utf8");
   } catch {
-    return { isStale: true, pid: null };
+    return { kind: "unparsable" };
   }
-  let payload;
+  if (data === "") {
+    return pastStaleWindow(info.mtime.getTime(), now) ? { kind: "unparsable" } : { kind: "held", pid: null };
+  }
+  let raw;
   try {
-    payload = JSON.parse(data);
+    raw = JSON.parse(data);
   } catch {
-    return { isStale: true, pid: null };
+    return { kind: "unparsable" };
   }
+  if (typeof raw !== "object" || raw === null) return { kind: "unparsable" };
+  const payload = raw;
   const startedAt = Date.parse(payload.started_at ?? "");
-  if (Number.isNaN(startedAt)) return { isStale: true, pid: null };
+  if (Number.isNaN(startedAt)) return { kind: "unparsable" };
   const pid = payload.pid ?? 0;
-  if (!pidAlive(pid)) return { isStale: true, pid };
-  if ((now.getTime() - startedAt) / 1e3 > StaleLockSeconds) {
-    return { isStale: true, pid };
-  }
-  return { isStale: false, pid };
+  if (!pidAlive(pid)) return { kind: "dead", pid };
+  if (pastStaleWindow(startedAt, now)) return { kind: "expired", pid };
+  return { kind: "held", pid };
 }
 function defaultPIDAlive(pid) {
   try {
@@ -41495,30 +41524,39 @@ function defaultPIDAlive(pid) {
     return err.code !== "ESRCH";
   }
 }
-function acquireLock(lockPath, now, pidAlive) {
-  const nowDate = now ? now : /* @__PURE__ */ new Date();
-  const alive = pidAlive ?? defaultPIDAlive;
+function defaultNow() {
+  return /* @__PURE__ */ new Date();
+}
+function lockDefaults(seams) {
+  return {
+    clock: seams.clock ?? defaultNow,
+    pidAlive: seams.pidAlive ?? defaultPIDAlive,
+    sleep: seams.sleep ?? sleep
+  };
+}
+function acquireLock(lockPath, seams = {}) {
+  const { clock, pidAlive } = lockDefaults(seams);
   const result = {
     acquired: false,
     stalePID: null
   };
-  const mutexPath = lockPath + ".mutex";
-  withExclusiveLock(mutexPath, () => {
-    if (import_node_fs17.default.existsSync(lockPath)) {
-      const { isStale, pid } = lockIsStale(lockPath, nowDate, alive);
-      if (!isStale) {
+  withExclusiveLock(
+    lockPath + ".mutex",
+    () => {
+      const now = clock();
+      const state = lockState(lockPath, now, pidAlive);
+      if (state.kind === "held") {
         result.acquired = false;
         return;
       }
-      import_node_fs17.default.unlinkSync(lockPath);
-      writeLock(lockPath, 0, nowDate);
+      if (state.kind !== "free") removeLock(lockPath);
+      writeLock(lockPath, 0, now);
       result.acquired = true;
-      result.stalePID = pid;
-      return;
-    }
-    writeLock(lockPath, 0, nowDate);
-    result.acquired = true;
-  });
+      result.stalePID = state.kind === "dead" || state.kind === "expired" ? state.pid : null;
+    },
+    "reclaim",
+    seams
+  );
   return result;
 }
 function readQueue(queuePath) {
@@ -41538,14 +41576,20 @@ function readQueue(queuePath) {
 function withQueueLock(queuePath, fn) {
   mkdirSafe(import_node_path19.default.dirname(queuePath), 493);
   const writelockPath = queuePath + ".writelock";
-  withExclusiveLock(writelockPath, () => {
-    const newLines = fn(readQueue(queuePath));
-    let body = "";
-    for (const line of newLines) body += line + "\n";
-    const tmpPath = queuePath + ".tmp";
-    import_node_fs17.default.writeFileSync(tmpPath, body, { mode: 420 });
-    import_node_fs17.default.renameSync(tmpPath, queuePath);
-  });
+  withExclusiveLock(
+    writelockPath,
+    () => {
+      const newLines = fn(readQueue(queuePath));
+      let body = "";
+      for (const line of newLines) body += line + "\n";
+      const tmpPath = queuePath + ".tmp";
+      import_node_fs17.default.writeFileSync(tmpPath, body, { mode: 420 });
+      import_node_fs17.default.renameSync(tmpPath, queuePath);
+    },
+    // "fail", never "reclaim": two writers each believing they hold the queue
+    // corrupts it. See [StalePolicy].
+    "fail"
+  );
 }
 function appendQueue(queuePath, rel) {
   withQueueLock(queuePath, (lines) => {
@@ -41583,17 +41627,28 @@ function relForEvent(root, abs) {
   if (rel === ".." || rel.startsWith(".." + import_node_path19.default.sep)) return null;
   return toSlash3(rel);
 }
-function withExclusiveLock(lockPath, critical) {
+var LockRetryMillis = 5;
+function withExclusiveLock(lockPath, critical, stalePolicy, seams = {}) {
+  const { clock, pidAlive, sleep: wait } = lockDefaults(seams);
   mkdirSafe(import_node_path19.default.dirname(lockPath), 493);
   let fd;
   for (; ; ) {
     try {
-      fd = import_node_fs17.default.openSync(lockPath, "wx");
+      fd = createLockFile(lockPath, clock());
       break;
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
-      sleep(5);
     }
+    const state = lockState(lockPath, clock(), pidAlive);
+    if (state.kind === "held") {
+      wait(LockRetryMillis);
+      continue;
+    }
+    if (state.kind === "free") continue;
+    if (state.kind !== "dead" && stalePolicy === "fail") {
+      throw lockStuckError(lockPath, state);
+    }
+    removeLock(lockPath);
   }
   let criticalErr = null;
   try {
@@ -41603,14 +41658,34 @@ function withExclusiveLock(lockPath, critical) {
   } finally {
     import_node_fs17.default.closeSync(fd);
     try {
-      import_node_fs17.default.unlinkSync(lockPath);
+      removeLock(lockPath);
     } catch (err) {
-      if (err.code !== "ENOENT") {
-        if (criticalErr === null) criticalErr = err;
-      }
+      if (criticalErr === null) criticalErr = err;
     }
   }
   if (criticalErr !== null) throw criticalErr;
+}
+function createLockFile(lockPath, now) {
+  const fd = import_node_fs17.default.openSync(lockPath, "wx");
+  try {
+    import_node_fs17.default.writeSync(fd, lockPayload(process.pid, now));
+  } catch (err) {
+    import_node_fs17.default.closeSync(fd);
+    removeLock(lockPath);
+    throw err;
+  }
+  return fd;
+}
+function lockStuckError(lockPath, state) {
+  if (state.kind === "unparsable") {
+    return new Error(
+      `lock ${lockPath} says nothing about its holder (unreadable, or not a lock payload); if no other process is writing to this vault, remove it`
+    );
+  }
+  const pid = state.kind === "expired" ? ` by pid ${state.pid}` : "";
+  return new Error(
+    `lock ${lockPath} is held${pid}, that pid is still alive, and the lock has outlived ${StaleLockSeconds}s; if that process is no longer writing to this vault, remove it`
+  );
 }
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -41618,6 +41693,7 @@ function sleep(ms) {
 function toSlash3(p) {
   return p.split(import_node_path19.default.sep).join("/");
 }
+var StopSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
 function runWatch(paths, options = {}) {
   const debounceSeconds = options.debounceSeconds ?? DefaultDebounceSeconds;
   const pollIntervalSeconds = options.pollIntervalSeconds ?? DefaultPollIntervalSeconds;
@@ -41643,14 +41719,12 @@ function runWatch(paths, options = {}) {
       stopped = true;
       log2("watcher stopped");
       cancel();
-      offSignal("SIGINT", stop);
-      offSignal("SIGTERM", stop);
+      for (const signal of StopSignals) offSignal(signal, stop);
       void watcher.close();
       removeLock(paths.lock);
       resolve6();
     };
-    onSignal("SIGINT", stop);
-    onSignal("SIGTERM", stop);
+    for (const signal of StopSignals) onSignal(signal, stop);
     watcher.on("all", (_eventName, p) => {
       const rel = relForEvent(paths.root, p);
       if (rel !== null) debouncer.recordEvent(rel);
@@ -41697,6 +41771,7 @@ function defaultOffSignal(signal, cb) {
 // src/check.ts
 var import_node_fs18 = __toESM(require("node:fs"), 1);
 var import_node_path20 = __toESM(require("node:path"), 1);
+var import_yaml4 = __toESM(require_dist(), 1);
 init_vaultgit();
 init_pagepredicate();
 function walkAllMd(root) {
@@ -41718,6 +41793,12 @@ function walkAllMd(root) {
     if (err.code !== "ENOENT") throw err;
   }
   return refs.sort();
+}
+var UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
+var SOURCES_DIR = "wiki/sources";
+var RAW_HREF_PREFIX = import_node_path20.default.posix.relative(SOURCES_DIR, "raw");
+function regexEscape(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 async function kindFolderConformance(root) {
   const findings = [];
@@ -41759,7 +41840,7 @@ async function frontmatterLinkFormat(root) {
     const unquotedLines = /* @__PURE__ */ new Set();
     const fmLines = frontmatter.split("\n");
     for (let i = 0; i < fmLines.length; i++) {
-      if (/^\s*-\s+\[/.test(fmLines[i])) {
+      if (UNQUOTED_LIST_LINK_RE.test(fmLines[i])) {
         unquotedLines.add(i);
         findings.push({
           pageRef: ref,
@@ -41769,7 +41850,7 @@ async function frontmatterLinkFormat(root) {
     }
     for (const link2 of iterLinks(frontmatter)) {
       if (unquotedLines.has(link2.line)) continue;
-      const reencoded = percentEncode(link2.decodedPath);
+      const reencoded = encodeDest(link2.decodedPath, link2.decodedAnchor);
       if (link2.dest !== reencoded)
         findings.push({
           pageRef: ref,
@@ -41859,6 +41940,103 @@ async function orphans(root) {
     detail: "no inbound links from other wiki pages"
   })).sort((a, b) => a.pageRef.localeCompare(b.pageRef));
 }
+function doubleQuotedSpans(frontmatter) {
+  let doc;
+  try {
+    doc = (0, import_yaml4.parseDocument)(frontmatter);
+  } catch {
+    return [];
+  }
+  if (doc.errors.length > 0) return [];
+  const spans = [];
+  const walk2 = (node) => {
+    if ((0, import_yaml4.isScalar)(node)) {
+      if (node.type === "QUOTE_DOUBLE" && node.range)
+        spans.push([node.range[0], node.range[2]]);
+    } else if ((0, import_yaml4.isSeq)(node)) {
+      for (const item of node.items) walk2(item);
+    } else if ((0, import_yaml4.isMap)(node)) {
+      for (const pair of node.items) walk2(pair.value);
+    }
+  };
+  walk2(doc.contents);
+  return spans;
+}
+function insideAny(spans, start, end) {
+  return spans.some(([s, e]) => s <= start && end <= e);
+}
+function joinLabel(raw) {
+  return raw.replace(/[ \t]*\r?\n[ \t]*/g, " ");
+}
+function frontmatterSplits(frontmatter) {
+  const spans = doubleQuotedSpans(frontmatter);
+  const splits = [];
+  for (const link2 of iterLinks(frontmatter)) {
+    const line = link2.line + 2;
+    const labelStart = link2.fullStart + (link2.isImage ? 2 : 1);
+    const labelEnd = labelStart + link2.label.length;
+    const rawLabel = frontmatter.slice(labelStart, labelEnd);
+    if (rawLabel.includes("\n") && insideAny(spans, labelStart, labelEnd)) {
+      splits.push({
+        start: labelStart,
+        end: labelEnd,
+        joined: joinLabel(rawLabel),
+        kind: "label",
+        line
+      });
+    }
+    const rawDest = frontmatter.slice(link2.start, link2.end);
+    if (rawDest.includes("\n") && insideAny(spans, link2.start, link2.end)) {
+      splits.push({
+        start: link2.start,
+        end: link2.end,
+        // iterLinks joins escaped line breaks out of the destination, so its
+        // `dest` *is* the joined value — a fold is spliced as it is read.
+        joined: link2.dest,
+        kind: "destination",
+        line
+      });
+    }
+  }
+  return splits;
+}
+var OPEN_DEST_RE = /\]\(([^\s)]+)$/;
+var DEST_CONTINUATION_RE = /^[^\s"'()][^\s)]*\)/;
+function bodySplits(pageRef2, text2, body, bodyOffset) {
+  const lines = body.split("\n");
+  const code2 = codeLineRanges(body);
+  const firstLine = text2.slice(0, bodyOffset).split("\n").length;
+  const findings = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (code2.has(i) || code2.has(i + 1)) continue;
+    const open2 = OPEN_DEST_RE.exec(lines[i]);
+    if (!open2) continue;
+    const cont = DEST_CONTINUATION_RE.exec(lines[i + 1]);
+    if (!cont) continue;
+    findings.push({
+      pageRef: pageRef2,
+      detail: `body destination split across lines (line ${firstLine + i}): "${open2[1]}" + "${cont[0].slice(0, -1)}" \u2014 CommonMark reads no link here, so vault move never rewrites it`
+    });
+  }
+  return findings;
+}
+async function splitLinks(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const findings = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    const { frontmatter, hasFrontmatter, body, bodyOffset } = splitFrontmatter(text2);
+    if (hasFrontmatter && frontmatter !== "") {
+      for (const split of frontmatterSplits(frontmatter)) {
+        findings.push({
+          pageRef: ref,
+          detail: `frontmatter link ${split.kind} split across lines (line ${split.line}): joins to "${split.joined}"`
+        });
+      }
+    }
+    findings.push(...bodySplits(ref, text2, body, bodyOffset));
+  }
+  return findings;
+}
 var CHECKS = {
   "kind-folder-conformance": kindFolderConformance,
   "ingestion-source-integrity": ingestionSourceIntegrity,
@@ -41867,7 +42045,8 @@ var CHECKS = {
   "missing-volatility-source-date": missingVolatilitySourceDate,
   "unresolved-supersession": unresolvedSupersession,
   "contradiction-callouts": contradictionCallouts,
-  orphans
+  orphans,
+  "split-links": splitLinks
 };
 async function fixFrontmatterLinkFormat(root) {
   const pages = new Vault(root).loadWikiPages();
@@ -41876,7 +42055,7 @@ async function fixFrontmatterLinkFormat(root) {
     const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
     if (!hasFrontmatter || frontmatter === "") continue;
     let fm = frontmatter.split("\n").map((line) => {
-      if (!/^\s*-\s+\[/.test(line)) return line;
+      if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
       const open2 = line.indexOf("[");
       if (open2 < 0) return line;
       const closeParenIdx = line.lastIndexOf(")");
@@ -41885,8 +42064,7 @@ async function fixFrontmatterLinkFormat(root) {
     }).join("\n");
     const edits = [];
     for (const link2 of iterLinks(fm)) {
-      const fullDecoded = link2.decodedPath + (link2.decodedAnchor ? "#" + link2.decodedAnchor : "");
-      const reencoded = percentEncode(fullDecoded);
+      const reencoded = encodeDest(link2.decodedPath, link2.decodedAnchor);
       if (link2.dest !== reencoded)
         edits.push({ start: link2.start, end: link2.end, dest: reencoded });
     }
@@ -41904,11 +42082,14 @@ async function fixIngestionSourceIntegrity(root) {
   const pages = new Vault(root).loadWikiPages();
   const changed = [];
   for (const [ref, text2] of Object.entries(pages)) {
-    if (!ref.startsWith("wiki/sources/")) continue;
+    if (!ref.startsWith(SOURCES_DIR + "/")) continue;
     const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
     if (!hasFrontmatter) continue;
     if (/^raw_source\s*:/m.test(frontmatter)) continue;
-    const rawLinkRe = /\[[^\]]+\]\(\.\.\/\.\.\/raw\/[^)]+\)/g;
+    const rawLinkRe = new RegExp(
+      `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
+      "g"
+    );
     const rawLinks = [...body.matchAll(rawLinkRe)];
     if (rawLinks.length !== 1) continue;
     const [m] = rawLinks;
@@ -41986,16 +42167,51 @@ ${newBody}` : newBody;
   }
   return changed;
 }
+async function fixSplitLinks(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const changed = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+    if (!hasFrontmatter || frontmatter === "") continue;
+    const splits = frontmatterSplits(frontmatter);
+    if (splits.length === 0) continue;
+    let fm = frontmatter;
+    for (const s of splits.sort((a, b) => b.start - a.start)) {
+      fm = fm.slice(0, s.start) + s.joined + fm.slice(s.end);
+    }
+    import_node_fs18.default.writeFileSync(import_node_path20.default.join(root, ref), `---
+${fm}---
+${body}`, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
 var FIXES = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
-  "missing-cross-references": fixMissingCrossReferences
+  "missing-cross-references": fixMissingCrossReferences,
+  "split-links": fixSplitLinks
 };
+
+// src/output.ts
+function emitRows(rows) {
+  for (const row of rows) console.log(JSON.stringify(row));
+}
+function emitDocument(value) {
+  console.log(JSON.stringify(value));
+}
+function fail(message) {
+  throw new Error(message);
+}
+function failureMessage(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.endsWith("\n") ? message : message + "\n";
+}
 
 // src/exportwriter.ts
 var import_node_fs20 = __toESM(require("node:fs"), 1);
 var import_node_path24 = __toESM(require("node:path"), 1);
-var git2 = __toESM(require_isomorphic_git(), 1);
+init_vaultgit();
 
 // src/exportmeta.ts
 var import_node_path21 = __toESM(require("node:path"), 1);
@@ -42073,9 +42289,8 @@ function buildExportMeta(pages, opts = {}) {
   for (const list2 of tagMap.values()) list2.sort();
   for (const list2 of kindMap.values()) list2.sort();
   const wikiEntries = [];
-  for (const pageRef2 of exported) {
+  for (const [pageRef2, entry] of pages) {
     if (!pageRef2.startsWith("wiki/")) continue;
-    const entry = pages.get(pageRef2);
     const { record } = entry;
     if (!record) continue;
     wikiEntries.push({
@@ -42093,12 +42308,12 @@ function buildExportMeta(pages, opts = {}) {
     return a.title.localeCompare(b.title, void 0, { sensitivity: "base" });
   });
   const getStarted = wikiEntries.slice(0, GET_STARTED_COUNT);
-  return { tagMap, kindMap, inboundCounts, getStarted };
+  return { exported, tagMap, kindMap, inboundCounts, getStarted };
 }
 
 // src/exportrender.ts
 var import_node_path22 = __toESM(require("node:path"), 1);
-var import_yaml4 = __toESM(require_dist(), 1);
+var import_yaml5 = __toESM(require_dist(), 1);
 
 // src/exportstyle.ts
 var SAKURA_CSS = `/* Sakura.css v1.5.1
@@ -42471,7 +42686,6 @@ function navHref(htmlPath, targetPath, mode) {
   if (mode === "single-file") return hashHref(htmlPath, targetPath);
   return `${rootPrefix(htmlPath)}${targetPath}`;
 }
-var SCHEME_RE2 = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 function vaultPageDir(pageRef2) {
   const d = import_node_path22.default.posix.dirname(pageRef2);
   return d === "." ? "" : d;
@@ -42484,9 +42698,9 @@ function applyEdits2(src, edits) {
   return src;
 }
 function claimsDest(dest, mode) {
-  if (dest === "" || dest.startsWith("/") || dest.includes("://")) return false;
+  if (!isVaultRelativeDest(dest)) return false;
   if (dest.endsWith(".md")) return true;
-  return mode === "single-file" && !SCHEME_RE2.test(dest);
+  return mode === "single-file";
 }
 function rewriteBodyLinks(bodyText, pageRef2, exported, mode) {
   const pageDir = vaultPageDir(pageRef2);
@@ -42578,7 +42792,7 @@ function renderPageLink(targetRef, pageRef2, exported, allPages, mode) {
 function renderFrontmatterTable(pageRef2, record, text2, exported, allPages, tagSlugMap, mode) {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
   if (!hasFrontmatter) return "";
-  const fm = frontmatter.trim() ? (0, import_yaml4.parse)(frontmatter) : null;
+  const fm = frontmatter.trim() ? (0, import_yaml5.parse)(frontmatter) : null;
   if (typeof fm !== "object" || fm === null) return "";
   const fmMap = fm;
   const rows = [];
@@ -42655,7 +42869,7 @@ function buildRawPageParts(pageRef2, text2, exported, wikiTitle, mode) {
   const { body, hasFrontmatter, frontmatter } = splitFrontmatter(text2);
   let fmSection = "";
   if (hasFrontmatter && frontmatter.trim()) {
-    const fm = (0, import_yaml4.parse)(frontmatter);
+    const fm = (0, import_yaml5.parse)(frontmatter);
     if (typeof fm === "object" && fm !== null) {
       const rows = Object.entries(fm).map(
         ([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v ?? ""))}</td></tr>`
@@ -42674,23 +42888,16 @@ ${bodyHtml}</article>`;
   return { title: pageRef2, nav, main: main2 };
 }
 function* renderPageParts(pages, meta, opts = {}, mode = "multi-page") {
-  const includeRaw = opts.includeRaw ?? false;
   const wikiTitle = exportTitle(opts);
-  const exported = /* @__PURE__ */ new Set();
-  for (const ref of pages.keys()) {
-    if (ref.startsWith("wiki/") || includeRaw && ref.startsWith("raw/")) {
-      exported.add(ref);
-    }
-  }
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
-  for (const pageRef2 of exported) {
+  for (const pageRef2 of meta.exported) {
     const entry = pages.get(pageRef2);
     const { record, text: text2 } = entry;
     const htmlPath = mdToHtml(pageRef2);
     if (!record) {
       yield {
         path: htmlPath,
-        parts: buildRawPageParts(pageRef2, text2, exported, wikiTitle, mode)
+        parts: buildRawPageParts(pageRef2, text2, meta.exported, wikiTitle, mode)
       };
       continue;
     }
@@ -42700,7 +42907,7 @@ function* renderPageParts(pages, meta, opts = {}, mode = "multi-page") {
         pageRef2,
         record,
         text2,
-        exported,
+        meta.exported,
         pages,
         tagSlugMap,
         wikiTitle,
@@ -42722,7 +42929,7 @@ function* renderPages(pages, meta, opts = {}) {
 }
 
 // src/exportaggregate.ts
-var import_yaml5 = __toESM(require_dist(), 1);
+var import_yaml6 = __toESM(require_dist(), 1);
 function kindBlurb(kind, pages) {
   const folder = KindFolders[kind];
   if (!folder) return "";
@@ -42731,7 +42938,7 @@ function kindBlurb(kind, pages) {
   if (!entry) return "";
   const { frontmatter, hasFrontmatter } = splitFrontmatter(entry.text);
   if (!hasFrontmatter) return "";
-  const fm = (0, import_yaml5.parse)(frontmatter);
+  const fm = (0, import_yaml6.parse)(frontmatter);
   if (typeof fm !== "object" || fm === null) return "";
   return String(fm["summary"] ?? "");
 }
@@ -42811,14 +43018,9 @@ function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode) {
     );
     return `<li><a href="${href}">${escHtml(label)}</a> (${refs.length})${blurbHtml}</li>`;
   });
-  const exported = /* @__PURE__ */ new Set();
-  for (const ref of pages.keys()) {
-    if (ref.startsWith("wiki/")) exported.add(ref);
-    if ((opts.includeRaw ?? false) && ref.startsWith("raw/")) exported.add(ref);
-  }
   let startedItems;
   const suppliedStarters = opts.starters?.filter(
-    (s) => exported.has(s.pageRef)
+    (s) => meta.exported.has(s.pageRef)
   );
   if (suppliedStarters && suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef: pageRef2, annotation }) => {
@@ -43018,9 +43220,9 @@ function resolveExportTitle(root, flagTitle) {
 
 // src/exportwriter.ts
 var ExportDirtyError = class extends Error {
-  constructor(message, dirtyFiles2) {
+  constructor(message, dirtyFiles) {
     super(message);
-    this.dirtyFiles = dirtyFiles2;
+    this.dirtyFiles = dirtyFiles;
     this.name = "ExportDirtyError";
   }
 };
@@ -43036,30 +43238,6 @@ var ExportTargetIsDirectoryError = class extends Error {
     this.name = "ExportTargetIsDirectoryError";
   }
 };
-async function dirtyFiles(root, subtreePaths) {
-  if (subtreePaths.length === 0) return [];
-  try {
-    await git2.findRoot({ fs: import_node_fs20.default, filepath: root });
-  } catch {
-    return [];
-  }
-  try {
-    const matrix = await git2.statusMatrix({
-      fs: import_node_fs20.default,
-      dir: root,
-      filter: (f) => subtreePaths.some((s) => f === s || f.startsWith(s + "/"))
-    });
-    const dirty = [];
-    for (const [filepath, head, workdir, stage] of matrix) {
-      if (head === 1 && workdir === 1 && stage === 1) continue;
-      if (head === 0 && workdir === 0 && stage === 0) continue;
-      dirty.push(filepath);
-    }
-    return dirty;
-  } catch {
-    return [];
-  }
-}
 function enumerateRawRefs(root) {
   const rawDir = import_node_path24.default.join(root, "raw");
   const refs = [];
@@ -43122,7 +43300,7 @@ async function runExport2(root, opts) {
   if (!allowDirty) {
     const subtrees = ["wiki"];
     if (includeRaw) subtrees.push("raw");
-    const dirty = await dirtyFiles(root, subtrees);
+    const dirty = await new VaultGit(root).dirtyFiles(subtrees);
     if (dirty.length > 0) {
       throw new ExportDirtyError(
         `Exported subtree has uncommitted changes (${dirty.length} file${dirty.length === 1 ? "" : "s"}). Commit or stash them, or pass --allow-dirty to skip this check.
@@ -43216,10 +43394,7 @@ function buildCandidates(root) {
 // src/cli.ts
 var import_meta = {};
 function stub(command, label) {
-  command.action(() => {
-    console.error(`enchiridion ${label}: not yet implemented`);
-    process.exitCode = 1;
-  });
+  command.action(() => fail(`enchiridion ${label}: not yet implemented`));
 }
 function loadPage(file) {
   return new Page(import_node_fs21.default.readFileSync(file, "utf8"));
@@ -43289,13 +43464,6 @@ function printToolCallSummary() {
   if (events.length === 0) return;
   console.log(formatSummary(summarize(events)));
 }
-function printIndentedJSON(value) {
-  console.log(JSON.stringify(value, null, 2));
-}
-function bracketListRepr(items) {
-  if (items.length === 0) return "[]";
-  return "[" + items.map((item) => `'${item}'`).join(", ") + "]";
-}
 function splitCommaList(value) {
   return value.split(",").map((s) => s.trim()).filter((s) => s !== "");
 }
@@ -43310,8 +43478,8 @@ function orDashPtr(s) {
   if (s === null) return "-";
   return orDash(s);
 }
-function hitJSON(hit) {
-  return JSON.stringify({
+function hitRow(hit) {
+  return {
     page_ref: hit.pageRef,
     score: hit.score,
     title: hit.title,
@@ -43323,11 +43491,11 @@ function hitJSON(hit) {
     volatility: hit.volatility,
     superseded_by: hit.supersededBy,
     snippet: hit.snippet
-  });
+  };
 }
 function renderHits(hits, asJSON) {
   if (asJSON) {
-    for (const hit of hits) console.log(hitJSON(hit));
+    emitRows(hits.map(hitRow));
     return;
   }
   let width = 0;
@@ -43342,16 +43510,14 @@ function renderHits(hits, asJSON) {
 }
 function renderStatus(st, asJSON) {
   if (asJSON) {
-    console.log(
-      JSON.stringify({
-        pages: st.pages,
-        db_size_bytes: st.dbSizeBytes,
-        backend: st.backend,
-        schema_version: st.schemaVersion,
-        git_head: st.gitHead,
-        uncommitted_pages: st.uncommittedPages
-      })
-    );
+    emitDocument({
+      pages: st.pages,
+      db_size_bytes: st.dbSizeBytes,
+      backend: st.backend,
+      schema_version: st.schemaVersion,
+      git_head: st.gitHead,
+      uncommitted_pages: st.uncommittedPages
+    });
     return;
   }
   console.log(`pages:             ${st.pages}`);
@@ -43369,15 +43535,13 @@ function renderStatus(st, asJSON) {
 }
 function renderReindex(stats, full, asJSON) {
   if (asJSON) {
-    console.log(
-      JSON.stringify({
-        pages: stats.pages,
-        inserted: stats.inserted,
-        updated: stats.updated,
-        removed: stats.removed,
-        duration_ms: stats.durationMs
-      })
-    );
+    emitDocument({
+      pages: stats.pages,
+      inserted: stats.inserted,
+      updated: stats.updated,
+      removed: stats.removed,
+      duration_ms: stats.durationMs
+    });
     return;
   }
   const action = full ? "full reindex" : "reindex";
@@ -43399,28 +43563,23 @@ async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
     candidates: r.candidates
   }));
   const vocab = await index.tagCounts();
+  const payload = { pages };
   if (tagsContain === "" && tagCount === "") {
-    console.log(
-      JSON.stringify({ pages, vocabulary: vocab })
-    );
-    return;
-  }
-  console.log(JSON.stringify({ pages }));
-  if (tagsContain !== "") {
-    const matches = tagsContaining(vocab, splitCommaList(tagsContain));
-    console.log(bracketListRepr(matches));
-  }
-  if (tagCount !== "") {
-    const counts = tagCounts(vocab, splitCommaList(tagCount));
-    for (const tc of counts) {
-      console.log(`${tc.tag} count: ${tc.count}`);
+    payload.vocabulary = vocab;
+  } else {
+    if (tagsContain !== "") {
+      payload.tag_matches = tagsContaining(vocab, splitCommaList(tagsContain));
+    }
+    if (tagCount !== "") {
+      payload.tag_counts = tagCounts(vocab, splitCommaList(tagCount));
     }
   }
+  emitDocument(payload);
 }
 function ignoreRawFile(root, rawRel, comment) {
   const rel = import_node_path25.default.posix.normalize(rawRel);
   if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
-    throw new Error(
+    fail(
       `--ignore takes a vault-relative path under raw/, got ${JSON.stringify(rawRel)}`
     );
   }
@@ -43460,9 +43619,7 @@ function buildProgram() {
     "which date the --since/--until bounds apply to (source_date|git_date)",
     (value) => {
       if (value !== "source_date" && value !== "git_date") {
-        throw new Error(
-          `must be 'source_date' or 'git_date', got "${value}"`
-        );
+        fail(`must be 'source_date' or 'git_date', got "${value}"`);
       }
       return value;
     },
@@ -43559,13 +43716,13 @@ function buildProgram() {
     let id = opts.sessionId ?? "";
     if (id === "") id = process.env.CLAUDE_CODE_SESSION_ID ?? "";
     if (id === "") {
-      throw new Error(
+      fail(
         "no session_id \u2014 pass --session-id or set $CLAUDE_CODE_SESSION_ID"
       );
     }
     const events = readLog(id, "");
     if (events.length === 0) {
-      throw new Error(`no log found at ${logPath(id, "")}`);
+      fail(`no log found at ${logPath(id, "")}`);
     }
     console.log(formatSummary(summarize(events)));
   });
@@ -43604,22 +43761,20 @@ function buildProgram() {
       const meta = readKindMeta(import_node_path25.default.join(root, "wiki", folder));
       result.push({ kind, folder, canonical: false, definition: meta });
     }
-    console.log(JSON.stringify(result));
+    emitDocument(result);
   });
   const checkNames = Object.keys(CHECKS).join(", ");
-  const check3 = program2.command("check").description(`Run a vault health check by name; names: ${checkNames}`).argument("<name>", "check name").option("--json", "emit findings as a JSON array").action(async (name, opts) => {
+  const check3 = program2.command("check").description(`Run a vault health check by name; names: ${checkNames}`).argument("<name>", "check name").option("--json", "emit findings as JSON Lines (one object per line)").action(async (name, opts) => {
     const fn = CHECKS[name];
     if (!fn) {
-      console.error(
+      fail(
         `enchiridion check: unknown check "${name}"; known: ${checkNames}`
       );
-      process.exitCode = 1;
-      return;
     }
     const { root } = resolveRoot();
     const findings = await fn(root);
     if (opts.json) {
-      console.log(JSON.stringify(findings));
+      emitRows(findings);
     } else {
       for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
     }
@@ -43629,11 +43784,7 @@ function buildProgram() {
   const fix = program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").action(async (name) => {
     const fn = FIXES[name];
     if (!fn) {
-      console.error(
-        `enchiridion fix: unknown fix "${name}"; known: ${fixNames}`
-      );
-      process.exitCode = 1;
-      return;
+      fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
     }
     const { root } = resolveRoot();
     const changed = await fn(root);
@@ -43645,9 +43796,7 @@ function buildProgram() {
     const p = loadPage(file);
     const { value, ok } = p.get(key);
     if (!ok || value === null || value === void 0) {
-      console.error(`no frontmatter key "${key}" in ${file}`);
-      process.exitCode = 1;
-      return;
+      fail(`no frontmatter key "${key}" in ${file}`);
     }
     console.log(formatFrontmatterValue(value));
   });
@@ -43659,7 +43808,7 @@ function buildProgram() {
         try {
           value = JSON.parse(raw);
         } catch {
-          throw new Error(`parsing ${key} as JSON: invalid JSON`);
+          fail(`parsing ${key} as JSON: invalid JSON`);
         }
       }
       if (key === "source_date") value = canonicalSourceDate(value);
@@ -43673,23 +43822,23 @@ function buildProgram() {
     try {
       values = JSON.parse(raw);
     } catch {
-      throw new Error(`merge expects a JSON list for ${key}`);
+      fail(`merge expects a JSON list for ${key}`);
     }
     if (!Array.isArray(values)) {
-      throw new Error(`merge expects a JSON list for ${key}`);
+      fail(`merge expects a JSON list for ${key}`);
     }
     const updated = p.merge(key, values);
     writePageFile(file, updated);
   });
-  program2.command("read-page <ref>").description("Print a page's full content by vault-relative ref").option("--json", "emit {page_ref, frontmatter, body} as JSON").action((ref, opts) => {
+  program2.command("read-page <ref>").description("Print a page's full content by vault-relative ref").option("--json", "emit {page_ref, frontmatter, body} as one JSON line").action((ref, opts) => {
     const { root } = resolveRoot();
     const vault2 = new Vault(root);
     if (!vault2.exists(ref)) {
-      throw new Error(`page not found: ${ref}`);
+      fail(`page not found: ${ref}`);
     }
     const page2 = vault2.load(ref);
     if (opts.json) {
-      printIndentedJSON({
+      emitDocument({
         page_ref: ref,
         frontmatter: page2.frontmatter(),
         body: page2.body()
@@ -43703,7 +43852,7 @@ function buildProgram() {
     const records = new Vault(root).pages();
     const resolutions = resolve2(pageRefs, records);
     if (opts.json) {
-      for (const res of resolutions) console.log(JSON.stringify(res));
+      emitRows(resolutions);
       return;
     }
     for (const res of resolutions) {
@@ -43726,19 +43875,19 @@ function buildProgram() {
     const folder = folderArg === void 0 ? "" : normalizeFolderArg(folderArg);
     const result = await scan(root, folder, null);
     if (opts.json) {
+      const rows = [];
       for (const c of result.eligible) {
-        console.log(
-          JSON.stringify({
-            kind: "eligible",
-            raw_rel: c.rawRel,
-            reason: c.reason,
-            back_pointers: c.backPointers
-          })
-        );
+        rows.push({
+          kind: "eligible",
+          raw_rel: c.rawRel,
+          reason: c.reason,
+          back_pointers: c.backPointers
+        });
       }
       for (const rawRel of result.ignored) {
-        console.log(JSON.stringify({ kind: "ignored", raw_rel: rawRel }));
+        rows.push({ kind: "ignored", raw_rel: rawRel });
       }
+      emitRows(rows);
       return;
     }
     renderScanTable(result);
@@ -43774,9 +43923,7 @@ function buildProgram() {
       }
       const { acquired, stalePID } = acquireLock(paths.lock);
       if (!acquired) {
-        throw new Error(
-          `another watcher is already running (lock at ${paths.lock})`
-        );
+        fail(`another watcher is already running (lock at ${paths.lock})`);
       }
       if (stalePID !== null) {
         console.log(
@@ -43808,12 +43955,10 @@ function buildProgram() {
       const planPath = opts.plan ?? "";
       const ignoreRels = opts.ignore ?? [];
       if (opts.dryRun && planPath === "") {
-        throw new Error(
-          "--dry-run only applies to --plan; --ignore always writes"
-        );
+        fail("--dry-run only applies to --plan; --ignore always writes");
       }
       if (planPath === "" === (ignoreRels.length === 0)) {
-        throw new Error("exactly one of --plan or --ignore is required");
+        fail("exactly one of --plan or --ignore is required");
       }
       const { root } = resolveRoot();
       if (ignoreRels.length > 0) {
@@ -43831,7 +43976,7 @@ function buildProgram() {
     "path to a manifest JSON file ('-' reads stdin)"
   ).action(async (opts) => {
     if (!opts.manifest) {
-      throw new Error("required option '--manifest <file>' not specified");
+      fail("required option '--manifest <file>' not specified");
     }
     const { root } = resolveRoot();
     let text2;
@@ -43877,10 +44022,10 @@ function buildProgram() {
     RelatedThreshold
   ).option(
     "--tags-containing <substrings>",
-    "comma-separated substrings (case-insensitive OR match); with --plan, replaces the full tag-vocabulary JSON dump with the plain-text list of matching vault tags"
+    "comma-separated substrings (case-insensitive OR match); with --plan, selects the tag_matches field in place of the full tag-vocabulary dump"
   ).option(
     "--tag-count <tags>",
-    "comma-separated exact tag names; with --plan, replaces the full tag-vocabulary JSON dump with plain-text per-tag page counts (0 if the tag doesn't exist yet)"
+    "comma-separated exact tag names; with --plan, selects the tag_counts field (per-tag page counts, 0 if the tag doesn't exist yet) in place of the full tag-vocabulary dump"
   ).action(
     async (opts) => {
       const { root } = resolveRoot();
@@ -43913,16 +44058,14 @@ function buildProgram() {
           body,
           discoverOpts
         );
-        for (const c of candidates) {
-          console.log(JSON.stringify(c));
-        }
+        emitRows(candidates);
       } finally {
         index.close();
       }
     }
   );
   const hook = program2.command("hook").description("Handle a Claude Code hook payload read from stdin").action(() => {
-    throw new Error(
+    fail(
       `hook: name the event, one of ${["session-start", "post-tool-use"].join(", ")}`
     );
   });
@@ -43947,7 +44090,7 @@ function buildProgram() {
     "save the wiki title as the persistent default and exit (writes no site)"
   ).option(
     "--candidates",
-    "emit ranked candidate JSON to stdout and exit (writes nothing)"
+    "emit the ranked candidate list as one JSON line to stdout and exit (writes nothing)"
   ).option(
     "--starters <refs...>",
     "page refs (optionally as ref=annotation) for the get-started block"
@@ -43958,9 +44101,7 @@ function buildProgram() {
         try {
           saveExportTitle(root, opts.saveTitle);
         } catch (err) {
-          console.error(`enchiridion export: ${err.message}`);
-          process.exitCode = 1;
-          return;
+          fail(`enchiridion export: ${err.message}`);
         }
         console.log(
           `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`
@@ -43968,8 +44109,7 @@ function buildProgram() {
         return;
       }
       if (opts.candidates) {
-        const candidates = buildCandidates(root);
-        console.log(JSON.stringify(candidates, null, 2));
+        emitDocument(buildCandidates(root));
         return;
       }
       const starters = [];
@@ -44000,8 +44140,7 @@ function buildProgram() {
         console.log(`Exported to ${outPath}`);
       } catch (err) {
         if (err instanceof ExportDirtyError || err instanceof ExportTargetNotEmptyError || err instanceof ExportTargetIsDirectoryError) {
-          console.error(`enchiridion export: ${err.message}`);
-          process.exitCode = 1;
+          fail(`enchiridion export: ${err.message}`);
         } else {
           throw err;
         }
@@ -44060,8 +44199,7 @@ async function run(argv) {
           exitCode: err.exitCode
         };
       }
-      const message = err instanceof Error ? err.message : String(err);
-      stderr.push(message.endsWith("\n") ? message : message + "\n");
+      stderr.push(failureMessage(err));
       return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 1 };
     }
     const exitCode = Number(process.exitCode ?? 0);
@@ -44080,7 +44218,10 @@ function main() {
     program2.help();
     return;
   }
-  program2.parse(process.argv);
+  void program2.parseAsync(process.argv).catch((err) => {
+    process.stderr.write(failureMessage(err));
+    process.exitCode = 1;
+  });
 }
 if (isMainModule()) {
   main();
