@@ -21,8 +21,9 @@ import {
   sessionsDir,
   readTranscriptPath,
   processLookupEnv,
+  findProjectSessionsDir,
 } from "./sessionstate.js";
-import type { LookupEnv } from "./sessionstate.js";
+import type { HostLayout, LookupEnv } from "./sessionstate.js";
 
 /** The default cap on a sanitized slug. */
 export const SLUG_MAX_LENGTH = 60;
@@ -400,25 +401,11 @@ export async function captureSession(
   const [claudeCodeID] = lookupEnv("CLAUDE_CODE_SESSION_ID");
   const [openCodeID] = lookupEnv("OPENCODE_SESSION_ID");
   if (openCodeID && !claudeCodeID) {
-    return captureOpenCodeSession(
-      wikiRoot,
-      slug,
-      cwd,
-      lookupEnv,
-      now,
-      exportSeam,
-    );
+    return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
   }
   if (openCodeID) {
     if (isOpenCodeSessionTracked(cwd, lookupEnv)) {
-      return captureOpenCodeSession(
-        wikiRoot,
-        slug,
-        cwd,
-        lookupEnv,
-        now,
-        exportSeam,
-      );
+      return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
     }
     return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
   }
@@ -492,36 +479,30 @@ function isENOENT(err: unknown): boolean {
 // OpenCode host support
 // ---------------------------------------------------------------------------
 
-/** Where the session-tracker plugin writes its state. */
-const OPEN_CODE_SESSIONS_SUBDIR = path.join(
-  ".opencode",
-  "wiki-knowledge",
-  "sessions",
-);
+/** OpenCode's session-state layout — the only things OpenCode differs from
+ * Claude Code in: a `.opencode/` marker and its own state path. It exports no
+ * project-root variable, so the shared rule's env override is skipped. */
+const OpenCode: HostLayout = {
+  marker: ".opencode",
+  projectDirEnv: "",
+  stateDir: path.join(".opencode", "wiki-knowledge", "sessions"),
+};
 
 /**
- * The session-tracker state dir for this project: the nearest ancestor of cwd
- * containing `.opencode/` — writer and reader must agree even when cwd is a
- * subdirectory — and cwd itself when no ancestor holds the marker, so a path
- * is always returned (it may not exist yet).
+ * Where the session-tracker plugin writes its state for the project cwd
+ * belongs to, or undefined when nothing identifies one.
+ *
+ * Resolved by sessionstate's one rule (#493, ADR-0025) — the same walk, `$HOME`
+ * stop and no-cwd-guess posture Claude Code's state resolves by, with only this
+ * host's layout substituted. There is no always-answers form here: the sole
+ * caller (isOpenCodeSessionTracked) never surfaces the path, and "no project"
+ * is its answer.
  */
-function openCodeSessionsDir(cwd: string): string {
-  let dir = cwd === "" ? process.cwd() : cwd;
-  let base = dir;
-  for (;;) {
-    try {
-      if (fs.statSync(path.join(dir, ".opencode")).isDirectory()) {
-        base = dir;
-        break;
-      }
-    } catch {
-      // not present — keep walking up
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return path.join(base, OPEN_CODE_SESSIONS_SUBDIR);
+export function findOpenCodeSessionsDir(
+  cwd: string,
+  lookupEnv: LookupEnv = processLookupEnv,
+): string | undefined {
+  return findProjectSessionsDir(cwd, OpenCode, lookupEnv);
 }
 
 /**
@@ -589,7 +570,8 @@ export function isOpenCodeSessionTracked(
   const sessionID = sessionIDRaw ?? "";
   if (!ok || sessionID === "") return false;
 
-  const stateDir = openCodeSessionsDir(cwd);
+  const stateDir = findOpenCodeSessionsDir(cwd, lookupEnv);
+  if (stateDir === undefined) return false;
   try {
     if (!fs.statSync(stateDir).isDirectory()) return false;
   } catch {
@@ -785,21 +767,18 @@ export function normalizeExport(exportDoc: Uint8Array): Turn[] {
  * The whole pipeline (openCodeSessionIDFromEnv -> export -> normalizeExport ->
  * transcriptToPage -> writeCapture) in one call. The session id comes from
  * `$OPENCODE_SESSION_ID` alone — no tracker state is required, so a session
- * that predates the plugin still captures via `opencode export` (#402).
- * exportSeam is the injectable fetch seam; undefined runs the real
- * `opencode export`.
+ * that predates the plugin still captures via `opencode export` (#402), and no
+ * project root is resolved: the transcript comes from the host, and the capture
+ * goes into the vault. exportSeam is the injectable fetch seam; undefined runs
+ * the real `opencode export`.
  */
 export async function captureOpenCodeSession(
   wikiRoot: string,
   slug: string,
-  cwd: string,
   lookupEnv: LookupEnv,
   now: Date,
   exportSeam?: Exporter,
 ): Promise<string> {
-  // cwd is retained for capture-function signature parity with the Claude Code
-  // path; the OpenCode capture needs no vault-root walk, only the env var.
-  void cwd;
   const sessionID = openCodeSessionIDFromEnv(lookupEnv);
   const timestamp = now.getTime() === 0 ? new Date() : now;
   const fetch =

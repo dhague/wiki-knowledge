@@ -20,9 +20,11 @@ import {
   captureSession,
   openCodeSessionIDFromEnv,
   isOpenCodeSessionTracked,
+  findOpenCodeSessionsDir,
   ErrTooFewTurns,
   CaptureError,
 } from "./transcriptcapture.js";
+import { findSessionsDir } from "./sessionstate.js";
 import type { Turn } from "./transcriptcapture.js";
 import type { LookupEnv } from "./sessionstate.js";
 
@@ -545,7 +547,7 @@ function openCodeEnvAndState(): {
 }
 
 test("captureOpenCodeSession writes a capture using the injected export seam", async () => {
-  const { project, lookupEnv, sessionID } = openCodeEnvAndState();
+  const { lookupEnv, sessionID } = openCodeEnvAndState();
   const doc = JSON.stringify({
     info: { id: sessionID },
     messages: [
@@ -562,7 +564,6 @@ test("captureOpenCodeSession writes a capture using the injected export seam", a
   const rel = await captureOpenCodeSession(
     wikiRoot,
     "My Session",
-    project,
     lookupEnv,
     NOW,
     exportSeam,
@@ -574,7 +575,7 @@ test("captureOpenCodeSession writes a capture using the injected export seam", a
 });
 
 test("captureOpenCodeSession writes attribution naming OpenCode, not Claude Code", async () => {
-  const { project, lookupEnv, sessionID } = openCodeEnvAndState();
+  const { lookupEnv, sessionID } = openCodeEnvAndState();
   const doc = JSON.stringify({
     info: { id: sessionID },
     messages: [
@@ -589,7 +590,6 @@ test("captureOpenCodeSession writes attribution naming OpenCode, not Claude Code
   const rel = await captureOpenCodeSession(
     wikiRoot,
     "",
-    project,
     lookupEnv,
     NOW,
     exportSeam,
@@ -603,13 +603,12 @@ test("captureOpenCodeSession writes attribution naming OpenCode, not Claude Code
 });
 
 test("captureOpenCodeSession fails when the export seam errors", async () => {
-  const { project, lookupEnv } = openCodeEnvAndState();
+  const { lookupEnv } = openCodeEnvAndState();
   const exportSeam = async (): Promise<Uint8Array> => {
     throw new CaptureError("export exploded");
   };
   await assert.rejects(
-    () =>
-      captureOpenCodeSession(tmp(), "", project, lookupEnv, NOW, exportSeam),
+    () => captureOpenCodeSession(tmp(), "", lookupEnv, NOW, exportSeam),
     (err: unknown) =>
       err instanceof CaptureError && /export exploded/.test(err.message),
   );
@@ -619,7 +618,6 @@ test("captureOpenCodeSession captures a session that predates the tracker", asyn
   // No `.opencode/` state dir at all: the session was started before the
   // session-tracker plugin was installed, so it was never recorded. `opencode
   // export` still has the transcript, so the capture must succeed anyway (#402).
-  const project = tmp();
   const sessionID = "oc-pre-plugin-777";
   const lookupEnv = env({ OPENCODE_SESSION_ID: sessionID });
   const doc = JSON.stringify({
@@ -636,7 +634,6 @@ test("captureOpenCodeSession captures a session that predates the tracker", asyn
   const rel = await captureOpenCodeSession(
     wikiRoot,
     "",
-    project,
     lookupEnv,
     NOW,
     exportSeam,
@@ -680,6 +677,129 @@ test("isOpenCodeSessionTracked is false when the env var is unset", () => {
 test("isOpenCodeSessionTracked is false when there is no state directory", () => {
   assert.equal(
     isOpenCodeSessionTracked(tmp(), env({ OPENCODE_SESSION_ID: "oc-x" })),
+    false,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The session root: one rule, per-host layout (#493)
+// ---------------------------------------------------------------------------
+
+/**
+ * A directory that is not a project for either host: no `.claude/` and no
+ * `.opencode/` anywhere between cwd and the sandboxed $HOME. The sandbox is
+ * injected as $HOME so each walk hits the home boundary and stops, rather than
+ * escaping into the real filesystem — where a stray marker would answer for it.
+ */
+function notAProject(): { home: string; cwd: string } {
+  const home = tmp();
+  const cwd = path.join(home, "no", "project", "here");
+  fs.mkdirSync(cwd, { recursive: true });
+  return { home, cwd };
+}
+
+test("both host adapters resolve no project when neither marker is present (#493)", () => {
+  const { home, cwd } = notAProject();
+  const lookupEnv = env({ HOME: home });
+  assert.equal(findSessionsDir(cwd, lookupEnv), undefined);
+  assert.equal(findOpenCodeSessionsDir(cwd, lookupEnv), undefined);
+});
+
+test("findOpenCodeSessionsDir walks up to the nearest .opencode ancestor", () => {
+  const project = tmp();
+  const nested = path.join(project, "src", "deep");
+  fs.mkdirSync(path.join(project, ".opencode"), { recursive: true });
+  fs.mkdirSync(nested, { recursive: true });
+  assert.equal(
+    findOpenCodeSessionsDir(nested, env({})),
+    path.join(project, ".opencode", "wiki-knowledge", "sessions"),
+  );
+});
+
+test("findOpenCodeSessionsDir returns no project rather than falling back to cwd (#493)", () => {
+  // The writer-facing posture: with no `.opencode/` above it the answer is
+  // "not inside a project", never a cwd-relative guess (#485). Reading the
+  // tracker state from a bare cwd is what this replaced.
+  const { home, cwd } = notAProject();
+  assert.equal(findOpenCodeSessionsDir(cwd, env({ HOME: home })), undefined);
+});
+
+test("the OpenCode walk stops at the home directory (#493)", () => {
+  // `~/.opencode` is no more a project marker than `~/.claude` is: a directory
+  // the user did not make a project must not answer for one, or a session run
+  // from $HOME writes a state tree into what is global configuration (#485).
+  const home = tmp();
+  fs.mkdirSync(path.join(home, ".opencode"), { recursive: true });
+  const cwd = path.join(home, "scratch");
+  fs.mkdirSync(cwd, { recursive: true });
+  assert.equal(findOpenCodeSessionsDir(cwd, env({ HOME: home })), undefined);
+});
+
+test("a project under the home directory still resolves for OpenCode (#485)", () => {
+  // The boundary is the home directory itself, not everything below it: a
+  // project's own `.opencode/` is reached before the walk gets there.
+  const home = tmp();
+  fs.mkdirSync(path.join(home, ".opencode"), { recursive: true });
+  const project = path.join(home, "code", "app");
+  fs.mkdirSync(path.join(project, ".opencode"), { recursive: true });
+  assert.equal(
+    findOpenCodeSessionsDir(path.join(project, "src"), env({ HOME: home })),
+    path.join(project, ".opencode", "wiki-knowledge", "sessions"),
+  );
+});
+
+test("the OpenCode adapter has no env override (#493)", () => {
+  // `$CLAUDE_PROJECT_DIR` is Claude Code's statement about Claude Code's
+  // project. OpenCode exports no equivalent, so it cannot move this root —
+  // and a variable leaked from a Claude session must not name an OpenCode
+  // project that does not exist.
+  const { home, cwd } = notAProject();
+  const project = tmp();
+  fs.mkdirSync(path.join(project, ".opencode"), { recursive: true });
+  assert.equal(
+    findOpenCodeSessionsDir(
+      cwd,
+      env({ HOME: home, CLAUDE_PROJECT_DIR: project }),
+    ),
+    undefined,
+  );
+});
+
+test("each adapter is keyed on its own marker, not the other host's (#493)", () => {
+  const home = tmp();
+  const lookupEnv = env({ HOME: home });
+  const claudeProject = path.join(home, "claude-project");
+  fs.mkdirSync(path.join(claudeProject, ".claude"), { recursive: true });
+  const openCodeProject = path.join(home, "opencode-project");
+  fs.mkdirSync(path.join(openCodeProject, ".opencode"), { recursive: true });
+
+  assert.equal(
+    findSessionsDir(claudeProject, lookupEnv),
+    path.join(claudeProject, ".claude", "wiki-knowledge", "sessions"),
+  );
+  assert.equal(findOpenCodeSessionsDir(claudeProject, lookupEnv), undefined);
+
+  assert.equal(
+    findOpenCodeSessionsDir(openCodeProject, lookupEnv),
+    path.join(openCodeProject, ".opencode", "wiki-knowledge", "sessions"),
+  );
+  assert.equal(findSessionsDir(openCodeProject, lookupEnv), undefined);
+});
+
+test("isOpenCodeSessionTracked reads the tracker state at the project root, not at cwd", () => {
+  const { project, lookupEnv } = openCodeEnvAndState();
+  const nested = path.join(project, "wiki", "concepts");
+  fs.mkdirSync(nested, { recursive: true });
+  assert.equal(isOpenCodeSessionTracked(nested, lookupEnv), true);
+});
+
+test("isOpenCodeSessionTracked answers false with no project, never a cwd guess (#493)", () => {
+  const { home, cwd } = notAProject();
+  assert.equal(
+    isOpenCodeSessionTracked(
+      cwd,
+      env({ HOME: home, OPENCODE_SESSION_ID: "oc-x" }),
+    ),
     false,
   );
 });

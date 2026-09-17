@@ -71,6 +71,10 @@ A small (~15–30 page), hand-authored ground-truth vault used as the eval and m
 **Deployment mode**:
 Whether the plugin resolves the vault as the launch directory (**dedicated**) or via `$WIKI_ROOT` while installed user-scope for use from any repo (**query-from-anywhere**). Both are supported; the vault-root resolution order is what makes either possible (see [ADR-0004](docs/adr/0004-deployment-modes-and-vault-root-resolution.md)).
 
+**Session root**:
+The project a host session's state belongs to — under which that host keeps its session state (`.claude/wiki-knowledge/sessions/` for Claude Code, `.opencode/…` for OpenCode), and **never the vault**, which in query-from-anywhere mode is somewhere else entirely. Resolved per host by one order: the host's env override (`$CLAUDE_PROJECT_DIR` for Claude Code; OpenCode exports none) → the nearest ancestor of cwd carrying the host's marker directory → **stop at `$HOME`**, "no project" rather than a cwd fallback ([ADR-0025](docs/adr/0025-session-root-per-host-no-cwd-fallback.md)). Deliberately *not* the vault-root order ([ADR-0004](docs/adr/0004-deployment-modes-and-vault-root-resolution.md)): that one ends in a cwd fallback, and a session-state writer that fell back would create a state tree wherever the caller stood (#485).
+_Avoid_: Project root, project dir (the vault root is the project dir in dedicated mode; this names whose session state it is), session directory (that is the `sessions/` directory under this root, not the root itself).
+
 **Turn**:
 One assistant message in an agent session, which may carry several parallel tool calls. Agent procedures are designed against turn cost — see [ADR-0007](docs/adr/0007-turn-cost-not-tool-call-count.md).
 _Avoid_: Tool call — a turn may batch several tool calls together, so the two counts diverge; see ADR-0007.
