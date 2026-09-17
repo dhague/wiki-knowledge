@@ -33,7 +33,7 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<sub
 
 ### 2. Run mechanical checks
 
-Run all nine with `"$ENCHIRIDION" check <name> --json`. Each returns a JSON array of `{"pageRef": "...", "detail": "..."}` objects, or `[]` when clean. Run in parallel where the vault is large:
+Run all nine with `"$ENCHIRIDION" check <name> --json`. Each emits JSON Lines — one `{"pageRef": "...", "detail": "..."}` object per finding, one per line, and nothing at all when clean (no `[]` to unwrap). Run in parallel where the vault is large:
 
 ```bash
 "$ENCHIRIDION" check kind-folder-conformance --json

@@ -53,7 +53,7 @@ Use `"$ENCHIRIDION"` for every call below.
    ```bash
    "$ENCHIRIDION" export --candidates
    ```
-   Emits a JSON array to stdout — each entry is an object with fields
+   Emits one compact JSON array on a single stdout line — each entry is an object with fields
    `pageRef`, `title`, `summary`, `kind`, `tags`, `inboundCount`. No files
    written.
 
