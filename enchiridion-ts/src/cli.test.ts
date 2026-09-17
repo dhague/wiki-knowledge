@@ -58,10 +58,11 @@ function writeTempPage(frontmatter: string, body: string): string {
   return file;
 }
 
-/** Run the CLI with `input` piped to its stdin. */
+/** Run the CLI with `input` piped to its stdin, and optional extra env. */
 function runWithStdin(
   args: string[],
   input: string,
+  env?: Record<string, string>,
 ): {
   status: number | null;
   stdout: string;
@@ -70,6 +71,7 @@ function runWithStdin(
   const result = spawnSync(tsxBin, [cliPath, ...args], {
     encoding: "utf8",
     input,
+    env: env ? { ...process.env, ...env } : undefined,
   });
   return {
     status: result.status,
@@ -317,16 +319,27 @@ test("hook session-start: malformed stdin fails open, exits 0", () => {
 test("hook post-tool-use: reads stdin, appends one JSON line, exits 0", () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hook-"));
   const sessionID = "hook-sess-2";
+  // The tool call runs in a content folder, while $CLAUDE_PROJECT_DIR — which
+  // Claude Code exports to every hook process — still names the project, so
+  // the line belongs at the project root, not beside the tool call (#485).
+  const contentDir = path.join(project, "wiki", "concepts");
+  fs.mkdirSync(contentDir, { recursive: true });
   const payload = JSON.stringify({
     session_id: sessionID,
-    cwd: project,
+    cwd: contentDir,
     tool_name: "Bash",
     tool_use_id: "tu_1",
     prompt_id: "pr_1",
     duration_ms: 42,
   });
-  const { status, stderr } = runWithStdin(["hook", "post-tool-use"], payload);
+  const { status, stderr } = runWithStdin(["hook", "post-tool-use"], payload, {
+    CLAUDE_PROJECT_DIR: project,
+  });
   assert.equal(status, 0, stderr);
+  assert.ok(
+    !fs.existsSync(path.join(contentDir, ".claude")),
+    "session state was scattered into a content directory",
+  );
   const logDir = path.join(project, ".claude", "wiki-knowledge", "sessions");
   const lines = fs
     .readFileSync(path.join(logDir, `${sessionID}-tool-calls.jsonl`), "utf8")

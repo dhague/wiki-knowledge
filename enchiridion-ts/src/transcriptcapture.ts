@@ -254,7 +254,7 @@ export function findTranscriptPath(
     );
   }
 
-  const stateDir = sessionsDir("", cwd, lookupEnv);
+  const stateDir = sessionsDir(cwd, lookupEnv);
   let stateStat: fs.Stats;
   try {
     stateStat = fs.statSync(stateDir);
@@ -300,7 +300,8 @@ function stateDirNotLocated(cwd: string): CaptureError {
     "Could not locate a session state directory. Searched " +
       "$CLAUDE_PROJECT_DIR, then walked up from " +
       cwd +
-      " for a '.claude/' ancestor, and did not find one. (Has the " +
+      " as far as the home directory for a '.claude/' ancestor, and did " +
+      "not find one. (Has the " +
       "SessionStart hook ever run in this project? Start a new session " +
       "in the project root and try again.)",
   );

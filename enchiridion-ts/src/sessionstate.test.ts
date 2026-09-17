@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   sessionsDir,
+  findSessionsDir,
   writeTranscriptPath,
   readTranscriptPath,
 } from "./sessionstate.js";
@@ -27,23 +28,28 @@ function env(map: Record<string, string>): LookupEnv {
   };
 }
 
+/**
+ * A cwd with no `.claude` anywhere above it, for the tests that must observe
+ * an *unresolvable* root. The sandbox is injected as $HOME so the walk-up hits
+ * the home boundary and stops, rather than escaping into the real filesystem —
+ * where a stray `/tmp/.claude` left by an old run would change the answer.
+ */
+function sandbox(): { home: string; cwd: string } {
+  const home = tmp();
+  const cwd = path.join(home, "no", "project", "here");
+  fs.mkdirSync(cwd, { recursive: true });
+  return { home, cwd };
+}
+
 // ---------------------------------------------------------------------------
 // sessionsDir resolution order
 // ---------------------------------------------------------------------------
 
-test("sessionsDir: injected root wins over everything", () => {
-  const root = tmp();
-  const got = sessionsDir(root, "/some/other/cwd", env({}));
-  assert.equal(got, path.join(root, ".claude", "wiki-knowledge", "sessions"));
-});
-
-test("sessionsDir: CLAUDE_PROJECT_DIR is used when no root", () => {
+test("sessionsDir: CLAUDE_PROJECT_DIR wins over a .claude ancestor", () => {
   const project = tmp();
-  const got = sessionsDir(
-    "",
-    "/some/cwd",
-    env({ CLAUDE_PROJECT_DIR: project }),
-  );
+  const elsewhere = tmp();
+  fs.mkdirSync(path.join(elsewhere, ".claude"), { recursive: true });
+  const got = sessionsDir(elsewhere, env({ CLAUDE_PROJECT_DIR: project }));
   assert.equal(
     got,
     path.join(project, ".claude", "wiki-knowledge", "sessions"),
@@ -54,20 +60,85 @@ test("sessionsDir: walks up to the nearest .claude ancestor", () => {
   const root = tmp();
   const nested = path.join(root, "a", "b");
   fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
-  const got = sessionsDir("", nested, env({}));
+  const got = sessionsDir(nested, env({}));
   assert.equal(got, path.join(root, ".claude", "wiki-knowledge", "sessions"));
 });
 
 test("sessionsDir: falls back to cwd when no .claude ancestor exists", () => {
-  const cwd = tmp();
-  const got = sessionsDir("", cwd, env({}));
+  const { home, cwd } = sandbox();
+  const got = sessionsDir(cwd, env({ HOME: home }));
   assert.equal(got, path.join(cwd, ".claude", "wiki-knowledge", "sessions"));
 });
 
 test("sessionsDir: empty CLAUDE_PROJECT_DIR is ignored", () => {
-  const cwd = tmp();
-  const got = sessionsDir("", cwd, env({ CLAUDE_PROJECT_DIR: "" }));
+  const root = tmp();
+  const nested = path.join(root, "a");
+  fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+  fs.mkdirSync(nested, { recursive: true });
+  const got = sessionsDir(nested, env({ CLAUDE_PROJECT_DIR: "" }));
+  assert.equal(got, path.join(root, ".claude", "wiki-knowledge", "sessions"));
+});
+
+test("sessionsDir: the walk stops at the home directory", () => {
+  const home = tmp();
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+  const cwd = path.join(home, "scratch");
+  fs.mkdirSync(cwd, { recursive: true });
+  const got = sessionsDir(cwd, env({ HOME: home }));
   assert.equal(got, path.join(cwd, ".claude", "wiki-knowledge", "sessions"));
+});
+
+// ---------------------------------------------------------------------------
+// findSessionsDir — the same rule, refusing the cwd guess (#485)
+// ---------------------------------------------------------------------------
+
+test("findSessionsDir: CLAUDE_PROJECT_DIR, without a .claude on disk", () => {
+  const project = tmp();
+  const { home, cwd } = sandbox();
+  const got = findSessionsDir(
+    cwd,
+    env({ HOME: home, CLAUDE_PROJECT_DIR: project }),
+  );
+  assert.equal(
+    got,
+    path.join(project, ".claude", "wiki-knowledge", "sessions"),
+  );
+});
+
+test("findSessionsDir: walks up to the nearest .claude ancestor", () => {
+  const root = tmp();
+  const nested = path.join(root, "a", "b");
+  fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+  const got = findSessionsDir(nested, env({}));
+  assert.equal(got, path.join(root, ".claude", "wiki-knowledge", "sessions"));
+});
+
+test("findSessionsDir: undefined when no project is identifiable (#485)", () => {
+  const { home, cwd } = sandbox();
+  assert.equal(findSessionsDir(cwd, env({ HOME: home })), undefined);
+});
+
+test("findSessionsDir: undefined rather than the home directory (#485)", () => {
+  const home = tmp();
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+  const cwd = path.join(home, "scratch");
+  fs.mkdirSync(cwd, { recursive: true });
+  assert.equal(findSessionsDir(cwd, env({ HOME: home })), undefined);
+});
+
+test("findSessionsDir: a project under the home directory still resolves", () => {
+  const home = tmp();
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+  const project = path.join(home, "code", "vault");
+  fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
+  const got = findSessionsDir(
+    path.join(project, "wiki", "concepts"),
+    env({ HOME: home }),
+  );
+  assert.equal(
+    got,
+    path.join(project, ".claude", "wiki-knowledge", "sessions"),
+  );
 });
 
 // ---------------------------------------------------------------------------

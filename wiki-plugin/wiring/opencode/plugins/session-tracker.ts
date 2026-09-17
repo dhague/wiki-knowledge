@@ -22,7 +22,8 @@
  * Events are already scoped to the plugin's directory (OpenCode drops events
  * whose `location.directory` differs), but the session's own directory is
  * preferred anyway so state lands in the project the session actually
- * belongs to, mirroring the CC hook's use of the payload cwd.
+ * belongs to — the same preference the CC hook now states outright, resolving
+ * the project rather than wherever a tool last ran (#485).
  *
  * Never raises or blocks: any failure is swallowed so a broken tracker can't
  * interrupt session start.

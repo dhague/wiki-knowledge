@@ -18,8 +18,7 @@ import { sessionsDir, processLookupEnv } from "./sessionstate.js";
 /** The tool-call log path for sessionID under stateDir. An empty stateDir
  * resolves the session state directory. */
 export function logPath(sessionID: string, stateDir: string): string {
-  const dir =
-    stateDir === "" ? sessionsDir("", "", processLookupEnv) : stateDir;
+  const dir = stateDir === "" ? sessionsDir("", processLookupEnv) : stateDir;
   return path.join(dir, `${sessionID}-tool-calls.jsonl`);
 }
 
