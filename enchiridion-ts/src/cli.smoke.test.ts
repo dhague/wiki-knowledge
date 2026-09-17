@@ -340,6 +340,17 @@ test(
       JSON.parse(lines[0]).page_ref,
       "wiki/concepts/connection-pooling.md",
     );
+
+    // --plan stays one document: the tag vocabulary the caller needs to mint
+    // tags rides inside it, not after it as plain text.
+    const planPath = path.join(root, "draft.json");
+    fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
+    const plan = runBundled(
+      ["discover", "--plan", planPath, "--tags-containing", "data"],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(plan.status, 0, plan.stderr);
+    assert.deepEqual(JSON.parse(plan.stdout).tag_matches, ["database"]);
   },
 );
 
@@ -642,6 +653,20 @@ test(
       stdout.trim(),
       "wiki/concepts/old.md  ->  wiki/concepts/new.md",
     );
+
+    // --json is JSON Lines: the same one row, as one object on one line.
+    const asJSON = runBundled(
+      ["superseded-by", "wiki/concepts/old.md", "--json"],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(asJSON.status, 0, asJSON.stderr);
+    const rows = asJSON.stdout
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].seed, "wiki/concepts/old.md");
+    assert.equal(rows[0].active, "wiki/concepts/new.md");
   },
 );
 
@@ -679,6 +704,63 @@ test(
     assert.equal(payload.page_ref, "wiki/concepts/a.md");
     assert.deepEqual(payload.frontmatter, { title: "A", summary: "s" });
     assert.equal(payload.body, "\nbody text\n");
+    // One compact document on one line, not a pretty-printed blob.
+    assert.equal(asJSON.stdout, JSON.stringify(payload) + "\n");
+  },
+);
+
+// ---------------------------------------------------------------------------
+// check / fix
+// ---------------------------------------------------------------------------
+
+test(
+  `[${runtimeName}] check: --json is JSON Lines, and a clean check is silent`,
+  { skip: skipReason },
+  () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "enchiridion-smoke-check-"),
+    );
+    fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "wiki", "loose.md"),
+      "---\ntitle: L\n---\n",
+    );
+    fs.mkdirSync(path.join(root, "wiki", "concepts", "nested"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(root, "wiki", "concepts", "nested", "deep.md"),
+      "---\ntitle: D\n---\n",
+    );
+    fs.writeFileSync(path.join(root, ".wiki-root"), "");
+
+    const { status, stdout, stderr } = runBundled(
+      ["check", "kind-folder-conformance", "--json"],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(status, 0, stderr);
+    const rows = stdout
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    assert.deepEqual(
+      rows.map((r) => r.pageRef),
+      ["wiki/concepts/nested/deep.md", "wiki/loose.md"],
+    );
+
+    const clean = runBundled(["check", "contradiction-callouts", "--json"], {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    });
+    assert.equal(clean.status, 0, clean.stderr);
+    assert.equal(clean.stdout, "");
+
+    const unknown = runBundled(["check", "nope"], {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    });
+    assert.notEqual(unknown.status, 0);
+    assert.match(unknown.stderr, /unknown check "nope"/);
   },
 );
 

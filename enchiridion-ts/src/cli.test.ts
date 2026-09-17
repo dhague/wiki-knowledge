@@ -943,7 +943,7 @@ test("read-page: prints a page's full markdown by vault-relative ref", () => {
   assert.equal(stdout, "---\ntitle: A\nsummary: s\n---\n\nbody text\n");
 });
 
-test("read-page --json: emits {page_ref, frontmatter, body}", () => {
+test("read-page --json: emits {page_ref, frontmatter, body} as one compact line", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-rp-"));
   fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
   fs.writeFileSync(
@@ -961,6 +961,8 @@ test("read-page --json: emits {page_ref, frontmatter, body}", () => {
   assert.equal(payload.page_ref, "wiki/concepts/a.md");
   assert.deepEqual(payload.frontmatter, { title: "A", tags: ["db"] });
   assert.equal(payload.body, "\nbody text\n");
+  // One document, one line: the page is not pretty-printed across many.
+  assert.equal(stdout, JSON.stringify(payload) + "\n");
 });
 
 test("read-page: a missing ref errors non-zero", () => {
@@ -1048,6 +1050,110 @@ test("ingest-scan: lists eligible raw files", () => {
   assert.equal(records[0].kind, "eligible");
   assert.equal(records[0].raw_rel, "raw/foo.md");
   assert.equal(records[0].reason, "never-ingested");
+});
+
+// ---------------------------------------------------------------------------
+// check / fix — the vault-health pair
+// ---------------------------------------------------------------------------
+
+/** A vault with two structural violations and two well-formed pages. */
+function buildLintableVault(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-check-"));
+  const write = (rel: string, content: string) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  };
+  write("wiki/loose.md", "---\ntitle: Loose\nsummary: s\n---\n\n");
+  write(
+    "wiki/concepts/nested/deep.md",
+    "---\ntitle: Deep\nsummary: s\n---\n\n",
+  );
+  write("wiki/concepts/a.md", "---\ntitle: A\nsummary: s\n---\n\n");
+  write("wiki/concepts/b.md", "---\ntitle: B\nsummary: s\n---\n\n");
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  return root;
+}
+
+/** The same vault plus one page whose frontmatter carries an unquoted YAML
+ * list link — check 3's and fix 3's shared defect. Kept out of
+ * buildLintableVault: the sequence `- [B](b.md)` does not merely look wrong,
+ * it is unparseable, so every record-reading check on that vault throws. */
+function buildQuotelessVault(): string {
+  const root = buildLintableVault();
+  fs.writeFileSync(
+    path.join(root, "wiki/concepts/a.md"),
+    "---\ntitle: A\nsummary: s\nrelated:\n  - [B](b.md)\n---\n\n",
+  );
+  return root;
+}
+
+test("check --json: one finding per line, each a self-contained object", () => {
+  const root = buildLintableVault();
+  const { status, stdout, stderr } = runEnv(
+    ["check", "kind-folder-conformance", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.deepEqual(
+    rows.map((r) => r.pageRef),
+    ["wiki/concepts/nested/deep.md", "wiki/loose.md"],
+  );
+  assert.match(rows[1].detail, /at wiki\/ root/);
+  // One object per line, not one array wrapping them — a consumer iterates
+  // stdout line by line without buffering the whole result.
+  assert.notEqual(stdout.trim()[0], "[");
+});
+
+test("check --json: a clean check is silence, not []", () => {
+  const root = buildLintableVault();
+  const { status, stdout, stderr } = runEnv(
+    ["check", "contradiction-callouts", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+});
+
+test("check: an unknown name errors non-zero, naming the known ones", () => {
+  const root = buildLintableVault();
+  const { status, stderr } = runEnv(["check", "nope"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /unknown check "nope"/);
+});
+
+test("fix: prints each changed page ref, one per line", () => {
+  const root = buildQuotelessVault();
+  const { status, stdout, stderr } = runEnv(
+    ["fix", "frontmatter-link-format"],
+    {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "wiki/concepts/a.md\n");
+  assert.match(
+    fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8"),
+    /- "\[B\]\(b\.md\)"/,
+  );
+});
+
+test("fix: an unknown name errors non-zero, naming the known ones", () => {
+  const root = buildLintableVault();
+  const { status, stderr } = runEnv(["fix", "nope"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /unknown fix "nope"/);
 });
 
 test("watch --dequeue: removes one queue entry and exits", () => {
@@ -1204,7 +1310,7 @@ test("discover: --plan - reads the draft from stdin", async () => {
   assert.equal(payload.pages.length, 1);
 });
 
-test("discover: --plan with --tags-containing emits the bracket list", async () => {
+test("discover: --plan --tags-containing folds the matches into the one document", async () => {
   const root = await buildCommittedVault();
   const planPath = path.join(root, "draft.json");
   fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
@@ -1213,10 +1319,113 @@ test("discover: --plan with --tags-containing emits the bracket list", async () 
     { cwd: root, env: { WIKI_ROOT: root } },
   );
   assert.equal(status, 0, stderr);
-  const lines = stdout.trim().split("\n");
-  // bracket list is always the final line regardless of pages payload length
-  const last = lines[lines.length - 1];
-  assert.match(last, /^\[.*database.*\]$/);
+  // Still exactly one JSON document — the matches ride inside it as a named
+  // field, not after it as plain text a JSON reader would discard.
+  const payload = JSON.parse(stdout);
+  assert.deepEqual(payload.tag_matches, ["database"]);
+  assert.equal(payload.vocabulary, undefined);
+});
+
+test("discover: --plan --tag-count reports each asked-for tag's count in the one document", async () => {
+  const root = await buildCommittedVault();
+  const planPath = path.join(root, "draft.json");
+  fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--plan",
+      planPath,
+      "--tags-containing",
+      "data",
+      "--tag-count",
+      "database,never-minted",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const payload = JSON.parse(stdout);
+  assert.deepEqual(payload.tag_counts, [
+    { tag: "database", count: 1 },
+    // 0 is the signal that minting the tag is safe.
+    { tag: "never-minted", count: 0 },
+  ]);
+});
+
+// ---------------------------------------------------------------------------
+// search — JSON Lines for hits, one document for the index's own state
+// ---------------------------------------------------------------------------
+
+test("search --json: one hit object per line", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["search", "connection pooling", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.equal(rows[0].page_ref, "wiki/concepts/connection-pooling.md");
+  // The row's keys are the contract, unchanged by this ticket.
+  for (const key of [
+    "page_ref",
+    "score",
+    "title",
+    "summary",
+    "tags",
+    "kind",
+    "source_date",
+    "git_date",
+    "volatility",
+    "superseded_by",
+    "snippet",
+  ]) {
+    assert.ok(key in rows[0], `row is missing ${key}`);
+  }
+});
+
+test("search --json: no hits is silence, not []", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["search", "zzzznothingmatchesthis", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+});
+
+test("search --reindex --json: one compact JSON document", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(["search", "--reindex", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.pages, 2);
+  assert.equal(stdout, JSON.stringify(payload) + "\n");
+});
+
+test("search --status --json: one compact JSON document", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(["search", "--status", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const payload = JSON.parse(stdout);
+  for (const key of [
+    "pages",
+    "db_size_bytes",
+    "backend",
+    "schema_version",
+    "git_head",
+    "uncommitted_pages",
+  ]) {
+    assert.ok(key in payload, `status is missing ${key}`);
+  }
+  assert.equal(stdout, JSON.stringify(payload) + "\n");
 });
 
 test("vault kinds: canonical-only vault returns four entries", () => {
@@ -1319,8 +1528,29 @@ test("vault kinds: respects WIKI_ROOT env var", () => {
 });
 
 // ---------------------------------------------------------------------------
-// export: the wiki title (#477)
+// export: --candidates, and the wiki title (#477)
 // ---------------------------------------------------------------------------
+
+test("export --candidates: the ranked list is one compact JSON document", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(["export", "--candidates"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const candidates = JSON.parse(stdout);
+  assert.deepEqual(
+    candidates.map((c: { pageRef: string }) => c.pageRef),
+    [
+      "wiki/concepts/connection-pooling.md",
+      "wiki/concepts/sourdough-starter.md",
+    ],
+  );
+  // The whole list is one document the caller parses in one go — the dialect
+  // is how many documents, not the outer JSON type.
+  assert.equal(stdout, JSON.stringify(candidates) + "\n");
+  assert.ok(!stdout.includes("\n "));
+});
 
 test("export --save-title: persists the title, writes no site", async () => {
   const root = await buildCommittedVault();

@@ -62,7 +62,7 @@ Given one document already inside the vault.
        --tag-count "<candidate tags, comma list>"
    ```
 
-   Derive both comma lists from this draft's own candidate tags (the tags step 2's chunks are likely to want); always pass both, never leave either optional. It uses the same BM25 index as `search`; it returns candidates classified `duplicate`/`refines`/`related`/`distinct` per page, each carrying `summary`, `tags`, `volatility`, `superseded_by` — plus, in place of the full tag-vocabulary dump, the plain-text matches for `--tags-containing` and per-tag counts for `--tag-count` (0 means safe to mint) for step 4's tag-minting.
+   Derive both comma lists from this draft's own candidate tags (the tags step 2's chunks are likely to want); always pass both, never leave either optional. It uses the same BM25 index as `search`; it returns candidates classified `duplicate`/`refines`/`related`/`distinct` per page, each carrying `summary`, `tags`, `volatility`, `superseded_by` — plus, in place of the full `vocabulary` dump, `tag_matches` (the vault tags matching `--tags-containing`) and `tag_counts` (per-tag page counts for `--tag-count`; 0 means safe to mint) — named fields in that same one JSON document, so no second parse and no trailing text to strip. Both feed step 4's tag-minting.
 
    The hint is a starting point — confirm or override against the candidate's own `summary`; record only which **op** each plan entry gets. Nothing here writes.
 
@@ -210,7 +210,7 @@ Field notes:
 
 - **`title`** — human-readable name; the filename is its kebab-slug.
 - **`summary`** — the single most important field. One line, ≤ ~20 words, written well at ingestion.
-- **`tags`** — emergent, not controlled. **Reuse an existing tag where one fits; mint a new one only where nothing does.** The `--tags-containing`/`--tag-count` output from step 3 is your vocabulary; a count of 0 means safe to mint.
+- **`tags`** — emergent, not controlled. **Reuse an existing tag where one fits; mint a new one only where nothing does.** The `tag_matches`/`tag_counts` fields from step 3's `discover` document are your vocabulary; a count of 0 means safe to mint.
 - **`source_date`** — **valid time**: when the knowledge is *from* (the document's own date, the meeting's date). One canonical spelling: `YYYY-MM-DD`. Distinct from the commit date; never use today's date for the source's own.
 - **`raw_source`** — **single markdown link into `raw/`** (title = the artifact's literal filename, destination = percent-encoded path), **required on `sources/` pages, omitted on every other kind**. Distinct from the `source`-type *edge*: this field points into `raw/`; the edge points at another `wiki/` page.
 - **`volatility`** — `stable` | `evolving` | `volatile`. Authored, not inferred.
