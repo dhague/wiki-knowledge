@@ -580,7 +580,7 @@ export async function fixIngestionSourceIntegrity(
   return changed;
 }
 
-// Fix for check 11 (unambiguous case) — insert relative markdown links for exact title
+// Fix for check 12 (unambiguous case) — insert relative markdown links for exact title
 // matches that appear in body text without an existing link to that page.
 export async function fixMissingCrossReferences(
   root: string,
