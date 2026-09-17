@@ -242,16 +242,17 @@ describe("iterLinks", () => {
     );
   });
 
-  it("joins a folded angle-bracketed destination", () => {
-    // Built by the writer rather than spelled out, because the fold is the
-    // writer's: it breaks mid-token (escaped) only when the destination holds
-    // no space to break at.
+  it("emits a long destination unfolded, and reads it back", () => {
+    // The writer folds nothing (ADR-0024), so this is the shape every page
+    // written from here on carries: the destination on one line, however long
+    // it is. The folds this reader still resolves are the ones already on
+    // disk, which the fixtures above spell out by hand.
     const dest = `a-very-long-slug-${"and-longer-".repeat(8)}wraps.md`;
     const text = new Page("---\ntitle: x\n---\n\n").set("related", [
       `[t](<${dest}>)`,
     ]).text;
 
-    assert.match(text, /\\\n/);
+    assert.doesNotMatch(text, /\\\r?\n/);
     assert.deepEqual(
       iterLinks(text).map((m) => m.decodedPath),
       [dest],
@@ -546,10 +547,14 @@ const genVaultArb = fc
 /** Build a small vault of pages that link to each other, plus a frozen link
  * inside a code block.
  *
- * The frontmatter is rendered by [Page.set] rather than hand-written, so a
- * destination the writer folds is a fold the fixture really has: a hand-written
- * `related:` block would be free to drift from what the writer emits, and the
- * fold is precisely what the YAML oracle exists to catch. */
+ * The frontmatter is rendered by [Page.set] — the emitter's own shape — and
+ * then one destination per page is folded **by hand**, because the emitter
+ * folds nothing any more (ADR-0024). The fold matters more than the fidelity
+ * that used to be the reason to let the writer produce it: it is the shape
+ * every raw-text reader has to cope with, and the thing the YAML oracle below
+ * exists to compare, so the fixture has to carry one whatever the writer does.
+ * What keeps the hand-written form honest is that the value still has to
+ * survive the YAML parser, which is what the oracle reads it back through. */
 function buildVault(refs: string[]): Record<string, string> {
   const pages: Record<string, string> = {};
   for (const ref of refs) {
@@ -561,11 +566,48 @@ function buildVault(refs: string[]): Record<string, string> {
     let body = "";
     for (const dest of dests) body += `Body link [t](${dest})\n`;
     body += "\n```\n[frozen](never-touched.md)\n```\n";
-    pages[ref] = new Page(body)
-      .set("title", posixBasename(ref))
-      .set("related", links).text;
+    pages[ref] = foldLongestItem(
+      new Page(body).set("title", posixBasename(ref)).set("related", links)
+        .text,
+    );
   }
   return pages;
+}
+
+/** A quoted list item in a frontmatter block: `  - "[t](dest)"`. */
+const LINK_ITEM_RE = /^(\s*- ")(.*)(")$/;
+
+/** The continuation indent the emitter used for a folded item under a
+ * top-level key — `  - ` plus two, which is where the old writer put the
+ * second half of a destination. */
+const FOLD_CONTINUATION = "    ";
+
+/** Split the longest quoted list item in text with a YAML escaped line break,
+ * in the shape the emitter produced before ADR-0024: a trailing `\`, a break,
+ * then the continuation indent, all three dropped by a conforming reader.
+ *
+ * Any cut point preserves the value, which is why this can be a blunt
+ * midpoint rather than a search for a space: the fold drops the break and the
+ * indentation after it, and nothing else. */
+function foldLongestItem(text: string): string {
+  const lines = text.split("\n");
+  let at = -1;
+  let longest = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const match = LINK_ITEM_RE.exec(lines[i]);
+    if (match && match[2]!.length > longest) {
+      longest = match[2]!.length;
+      at = i;
+    }
+  }
+  if (at < 0) return text;
+  const [, open, value, close] = LINK_ITEM_RE.exec(
+    lines[at]!,
+  ) as RegExpExecArray;
+  const cut = Math.ceil(value!.length / 2);
+  lines[at] =
+    `${open}${value!.slice(0, cut)}\\\n${FOLD_CONTINUATION}${value!.slice(cut)}${close}`;
+  return lines.join("\n");
 }
 
 /** A minimal relPath for test fixture generation (mirrors the module's). */
@@ -617,8 +659,9 @@ function movedRef(ref: string, oldRel: string, newRel: string): string {
   return ref === oldRel ? newRel : ref;
 }
 
-/** Whether the writer folded a link destination in text's frontmatter across
- * two lines.
+/** Whether a link destination in text's frontmatter is folded across two
+ * lines — written by hand by [foldLongestItem], since the emitter no longer
+ * produces one, or inherited from a page written before ADR-0024.
  *
  * Read from raw bytes and the YAML parser, never through [iterLinks]: a guard
  * built on that scan would go blind exactly when the fold it guards went blind,
@@ -840,6 +883,10 @@ const FM_VALUES = [
   "hello",
   "[B](b.md)",
   "[x](../c.md)",
+  // Long enough that the emitter folded it before ADR-0024 — which is what
+  // makes the round-trip property below a fold guard too: a fold is not a
+  // quote character, so it survives `strip` and fails the comparison.
+  "[A rather long target page title](../entities/a-rather-long-target-page-title-that-will-definitely-wrap.md)",
 ];
 
 const genPageArb = fc
@@ -888,6 +935,60 @@ describe("no-op Set preserves key order and changes only quote style", () => {
         // characters from both and they are identical.
         const strip = (s: string) => s.replace(/['"]/g, "");
         assert.equal(strip(updated), strip(text));
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property test — the emitter folds nothing (ADR-0024)
+// ---------------------------------------------------------------------------
+
+// Both shapes the emitter used to produce are generated here: a link whose
+// label has no space (the destination folded mid-token, escaped) and one whose
+// label has spaces (folded at a space, leaving the label split across lines).
+const genLinkValueArb = fc
+  .record({
+    label: fc.constantFrom(
+      "t",
+      "Some long page title here",
+      "RBWM Council Political Composition",
+    ),
+    // Space-free and past any sensible width: the shape that folded
+    // mid-token with a trailing backslash, since a percent-encoded
+    // destination offers no space to break at.
+    slug: fc
+      .array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz0123456789-"), {
+        minLength: 90,
+        maxLength: 160,
+      })
+      .map((chars) => chars.join("")),
+  })
+  .map(({ label, slug }) => `[${label}](../concepts/${slug}.md)`);
+
+describe("the writer never folds a line", () => {
+  it("emits each link on one line, and reads back what went in", () => {
+    fc.assert(
+      fc.property(genLinkValueArb, (value) => {
+        const text = new Page("---\ntitle: x\n---\n\n").set("related", [
+          value,
+        ]).text;
+
+        // Neither shape of fold: no escaped line break, and no item continued
+        // onto a follow-on line. One line each for `title`, the key, the item.
+        assert.doesNotMatch(text, /\\\r?\n/);
+        const fmLines = splitFrontmatter(text)
+          .frontmatter.split("\n")
+          .filter((line) => line.trim() !== "");
+        assert.equal(fmLines.length, 3, fmLines.join(" / "));
+
+        // And no fold is hiding a corruption: the value survives the round
+        // trip byte for byte.
+        assert.deepEqual(parseYaml(splitFrontmatter(text).frontmatter), {
+          title: "x",
+          related: [value],
+        });
       }),
       { numRuns: 100 },
     );
