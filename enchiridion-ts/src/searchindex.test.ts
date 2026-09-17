@@ -1004,6 +1004,171 @@ describe("status", () => {
       index.close();
     }
   });
+
+  // -- uncommittedPages (#496) ----------------------------------------------
+  //
+  // The number means "how many pages search could return if they were
+  // committed" — pages on disk the index does not hold. Everything below
+  // builds a *real* vault on disk (the git walk is what decides what HEAD
+  // holds, and no fake reproduces that), so each case pays a temp repo.
+
+  /** Write one page file at a vault-relative ref, making parents as needed. */
+  const writeFile = (root: string, ref: string, text: string): void => {
+    const p = path.join(root, ...ref.split("/"));
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, text);
+  };
+
+  /** A page body that `newPageRecord` accepts, so it indexes rather than skips. */
+  const pageText = (title: string): string =>
+    page(title, "s", `${title} body`, [], "source_date: 2026-01-01\n");
+
+  /**
+   * A real vault at a fresh temp root with `refs` committed at HEAD, plus the
+   * git seam so a test can commit a further change. The caller removes `root`.
+   */
+  const committedVault = async (
+    refs: string[],
+  ): Promise<{ root: string; git: VaultGit }> => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
+    for (const ref of refs) {
+      writeFile(root, ref, pageText(path.basename(ref, ".md")));
+    }
+    const git = new VaultGit(root);
+    await git.init();
+    await git.add(["wiki"]);
+    await git.commit("seed vault");
+    return { root, git };
+  };
+
+  it("reports 0 uncommitted pages on a clean tree", async () => {
+    const { root, git } = await committedVault([
+      "wiki/concepts/a.md",
+      "wiki/concepts/b.md",
+    ]);
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.reindex(true);
+        const status = await index.status();
+        assert.equal(status.pages, 2, "both committed pages indexed");
+        assert.equal(
+          status.uncommittedPages,
+          0,
+          "every page on disk is committed and indexed",
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts an uncommitted page as one search could return if committed", async () => {
+    const { root, git } = await committedVault(["wiki/concepts/a.md"]);
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.reindex(true);
+        writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
+        const status = await index.status();
+        assert.equal(
+          status.uncommittedPages,
+          1,
+          "the draft is on disk and the index does not hold it",
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports 0 for an uncommitted deletion — no page search could newly return", async () => {
+    const { root, git } = await committedVault([
+      "wiki/concepts/a.md",
+      "wiki/concepts/b.md",
+    ]);
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.reindex(true);
+        // `a.md` is committed at HEAD and still indexed, but gone from disk.
+        fs.rmSync(path.join(root, "wiki/concepts/a.md"));
+        const status = await index.status();
+        assert.equal(
+          status.uncommittedPages,
+          0,
+          "a page missing from disk is not a page search could return",
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not let a committed deletion cancel an uncommitted addition (#496)", async () => {
+    // The cancelling case: one committed deletion and one uncommitted
+    // addition, with the index still holding the deleted page (it is a view
+    // of the HEAD it has accounted for, and `status` does not sync).
+    //
+    // Counted by subtraction this is `2 on disk - 2 indexed = 0` — the
+    // subtraction cancels an addition against a deletion and reports the
+    // state it exists to surface. As a set difference it is 1: the addition
+    // is the one page search could return if committed, and the deletion is
+    // not a page at all — it is on nobody's disk, so it cannot pay for the
+    // addition's absence from the index.
+    const { root, git } = await committedVault([
+      "wiki/concepts/a.md",
+      "wiki/concepts/b.md",
+    ]);
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.reindex(true);
+        assert.equal(
+          (await index.status()).pages,
+          2,
+          "precondition: both seeded pages are indexed",
+        );
+
+        // Commit the deletion of a.md, and leave the index where it is — a
+        // view of the HEAD it has accounted for, and `status` does not sync.
+        fs.rmSync(path.join(root, "wiki/concepts/a.md"));
+        await git.add(["wiki"]);
+        await git.commit("delete a");
+        const head = await git.committedPages("");
+        assert.deepEqual(
+          head.pages.map((p) => p.pageRef).sort(),
+          ["wiki/concepts/b.md"],
+          "precondition: the deletion is committed — HEAD no longer carries a.md",
+        );
+        assert.equal(
+          (await index.status()).pages,
+          2,
+          "precondition: the index still holds the deleted page",
+        );
+
+        // An uncommitted addition on top.
+        writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
+
+        const status = await index.status();
+        assert.equal(
+          status.uncommittedPages,
+          1,
+          "the draft survives a committed deletion that cancels it by count",
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
