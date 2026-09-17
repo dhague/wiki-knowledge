@@ -203,13 +203,51 @@ test("check 3: unquoted list item link is a violation", async () => {
   );
 });
 
-test("check 3: unencoded # in filename destination is a violation", async () => {
-  // A # in a filename must be encoded as %23; without encoding it is parsed as
-  // an anchor separator, causing dest != reencoded(decodedPath).
+// The settled anchor rule (#492 §1, recorded in `wiki-conventions`): a
+// frontmatter relationship link is the same link form as a body link, anchors
+// included. The `#` introducing an anchor is written literally; a literal `#`
+// *inside a filename* is spelled `%23`.
+test("check 3: frontmatter destination carrying a genuine anchor is clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Cache TTL](../concepts/caching.md#ttl)"\n',
+    ),
+    "wiki/concepts/caching.md": page("Caching"),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, []);
+});
+
+test("check 3: an unencoded # is the anchor separator, not a filename character", async () => {
+  // Asking for `%23` here was the inversion: it read a legal heading link as a
+  // filename and reported it, and the fix then wrote a dangling `%23ttl`.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
       'related:\n  - "[Bar](../entities/bar#baz.md)"\n',
+    ),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, []);
+});
+
+test("check 3: %23 in a filename destination is the encoded spelling, and clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/bar%23baz.md)"\n',
+    ),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, []);
+});
+
+test("check 3: an anchor is no hiding place for an unencoded path", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/my(page).md#ttl)"\n',
     ),
   });
   const findings = await frontmatterLinkFormat(root);
@@ -218,15 +256,21 @@ test("check 3: unencoded # in filename destination is a violation", async () => 
       (f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail),
     ),
   );
+  // and what it asks for keeps the anchor as an anchor
+  assert.ok(
+    findings.some((f) =>
+      f.detail.includes(`should be "../entities/my%28page%29.md#ttl"`),
+    ),
+  );
 });
 
 test("check 3: a folded destination is checked, not skipped", async () => {
   // Before the fold was joined, this link was invisible to the raw-text scan
-  // and its unencoded `#` went unreported.
+  // and its unencoded parens went unreported.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
-      'related:\n  - "[Bar](../entities/some-rather-long-bar-page-name-here#baz\\\n    .md)"\n',
+      'related:\n  - "[Bar](../entities/some-rather-long-bar-page-name-here\\\n    (draft).md#ttl)"\n',
     ),
   });
   const findings = await frontmatterLinkFormat(root);
@@ -461,19 +505,65 @@ test("fix frontmatter-link-format: quotes unquoted YAML list link", async () => 
   assert.deepEqual(findings, []);
 });
 
-test("fix frontmatter-link-format: encodes # in link destination", async () => {
+test("fix frontmatter-link-format: leaves an anchor-carrying destination byte-identical", async () => {
+  // The corruption #492 is about: `#ttl` here is a heading fragment, and the
+  // fixer turned it into `%23ttl` — a working link into a dangling filename.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
-      'related:\n  - "[Bar](../entities/bar#baz.md)"\n',
+      'related:\n  - "[Cache TTL](../concepts/caching.md#ttl)"\n',
+    ),
+    "wiki/concepts/caching.md": page("Caching"),
+  });
+  const file = path.join(root, "wiki/concepts/foo.md");
+  const before = fs.readFileSync(file, "utf8");
+  const changed = await fixFrontmatterLinkFormat(root);
+  assert.deepEqual(changed, []);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("fix frontmatter-link-format: leaves a %23 filename destination alone", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar](../entities/bar%23baz.md)"\n',
     ),
   });
+  const file = path.join(root, "wiki/concepts/foo.md");
+  const before = fs.readFileSync(file, "utf8");
+  const changed = await fixFrontmatterLinkFormat(root);
+  assert.deepEqual(changed, []);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("fix frontmatter-link-format: fixes an unencoded path and keeps the anchor", async () => {
+  const src =
+    "---\n" +
+    "title: Foo\n" +
+    'summary: "A summary: with a colon, a comma and (parens)"\n' +
+    "tags: [alpha, beta]\n" +
+    "source_date: 2026-01-02\n" +
+    "volatility: stable\n" +
+    "related:\n" +
+    '  - "[Bar](../entities/my(page).md#ttl)"\n' +
+    "---\nBody.\n";
+  const root = writeVault({ "wiki/concepts/foo.md": src });
   const changed = await fixFrontmatterLinkFormat(root);
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
-  assert.match(text, /bar%23baz\.md/);
-  const findings = await frontmatterLinkFormat(root);
-  assert.deepEqual(findings, []);
+
+  // The anchor survives as an anchor, never as a filename character.
+  assert.doesNotMatch(text, /%23ttl/);
+  // Byte-level: one destination re-encoded, every other byte — the other
+  // frontmatter keys included — untouched (ADR-0012's relaxed round-trip).
+  assert.equal(
+    text,
+    src.replace(
+      "../entities/my(page).md#ttl",
+      "../entities/my%28page%29.md#ttl",
+    ),
+  );
+  assert.deepEqual(await frontmatterLinkFormat(root), []);
 });
 
 test("fix frontmatter-link-format: repairs a folded destination whole", async () => {
@@ -482,19 +572,21 @@ test("fix frontmatter-link-format: repairs a folded destination whole", async ()
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
-      'related:\n  - "[Bar](../entities/bar#baz\\\n    .md)"\n',
+      'related:\n  - "[Bar](../entities/bar(draft)\\\n    .md#ttl)"\n',
     ),
   });
   const changed = await fixFrontmatterLinkFormat(root);
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
-  assert.match(text, /- "\[Bar\]\(\.\.\/entities\/bar%23baz\.md\)"/);
+  assert.match(text, /- "\[Bar\]\(\.\.\/entities\/bar%28draft%29\.md#ttl\)"/);
+  assert.doesNotMatch(text, /%23ttl/);
   // The page still parses, and the edge still points where it did — read back
-  // through the YAML parser, not the raw-text link scan.
+  // through the YAML parser, not the raw-text link scan. The anchor is a
+  // fragment of that page, so it is not part of the target.
   const findings = await frontmatterLinkFormat(root);
   assert.deepEqual(findings, []);
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
-    { key: "related", targets: ["wiki/entities/bar#baz.md"] },
+    { key: "related", targets: ["wiki/entities/bar(draft).md"] },
   ]);
 });
 

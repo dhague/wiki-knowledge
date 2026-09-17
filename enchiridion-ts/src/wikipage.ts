@@ -523,8 +523,17 @@ function applyEdits(src: string, edits: Edit[]): string {
   return src;
 }
 
-/** Re-encode a decoded path and anchor back into a link destination. */
-function encodeDest(p: string, anchor: string): string {
+/**
+ * Re-encode a decoded path and anchor back into a link destination — the
+ * inverse of [splitDest], and the one description of an encoded destination.
+ * The `#` introducing an anchor is written literally; only a `#` in the
+ * *path* — a filename's own hash, decoded from `%23` — becomes `%23`.
+ *
+ * A caller that compares or splices a destination does it through here.
+ * Recombining path and anchor into one string and encoding that instead turns
+ * `#ttl` into `%23ttl`, a heading link into a dangling filename (#492).
+ */
+export function encodeDest(p: string, anchor: string): string {
   let dest = percentEncode(p);
   if (anchor !== "") dest += "#" + percentEncode(anchor);
   return dest;
