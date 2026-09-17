@@ -7,6 +7,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
 import path from "node:path";
+// The conforming YAML reader — the oracle for what a fold means.
+import { parse as parseYaml } from "yaml";
 import {
   Page,
   percentEncode,
@@ -184,6 +186,73 @@ describe("iterLinks", () => {
     assert.equal(links.length, 2);
     assert.equal(links[0].isImage, false);
     assert.equal(links[1].isImage, true);
+  });
+
+  it("joins a destination folded by a YAML escaped line break", () => {
+    const text = [
+      "---",
+      "related:",
+      '  - "[A rather long target page',
+      "    title](../entities/a-rather-long-tar\\",
+      '    get-page-title-that-will-definitely-wrap.md)"',
+      "---",
+      "Body.",
+    ].join("\n");
+
+    const links = iterLinks(text);
+    assert.equal(links.length, 1);
+    assert.equal(
+      links[0].decodedPath,
+      "../entities/a-rather-long-target-page-title-that-will-definitely-wrap.md",
+    );
+    // The span is the *raw* folded destination, backslash and line break
+    // included, so a splice replaces the fold wholesale rather than leaving a
+    // stray continuation behind.
+    assert.equal(
+      text.slice(links[0].start, links[0].end),
+      "../entities/a-rather-long-tar\\\n    get-page-title-that-will-definitely-wrap.md",
+    );
+  });
+
+  it("joins a folded destination on a top-level scalar", () => {
+    // A bare key folds with a two-space continuation, which can itself begin
+    // with `-` — inside the scalar it is just a filename character.
+    const text =
+      '---\nraw_source: "[f.txt](../../raw/a-rather-long-slug-num\\\n  -ber-7-raw-artifact.txt)"\n---\n';
+    assert.deepEqual(
+      iterLinks(text).map((m) => m.decodedPath),
+      ["../../raw/a-rather-long-slug-num-ber-7-raw-artifact.txt"],
+    );
+  });
+
+  it("keeps the space that YAML keeps before a fold", () => {
+    // The parser is the oracle for what a fold means: whitespace *before* the
+    // `\` is content, only the break and the next line's indent are dropped.
+    // A regex that swallowed it would resolve to a silently wrong path.
+    const text = '---\nrelated:\n  - "[T](<a b \\\n    c.md>)"\n---\n';
+    assert.deepEqual(parseYaml(splitFrontmatter(text).frontmatter), {
+      related: ["[T](<a b c.md>)"],
+    });
+    assert.deepEqual(
+      iterLinks(text).map((m) => m.decodedPath),
+      ["a b c.md"],
+    );
+  });
+
+  it("joins a folded angle-bracketed destination", () => {
+    // Built by the writer rather than spelled out, because the fold is the
+    // writer's: it breaks mid-token (escaped) only when the destination holds
+    // no space to break at.
+    const dest = `a-very-long-slug-${"and-longer-".repeat(8)}wraps.md`;
+    const text = new Page("---\ntitle: x\n---\n\n").set("related", [
+      `[t](<${dest}>)`,
+    ]).text;
+
+    assert.match(text, /\\\n/);
+    assert.deepEqual(
+      iterLinks(text).map((m) => m.decodedPath),
+      [dest],
+    );
   });
 });
 
@@ -374,6 +443,29 @@ describe("PlanMove", () => {
       "wiki/entities/b.md",
     );
     assert.equal(got.text, src);
+  });
+
+  it("rewrites a folded inbound frontmatter link into valid YAML", () => {
+    // A folded destination is one raw span spanning two lines; the splice must
+    // replace the whole span, or the leftover continuation corrupts the YAML.
+    const pages = {
+      "wiki/concepts/a.md":
+        '---\nrelated:\n  - "[A rather long target page title](../entities/a-rather-long-tar\\\n    get-page-title-that-will-definitely-wrap.md)"\n---\nBody.\n',
+      "wiki/entities/a-rather-long-target-page-title-that-will-definitely-wrap.md":
+        "---\ntitle: A rather long target page title\n---\nBody.\n",
+    };
+    const moved = planMove(
+      pages,
+      "wiki/entities/a-rather-long-target-page-title-that-will-definitely-wrap.md",
+      "wiki/entities/b.md",
+    );
+
+    // Oracle: the YAML parser, not iterLinks, says where the edge now points.
+    assert.deepEqual(
+      moved["wiki/concepts/a.md"] &&
+        new Page(moved["wiki/concepts/a.md"]).frontmatter()?.["related"],
+      ["[A rather long target page title](../entities/b.md)"],
+    );
   });
 });
 

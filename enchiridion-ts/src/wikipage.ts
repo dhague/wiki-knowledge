@@ -46,18 +46,55 @@ const ENCODE_CHARS = " #%()<>";
 const FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
 
 /**
+ * A YAML escaped line break: a trailing `\` that joins the next line to this
+ * one, the break and the following indentation both dropped.
+ *
+ * Frontmatter is YAML, so a markdown-link scalar there is a doubly-encoded
+ * value — the link's own percent-encoding, then YAML's quoting. The writer
+ * folds any scalar that outgrows the line width, breaking mid-token with an
+ * escaped line break when it finds no space to break at. A percent-encoded
+ * destination has no space, so a long slug folds this way as a matter of
+ * course, not as an edge case.
+ *
+ * The matched span covers the raw fold, so a destination splice replaces the
+ * continuation wholesale instead of leaving a stray `\` behind. Whitespace
+ * *before* the `\` is content rather than part of the fold — a conforming
+ * reader keeps it (`"[T](<a b \` + break + ` c.md>)"` is `<a b c.md>`).
+ *
+ * A *plain* line break is deliberately not a fold, nor is a `\` at the end of
+ * a literal block scalar (`related: |`). Both are shapes the conventions spec
+ * allows no link to take, and the raw text cannot tell the block scalar from a
+ * fold; reading a plain break as part of a destination would be worse, since
+ * it would call prose that is not a link a link.
+ */
+const ESCAPED_LINE_BREAK_RE = /\\\r?\n[ \t]*/g;
+
+/** Strip the folds [ESCAPED_LINE_BREAK_RE] matched — what a conforming YAML
+ * reader sees as the destination. */
+function joinEscapedLineBreaks(dest: string): string {
+  return dest.replace(ESCAPED_LINE_BREAK_RE, "");
+}
+
+/** One destination character, or an escaped line break standing in for the
+ * break a YAML reader would fold away. */
+const DEST_ATOM = `(?:[^()\\s]|${ESCAPED_LINE_BREAK_RE.source})`;
+
+/**
  * Build a regex fragment for an unbracketed link destination. Per CommonMark,
  * a destination without `<>` ends at the first *unbalanced* `)` — `(draft)`
  * inside one doesn't terminate it. JS regexes have no recursion, so nesting
  * is bounded at depth levels: plenty for a real filename or URL.
  */
 function nestedParenDest(depth: number): string {
-  let frag = "[^()\\s]*";
+  let frag = `${DEST_ATOM}*`;
   for (let i = 0; i < depth; i++) {
-    frag = `(?:[^()\\s]|\\(${frag}\\))*`;
+    frag = `(?:${DEST_ATOM}|\\(${frag}\\))*`;
   }
   return frag;
 }
+
+/** An angle-bracketed destination, folded across lines the same way. */
+const ANGLE_DEST = `<[^<>\\n]*(?:${ESCAPED_LINE_BREAK_RE.source}[^<>\\n]*)*>`;
 
 /**
  * Match a markdown inline link or image: `[label](dest ...)` /
@@ -65,12 +102,16 @@ function nestedParenDest(depth: number): string {
  * `dest` is either `<...>` or a whitespace-free run that may contain balanced
  * parens; an optional title after the dest is matched but excluded.
  *
+ * A destination may also carry YAML escaped line breaks — see
+ * [ESCAPED_LINE_BREAK_RE]. They are part of the match (so the span is the raw
+ * folded region) and are joined out of the destination's value.
+ *
  * The `d` (hasIndices) flag exposes each group's source offsets.
  */
 const LINK_RE = new RegExp(
   `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]` +
     `\\([ \\t]*` +
-    `(<[^<>\\n]*>|${nestedParenDest(4)})` +
+    `(${ANGLE_DEST}|${nestedParenDest(4)})` +
     `(?:[ \\t]+(?:"[^"]*"|'[^']*'|\\([^)]*\\)))?` +
     `[ \\t]*\\)`,
   "gd",
@@ -153,9 +194,13 @@ export function splitFrontmatter(src: string): {
 
 /** One link/image occurrence, positioned in the source text. */
 export interface LinkMatch {
+  /** Raw source offsets bracketing the destination. For a destination folded
+   * across lines by a YAML escaped line break these span the whole fold, so
+   * `src.slice(start, end)` is that raw region rather than [dest]. */
   start: number;
   end: number;
-  /** the encoded destination (angle brackets and any title excluded) */
+  /** the encoded destination (angle brackets, any title and any fold
+   * excluded) */
   dest: string;
   /** splitDest(dest).path — decoded, anchor-free */
   decodedPath: string;
@@ -208,7 +253,9 @@ function lineOf(src: string, offset: number): number {
  * Occurrences inside fenced/indented code blocks are skipped. Offsets are
  * absolute into src. Scans the *whole* document, frontmatter included, so
  * typed edges, `supersedes` and `raw_source` are found by the same rule as
- * body links.
+ * body links — including a destination the frontmatter writer folded across
+ * lines, whose escaped line breaks are joined out of [LinkMatch.dest] while
+ * [LinkMatch.start]/[LinkMatch.end] still bracket the raw fold.
  */
 export function iterLinks(src: string): LinkMatch[] {
   const codeLines = codeLineRanges(src);
@@ -217,7 +264,7 @@ export function iterLinks(src: string): LinkMatch[] {
     const idx = m.indices![3];
     let start = idx[0];
     let end = idx[1];
-    let dest = m[3]!;
+    let dest = joinEscapedLineBreaks(m[3]!);
     // Unwrap an angle-bracketed destination: `<path>` -> `path`.
     if (dest.startsWith("<") && dest.endsWith(">")) {
       start += 1;
