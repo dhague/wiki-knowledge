@@ -109,7 +109,10 @@ test("frontmatter key order is preserved", () => {
 });
 
 // The write half of #192: a plan's timestamped `source_date` is truncated to
-// its canonical date at resolve time.
+// its canonical date on the way to disk. Since #499 that truncation is not
+// resolve's own doing — [Page.set] applies the rule to every value it is
+// handed — so this test now pins that the writer's invariant reaches ingest,
+// not that resolve remembers to canonicalise.
 test("resolve writes a canonical source_date", () => {
   const src = `{"title":"T","pages":[{"op":"create","title":"A","kind":"concept","body":"b",
     "frontmatter":{"summary":"s","source_date":"2026-07-20T14:30:00Z"}}]}`;

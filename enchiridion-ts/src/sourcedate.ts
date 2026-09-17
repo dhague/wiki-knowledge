@@ -6,17 +6,30 @@
  * clock truncates to its date — once lived in four private implementations
  * that drifted: `page set` accepted an invalid calendar date that ingest
  * refused, and the search index validated nothing at all (#309). This module
- * is the rule, implemented once.
+ * is the rule, implemented once — and applied at one place, the frontmatter
+ * writer, rather than by each caller that builds a page (#499).
  *
  * [parseSourceDate] is the single shared fact: parse any accepted spelling,
  * validate the calendar date (leap years, month/day ranges), and return the
  * canonical [CANONICAL_DATE_FORMAT], or null when the value isn't a valid
  * date. The two postures on top of it — [canonicalSourceDate] refuses (throws
  * on a non-date), [truncateSourceDate] tolerates (passes the value through) —
- * are the thin choices the consumers make: the read path (pagerecord)
- * tolerates and stores verbatim (it renders its own fallback from
- * [parseSourceDate], not via [truncateSourceDate]), while the write paths
- * (`page set`, ingest's validation) refuse.
+ * split *validating* from *writing*, not one caller from another:
+ *
+ *   - The **writer** tolerates. Frontmatter bytes are produced in exactly one
+ *     place — [wikipage.Page.set], which [wikipage.Page.merge] also goes
+ *     through — so the rule is applied there and no caller can forget it:
+ *     whatever spelling a value arrives in, the page that reaches disk
+ *     carries the canonical one. A non-date passes through that writer
+ *     untouched; a writer must never throw on content it was handed.
+ *   - **Validation** refuses, and stays with the callers that validate before
+ *     they write: `page set` refuses a non-date argument up front, and
+ *     ingest's pre-flight refuses it in the plan. That is what turns a bad
+ *     `source_date` into a message instead of a silently stored value.
+ *
+ * The read path (pagerecord) tolerates in the writer's way, storing the value
+ * verbatim — it renders its own fallback from [parseSourceDate], not via
+ * [truncateSourceDate].
  */
 
 /** The one canonical spelling every accepted `source_date` is truncated to. */
@@ -67,8 +80,10 @@ export function parseSourceDate(value: unknown): string | null {
 /**
  * The refuse posture: canonicalise a `source_date` to YYYY-MM-DD, truncating
  * a clock, and throw on a value that isn't a valid date at all. Null and
- * undefined read as absent and pass through. The `page set` write path uses
- * this so it rejects exactly the spellings ingest's validation rejects.
+ * undefined read as absent and pass through. This is the *validating* posture,
+ * not a writing one: `page set` calls it on its argument before any bytes are
+ * written, so a bad value is refused with a message rather than stored. The
+ * writer itself tolerates — see the module comment.
  */
 export function canonicalSourceDate(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return value;
@@ -83,9 +98,10 @@ export function canonicalSourceDate(value: unknown): string | null | undefined {
 
 /**
  * The tolerate posture: canonicalise a `source_date` to YYYY-MM-DD when it's
- * a valid date, otherwise return the value unchanged. The read paths use this
- * so a legacy or hand-written non-date is stored verbatim rather than being
- * an error.
+ * a valid date, otherwise return the value unchanged. This is the writer's
+ * posture — [wikipage.Page.set] runs every `source_date` it is handed through
+ * it — so a legacy or hand-written non-date reaches disk verbatim rather than
+ * being an error. The read paths tolerate the same way.
  */
 export function truncateSourceDate(value: unknown): unknown {
   const date = parseSourceDate(value);

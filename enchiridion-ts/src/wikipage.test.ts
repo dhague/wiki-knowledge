@@ -374,6 +374,102 @@ describe("Page.set", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The writer applies the source-date rule (#499)
+// ---------------------------------------------------------------------------
+
+// Every frontmatter shape the round-trip contract cares about, around one
+// non-canonical `source_date`: a comment, a blank line, a single-quoted
+// scalar, a double-quoted one, a block sequence, a plain scalar and a nested
+// mapping, with `source_date` in the middle so a writer that rebuilt the block
+// rather than changing one value would show it. A *flow* sequence is the one
+// shape the emitter re-spaces, so the fixture holds block ones.
+const uncanonicalSourceDatePage = [
+  "---",
+  "# a comment, which a writer has no business dropping",
+  "title: 'A Page'",
+  "",
+  'summary: "a quoted summary"',
+  "tags:",
+  "  - deploy",
+  '  - "ci"',
+  "source_date: '2026-01-02T10:00:00Z'",
+  "volatility: stable",
+  "nested:",
+  "  a: 1",
+  "---",
+  "",
+  "# Heading",
+  "",
+  "body text",
+  "",
+].join("\n");
+
+describe("Page.set applies the source-date rule on the way to disk", () => {
+  // The ticket's assertion: whichever caller asked, what reaches disk carries
+  // the canonical spelling. `set` is the one place frontmatter bytes are
+  // produced, so the rule lives there now rather than in each caller.
+  for (const [value, want] of [
+    ["2026-01-02", "2026-01-02"],
+    ["2026-01-02T10:00:00Z", "2026-01-02"],
+    ["2026-01-02T10:00:00+05:00", "2026-01-02"],
+    ["2026-01-02 10:00:00", "2026-01-02"],
+    [" 2026-01-02 ", "2026-01-02"],
+    [new Date(Date.UTC(2026, 0, 2, 10, 0)), "2026-01-02"],
+  ] as Array<[unknown, string]>) {
+    it(`writes ${String(value)} as ${want}`, () => {
+      const written = new Page("---\ntitle: T\n---\nbody\n").set(
+        "source_date",
+        value,
+      ).text;
+      assert.equal(written, `---\ntitle: T\nsource_date: ${want}\n---\nbody\n`);
+    });
+  }
+
+  // The hard part: canonicalising changes that one value and not one other
+  // byte. Frontmatter is re-serialised (ADR-0012), so this is a real
+  // assertion: it holds only because every untouched key keeps its source
+  // style, order and position, the comment and blank line survive, and the
+  // body is spliced back verbatim.
+  it("changes the value and not one other byte", () => {
+    const written = new Page(uncanonicalSourceDatePage).set(
+      "source_date",
+      "2026-01-02T10:00:00Z",
+    ).text;
+    assert.equal(
+      written,
+      uncanonicalSourceDatePage.replace(
+        "source_date: '2026-01-02T10:00:00Z'",
+        "source_date: 2026-01-02",
+      ),
+    );
+  });
+
+  // The tolerant posture, and the assertion that fails if someone later
+  // "simplifies" the writer to the refusing one. A writer must not throw on
+  // content it was handed: a hand-written "summer 2026", an impossible
+  // calendar date and a non-string are all "not a date", and refusing one is
+  // validation's business — already had by the time a page reaches here.
+  it("leaves a non-date alone rather than refusing it", () => {
+    for (const value of ["summer 2026", "2026-02-30", "nope", 20260720]) {
+      const written = new Page(uncanonicalSourceDatePage).set(
+        "source_date",
+        value,
+      ).text;
+      assert.deepEqual(
+        new Page(written).get("source_date").value,
+        value,
+        `for ${String(value)}`,
+      );
+    }
+  });
+
+  it("leaves a non-date byte-identical when nothing else churns", () => {
+    const src = "---\ntitle: T\nsource_date: summer 2026\n---\nbody\n";
+    assert.equal(new Page(src).set("source_date", "summer 2026").text, src);
+  });
+});
+
 describe("Page.merge", () => {
   it("unions preserving order", () => {
     const page = new Page("---\ntags:\n  - a\n  - b\n---\nbody\n").mergeStrings(
