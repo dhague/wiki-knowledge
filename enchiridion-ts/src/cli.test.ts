@@ -665,6 +665,82 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
   assert.equal(logStatus, 0);
 });
 
+test("ingest: a consolidate plan absorbs, deletes and commits once", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-cli-con-"));
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "caching.md"),
+    "---\ntitle: Caching\n---\nCaching is remembering a value.\n",
+  );
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "caching-ttl.md"),
+    "---\ntitle: Caching TTL\n---\nA cache entry expires after its TTL.\n",
+  );
+
+  // Committed first: the executor stages the deleted loser as a removal, and an
+  // untracked missing path is still an error (vaultgit.add).
+  const signature = {
+    name: "test",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.init({ fs, dir: root });
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "seed",
+    author: signature,
+    committer: signature,
+  });
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "Caching",
+      action: "consolidate",
+      consolidates: ["wiki/concepts/caching-ttl.md"],
+      pages: [
+        {
+          op: "update",
+          page_ref: "wiki/concepts/caching.md",
+          body: "Caching is remembering a value.\n\nA cache entry expires after its TTL.\n",
+        },
+      ],
+    }),
+  );
+
+  const { status, stdout, stderr } = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(stdout.split("\n")[0], /^[0-9a-f]{40}$/);
+  assert.ok(
+    !fs.existsSync(path.join(root, "wiki", "concepts", "caching-ttl.md")),
+    "the absorbed page should be deleted",
+  );
+  assert.ok(!fs.existsSync(planPath), "plan file should be deleted");
+
+  const { stdout: shown } = spawnSync(
+    "git",
+    ["-C", root, "show", "--format=%s%n%b", "--no-patch", "HEAD"],
+    { encoding: "utf8" },
+  );
+  assert.match(shown, /consolidate: Caching/);
+  assert.match(shown, /deleted: wiki\/concepts\/caching-ttl\.md/);
+
+  const { stdout: tree } = spawnSync(
+    "git",
+    ["-C", root, "ls-tree", "-r", "--name-only", "HEAD"],
+    { encoding: "utf8" },
+  );
+  assert.ok(!tree.includes("caching-ttl.md"), tree);
+});
+
 test("ingest: plan file NOT deleted when ingest fails", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-"),

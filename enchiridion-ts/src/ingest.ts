@@ -38,6 +38,18 @@
  * no raw artifact) and passes `action: "synthesize"` so the history
  * distinguishes the two without reading the diff.
  *
+ * **`action: "consolidate"` is the third shape** (CONTEXT.md,
+ * **Consolidation**; ADR-0021). One page — the survivor — absorbs the pages
+ * [Plan.consolidates] names, each absorbed body becoming a section of the
+ * survivor's authored body. The executor repoints every inbound link at the
+ * survivor (reusing the move machinery, [Vault.consolidate]), deletes the
+ * consolidated pages, and commits once. Losslessness is mechanical rather than
+ * promised: validation — and the executor again, immediately before the delete
+ * — refuses a survivor body that no longer reads the content of a page it
+ * absorbs. The consolidated pages are deleted rather than recorded as
+ * `superseded`: there is no conflicting claim to preserve. `plan.raw` stays
+ * unset, a Consolidation being sourced from pages, not an artifact.
+ *
  * [Plan.raw] is never renamed or moved — a file with external identity keeps
  * its name forever. Ingestion reads it and stages it; `raw_source` links
  * point at it where it sits, percent-encoded by the link machinery rather
@@ -51,6 +63,7 @@
 import path from "node:path";
 import {
   Page,
+  canonicalizeLinkTargets,
   composeLink,
   normalizeBodyLinks,
   splitFrontmatter,
@@ -60,6 +73,7 @@ import { Vault } from "./vault.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
+import { isPageRef } from "./pagepredicate.js";
 
 /** Caps a full path (vault root plus vault-relative path), for Windows'
  * 255-char limit (#70). */
@@ -68,6 +82,10 @@ export const MaxPathLength = 255;
 /** The two verbs a plan page may carry. */
 export const OpCreate = "create";
 export const OpUpdate = "update";
+
+/** The plan verb whose one page absorbs the pages `consolidates` names
+ * (ADR-0021). */
+export const ActionConsolidate = "consolidate";
 
 /** Thrown when a plan fails shape or semantic validation. The message lists
  * every problem found, not just the first. */
@@ -148,12 +166,15 @@ export interface PagePlan {
 /** The deterministic description of one ingestion's decided outcome. */
 export interface Plan {
   title: string;
-  /** The structured commit's verb ([Manifest.action]): `ingest`, or
-   * `synthesize` for a wiki-ask synthesis save. */
+  /** The structured commit's verb ([Manifest.action]): `ingest`, `synthesize`
+   * for a wiki-ask synthesis save, or `consolidate` for a Consolidation. */
   action: string;
   source_date: string;
   raw: string;
   pages: PagePlan[];
+  /** For `action: "consolidate"`, the vault-relative refs the survivor absorbs
+   * — empty for every other action. */
+  consolidates: string[];
 }
 
 /** Read one plan from JSON.
@@ -171,6 +192,11 @@ export function decodePlan(jsonText: string): Plan {
   }
   const action = typeof data["action"] === "string" ? data["action"] : "";
   const rawPages = Array.isArray(data["pages"]) ? data["pages"] : [];
+  const consolidates = Array.isArray(data["consolidates"])
+    ? (data["consolidates"] as unknown[]).map((ref) =>
+        typeof ref === "string" ? ref : String(ref),
+      )
+    : [];
   const pages: PagePlan[] = rawPages.map((p) => {
     const page = p as Record<string, unknown>;
     return {
@@ -195,6 +221,7 @@ export function decodePlan(jsonText: string): Plan {
       typeof data["source_date"] === "string" ? data["source_date"] : "",
     raw: typeof data["raw"] === "string" ? data["raw"] : "",
     pages,
+    consolidates,
   };
 }
 
@@ -217,6 +244,23 @@ export interface ResolvedPage {
   loaded: boolean;
 }
 
+/** One page a Consolidation absorbs, with the body resolve read from disk —
+ * the left-hand side of the losslessness gate (ADR-0021). */
+export interface AbsorbedPage {
+  /** Vault-relative, normalized. */
+  pageRef: string;
+  /** The page's body — everything after the frontmatter block. */
+  body: string;
+  /** Whether the page was on disk when the plan resolved. */
+  found: boolean;
+}
+
+/** The Consolidation a plan declares, resolved: who absorbs, and what. */
+export interface ResolvedConsolidation {
+  survivorRef: string;
+  absorbed: AbsorbedPage[];
+}
+
 /** A plan with every derived fact computed exactly once.
  *
  * Constructible directly (no vault needed) for tests; [resolve] is the
@@ -230,6 +274,8 @@ export class Resolved {
     /** {kind: folder} for vault-discovered kind-folders beyond the four
      * canonical ones; empty when resolved without a vault. */
     readonly extraKindFolders: Record<string, string>,
+    /** The resolved Consolidation, or null when this is not one. */
+    readonly consolidation: ResolvedConsolidation | null = null,
   ) {}
 
   /** A handle on the vault this plan resolved against, or null when it
@@ -333,6 +379,49 @@ export class Resolved {
         }
       }
     }
+
+    // A Consolidation is one survivor plus the pages it absorbs, and nothing
+    // else: the absorbed bodies *are* the survivor's authored body, so there is
+    // no artifact to chain evidence to and no second page to write (ADR-0021).
+    if (this.plan.action === ActionConsolidate) {
+      if (this.plan.consolidates.length === 0) {
+        problems.push(
+          `plan.consolidates must name at least one page when action is '${ActionConsolidate}'`,
+        );
+      }
+      if (this.plan.pages.length !== 1) {
+        problems.push(
+          `action '${ActionConsolidate}' takes exactly one page (the survivor), got ${this.plan.pages.length}`,
+        );
+      } else if (this.plan.pages[0].body === null) {
+        problems.push(
+          `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`,
+        );
+      }
+      if (this.plan.raw !== "") {
+        problems.push(
+          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
+        );
+      }
+    } else if (this.plan.consolidates.length > 0) {
+      problems.push(
+        `plan.consolidates is only valid when action is '${ActionConsolidate}'`,
+      );
+    }
+
+    const seenConsolidated = new Set<string>();
+    for (let i = 0; i < this.plan.consolidates.length; i++) {
+      const ref = this.plan.consolidates[i];
+      if (ref === "") {
+        problems.push(`plan.consolidates[${i}] must not be empty`);
+        continue;
+      }
+      if (seenConsolidated.has(ref)) {
+        problems.push(`plan.consolidates names ${ref} more than once`);
+        continue;
+      }
+      seenConsolidated.add(ref);
+    }
     return problems;
   }
 
@@ -398,6 +487,94 @@ export class Resolved {
       }
       problems.push(...checkChainOfEvidence(staged, this.plan.raw));
     }
+
+    if (this.plan.action === ActionConsolidate) {
+      problems.push(...this.consolidationErrors());
+    }
+    return problems;
+  }
+
+  /** Semantic half of the Consolidation checks: the absorbed pages are real
+   * pages that exist, and the survivor still reads their content. */
+  private consolidationErrors(): string[] {
+    const c = this.consolidation;
+    if (c === null) return [];
+    const problems: string[] = [];
+    if (c.survivorRef === "") {
+      // The survivor's own shape error (an invalid kind, a missing page_ref)
+      // is already reported; there is nothing to compare it against yet.
+      return problems;
+    }
+    if (c.absorbed.some((a) => a.pageRef === c.survivorRef)) {
+      problems.push(
+        `plan.consolidates names the survivor ${c.survivorRef}; a page cannot absorb itself`,
+      );
+    }
+    for (let i = 0; i < c.absorbed.length; i++) {
+      const absorbed = c.absorbed[i];
+      if (absorbed.pageRef === "") continue;
+      // The page predicate, not a bare existence test: `wiki/_index.md`, a
+      // KIND.md and a nested file all sit on disk without being pages, and
+      // deleting one is not a Consolidation (pagepredicate, #310).
+      if (!isPageRef(absorbed.pageRef)) {
+        problems.push(
+          `plan.consolidates[${i}] ${absorbed.pageRef} is not a page (wiki/<kind-folder>/<file>.md)`,
+        );
+        continue;
+      }
+      if (!absorbed.found) {
+        problems.push(
+          `plan.consolidates[${i}] ${absorbed.pageRef} does not exist`,
+        );
+      }
+    }
+    problems.push(...this.losslessnessErrors());
+    return problems;
+  }
+
+  /**
+   * The Consolidation's losslessness gate (ADR-0021): each absorbed page's body
+   * must still be readable in the survivor's body, so the delete drops nothing.
+   *
+   * Compared through [canonicalizeLinkTargets], so the two sides are read as
+   * *where their links point* rather than how each destination is spelled. An
+   * absorbed body therefore compares equal whether it was copied verbatim or
+   * re-based with `../` after landing in a survivor in another kind-folder, and
+   * a link the merge quietly broke does not. Frontmatter is deliberately
+   * outside the comparison: the survivor's summary, tags and edges are the
+   * author's judgment about the merged page, not absorbed content.
+   */
+  private losslessnessErrors(): string[] {
+    const c = this.consolidation;
+    if (c === null || c.survivorRef === "" || this.pages.length !== 1)
+      return [];
+    const survivor = this.pages[0].page;
+    if (survivor === null) return [];
+
+    const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
+    const target = (ref: string): string =>
+      consolidated.has(ref) ? c.survivorRef : ref;
+    const survivorBody = canonicalizeLinkTargets(
+      survivor.body(),
+      path.posix.dirname(c.survivorRef),
+      target,
+    );
+
+    const problems: string[] = [];
+    for (const absorbed of c.absorbed) {
+      if (!absorbed.found) continue; // its own "does not exist" error
+      const want = canonicalizeLinkTargets(
+        absorbed.body,
+        path.posix.dirname(absorbed.pageRef),
+        target,
+      ).trim();
+      if (want === "") continue; // a stub absorbs nothing
+      if (!survivorBody.includes(want)) {
+        problems.push(
+          `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content — a Consolidation is lossless (ADR-0021)`,
+        );
+      }
+    }
     return problems;
   }
 
@@ -413,6 +590,10 @@ export class Resolved {
       );
     }
     const v = this.vault() as Vault;
+
+    if (this.plan.action === ActionConsolidate) {
+      return this.executeConsolidation(v, git);
+    }
 
     const created: string[] = [];
     const updated: string[] = [];
@@ -456,11 +637,74 @@ export class Resolved {
     );
   }
 
+  /**
+   * [execute] for `action: consolidate`: write the survivor, repoint every
+   * inbound link at it, delete the absorbed pages, commit once (ADR-0021).
+   *
+   * The losslessness check runs again here, on the same resolved facts, seconds
+   * before the delete: ADR-0021 makes the *executor* the safeguard, so a
+   * [Resolved] built by hand cannot route around [validate]. */
+  private async executeConsolidation(v: Vault, git: Git): Promise<string> {
+    const c = this.consolidation;
+    const survivor = this.pages.length === 1 ? this.pages[0] : null;
+    if (
+      c === null ||
+      c.survivorRef === "" ||
+      survivor === null ||
+      survivor.page === null
+    ) {
+      throw new ErrPlan("invalid plan: consolidation was not resolved");
+    }
+
+    const problems = this.losslessnessErrors();
+    for (const absorbed of c.absorbed) {
+      if (!absorbed.found) {
+        problems.push(`plan.consolidates ${absorbed.pageRef} does not exist`);
+      }
+    }
+    if (problems.length > 0) {
+      throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
+    }
+
+    const losers = c.absorbed.map((a) => a.pageRef);
+    // The survivor is written before anything is deleted, so an interrupted
+    // Consolidation has always laid the absorbed content down first.
+    const changed = v.consolidate(c.survivorRef, survivor.page, losers);
+
+    const created: string[] = [];
+    const updated: string[] = [];
+    for (const ref of changed) {
+      // The survivor is accounted for below; the rest are pages whose inbound
+      // links the Consolidation rewrote. Consolidated pages are never among
+      // them — [Vault.consolidate] drops them before it writes.
+      if (ref !== c.survivorRef) updated.push(ref);
+    }
+    if (survivor.plan.op === OpCreate) created.push(c.survivorRef);
+    else updated.unshift(c.survivorRef);
+
+    return commit(
+      this.root,
+      {
+        title: this.plan.title,
+        action: this.plan.action,
+        created,
+        updated,
+        deleted: losers,
+        source_date: manifestSourceDate(this.plan.source_date),
+        raw_source: this.plan.raw,
+      },
+      git,
+    );
+  }
+
   /** A human-readable summary of what [Resolved.execute] would write. */
   describe(): string {
     const lines = [`${this.plan.action}: ${this.plan.title}`];
     for (const resolved of this.pages) {
       lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
+    }
+    for (const absorbed of this.consolidation?.absorbed ?? []) {
+      lines.push(`  ${"delete".padEnd(6)} ${absorbed.pageRef}`);
     }
     return lines.join("\n");
   }
@@ -546,7 +790,42 @@ export function resolve(plan: Plan, root: string): Resolved {
       loaded,
     });
   }
-  return new Resolved(plan, resolvedPages, root, extraKindFolders);
+  return new Resolved(
+    plan,
+    resolvedPages,
+    root,
+    extraKindFolders,
+    resolveConsolidation(plan, resolvedPages, v),
+  );
+}
+
+/** Read the consolidation a plan declares: its survivor, and each absorbed
+ * page's body as it stands on disk.
+ *
+ * A body is captured here, once, for the same reason every other derived fact
+ * is: [Resolved.validate] and [Resolved.execute] then read the same content, so
+ * the plan that was checked and the plan that gets written cannot diverge —
+ * including when execute runs a second time, after the file it read is gone. */
+function resolveConsolidation(
+  plan: Plan,
+  resolvedPages: ResolvedPage[],
+  v: Vault | null,
+): ResolvedConsolidation | null {
+  if (plan.action !== ActionConsolidate || resolvedPages.length === 0) {
+    return null;
+  }
+  const survivorRef = resolvedPages[0].pageRef;
+  const absorbed: AbsorbedPage[] = plan.consolidates.map((ref) => {
+    const pageRef = path.posix.normalize(ref);
+    let body = "";
+    let found = false;
+    if (v !== null && pageRef !== "" && v.exists(pageRef)) {
+      body = v.load(pageRef).body();
+      found = true;
+    }
+    return { pageRef, body, found };
+  });
+  return { survivorRef, absorbed };
 }
 
 /** The vault-relative path a plan page will occupy, or "" when it can't be

@@ -742,6 +742,280 @@ test("describe", () => {
   assert.equal(resolved.describe(), "ingest: T\n  create wiki/concepts/a.md");
 });
 
+// --- Consolidation — `action: consolidate` (ADR-0021) -----------------------
+
+/** A survivor plus two fragmented pages that say the same thing, and a page
+ * whose links to both must follow the survivor. */
+const fragmentedVault: Record<string, string> = {
+  "wiki/concepts/caching.md":
+    "---\ntitle: Caching\n---\nCaching is remembering a value.\n",
+  "wiki/concepts/caching-ttl.md":
+    "---\ntitle: Caching TTL\n---\nA cache entry expires after its TTL.\n",
+  "wiki/concepts/cache-expiry.md":
+    "---\ntitle: Cache expiry\n---\nEntries also expire when evicted.\n",
+  "wiki/concepts/client.md":
+    "---\ntitle: Client\n---\nSee [TTL](caching-ttl.md) and [expiry](cache-expiry.md).\n",
+};
+
+const consolidatePlan = `{"title":"Caching","action":"consolidate","consolidates":["wiki/concepts/caching-ttl.md","wiki/concepts/cache-expiry.md"],"pages":[
+  {"op":"update","page_ref":"wiki/concepts/caching.md","frontmatter":{"tags":["caching"]},
+   "body":"Caching is remembering a value.\\n\\n## TTL\\n\\nA cache entry expires after its TTL.\\n\\n## Eviction\\n\\nEntries also expire when evicted.\\n"}]}`;
+
+/** The consolidate plan with one its pieces swapped out for a broken one. */
+function consolidateWith(overrides: {
+  consolidates?: string[];
+  page?: string;
+  raw?: string;
+  action?: string;
+}): string {
+  return JSON.stringify({
+    title: "Caching",
+    action: overrides.action ?? "consolidate",
+    ...(overrides.raw === undefined ? {} : { raw: overrides.raw }),
+    consolidates: overrides.consolidates ?? ["wiki/concepts/caching-ttl.md"],
+    pages: [
+      JSON.parse(
+        overrides.page ??
+          `{"op":"update","page_ref":"wiki/concepts/caching.md","body":"Caching is remembering a value.\\nA cache entry expires after its TTL.\\n"}`,
+      ),
+    ],
+  });
+}
+
+test("decodePlan reads consolidates and keeps the consolidate action", () => {
+  const plan = decodePlanOK(consolidatePlan);
+  assert.equal(plan.action, "consolidate");
+  assert.deepEqual(plan.consolidates, [
+    "wiki/concepts/caching-ttl.md",
+    "wiki/concepts/cache-expiry.md",
+  ]);
+});
+
+test("decodePlan defaults consolidates to empty", () => {
+  assert.deepEqual(decodePlanOK(`{"title":"T"}`).consolidates, []);
+});
+
+test("shape validation rejects consolidates without the consolidate action", () => {
+  const errors = validationErrors(
+    consolidateWith({ action: "ingest" }),
+    newVault({}),
+  );
+  assert.match(errors, /only valid when action is 'consolidate'/);
+});
+
+test("shape validation rejects a consolidate plan with no absorbed pages", () => {
+  const errors = validationErrors(
+    consolidateWith({ consolidates: [] }),
+    newVault({}),
+  );
+  assert.match(errors, /plan\.consolidates must name at least one page/);
+});
+
+test("shape validation rejects a consolidate plan with more than one page", () => {
+  const src = JSON.stringify({
+    title: "Caching",
+    action: "consolidate",
+    consolidates: ["wiki/concepts/a.md"],
+    pages: [
+      { op: "update", page_ref: "wiki/concepts/b.md", body: "b" },
+      { op: "update", page_ref: "wiki/concepts/c.md", body: "c" },
+    ],
+  });
+  assert.match(validationErrors(src, newVault({})), /exactly one page/);
+});
+
+test("shape validation requires the survivor's merged body", () => {
+  const errors = validationErrors(
+    consolidateWith({
+      page: `{"op":"update","page_ref":"wiki/concepts/caching.md"}`,
+    }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /pages\[0\]\.body is required/);
+});
+
+test("shape validation rejects plan.raw on a Consolidation", () => {
+  const errors = validationErrors(
+    consolidateWith({ raw: "raw/doc.md" }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /plan\.raw must not be set/);
+});
+
+test("shape validation rejects a duplicated absorbed ref", () => {
+  const errors = validationErrors(
+    consolidateWith({
+      consolidates: [
+        "wiki/concepts/caching-ttl.md",
+        "wiki/concepts/caching-ttl.md",
+      ],
+    }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /names wiki\/concepts\/caching-ttl\.md more than once/);
+});
+
+test("semantic validation rejects a survivor absorbing itself", () => {
+  const errors = validationErrors(
+    consolidateWith({ consolidates: ["wiki/concepts/caching.md"] }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /cannot absorb itself/);
+});
+
+test("semantic validation rejects an absorbed page that does not exist", () => {
+  const errors = validationErrors(
+    consolidateWith({ consolidates: ["wiki/concepts/missing.md"] }),
+    newVault(fragmentedVault),
+  );
+  assert.match(
+    errors,
+    /plan\.consolidates\[0\] wiki\/concepts\/missing\.md does not exist/,
+  );
+});
+
+test("semantic validation rejects an absorbed ref that is not a page", () => {
+  const errors = validationErrors(
+    consolidateWith({ consolidates: ["wiki/_index.md"] }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /is not a page/);
+});
+
+test("semantic validation rejects a survivor that dropped absorbed content", () => {
+  const errors = validationErrors(
+    consolidateWith({
+      page: `{"op":"update","page_ref":"wiki/concepts/caching.md","body":"Only the eviction half.\\n"}`,
+    }),
+    newVault(fragmentedVault),
+  );
+  assert.match(
+    errors,
+    /does not contain wiki\/concepts\/caching-ttl\.md's content/,
+  );
+});
+
+test("losslessness reads a re-based link by where it points, not its spelling", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nSee [C](c.md).\n",
+    "wiki/concepts/c.md": "---\ntitle: C\n---\nC body.\n",
+    "wiki/notes/n.md": "---\ntitle: N\n---\nN body.\n",
+  });
+  const based = (body: string): string =>
+    JSON.stringify({
+      title: "N",
+      action: "consolidate",
+      consolidates: ["wiki/concepts/a.md"],
+      pages: [{ op: "update", page_ref: "wiki/notes/n.md", body }],
+    });
+
+  // Faithful: the link was re-based when the body landed in another folder.
+  assert.equal(
+    validationErrors(based("See [C](../concepts/c.md).\n"), root),
+    "",
+  );
+  // Not faithful: copied verbatim, the link now points at a page that is not
+  // there — the check catches what a byte comparison would have called a match.
+  assert.match(
+    validationErrors(based("See [C](c.md).\n"), root),
+    /does not contain wiki\/concepts\/a\.md's content/,
+  );
+});
+
+test("execute consolidates: survivor sections, deleted losers, repointed links, one commit", async () => {
+  const root = newVault(fragmentedVault);
+  const resolved = resolveOK(decodePlanOK(consolidatePlan), root);
+  resolved.validate();
+
+  const fake = new Fake();
+  const sha = await resolved.execute(fake);
+  assert.equal(sha.length, 40);
+
+  const v = new Vault(root);
+  const survivor = v.load("wiki/concepts/caching.md").text;
+  assert.match(survivor, /## TTL\n\nA cache entry expires after its TTL\./);
+  assert.match(survivor, /## Eviction\n\nEntries also expire when evicted\./);
+  assert.equal(v.exists("wiki/concepts/caching-ttl.md"), false);
+  assert.equal(v.exists("wiki/concepts/cache-expiry.md"), false);
+
+  // Both inbound links now land on the survivor.
+  const client = v.load("wiki/concepts/client.md").text;
+  assert.equal((client.match(/\(caching\.md\)/g) ?? []).length, 2);
+
+  // One commit under its own verb, recording deletes rather than a
+  // supersession (ADR-0021).
+  assert.equal(fake.messages.length, 1);
+  const message = fake.messages[0];
+  assert.ok(message.startsWith("consolidate: Caching"), message);
+  assert.ok(message.includes("updated: wiki/concepts/caching.md"), message);
+  assert.ok(message.includes("updated: wiki/concepts/client.md"), message);
+  assert.ok(message.includes("deleted: wiki/concepts/caching-ttl.md"), message);
+  assert.ok(
+    message.includes("deleted: wiki/concepts/cache-expiry.md"),
+    message,
+  );
+  assert.ok(!message.includes("superseded:"), message);
+});
+
+test("execute consolidation is idempotent", async () => {
+  const root = newVault(fragmentedVault);
+  const resolved = resolveOK(decodePlanOK(consolidatePlan), root);
+  resolved.validate();
+  await resolved.execute(new Fake());
+  const before = readAll(root);
+
+  // Re-execute the resolved plan: the losers are already gone, and the second
+  // run must leave the same bytes rather than fail on their absence.
+  await resolved.execute(new Fake());
+  const after = readAll(root);
+  assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort());
+  for (const [ref, text] of Object.entries(before)) {
+    assert.equal(after[ref], text, `${ref} changed on re-execute`);
+  }
+});
+
+test("execute consolidation may author a fresh survivor", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nAlpha.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nBeta.\n",
+  });
+  const resolved = resolveOK(
+    decodePlanOK(`{"title":"AB","action":"consolidate","consolidates":["wiki/concepts/a.md","wiki/concepts/b.md"],"pages":[
+      {"op":"create","title":"Alpha Beta","kind":"concept","body":"Alpha.\\n\\nBeta.\\n"}]}`),
+    root,
+  );
+  resolved.validate();
+  const fake = new Fake();
+  await resolved.execute(fake);
+
+  const v = new Vault(root);
+  assert.ok(v.exists("wiki/concepts/alpha-beta.md"));
+  assert.equal(v.exists("wiki/concepts/a.md"), false);
+  assert.equal(v.exists("wiki/concepts/b.md"), false);
+  assert.ok(
+    fake.messages[0].includes("created: wiki/concepts/alpha-beta.md"),
+    fake.messages[0],
+  );
+  assert.ok(
+    fake.messages[0].includes("deleted: wiki/concepts/a.md"),
+    fake.messages[0],
+  );
+});
+
+test("describe lists the survivor and the pages it absorbs", () => {
+  const resolved = resolveOK(
+    decodePlanOK(consolidatePlan),
+    newVault(fragmentedVault),
+  );
+  assert.equal(
+    resolved.describe(),
+    "consolidate: Caching\n" +
+      "  update wiki/concepts/caching.md\n" +
+      "  delete wiki/concepts/caching-ttl.md\n" +
+      "  delete wiki/concepts/cache-expiry.md",
+  );
+});
+
 function readAll(root: string): Record<string, string> {
   return new Vault(root).loadWikiPages();
 }
@@ -861,4 +1135,49 @@ test("integration: a synthesize action commits under its own verb", async () => 
   );
   const v = new Vault(root);
   assert.ok(v.exists("wiki/synthesis/answer.md"));
+});
+
+test("integration: a Consolidation deletes its losers in one real commit", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-ingest-con-"),
+  );
+  await initRepo(root);
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  for (const [name, body] of [
+    ["caching", "Caching is remembering a value.\n"],
+    ["caching-ttl", "A cache entry expires after its TTL.\n"],
+  ]) {
+    fs.writeFileSync(
+      path.join(root, "wiki", "concepts", `${name}.md`),
+      `---\ntitle: ${name}\n---\n${body}`,
+    );
+  }
+  // A real commit has to be made first: the deletion path stages a *tracked*
+  // file missing from disk, and an untracked one is still an error.
+  const seed = new VaultGit(root);
+  await seed.add(["wiki"]);
+  await seed.commit("seed");
+
+  const resolved = resolve(
+    decodePlanOK(`{"title":"Caching","action":"consolidate","consolidates":["wiki/concepts/caching-ttl.md"],"pages":[
+      {"op":"update","page_ref":"wiki/concepts/caching.md","body":"Caching is remembering a value.\\n\\nA cache entry expires after its TTL.\\n"}]}`),
+    root,
+  );
+  resolved.validate();
+  const sha = await resolved.execute(new VaultGit(root));
+
+  const log = await git.log({ fs, dir: root, depth: 1 });
+  assert.equal(log[0].oid, sha);
+  const message = log[0].commit.message;
+  assert.ok(message.startsWith("consolidate: Caching"), message);
+  assert.ok(message.includes("deleted: wiki/concepts/caching-ttl.md"), message);
+
+  const v = new Vault(root);
+  assert.ok(
+    v.load("wiki/concepts/caching.md").text.includes("expires after its TTL"),
+  );
+  assert.equal(v.exists("wiki/concepts/caching-ttl.md"), false);
+  // The loser is gone from HEAD's tree, not just from the working tree.
+  const head = await git.listFiles({ fs, dir: root, ref: "HEAD" });
+  assert.ok(!head.includes("wiki/concepts/caching-ttl.md"), String(head));
 });

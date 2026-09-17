@@ -15,7 +15,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { mkdirSafe } from "./fsutil.js";
-import { Page, planMove, splitFrontmatter } from "./wikipage.js";
+import {
+  Page,
+  planConsolidate,
+  planMove,
+  splitFrontmatter,
+} from "./wikipage.js";
 import { loadRecords } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 import { FolderKinds, KindFolders, folderToKind } from "./place.js";
@@ -346,5 +351,40 @@ export class Vault {
   rewriteInboundLinks(oldRel: string, newRel: string): string[] {
     const pages = this.loadWikiPages();
     return this.writeChanged(planMove(pages, oldRel, newRel), pages);
+  }
+
+  /** Absorb losers into the survivor (CONTEXT.md, **Consolidation**; ADR-0021).
+   *
+   * Writes survivor at survivorRef — the authored merged body — repoints every
+   * link across `wiki/**` that pointed at a consolidated page, then removes the
+   * consolidated pages. Returns the changed vault-relative paths, sorted.
+   *
+   * Writes before it deletes, deliberately: an interrupted Consolidation has
+   * always laid the absorbed content down first, so the deletes are the only
+   * step that can be half-done. Survivor need not already exist — a Consolidation
+   * may author a fresh one. */
+  consolidate(survivorRef: string, survivor: Page, losers: string[]): string[] {
+    const files = this.loadWikiPages();
+    const planned = planConsolidate(
+      { ...files, [survivorRef]: survivor.text },
+      losers,
+      survivorRef,
+    );
+    const changed = this.writeChanged(planned, files);
+    for (const ref of losers) this.remove(ref);
+    return changed;
+  }
+
+  /** Delete the page at pageRef (vault-relative).
+   *
+   * Idempotent: a page that is already gone is not an error, so re-running a
+   * Consolidation whose deletes were interrupted is safe. Every other failure
+   * still throws. */
+  remove(pageRef: string): void {
+    try {
+      fs.unlinkSync(this.path(pageRef));
+    } catch (err) {
+      if (!isENOENT(err)) throw err;
+    }
   }
 }
