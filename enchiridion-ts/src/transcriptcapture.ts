@@ -228,8 +228,8 @@ function fmtDate(d: Date, template: string): string {
 
 /** A capture failure; its message is user-facing. */
 export class CaptureError extends Error {
-  constructor(msg: string) {
-    super(msg);
+  constructor(msg: string, options?: { cause?: unknown }) {
+    super(msg, options);
     this.name = "CaptureError";
   }
 }
@@ -307,6 +307,10 @@ function stateDirNotLocated(cwd: string): CaptureError {
   );
 }
 
+/** Lists one directory's entry names. Injectable so the readdir-failure paths
+ * can be exercised without depending on filesystem permissions. */
+export type DirLister = (dir: string) => string[];
+
 /**
  * Writes the capture into `raw/conversations/`; returns its vault-relative
  * path.
@@ -316,24 +320,44 @@ function stateDirNotLocated(cwd: string): CaptureError {
  * slug — with contents rewritten in place; filename is used only when nothing
  * is found. So no raw file is ever renamed, and inbound raw_source links stay
  * valid with no link rewriting.
+ *
+ * listDir is the injectable directory-listing seam; undefined runs the real
+ * `fs.readdirSync`.
  */
 export function writeCapture(
   wikiRoot: string,
   filename: string,
   markdown: string,
   shortID: string,
+  listDir?: DirLister,
 ): string {
   const conversationsDir = path.join(wikiRoot, "raw", "conversations");
   mkdirSafe(conversationsDir);
 
+  const list = listDir ?? ((dir: string) => fs.readdirSync(dir));
   let matches: string[] = [];
   try {
-    matches = fs
-      .readdirSync(conversationsDir)
+    matches = list(conversationsDir)
       .filter((f) => f.endsWith(`-${shortID}.md`))
       .sort();
-  } catch {
-    // directory just created above; no matches
+  } catch (err) {
+    // ENOENT is the directory not being there at all (removed between the
+    // mkdir above and this listing), which really does mean "no prior
+    // capture". Anything else — permissions, I/O — is a directory that may
+    // well hold this session's capture, and reading that as "no prior
+    // capture" is the one interpretation that writes a *second* raw file:
+    // the first keeps its raw_source links and any typed edges pointing at
+    // it, and the vault ends up with two artifacts for one conversation.
+    if (!isENOENT(err)) {
+      throw new CaptureError(
+        `Could not list ${conversationsDir} to find an existing capture of ` +
+          `this session: ${errMsg(err)}. (Refusing to guess which file a ` +
+          `re-save should rewrite, because a failed listing read as "no ` +
+          `prior capture" writes a second raw file instead, orphaning the ` +
+          `first.)`,
+        { cause: err },
+      );
+    }
   }
   let outPath = path.join(conversationsDir, filename);
   if (matches.length > 0) {
@@ -458,6 +482,10 @@ function captureClaudeCodeSession(
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function isENOENT(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === "ENOENT";
 }
 
 // ---------------------------------------------------------------------------
