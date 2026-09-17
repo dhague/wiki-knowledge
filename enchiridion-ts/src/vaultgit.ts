@@ -108,32 +108,52 @@ export class VaultGit implements Git {
   }
 
   /**
-   * Stage vault-relative paths (a directory is staged recursively).
-   * Strict: throws on failure.
+   * Stage vault-relative paths (a directory is staged recursively). Strict:
+   * throws on failure.
+   *
+   * A path that names no file on disk is a **removal** when git already tracks
+   * it (or something under it) — a Consolidation's deleted loser (ADR-0021), and
+   * the reason [stageRemovals] exists. `git.add` would answer NotFoundError for
+   * one before that ran, so it is skipped here and left to the removal pass.
+   * A path git has never tracked is a typo, not a removal, and still throws.
    */
   async add(paths: string[]): Promise<void> {
-    for (const path of paths) {
+    const tracked = await this.trackedFiles();
+    for (const pagePath of paths) {
+      if (!fs.existsSync(path.join(this.root, pagePath))) {
+        if (!tracked.some((file) => coveredByPaths(file, [pagePath]))) {
+          throw new VaultGitError(
+            `git add ${pagePath}: no such file or directory`,
+          );
+        }
+        continue;
+      }
       try {
-        await git.add({ fs, dir: this.root, filepath: path });
+        await git.add({ fs, dir: this.root, filepath: pagePath });
       } catch (err) {
-        throw new VaultGitError(`git add ${path}: ${messageOf(err)}`);
+        throw new VaultGitError(`git add ${pagePath}: ${messageOf(err)}`);
       }
     }
     // isomorphic-git's `git.add` stages additions/modifications but not
     // removals — a deleted-but-tracked file stays in the index. Stage the
     // removals explicitly, matching isomorphic-git's own `git.remove` surface.
-    await this.stageRemovals(paths);
+    await this.stageRemovals(tracked, paths);
+  }
+
+  /** Every path in HEAD's tree, or [] when there is no HEAD yet (first commit). */
+  private async trackedFiles(): Promise<string[]> {
+    try {
+      return await git.listFiles({ fs, dir: this.root, ref: "HEAD" });
+    } catch {
+      return [];
+    }
   }
 
   /** Remove from the index any tracked file, under a staged path, missing on disk. */
-  private async stageRemovals(paths: string[]): Promise<void> {
-    let tracked: string[];
-    try {
-      tracked = await git.listFiles({ fs, dir: this.root, ref: "HEAD" });
-    } catch {
-      // No HEAD yet (first commit) — nothing is tracked, so nothing to remove.
-      return;
-    }
+  private async stageRemovals(
+    tracked: string[],
+    paths: string[],
+  ): Promise<void> {
     for (const file of tracked) {
       if (!coveredByPaths(file, paths)) continue;
       if (!fs.existsSync(path.join(this.root, file))) {

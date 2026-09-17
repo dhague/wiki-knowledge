@@ -9,8 +9,13 @@
  *
  *	created: wiki/concepts/prepared-statements.md
  *	updated: wiki/concepts/db-connection-pooling.md
+ *	deleted: wiki/concepts/connection-pooling-notes.md
  *	superseded: wiki/sources/deploy-capistrano.md -> wiki/sources/deploy-github-actions.md
  *	source-date: 2026-03-01
+ *
+ * `deleted` is a Consolidation's absorbed pages (ADR-0021) — gone from the
+ * vault, and deliberately *not* spelled `superseded`, which keeps both pages to
+ * preserve a conflicting claim. A Consolidation has no conflict to preserve.
  *
  * Git is a **hard dependency**: a root that isn't a work tree is an error,
  * never a silent skip — the time model depends on the history being
@@ -62,6 +67,9 @@ export interface Manifest {
   action?: string;
   created?: string[];
   updated?: string[];
+  /** Pages a Consolidation absorbed and removed — `git rm`'d, not superseded
+   * (ADR-0021). */
+  deleted?: string[];
   superseded?: Supersession[];
   source_date?: string;
   /** The raw/ artifact this ingestion is sourced from, if any. Staged
@@ -78,6 +86,7 @@ export function stagedPaths(m: Manifest): string[] {
   const paths: string[] = [];
   paths.push(...(m.created ?? []));
   paths.push(...(m.updated ?? []));
+  paths.push(...(m.deleted ?? []));
   for (const s of m.superseded ?? []) paths.push(s.old, s.new);
   if (m.raw_source) paths.push(m.raw_source);
 
@@ -99,6 +108,7 @@ export function buildMessage(m: Manifest): string {
   const lines: string[] = [`${action}: ${m.title}`, ""];
   for (const pageRef of m.created ?? []) lines.push(`created: ${pageRef}`);
   for (const pageRef of m.updated ?? []) lines.push(`updated: ${pageRef}`);
+  for (const pageRef of m.deleted ?? []) lines.push(`deleted: ${pageRef}`);
   for (const s of m.superseded ?? [])
     lines.push(`superseded: ${s.old} -> ${s.new}`);
   if (m.source_date) lines.push(`source-date: ${m.source_date}`);

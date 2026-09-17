@@ -48,6 +48,7 @@ test("buildMessage renders the structured format", () => {
     action: "ingest",
     created: ["wiki/concepts/a.md"],
     updated: ["wiki/concepts/b.md"],
+    deleted: ["wiki/concepts/absorbed.md"],
     superseded: [{ old: "wiki/sources/old.md", new: "wiki/sources/new.md" }],
     source_date: "2026-03-01",
   });
@@ -55,6 +56,7 @@ test("buildMessage renders the structured format", () => {
     "ingest: Deploy notes\n\n" +
     "created: wiki/concepts/a.md\n" +
     "updated: wiki/concepts/b.md\n" +
+    "deleted: wiki/concepts/absorbed.md\n" +
     "superseded: wiki/sources/old.md -> wiki/sources/new.md\n" +
     "source-date: 2026-03-01\n";
   assert.equal(got, want);
@@ -76,6 +78,7 @@ test("stagedPaths deduplicates in order", () => {
     title: "",
     created: ["a.md", "b.md"],
     updated: ["b.md", "c.md"],
+    deleted: ["c.md", "e.md"],
     superseded: [{ old: "c.md", new: "d.md" }],
     raw_source: "raw/doc.md",
   };
@@ -83,6 +86,7 @@ test("stagedPaths deduplicates in order", () => {
     "a.md",
     "b.md",
     "c.md",
+    "e.md",
     "d.md",
     "raw/doc.md",
   ]);

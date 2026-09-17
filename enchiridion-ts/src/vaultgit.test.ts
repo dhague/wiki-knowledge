@@ -130,6 +130,40 @@ test("add throws on failure (strict)", async () => {
   await assert.rejects(() => repo.add(["wiki/concepts/a.md"]));
 });
 
+test("add stages a tracked file missing on disk as a removal", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await repo.init();
+  writeFile(root, "wiki/concepts/a.md", "one\n");
+  await repo.add(["wiki/concepts/a.md"]);
+  await repo.commit("first");
+
+  // A Consolidation deletes its losers before committing, so the staged path
+  // names a file that is gone — a removal, not a typo (ADR-0021).
+  removeFile(root, "wiki/concepts/a.md");
+  await repo.add(["wiki/concepts/a.md"]);
+  const sha = await repo.commit("second");
+
+  const log = await git.log({ fs, dir: root, depth: 1 });
+  assert.equal(log[0].oid, sha);
+  const head = await git.listFiles({ fs, dir: root, ref: "HEAD" });
+  assert.deepEqual(
+    head.filter((file) => file.endsWith(".md")),
+    [],
+  );
+});
+
+test("add still throws for a path git has never tracked", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await repo.init();
+  writeFile(root, "wiki/concepts/a.md", "one\n");
+  await repo.add(["wiki/concepts/a.md"]);
+  await repo.commit("first");
+
+  await assert.rejects(() => repo.add(["wiki/concepts/missing.md"]));
+});
+
 test("commit throws when there is nothing to commit (strict)", async () => {
   const root = tmpRepo();
   const repo = new VaultGit(root);

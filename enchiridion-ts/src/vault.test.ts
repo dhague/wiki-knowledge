@@ -210,6 +210,60 @@ test("rewriteInboundLinks for a non-page target", () => {
   assert.equal(v.exists("raw/old.md"), false);
 });
 
+test("consolidate writes the survivor, repoints inbound links, deletes the losers", () => {
+  const v = writeVault({
+    "wiki/concepts/a.md": "A body.\n",
+    "wiki/concepts/b.md": "B body.\n",
+    "wiki/concepts/c.md": "C body.\n",
+    "wiki/concepts/d.md": "See [A](a.md) and [C](c.md).\n",
+  });
+  const survivor = new Page(
+    "---\ntitle: B\n---\n## A\n\nA body.\n\n## C\n\nC body.\n",
+  );
+  const changed = v.consolidate("wiki/concepts/b.md", survivor, [
+    "wiki/concepts/a.md",
+    "wiki/concepts/c.md",
+  ]);
+
+  assert.deepEqual(changed, ["wiki/concepts/b.md", "wiki/concepts/d.md"]);
+  assert.match(v.load("wiki/concepts/b.md").text, /## A\n\nA body\./);
+  assert.match(v.load("wiki/concepts/d.md").text, /\(b\.md\)/);
+  assert.equal(v.exists("wiki/concepts/a.md"), false);
+  assert.equal(v.exists("wiki/concepts/c.md"), false);
+});
+
+test("consolidate accepts a fresh survivor and is idempotent", () => {
+  const v = writeVault({
+    "wiki/concepts/a.md": "A body.\n",
+    "wiki/concepts/b.md": "B body.\n",
+  });
+  const survivor = new Page("---\ntitle: Merged\n---\nA body.\n\nB body.\n");
+  v.consolidate("wiki/concepts/merged.md", survivor, [
+    "wiki/concepts/a.md",
+    "wiki/concepts/b.md",
+  ]);
+  assert.equal(v.exists("wiki/concepts/a.md"), false);
+
+  // A second run has nothing left to write or delete, and must not throw on the
+  // pages the first run removed.
+  const again = v.consolidate("wiki/concepts/merged.md", survivor, [
+    "wiki/concepts/a.md",
+    "wiki/concepts/b.md",
+  ]);
+  assert.deepEqual(again, []);
+});
+
+test("remove is idempotent and reports a real failure", () => {
+  const v = writeVault({ "wiki/concepts/a.md": "a\n" });
+  v.remove("wiki/concepts/a.md");
+  v.remove("wiki/concepts/a.md"); // already gone — not an error
+  assert.equal(v.exists("wiki/concepts/a.md"), false);
+
+  // A pageRef that names a *directory* is a genuine failure, not a removal.
+  fs.mkdirSync(path.join(v.root, "wiki", "concepts", "dir.md"));
+  assert.throws(() => v.remove("wiki/concepts/dir.md"));
+});
+
 test("pages decodes records", () => {
   const v = writeVault({
     "wiki/concepts/a.md": "---\ntitle: A\ntags:\n  - x\n---\nbody\n",

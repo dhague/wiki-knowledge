@@ -22,6 +22,8 @@ import {
   composeLink,
   normalizeBodyLinks,
   planMove,
+  planConsolidate,
+  canonicalizeLinkTargets,
 } from "./wikipage.js";
 import type { LinkMatch } from "./wikipage.js";
 // The reader that finds frontmatter links through the YAML parser rather than
@@ -632,6 +634,73 @@ describe("PlanMove", () => {
   });
 });
 
+describe("PlanConsolidate", () => {
+  it("repoints inbound links at the survivor and drops the absorbed pages", () => {
+    const pages = {
+      "wiki/concepts/a.md": "A body.\n",
+      "wiki/concepts/b.md": "B body.\n",
+      "wiki/concepts/c.md": "C body.\n",
+      "wiki/entities/e.md":
+        '---\nrelated:\n  - "[A](../concepts/a.md)"\n---\n' +
+        "See [A](../concepts/a.md) and [C](../concepts/c.md).\n",
+    };
+    const after = planConsolidate(
+      pages,
+      ["wiki/concepts/a.md", "wiki/concepts/c.md"],
+      "wiki/concepts/b.md",
+    );
+
+    assert.ok(!("wiki/concepts/a.md" in after));
+    assert.ok(!("wiki/concepts/c.md" in after));
+    assert.equal(after["wiki/concepts/b.md"], "B body.\n");
+    // Body links and frontmatter edges both follow; the labels are the author's
+    // and stay exactly as they were.
+    assert.equal(
+      after["wiki/entities/e.md"],
+      '---\nrelated:\n  - "[A](../concepts/b.md)"\n---\n' +
+        "See [A](../concepts/b.md) and [C](../concepts/b.md).\n",
+    );
+  });
+
+  it("leaves the survivor's own outbound links alone", () => {
+    const pages = {
+      "wiki/concepts/a.md": "A.\n",
+      "wiki/concepts/b.md": "See [E](../entities/e.md).\n",
+    };
+    const after = planConsolidate(
+      pages,
+      ["wiki/concepts/a.md"],
+      "wiki/concepts/b.md",
+    );
+    assert.equal(after["wiki/concepts/b.md"], "See [E](../entities/e.md).\n");
+  });
+});
+
+describe("canonicalizeLinkTargets", () => {
+  it("reads a link by where it points, not how it is spelled", () => {
+    const copied = "See [X](x.md) and [E](../entities/e.md).\n";
+    const reBased = "See [X](../concepts/x.md) and [E](../entities/e.md).\n";
+    assert.equal(
+      canonicalizeLinkTargets(copied, "wiki/concepts"),
+      canonicalizeLinkTargets(reBased, "wiki/notes"),
+    );
+  });
+
+  it("maps a consolidated ref to the survivor and keeps the anchor", () => {
+    assert.equal(
+      canonicalizeLinkTargets("[A](a.md#ttl)", "wiki/concepts", (ref) =>
+        ref === "wiki/concepts/a.md" ? "wiki/concepts/b.md" : ref,
+      ),
+      "[A](wiki/concepts/b.md#ttl)",
+    );
+  });
+
+  it("leaves non-vault destinations byte-identical", () => {
+    const src = "[x](https://example.com/a.md) [y](/abs/a.md) [z](#sec)\n";
+    assert.equal(canonicalizeLinkTargets(src, "wiki/concepts"), src);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // A scheme-qualified destination is absolute, not relative (#500)
 // ---------------------------------------------------------------------------
@@ -1104,6 +1173,131 @@ describe("move changes nothing outside a link", () => {
             );
           }
         }
+      }),
+      { numRuns: MOVE_NUM_RUNS },
+    );
+  });
+});
+
+/** Where a ref — a page's or a link's target — points after a Consolidation:
+ * every consolidated page's links land on the survivor. The [movedRef] of the
+ * property below. */
+function consolidatedRef(
+  ref: string,
+  losers: string[],
+  survivor: string,
+): string {
+  return losers.includes(ref) ? survivor : ref;
+}
+
+// A Consolidation is a move with many sources and one destination, so the same
+// vault generator carries over. The difference the mapping has to survive is
+// that several refs collapse onto one, and that a page can be *both* a link
+// target and absorbed.
+//
+// The first generated page — always in a kind-folder, per genVaultArb — is
+// never consolidated away, so the YAML oracle has a page it can read both
+// before and after, the same guarantee the move property relies on.
+const genConsolidationArb = fc
+  .tuple(
+    genVaultArb.map(({ pages }) => pages),
+    fc.boolean(),
+    fc.nat(),
+    fc.array(fc.boolean(), { minLength: 3, maxLength: 3 }),
+  )
+  .map(([pages, promoteFirst, pick, mask]) => {
+    const refs = Object.keys(pages);
+    const first = refs[0];
+    const rest = refs.slice(1);
+    let survivor = first;
+    if (!promoteFirst && rest.length > 0) survivor = rest[pick % rest.length];
+
+    const absorbable = refs.filter((ref) => ref !== survivor && ref !== first);
+    let losers = absorbable.filter((_, i) => mask[i % mask.length]);
+    if (losers.length === 0 && absorbable.length > 0) losers = [absorbable[0]];
+    if (losers.length === 0) {
+      // Nothing can be absorbed without taking the kind-folder page the YAML
+      // oracle needs, so promote that page and absorb the rest instead.
+      survivor = first;
+      losers = refs.slice(1);
+    }
+    return { pages, survivor, losers };
+  })
+  .filter(
+    ({ pages, survivor, losers }) =>
+      losers.length > 0 &&
+      survivor in pages &&
+      losers.every((loser) => loser !== survivor && loser in pages),
+  );
+
+describe("consolidation preserves every link target", () => {
+  it("repoints every link at a consolidated page to the survivor", () => {
+    fc.assert(
+      fc.property(genConsolidationArb, ({ pages, survivor, losers }) => {
+        const after = planConsolidate(pages, losers, survivor);
+        let oracleReadAFold = false;
+
+        // Every consolidated page is gone; every other page is still there.
+        assert.equal(
+          Object.keys(after).length,
+          Object.keys(pages).length - losers.length,
+          "the vault did not shrink by exactly the consolidated pages",
+        );
+        for (const ref of losers) {
+          assert.ok(!(ref in after), `consolidated page ${ref} survived`);
+        }
+
+        for (const [ref, before] of Object.entries(pages)) {
+          if (losers.includes(ref)) continue;
+          const got = after[ref];
+          assert.ok(
+            got !== undefined,
+            `page ${ref} missing after consolidating`,
+          );
+
+          // Oracle 1 — the raw-text link scan: every link, body links included,
+          // now points at the survivor if it pointed at a consolidated page, and
+          // exactly where it did before otherwise.
+          const wantTargets = resolvedTargets(before, posixDirname(ref)).map(
+            (target) => consolidatedRef(target, losers, survivor),
+          );
+          const gotTargets = resolvedTargets(got, posixDirname(ref));
+          assert.deepEqual(gotTargets, wantTargets, `${ref}: link targets`);
+
+          // Nothing outside a link changed, and a splice can only flatten — so
+          // a line can be lost, never gained.
+          assert.ok(
+            got.split("\n").length <= before.split("\n").length,
+            `${ref}: the consolidation added a line`,
+          );
+          assert.deepEqual(
+            textBetweenLinks(got),
+            textBetweenLinks(before),
+            `${ref}: bytes outside a link changed`,
+          );
+
+          // Oracle 2 — the YAML parser, independent of the raw-text scan: a
+          // frontmatter edge the scan went blind to (a folded destination,
+          // #489) cannot make both sides of this comparison agree.
+          const wantEdges = frontmatterEdges(ref, before);
+          if (wantEdges === null) continue;
+          const gotEdges = frontmatterEdges(ref, got);
+          if (gotEdges === null) continue;
+          const wantMoved: Record<string, string[]> = {};
+          for (const [key, targets] of Object.entries(wantEdges)) {
+            wantMoved[key] = targets.map((target) =>
+              consolidatedRef(target, losers, survivor),
+            );
+          }
+          assert.deepEqual(gotEdges, wantMoved, `${ref}: frontmatter edges`);
+          oracleReadAFold ||=
+            hasFoldedDestination(before) && Object.keys(wantEdges).length > 0;
+        }
+
+        assert.ok(
+          oracleReadAFold,
+          "the YAML oracle compared no folded edge — it has nothing the raw-text scan could miss",
+        );
       }),
       { numRuns: MOVE_NUM_RUNS },
     );

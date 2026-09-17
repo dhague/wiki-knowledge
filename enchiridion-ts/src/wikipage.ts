@@ -482,6 +482,73 @@ export function planMove(
 }
 
 /**
+ * Compute the post-consolidation vault from pages (a {pageRef: text} map).
+ *
+ * Pure, and [planMove]'s sibling: every link pointing at a consolidated page is
+ * repointed at the survivor, and the consolidated pages are dropped. The
+ * survivor's own text is whatever the caller placed at `survivor` in `pages` —
+ * the authored merged body. A *fresh* survivor (a Consolidation may author one
+ * rather than promote a member) is supplied the same way: put it in the map at
+ * `survivor`. This function moves links and nothing else, exactly as [planMove]
+ * only moves links, which is the link half of a Consolidation being lossless
+ * (ADR-0021).
+ */
+export function planConsolidate(
+  pages: Record<string, string>,
+  losers: string[],
+  survivor: string,
+): Record<string, string> {
+  const dropped = new Set(losers);
+  const out: Record<string, string> = {};
+  for (const [rel, text] of Object.entries(pages)) {
+    if (dropped.has(rel)) continue;
+    // One pass per consolidated page, so the mapping composes exactly as
+    // repeated [rewriteText] calls do.
+    let next = text;
+    for (const loser of losers) {
+      next = new Page(next).retarget(rel, loser, survivor).text;
+    }
+    out[rel] = next;
+  }
+  return out;
+}
+
+/**
+ * Return text with every vault-relative link/image destination replaced by the
+ * vault-relative page it resolves to from pageDir (ADR-0009) — the document
+ * read as *where it points* rather than how each destination is spelled.
+ *
+ * A comparison helper, not a writer: nothing here percent-encodes and the
+ * result never reaches disk. Two spellings of the same link — one copied
+ * verbatim between kind-folders, one re-based with `../` — come out identical,
+ * which is what lets a Consolidation's losslessness check (ADR-0021) compare an
+ * absorbed body against that same body as it now reads inside the survivor.
+ *
+ * `target` maps a resolved vault-relative ref to the ref a reader should treat
+ * it as (a consolidated page → the survivor). Destinations that aren't
+ * vault-relative — URLs, absolute paths, bare anchors — are left byte-identical:
+ * they name nothing this vault owns.
+ */
+export function canonicalizeLinkTargets(
+  text: string,
+  pageDir: string,
+  target: (ref: string) => string = (ref) => ref,
+): string {
+  const edits: Edit[] = [];
+  for (const link of iterLinks(text)) {
+    if (!isVaultRelativeDest(link.decodedPath)) continue;
+    const resolved = target(resolveLinkDest(link.decodedPath, pageDir));
+    const dest =
+      link.decodedAnchor === ""
+        ? resolved
+        : `${resolved}#${link.decodedAnchor}`;
+    if (dest !== link.dest)
+      edits.push({ start: link.start, end: link.end, dest });
+  }
+  return applyEdits(text, edits);
+}
+
+/**
  * Compose a markdown link to targetRel from a page in pageDir.
  *
  * Both are vault-relative (`wiki/concepts/foo.md` / `wiki/synthesis`);
