@@ -59,11 +59,7 @@ import { path as placePath, Kinds } from "./place.js";
 import { Vault } from "./vault.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
-import {
-  CANONICAL_DATE_FORMAT,
-  parseSourceDate,
-  truncateSourceDate,
-} from "./sourcedate.js";
+import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 
 /** Caps a full path (vault root plus vault-relative path), for Windows'
  * 255-char limit (#70). */
@@ -605,6 +601,10 @@ function applyFrontmatter(
   }
 
   const merging = planPage.op === OpUpdate;
+  // `source_date` is deliberately absent here: [Page.set] applies the
+  // source-date rule to every value it is handed, so truncating a clock is
+  // the writer's job rather than this projection's (#499). Validation above
+  // has already refused anything that isn't a date at all.
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
     if (key === "raw_source" && value === true) {
@@ -613,9 +613,6 @@ function applyFrontmatter(
         continue;
       }
       v_ = composeLink(path.posix.basename(plan.raw), plan.raw, pageDir);
-    }
-    if (key === "source_date") {
-      v_ = truncateSourceDate(value);
     }
     if (Array.isArray(v_) && merging) {
       page = page.merge(key, v_);

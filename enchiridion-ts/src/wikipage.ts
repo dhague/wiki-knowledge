@@ -18,6 +18,11 @@
  *     [yaml.YAMLMap] mapping, so existing keys keep their position and new
  *     ones append), because a reordering edit would make every ingest diff
  *     unreadable — only incidental formatting may change.
+ *   - What [Page.set] writes is *canonical*: a `source_date` reaches disk in
+ *     its one spelling whatever spelling the caller handed over, because the
+ *     rule is applied here rather than by each caller (#499). A value that
+ *     isn't a date at all passes through untouched — see
+ *     [canonicalForWrite] and `sourcedate.ts`.
  */
 
 import {
@@ -31,6 +36,7 @@ import {
 import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import MarkdownIt from "markdown-it";
+import { truncateSourceDate } from "./sourcedate.js";
 
 // ---------------------------------------------------------------------------
 // Link machinery
@@ -393,10 +399,12 @@ export class Page {
    *
    * Mints a frontmatter block when the page has none. Only the block is
    * re-serialised; the body is spliced back verbatim.
+   *
+   * The value is canonicalised first — see [canonicalForWrite].
    */
   set(key: string, value: unknown): Page {
     const node = this.frontmatterNode();
-    const valueNode = newValueNode(value);
+    const valueNode = newValueNode(canonicalForWrite(key, value));
     setKey(node, key, valueNode);
     const rendered = renderFrontmatter(node);
     // With no frontmatter yet, body is the whole text — so the same
@@ -662,6 +670,28 @@ function setKey(mapping: YAMLMap, key: string, value: Scalar | YAMLSeq): void {
     }
   }
   mapping.add({ key, value });
+}
+
+/**
+ * Canonicalise a frontmatter value on its way to disk — the writer's half of
+ * the source-date rule (#499).
+ *
+ * [Page.set] is the one place frontmatter bytes are produced, so applying the
+ * rule here is what makes it unreachable for a caller — or for a writer added
+ * later — to skip: whatever spelling a `source_date` arrives in, the page
+ * that reaches disk carries the canonical one.
+ *
+ * The posture is [sourcedate.truncateSourceDate]'s: tolerate, never refuse. A
+ * recognised non-canonical spelling truncates to its date
+ * (`2026-01-02T10:00:00Z` becomes `2026-01-02`); a value that isn't a date at
+ * all, such as a hand-written "summer 2026", passes through byte-unchanged. A
+ * writer must not throw on content it was handed, and refusing a non-date is
+ * validation's business — done by the callers that validate before they
+ * write, through [sourcedate.canonicalSourceDate].
+ */
+function canonicalForWrite(key: string, value: unknown): unknown {
+  if (key !== "source_date") return value;
+  return truncateSourceDate(value);
 }
 
 /**
