@@ -26512,27 +26512,44 @@ var init_vaultgit = __esm({
         }
       }
       /**
-       * Stage vault-relative paths (a directory is staged recursively).
-       * Strict: throws on failure.
+       * Stage vault-relative paths (a directory is staged recursively). Strict:
+       * throws on failure.
+       *
+       * A path that names no file on disk is a **removal** when git already tracks
+       * it (or something under it) — a Consolidation's deleted loser (ADR-0021), and
+       * the reason [stageRemovals] exists. `git.add` would answer NotFoundError for
+       * one before that ran, so it is skipped here and left to the removal pass.
+       * A path git has never tracked is a typo, not a removal, and still throws.
        */
       async add(paths) {
-        for (const path26 of paths) {
+        const tracked = await this.trackedFiles();
+        for (const pagePath of paths) {
+          if (!import_node_fs8.default.existsSync(import_node_path9.default.join(this.root, pagePath))) {
+            if (!tracked.some((file) => coveredByPaths(file, [pagePath]))) {
+              throw new VaultGitError(
+                `git add ${pagePath}: no such file or directory`
+              );
+            }
+            continue;
+          }
           try {
-            await git.add({ fs: import_node_fs8.default, dir: this.root, filepath: path26 });
+            await git.add({ fs: import_node_fs8.default, dir: this.root, filepath: pagePath });
           } catch (err) {
-            throw new VaultGitError(`git add ${path26}: ${messageOf(err)}`);
+            throw new VaultGitError(`git add ${pagePath}: ${messageOf(err)}`);
           }
         }
-        await this.stageRemovals(paths);
+        await this.stageRemovals(tracked, paths);
+      }
+      /** Every path in HEAD's tree, or [] when there is no HEAD yet (first commit). */
+      async trackedFiles() {
+        try {
+          return await git.listFiles({ fs: import_node_fs8.default, dir: this.root, ref: "HEAD" });
+        } catch {
+          return [];
+        }
       }
       /** Remove from the index any tracked file, under a staged path, missing on disk. */
-      async stageRemovals(paths) {
-        let tracked;
-        try {
-          tracked = await git.listFiles({ fs: import_node_fs8.default, dir: this.root, ref: "HEAD" });
-        } catch {
-          return;
-        }
+      async stageRemovals(tracked, paths) {
         for (const file of tracked) {
           if (!coveredByPaths(file, paths)) continue;
           if (!import_node_fs8.default.existsSync(import_node_path9.default.join(this.root, file))) {
@@ -29450,8 +29467,8 @@ function suggestSimilar(word, candidates) {
     if (candidate.length <= 1) return;
     const distance = editDistance(word, candidate);
     const length = Math.max(word.length, candidate.length);
-    const similarity = (length - distance) / length;
-    if (similarity > minSimilarity) {
+    const similarity2 = (length - distance) / length;
+    if (similarity2 > minSimilarity) {
       if (distance < bestDistance) {
         bestDistance = distance;
         similar = [candidate];
@@ -37043,6 +37060,30 @@ function planMove(pages, oldRel, newRel) {
   }
   return out;
 }
+function planConsolidate(pages, losers, survivor) {
+  const dropped = new Set(losers);
+  const out = {};
+  for (const [rel, text2] of Object.entries(pages)) {
+    if (dropped.has(rel)) continue;
+    let next = text2;
+    for (const loser of losers) {
+      next = new Page(next).retarget(rel, loser, survivor).text;
+    }
+    out[rel] = next;
+  }
+  return out;
+}
+function canonicalizeLinkTargets(text2, pageDir, target = (ref) => ref) {
+  const edits = [];
+  for (const link2 of iterLinks(text2)) {
+    if (!isVaultRelativeDest(link2.decodedPath)) continue;
+    const resolved = target(resolveLinkDest(link2.decodedPath, pageDir));
+    const dest = link2.decodedAnchor === "" ? resolved : `${resolved}#${link2.decodedAnchor}`;
+    if (dest !== link2.dest)
+      edits.push({ start: link2.start, end: link2.end, dest });
+  }
+  return applyEdits(text2, edits);
+}
 function composeLink(title, targetRel, pageDir) {
   const dest = relPath(import_node_path2.default.posix.normalize(targetRel), pageDir);
   return `[${title}](${percentEncode(dest)})`;
@@ -38179,6 +38220,39 @@ var Vault = class {
     const pages = this.loadWikiPages();
     return this.writeChanged(planMove(pages, oldRel, newRel), pages);
   }
+  /** Absorb losers into the survivor (CONTEXT.md, **Consolidation**; ADR-0021).
+   *
+   * Writes survivor at survivorRef — the authored merged body — repoints every
+   * link across `wiki/**` that pointed at a consolidated page, then removes the
+   * consolidated pages. Returns the changed vault-relative paths, sorted.
+   *
+   * Writes before it deletes, deliberately: an interrupted Consolidation has
+   * always laid the absorbed content down first, so the deletes are the only
+   * step that can be half-done. Survivor need not already exist — a Consolidation
+   * may author a fresh one. */
+  consolidate(survivorRef, survivor, losers) {
+    const files = this.loadWikiPages();
+    const planned = planConsolidate(
+      { ...files, [survivorRef]: survivor.text },
+      losers,
+      survivorRef
+    );
+    const changed = this.writeChanged(planned, files);
+    for (const ref of losers) this.remove(ref);
+    return changed;
+  }
+  /** Delete the page at pageRef (vault-relative).
+   *
+   * Idempotent: a page that is already gone is not an error, so re-running a
+   * Consolidation whose deletes were interrupted is safe. Every other failure
+   * still throws. */
+  remove(pageRef2) {
+    try {
+      import_node_fs7.default.unlinkSync(this.path(pageRef2));
+    } catch (err) {
+      if (!isENOENT3(err)) throw err;
+    }
+  }
 };
 
 // src/cli.ts
@@ -38462,6 +38536,7 @@ function stagedPaths(m) {
   const paths = [];
   paths.push(...m.created ?? []);
   paths.push(...m.updated ?? []);
+  paths.push(...m.deleted ?? []);
   for (const s of m.superseded ?? []) paths.push(s.old, s.new);
   if (m.raw_source) paths.push(m.raw_source);
   const seen = /* @__PURE__ */ new Set();
@@ -38479,6 +38554,7 @@ function buildMessage(m) {
   const lines = [`${action}: ${m.title}`, ""];
   for (const pageRef2 of m.created ?? []) lines.push(`created: ${pageRef2}`);
   for (const pageRef2 of m.updated ?? []) lines.push(`updated: ${pageRef2}`);
+  for (const pageRef2 of m.deleted ?? []) lines.push(`deleted: ${pageRef2}`);
   for (const s of m.superseded ?? [])
     lines.push(`superseded: ${s.old} -> ${s.new}`);
   if (m.source_date) lines.push(`source-date: ${m.source_date}`);
@@ -38632,9 +38708,11 @@ function postToolUse(payload, lookupEnv = processLookupEnv) {
 
 // src/ingest.ts
 var import_node_path16 = __toESM(require("node:path"), 1);
+init_pagepredicate();
 var MaxPathLength = 255;
 var OpCreate = "create";
 var OpUpdate = "update";
+var ActionConsolidate = "consolidate";
 var ErrPlan = class extends Error {
   constructor(message) {
     super(message);
@@ -38688,6 +38766,9 @@ function decodePlan(jsonText) {
   }
   const action = typeof data["action"] === "string" ? data["action"] : "";
   const rawPages = Array.isArray(data["pages"]) ? data["pages"] : [];
+  const consolidates = Array.isArray(data["consolidates"]) ? data["consolidates"].map(
+    (ref) => typeof ref === "string" ? ref : String(ref)
+  ) : [];
   const pages = rawPages.map((p) => {
     const page = p;
     return {
@@ -38705,15 +38786,17 @@ function decodePlan(jsonText) {
     action: action === "" ? "ingest" : action,
     source_date: typeof data["source_date"] === "string" ? data["source_date"] : "",
     raw: typeof data["raw"] === "string" ? data["raw"] : "",
-    pages
+    pages,
+    consolidates
   };
 }
 var Resolved = class {
-  constructor(plan, pages, root, extraKindFolders) {
+  constructor(plan, pages, root, extraKindFolders, consolidation = null) {
     this.plan = plan;
     this.pages = pages;
     this.root = root;
     this.extraKindFolders = extraKindFolders;
+    this.consolidation = consolidation;
   }
   /** A handle on the vault this plan resolved against, or null when it
    * resolved without one. */
@@ -38798,6 +38881,44 @@ var Resolved = class {
         }
       }
     }
+    if (this.plan.action === ActionConsolidate) {
+      if (this.plan.consolidates.length === 0) {
+        problems.push(
+          `plan.consolidates must name at least one page when action is '${ActionConsolidate}'`
+        );
+      }
+      if (this.plan.pages.length !== 1) {
+        problems.push(
+          `action '${ActionConsolidate}' takes exactly one page (the survivor), got ${this.plan.pages.length}`
+        );
+      } else if (this.plan.pages[0].body === null) {
+        problems.push(
+          `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`
+        );
+      }
+      if (this.plan.raw !== "") {
+        problems.push(
+          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`
+        );
+      }
+    } else if (this.plan.consolidates.length > 0) {
+      problems.push(
+        `plan.consolidates is only valid when action is '${ActionConsolidate}'`
+      );
+    }
+    const seenConsolidated = /* @__PURE__ */ new Set();
+    for (let i = 0; i < this.plan.consolidates.length; i++) {
+      const ref = this.plan.consolidates[i];
+      if (ref === "") {
+        problems.push(`plan.consolidates[${i}] must not be empty`);
+        continue;
+      }
+      if (seenConsolidated.has(ref)) {
+        problems.push(`plan.consolidates names ${ref} more than once`);
+        continue;
+      }
+      seenConsolidated.add(ref);
+    }
     return problems;
   }
   /** Semantic errors cover the checks that need the vault: target existence,
@@ -38852,6 +38973,83 @@ var Resolved = class {
       }
       problems.push(...check(staged, this.plan.raw));
     }
+    if (this.plan.action === ActionConsolidate) {
+      problems.push(...this.consolidationErrors());
+    }
+    return problems;
+  }
+  /** Semantic half of the Consolidation checks: the absorbed pages are real
+   * pages that exist, and the survivor still reads their content. */
+  consolidationErrors() {
+    const c = this.consolidation;
+    if (c === null) return [];
+    const problems = [];
+    if (c.survivorRef === "") {
+      return problems;
+    }
+    if (c.absorbed.some((a) => a.pageRef === c.survivorRef)) {
+      problems.push(
+        `plan.consolidates names the survivor ${c.survivorRef}; a page cannot absorb itself`
+      );
+    }
+    for (let i = 0; i < c.absorbed.length; i++) {
+      const absorbed = c.absorbed[i];
+      if (absorbed.pageRef === "") continue;
+      if (!isPageRef(absorbed.pageRef)) {
+        problems.push(
+          `plan.consolidates[${i}] ${absorbed.pageRef} is not a page (wiki/<kind-folder>/<file>.md)`
+        );
+        continue;
+      }
+      if (!absorbed.found) {
+        problems.push(
+          `plan.consolidates[${i}] ${absorbed.pageRef} does not exist`
+        );
+      }
+    }
+    problems.push(...this.losslessnessErrors());
+    return problems;
+  }
+  /**
+   * The Consolidation's losslessness gate (ADR-0021): each absorbed page's body
+   * must still be readable in the survivor's body, so the delete drops nothing.
+   *
+   * Compared through [canonicalizeLinkTargets], so the two sides are read as
+   * *where their links point* rather than how each destination is spelled. An
+   * absorbed body therefore compares equal whether it was copied verbatim or
+   * re-based with `../` after landing in a survivor in another kind-folder, and
+   * a link the merge quietly broke does not. Frontmatter is deliberately
+   * outside the comparison: the survivor's summary, tags and edges are the
+   * author's judgment about the merged page, not absorbed content.
+   */
+  losslessnessErrors() {
+    const c = this.consolidation;
+    if (c === null || c.survivorRef === "" || this.pages.length !== 1)
+      return [];
+    const survivor = this.pages[0].page;
+    if (survivor === null) return [];
+    const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
+    const target = (ref) => consolidated.has(ref) ? c.survivorRef : ref;
+    const survivorBody = canonicalizeLinkTargets(
+      survivor.body(),
+      import_node_path16.default.posix.dirname(c.survivorRef),
+      target
+    );
+    const problems = [];
+    for (const absorbed of c.absorbed) {
+      if (!absorbed.found) continue;
+      const want = canonicalizeLinkTargets(
+        absorbed.body,
+        import_node_path16.default.posix.dirname(absorbed.pageRef),
+        target
+      ).trim();
+      if (want === "") continue;
+      if (!survivorBody.includes(want)) {
+        problems.push(
+          `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content \u2014 a Consolidation is lossless (ADR-0021)`
+        );
+      }
+    }
     return problems;
   }
   /** Write every resolved page and commit, returning the commit SHA.
@@ -38866,6 +39064,9 @@ var Resolved = class {
       );
     }
     const v = this.vault();
+    if (this.plan.action === ActionConsolidate) {
+      return this.executeConsolidation(v, git2);
+    }
     const created = [];
     const updated = [];
     const superseded = [];
@@ -38905,11 +39106,59 @@ var Resolved = class {
       git2
     );
   }
+  /**
+   * [execute] for `action: consolidate`: write the survivor, repoint every
+   * inbound link at it, delete the absorbed pages, commit once (ADR-0021).
+   *
+   * The losslessness check runs again here, on the same resolved facts, seconds
+   * before the delete: ADR-0021 makes the *executor* the safeguard, so a
+   * [Resolved] built by hand cannot route around [validate]. */
+  async executeConsolidation(v, git2) {
+    const c = this.consolidation;
+    const survivor = this.pages.length === 1 ? this.pages[0] : null;
+    if (c === null || c.survivorRef === "" || survivor === null || survivor.page === null) {
+      throw new ErrPlan("invalid plan: consolidation was not resolved");
+    }
+    const problems = this.losslessnessErrors();
+    for (const absorbed of c.absorbed) {
+      if (!absorbed.found) {
+        problems.push(`plan.consolidates ${absorbed.pageRef} does not exist`);
+      }
+    }
+    if (problems.length > 0) {
+      throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
+    }
+    const losers = c.absorbed.map((a) => a.pageRef);
+    const changed = v.consolidate(c.survivorRef, survivor.page, losers);
+    const created = [];
+    const updated = [];
+    for (const ref of changed) {
+      if (ref !== c.survivorRef) updated.push(ref);
+    }
+    if (survivor.plan.op === OpCreate) created.push(c.survivorRef);
+    else updated.unshift(c.survivorRef);
+    return commit2(
+      this.root,
+      {
+        title: this.plan.title,
+        action: this.plan.action,
+        created,
+        updated,
+        deleted: losers,
+        source_date: manifestSourceDate(this.plan.source_date),
+        raw_source: this.plan.raw
+      },
+      git2
+    );
+  }
   /** A human-readable summary of what [Resolved.execute] would write. */
   describe() {
     const lines = [`${this.plan.action}: ${this.plan.title}`];
     for (const resolved of this.pages) {
       lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
+    }
+    for (const absorbed of this.consolidation?.absorbed ?? []) {
+      lines.push(`  ${"delete".padEnd(6)} ${absorbed.pageRef}`);
     }
     return lines.join("\n");
   }
@@ -38974,7 +39223,30 @@ function resolve3(plan, root) {
       loaded
     });
   }
-  return new Resolved(plan, resolvedPages, root, extraKindFolders);
+  return new Resolved(
+    plan,
+    resolvedPages,
+    root,
+    extraKindFolders,
+    resolveConsolidation(plan, resolvedPages, v)
+  );
+}
+function resolveConsolidation(plan, resolvedPages, v) {
+  if (plan.action !== ActionConsolidate || resolvedPages.length === 0) {
+    return null;
+  }
+  const survivorRef = resolvedPages[0].pageRef;
+  const absorbed = plan.consolidates.map((ref) => {
+    const pageRef2 = import_node_path16.default.posix.normalize(ref);
+    let body = "";
+    let found = false;
+    if (v !== null && pageRef2 !== "" && v.exists(pageRef2)) {
+      body = v.load(pageRef2).body();
+      found = true;
+    }
+    return { pageRef: pageRef2, body, found };
+  });
+  return { survivorRef, absorbed };
 }
 function pageRef(page, extraKindFolders) {
   if (page.op !== OpCreate) return page.page_ref;
@@ -39057,6 +39329,8 @@ var import_node_path17 = __toESM(require("node:path"), 1);
 init_pagepredicate();
 var { Database } = import_node_sqlite3_wasm.default;
 var SCHEMA_VERSION = "4";
+var GROUP_SEPARATOR = String.fromCharCode(31);
+var GROUP_SEPARATOR_SQL = "char(31)";
 var BM25_WEIGHTS = "0.0,10.0,5.0,1.0";
 var BACKEND_NAME = "fts5";
 var SCHEMA_DDL = `
@@ -39393,6 +39667,61 @@ var Index = class _Index {
       "SELECT tag, COUNT(*) AS n FROM page_tag GROUP BY tag ORDER BY n DESC, tag ASC"
     );
     return rows.map((r) => ({ tag: r.tag, count: r.n }));
+  }
+  /**
+   * Every indexed page whose kind is not in `excludeKinds`, with its tag set —
+   * one query over `page` and `page_tag`, never a frontmatter re-parse. A
+   * materialised view of HEAD (ADR-0015), so an uncommitted page is invisible,
+   * which is what ADR-0021's fragmentation consequence requires.
+   */
+  async indexedPages(excludeKinds = []) {
+    await this.sync();
+    const scope = excludeKinds.length > 0 ? `WHERE p.kind NOT IN (${placeholders(excludeKinds.length)})` : "";
+    const rows = this.db.all(
+      `SELECT p.page_ref, p.title, p.kind,
+              (SELECT GROUP_CONCAT(t.tag, ${GROUP_SEPARATOR_SQL})
+                 FROM page_tag t WHERE t.page_ref = p.page_ref) AS tags
+       FROM page p ${scope} ORDER BY p.page_ref`,
+      excludeKinds
+    );
+    return rows.map((r) => ({
+      pageRef: r.page_ref,
+      title: r.title ?? "",
+      kind: r.kind ?? "",
+      tags: r.tags ? r.tags.split(GROUP_SEPARATOR).sort() : []
+    }));
+  }
+  /**
+   * Pairs of in-scope pages sharing at least one tag, most-shared first — the
+   * tag self-join ADR-0021 names as the concept-fragmentation check's
+   * candidate generator. Scope is applied in SQL so an excluded kind never
+   * enters the pairing, and the join is over `page_tag` alone (not the FTS5
+   * content column), so the ranking is an exact-match shared-tag count.
+   */
+  async sharedTagPairs(excludeKinds = []) {
+    await this.sync();
+    const scope = excludeKinds.length > 0 ? `AND p1.kind NOT IN (${placeholders(excludeKinds.length)})
+             AND p2.kind NOT IN (${placeholders(excludeKinds.length)})` : "";
+    const rows = this.db.all(
+      `SELECT t1.page_ref AS a, t2.page_ref AS b,
+              GROUP_CONCAT(t1.tag, ${GROUP_SEPARATOR_SQL}) AS tags
+       FROM page_tag t1
+       JOIN page_tag t2 ON t1.tag = t2.tag AND t1.page_ref < t2.page_ref
+       JOIN page p1 ON p1.page_ref = t1.page_ref
+       JOIN page p2 ON p2.page_ref = t2.page_ref
+       WHERE 1=1 ${scope}
+       GROUP BY t1.page_ref, t2.page_ref
+       ORDER BY COUNT(*) DESC, a, b`,
+      [
+        ...excludeKinds,
+        ...excludeKinds
+      ]
+    );
+    return rows.map((r) => ({
+      a: r.a,
+      b: r.b,
+      sharedTags: r.tags.split(GROUP_SEPARATOR).sort()
+    }));
   }
   async search(q) {
     await this.sync();
@@ -42037,6 +42366,234 @@ async function splitLinks(root) {
   }
   return findings;
 }
+var DefaultMinSimilarity = 0.5;
+var NonConsolidatableKinds = ["entity", "source", "synthesis"];
+var TitleMatchLimit = 200;
+var TitleStopwords = /* @__PURE__ */ new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "been",
+  "but",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "how",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "not",
+  "of",
+  "on",
+  "or",
+  "per",
+  "that",
+  "the",
+  "their",
+  "these",
+  "they",
+  "this",
+  "those",
+  "to",
+  "via",
+  "vs",
+  "was",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "why",
+  "with",
+  "you",
+  "your"
+]);
+function titleTokens2(title) {
+  const tokens = /* @__PURE__ */ new Set();
+  for (const word of title.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+    if (word.length > 1 && !TitleStopwords.has(word)) tokens.add(word);
+  }
+  return tokens;
+}
+function intersection(a, b) {
+  const shared = [];
+  for (const value of a) if (b.has(value)) shared.push(value);
+  return shared.sort();
+}
+function similarity(a, b) {
+  const sharedTags = intersection(a.tags, b.tags).length;
+  const sharedTitle = intersection(a.titleTokens, b.titleTokens).length;
+  const unionTags = a.tags.size + b.tags.size - sharedTags;
+  const unionTitle = a.titleTokens.size + b.titleTokens.size - sharedTitle;
+  const union = unionTags + unionTitle;
+  return union === 0 ? 0 : (sharedTags + sharedTitle) / union;
+}
+function titleMatch(title) {
+  const words = [...titleTokens2(title)];
+  if (words.length === 0) return "";
+  return `{title} : (${words.map((w) => `"${w}"`).join(" OR ")})`;
+}
+function inboundCounts(text2) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const [ref, content] of text2) {
+    const dir = ref.split("/").slice(0, -1).join("/");
+    for (const link2 of iterLinks(content)) {
+      const target = resolveLinkDest(link2.decodedPath, dir);
+      if (target === ref || !text2.has(target)) continue;
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+function fragmentationDetail(cluster) {
+  const basis = [];
+  if (cluster.basis.tags.length > 0)
+    basis.push(`shared tags: ${cluster.basis.tags.join(", ")}`);
+  if (cluster.basis.titleTokens.length > 0)
+    basis.push(`shared title terms: ${cluster.basis.titleTokens.join(", ")}`);
+  const why = basis.length > 0 ? basis.join("; ") : "similar titles";
+  return `${cluster.members.length} closely-related pages (${why}) \u2014 consider consolidating into ${cluster.suggestedSurvivor}`;
+}
+async function conceptFragmentation(root, opts = {}) {
+  const minSimilarity = opts.minSimilarity ?? DefaultMinSimilarity;
+  const index = await Index.open(root);
+  try {
+    const pages = await index.indexedPages(NonConsolidatableKinds);
+    const signals = /* @__PURE__ */ new Map();
+    for (const page of pages) {
+      signals.set(page.pageRef, {
+        tags: new Set(page.tags),
+        titleTokens: titleTokens2(page.title)
+      });
+    }
+    const candidates = /* @__PURE__ */ new Set();
+    const addPair = (a, b) => {
+      if (a === b || !signals.has(a) || !signals.has(b)) return;
+      candidates.add(a < b ? `${a}\0${b}` : `${b}\0${a}`);
+    };
+    for (const pair of await index.sharedTagPairs(NonConsolidatableKinds)) {
+      addPair(pair.a, pair.b);
+    }
+    const scopeKinds = [...new Set(pages.map((p) => p.kind))];
+    if (scopeKinds.length > 0) {
+      for (const page of pages) {
+        const match = titleMatch(page.title);
+        if (match === "") continue;
+        const hits = await index.search({
+          text: match,
+          raw: true,
+          kinds: scopeKinds,
+          // Supersession is not a reason to skip a page here: a superseded
+          // page is still a page, and the tag self-join does not skip it
+          // either — the two generators must see the same scope.
+          includeSuperseded: true,
+          limit: TitleMatchLimit
+        });
+        for (const hit of hits) addPair(page.pageRef, hit.pageRef);
+      }
+    }
+    const scored = [];
+    for (const key of [...candidates].sort()) {
+      const [a, b] = key.split("\0");
+      const sim = similarity(signals.get(a), signals.get(b));
+      if (sim >= minSimilarity) scored.push({ a, b, sim });
+    }
+    if (scored.length === 0) return [];
+    const parent = /* @__PURE__ */ new Map();
+    const find = (x) => {
+      const path26 = [];
+      let cur = x;
+      while (parent.get(cur) !== cur) {
+        path26.push(cur);
+        cur = parent.get(cur);
+      }
+      for (const node of path26) parent.set(node, cur);
+      return cur;
+    };
+    const union = (a, b) => {
+      for (const ref of [a, b]) if (!parent.has(ref)) parent.set(ref, ref);
+      const rootA = find(a);
+      const rootB = find(b);
+      if (rootA === rootB) return;
+      if (rootA < rootB) parent.set(rootB, rootA);
+      else parent.set(rootA, rootB);
+    };
+    for (const { a, b } of scored) union(a, b);
+    const clusters = /* @__PURE__ */ new Map();
+    for (const ref of parent.keys()) {
+      const root2 = find(ref);
+      const members = clusters.get(root2);
+      if (members) members.push(ref);
+      else clusters.set(root2, [ref]);
+    }
+    const basisByRoot = /* @__PURE__ */ new Map();
+    const minSimByRoot = /* @__PURE__ */ new Map();
+    for (const { a, b, sim } of scored) {
+      const root2 = find(a);
+      let basis = basisByRoot.get(root2);
+      if (!basis) {
+        basis = { tags: /* @__PURE__ */ new Set(), titleTokens: /* @__PURE__ */ new Set() };
+        basisByRoot.set(root2, basis);
+      }
+      const sharedTags = intersection(
+        signals.get(a).tags,
+        signals.get(b).tags
+      );
+      const sharedTitle = intersection(
+        signals.get(a).titleTokens,
+        signals.get(b).titleTokens
+      );
+      for (const tag of sharedTags) basis.tags.add(tag);
+      for (const word of sharedTitle) basis.titleTokens.add(word);
+      const previous = minSimByRoot.get(root2);
+      if (previous === void 0 || sim < previous) minSimByRoot.set(root2, sim);
+    }
+    const head = await new VaultGit(root).committedPages("");
+    const text2 = /* @__PURE__ */ new Map();
+    for (const change of head.pages) {
+      if (!change.deleted) text2.set(change.pageRef, change.content);
+    }
+    const inbound = inboundCounts(text2);
+    const findings = [];
+    for (const [root2, refs] of clusters) {
+      if (refs.length < 2) continue;
+      const members = refs.sort().map((ref) => ({
+        pageRef: ref,
+        bytes: Buffer.byteLength(text2.get(ref) ?? "", "utf8"),
+        inbound: inbound.get(ref) ?? 0
+      }));
+      const suggestedSurvivor = [...members].sort(
+        (x, y) => y.inbound - x.inbound || y.bytes - x.bytes || x.pageRef.localeCompare(y.pageRef)
+      )[0].pageRef;
+      const basis = basisByRoot.get(root2);
+      const cluster = {
+        members,
+        basis: {
+          tags: [...basis?.tags ?? []].sort(),
+          titleTokens: [...basis?.titleTokens ?? []].sort()
+        },
+        similarity: minSimByRoot.get(root2) ?? minSimilarity,
+        suggestedSurvivor
+      };
+      findings.push({
+        pageRef: suggestedSurvivor,
+        detail: fragmentationDetail(cluster),
+        cluster
+      });
+    }
+    return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+  } finally {
+    index.close();
+  }
+}
 var CHECKS = {
   "kind-folder-conformance": kindFolderConformance,
   "ingestion-source-integrity": ingestionSourceIntegrity,
@@ -42046,7 +42603,8 @@ var CHECKS = {
   "unresolved-supersession": unresolvedSupersession,
   "contradiction-callouts": contradictionCallouts,
   orphans,
-  "split-links": splitLinks
+  "split-links": splitLinks,
+  "concept-fragmentation": conceptFragmentation
 };
 async function fixFrontmatterLinkFormat(root) {
   const pages = new Vault(root).loadWikiPages();
@@ -42263,9 +42821,9 @@ function buildExportMeta(pages, opts = {}) {
   }
   const tagMap = /* @__PURE__ */ new Map();
   const kindMap = /* @__PURE__ */ new Map();
-  const inboundCounts = /* @__PURE__ */ new Map();
+  const inboundCounts2 = /* @__PURE__ */ new Map();
   for (const pageRef2 of exported) {
-    inboundCounts.set(pageRef2, 0);
+    inboundCounts2.set(pageRef2, 0);
   }
   for (const pageRef2 of exported) {
     const entry = pages.get(pageRef2);
@@ -42282,7 +42840,7 @@ function buildExportMeta(pages, opts = {}) {
     const refs = outboundRefs(pageRef2, entry.text);
     for (const target of refs) {
       if (exported.has(target)) {
-        inboundCounts.set(target, (inboundCounts.get(target) ?? 0) + 1);
+        inboundCounts2.set(target, (inboundCounts2.get(target) ?? 0) + 1);
       }
     }
   }
@@ -42299,7 +42857,7 @@ function buildExportMeta(pages, opts = {}) {
       summary: record.summary,
       kind: record.kind,
       tags: record.tags,
-      inboundCount: inboundCounts.get(pageRef2) ?? 0
+      inboundCount: inboundCounts2.get(pageRef2) ?? 0
     });
   }
   wikiEntries.sort((a, b) => {
@@ -42308,7 +42866,7 @@ function buildExportMeta(pages, opts = {}) {
     return a.title.localeCompare(b.title, void 0, { sensitivity: "base" });
   });
   const getStarted = wikiEntries.slice(0, GET_STARTED_COUNT);
-  return { exported, tagMap, kindMap, inboundCounts, getStarted };
+  return { exported, tagMap, kindMap, inboundCounts: inboundCounts2, getStarted };
 }
 
 // src/exportrender.ts
@@ -43764,21 +44322,35 @@ function buildProgram() {
     emitDocument(result);
   });
   const checkNames = Object.keys(CHECKS).join(", ");
-  const check3 = program2.command("check").description(`Run a vault health check by name; names: ${checkNames}`).argument("<name>", "check name").option("--json", "emit findings as JSON Lines (one object per line)").action(async (name, opts) => {
-    const fn = CHECKS[name];
-    if (!fn) {
-      fail(
-        `enchiridion check: unknown check "${name}"; known: ${checkNames}`
-      );
+  const check3 = program2.command("check").description(`Run a vault health check by name; names: ${checkNames}`).argument("<name>", "check name").option("--json", "emit findings as JSON Lines (one object per line)").option(
+    "--min-similarity <n>",
+    `concept-fragmentation cutoff, 0-1 (default ${DefaultMinSimilarity})`,
+    (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 1) {
+        throw new InvalidArgumentError(
+          `must be a number in [0, 1], got "${v}"`
+        );
+      }
+      return n;
     }
-    const { root } = resolveRoot();
-    const findings = await fn(root);
-    if (opts.json) {
-      emitRows(findings);
-    } else {
-      for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+  ).action(
+    async (name, opts) => {
+      const fn = CHECKS[name];
+      if (!fn) {
+        fail(
+          `enchiridion check: unknown check "${name}"; known: ${checkNames}`
+        );
+      }
+      const { root } = resolveRoot();
+      const findings = await fn(root, { minSimilarity: opts.minSimilarity });
+      if (opts.json) {
+        emitRows(findings);
+      } else {
+        for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+      }
     }
-  });
+  );
   void check3;
   const fixNames = Object.keys(FIXES).join(", ");
   const fix = program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").action(async (name) => {
