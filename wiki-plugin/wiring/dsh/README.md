@@ -23,6 +23,26 @@ same checkout, and DSH's own reconcile makes a repeated `add` a no-op that never
 duplicates the bundle in `dsh.profile.bundles`. Remove it with
 `dsh plugin --profile <profile> remove @dhague/wiki-knowledge-dsh`.
 
+## Which DSH it was verified against
+
+`package.json` records the version whose surface this bundle's rows were walked
+against, as `dsh.verifiedAgainst`. That field is the record's one home — the
+patch banner and the install output are both rendered from it — and it moves
+only when a person re-checks the surface map against a new DSH, never on a
+plugin release.
+
+The generator compares the record with `dsh --version` and prints both, naming
+[the GA re-verification ticket](https://github.com/dhague/wiki-knowledge/issues/536)
+when they differ. **It never refuses.** DSH is pre-GA and ships often, so a hard
+gate would turn every DSH patch release into a failed install; a mismatch is a
+signpost, not a verdict. Pass `--dsh-version` when you know better than
+`dsh --version` does — the generator deliberately reads the CLI rather than a
+profile, since it knows nothing about profiles and every profile it could name
+resolves its packages differently.
+
+Re-running the generator is also the check-later path: it needs no new verb, and
+`enchiridion check` stays a vault check rather than gaining a host concern.
+
 ## What it carries
 
 One top-level `insert:` entry, appending four rows to the profile's composed
@@ -75,14 +95,17 @@ the Claude Code payload's `duration_ms`.
 
 ## What is committed, and why
 
-`package.json` and this README. Nothing else.
+`package.json` and this README. Nothing else. The manifest is committed source
+and is never rewritten by tooling — the generator only reads it, including the
+`dsh.verifiedAgainst` record, which a person edits when they re-verify.
 
 `cordis.patch.yml` is **generated and gitignored**, because it bakes in the
 absolute plugin root — `customSkillDirs` is resolved against the DSH boot cwd,
 so a relative value is not an option, and a committed patch would be wrong on
 every machine but the one that generated it.
 
-Because the committed manifest carries no plugin-derived value, the bundle adds
-nothing to `scripts/release.sh` and nothing to CI's freshness guard. Moving the
-plugin checkout invalidates the baked path: re-run the generator and re-add the
-bundle from the new location.
+Because the committed manifest carries no plugin-derived value — only the
+declared patch path and the verified-against record — the bundle adds nothing to
+`scripts/release.sh` and nothing to CI's freshness guard. Moving the plugin
+checkout invalidates the baked path: re-run the generator and re-add the bundle
+from the new location.

@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -35,8 +36,13 @@ _spec.loader.exec_module(generate_dsh_bundle)
 
 gdb = generate_dsh_bundle
 
-#: The real plugin checkout this test file lives in.
+#: The real plugin checkout this test file lives in, and its committed bundle.
 REAL_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+REAL_BUNDLE = REAL_PLUGIN_ROOT / "wiring" / "dsh"
+
+#: The verified-against record a throwaway bundle carries. Shapes the rendering
+#: tests; the real record is asserted directly at the end.
+TEST_VERIFIED = "0.1.5-rc.2"
 
 
 # ---------------------------------------------------------------------------
@@ -84,10 +90,18 @@ _AGENT_TEXT = {
 }
 
 
-def _write_manifest(bundle_dir: Path, patch: str = "./cordis.patch.yml") -> None:
+def _write_manifest(
+    bundle_dir: Path,
+    patch: str = "./cordis.patch.yml",
+    verified: str | None = TEST_VERIFIED,
+) -> None:
+    """Write a throwaway bundle manifest; ``verified=None`` omits the record."""
+    dsh: dict = {"bundle": {"patch": patch}}
+    if verified is not None:
+        dsh["verifiedAgainst"] = verified
     bundle_dir.mkdir(parents=True, exist_ok=True)
     (bundle_dir / "package.json").write_text(
-        json.dumps({"name": "@dhague/wiki-knowledge-dsh", "dsh": {"bundle": {"patch": patch}}}),
+        json.dumps({"name": "@dhague/wiki-knowledge-dsh", "dsh": dsh}),
         encoding="utf-8",
     )
 
@@ -329,17 +343,19 @@ def test_build_patch_is_one_insert_with_the_skill_row_first(tmp_path: Path):
 
 
 def test_render_patch_banner_names_the_root_the_skills_and_the_marker(tmp_path: Path):
-    text = gdb.render_patch([], tmp_path, ["wiki-ask"])
+    text = gdb.render_patch([], tmp_path, ["wiki-ask"], TEST_VERIFIED)
     assert text.startswith(f"# {gdb.GENERATED_MARKER} — DO NOT EDIT BY HAND.\n")
     assert f"# Plugin root: {tmp_path}\n" in text
     assert "# Skills discovered: wiki-ask\n" in text
+    assert f"# Verified against: {gdb.DSH_PACKAGE} {TEST_VERIFIED}\n" in text
+    assert gdb.DSH_REVERIFY_URL in text
 
 
 def test_render_patch_never_folds_a_long_persona(tmp_path: Path):
     """ADR-0024's posture: emitted lines are not folded."""
     long_line = "x" * 3000
     row = {"id": "a", "name": "b", "config": {"persona": long_line}}
-    text = gdb.render_patch([{"insert": [row]}], tmp_path, ["s"])
+    text = gdb.render_patch([{"insert": [row]}], tmp_path, ["s"], TEST_VERIFIED)
     assert long_line in text
 
 
@@ -347,7 +363,7 @@ def test_render_patch_opens_the_top_level_sequence_at_column_zero(tmp_path: Path
     """`- insert:` at column 0, the shape DSH's own bundle patches are written
     in — not a root sequence indented by the emitter's offset."""
     row = [{"insert": [{"id": "a", "config": {"customSkillDirs": ["/p/skills"]}}]}]
-    body = [line for line in gdb.render_patch(row, tmp_path, ["s"]).splitlines()
+    body = [line for line in gdb.render_patch(row, tmp_path, ["s"], TEST_VERIFIED).splitlines()
             if line and not line.startswith("#")]
     assert body[0] == "- insert:"
     assert body[1] == "    - id: a"
@@ -356,7 +372,7 @@ def test_render_patch_opens_the_top_level_sequence_at_column_zero(tmp_path: Path
 
 def test_render_patch_emits_a_multi_line_scalar_as_a_block_scalar(tmp_path: Path):
     patch = [{"insert": [{"id": "a", "config": {"persona": "first line\n\nsecond line"}}]}]
-    text = gdb.render_patch(patch, tmp_path, ["s"])
+    text = gdb.render_patch(patch, tmp_path, ["s"], TEST_VERIFIED)
     assert "persona: |-" in text
     assert "          first line\n\n          second line\n" in text
     assert "\\n" not in text
@@ -373,6 +389,7 @@ def test_render_patch_round_trips_awkward_personas(tmp_path: Path):
     ):
         text = gdb.render_patch(
             [{"insert": [{"id": "a", "config": {"persona": persona}}]}], tmp_path, ["s"],
+            TEST_VERIFIED,
         )
         assert parse_patch(text)[0]["insert"][0]["config"]["persona"] == persona
 
@@ -411,7 +428,9 @@ def test_generate_bakes_an_absolute_root_for_a_relative_argument(
 ):
     make_bundle(plugin_root)
     monkeypatch.chdir(plugin_root)
-    assert gdb.main(["--plugin-root", ".", "--bundle", "bundle"]) == 0
+    assert gdb.main(
+        ["--plugin-root", ".", "--bundle", "bundle", "--dsh-version", TEST_VERIFIED],
+    ) == 0
     patch = load_patch(plugin_root / "bundle" / "cordis.patch.yml")
     root = rows(patch)[0]["config"]["customSkillDirs"][0]
     assert Path(root).is_absolute()
@@ -493,8 +512,165 @@ def test_generate_rejects_a_missing_canonical_agent(plugin_root: Path):
 
 
 # ---------------------------------------------------------------------------
+# seam 7 — the verified-against record, its two renderings, and the install
+# warning (#537)
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_verified_against_reads_the_committed_record(plugin_root: Path):
+    bundle = make_bundle(plugin_root)
+    assert gdb.manifest_verified_against(bundle) == TEST_VERIFIED
+
+
+def test_manifest_verified_against_rejects_a_manifest_with_no_record(plugin_root: Path):
+    bundle = plugin_root / "bundle"
+    _write_manifest(bundle, verified=None)
+    with pytest.raises(gdb.GenerationError, match="must record the DSH version"):
+        gdb.manifest_verified_against(bundle)
+
+
+def test_manifest_verified_against_rejects_a_blank_record(plugin_root: Path):
+    bundle = plugin_root / "bundle"
+    _write_manifest(bundle, verified="   ")
+    with pytest.raises(gdb.GenerationError, match="must record the DSH version"):
+        gdb.manifest_verified_against(bundle)
+
+
+def test_generate_stamps_the_record_into_the_patch_banner(plugin_root: Path):
+    bundle = make_bundle(plugin_root)
+    gdb.generate(plugin_root, bundle)
+    text = (bundle / "cordis.patch.yml").read_text(encoding="utf-8")
+    assert f"# Verified against: {gdb.DSH_PACKAGE} {TEST_VERIFIED}\n" in text
+    assert gdb.DSH_REVERIFY_URL in text
+
+
+def test_generate_refuses_a_bundle_that_records_no_version(plugin_root: Path):
+    bundle = plugin_root / "bundle"
+    _write_manifest(bundle, verified=None)
+    with pytest.raises(gdb.GenerationError, match="must record the DSH version"):
+        gdb.generate(plugin_root, bundle)
+
+
+def test_generate_accepts_a_version_it_has_never_seen(plugin_root: Path):
+    """No gate (#537): an unseen version is recorded and the bundle still
+    installs — refusing would turn every DSH release into a broken install."""
+    bundle = plugin_root / "bundle"
+    _write_manifest(bundle, verified="99.0.0-future")
+    gdb.generate(plugin_root, bundle)
+    assert len(rows(load_patch(bundle / "cordis.patch.yml"))) == 4
+
+
+class _Completed:
+    """Stand-in for ``subprocess.CompletedProcess`` at the seam we read."""
+
+    def __init__(self, returncode: int = 0, stdout: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+
+
+def test_installed_dsh_version_reads_the_cli(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(gdb.shutil, "which", lambda name: "/usr/bin/dsh")
+    monkeypatch.setattr(gdb.subprocess, "run", lambda *a, **k: _Completed(stdout="0.1.6\n"))
+    assert gdb.installed_dsh_version() == "0.1.6"
+
+
+def test_installed_dsh_version_takes_the_first_line(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(gdb.shutil, "which", lambda name: "/usr/bin/dsh")
+    monkeypatch.setattr(
+        gdb.subprocess, "run", lambda *a, **k: _Completed(stdout="0.1.6\nnoise\n"),
+    )
+    assert gdb.installed_dsh_version() == "0.1.6"
+
+
+def test_installed_dsh_version_is_none_without_a_dsh_on_path(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(gdb.shutil, "which", lambda name: None)
+    assert gdb.installed_dsh_version() is None
+
+
+def test_installed_dsh_version_is_none_when_the_cli_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(gdb.shutil, "which", lambda name: "/usr/bin/dsh")
+    monkeypatch.setattr(gdb.subprocess, "run", lambda *a, **k: _Completed(returncode=1))
+    assert gdb.installed_dsh_version() is None
+
+
+def test_installed_dsh_version_is_none_when_the_cli_cannot_run(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError("not executable")
+
+    monkeypatch.setattr(gdb.shutil, "which", lambda name: "/usr/bin/dsh")
+    monkeypatch.setattr(gdb.subprocess, "run", boom)
+    assert gdb.installed_dsh_version() is None
+
+
+def test_version_note_says_so_when_the_host_matches():
+    note = gdb._version_note(TEST_VERIFIED, TEST_VERIFIED)
+    assert f"{gdb.DSH_PACKAGE} {TEST_VERIFIED}" in note
+    assert "the same version" in note
+    assert gdb.DSH_REVERIFY_URL not in note
+
+
+def test_version_note_points_at_the_surface_map_on_a_mismatch():
+    note = gdb._version_note(TEST_VERIFIED, "0.1.6-alpha.2")
+    assert "reports 0.1.6-alpha.2" in note
+    assert gdb.DSH_REVERIFY_URL in note
+    assert "not a gate" in note
+
+
+def test_version_note_answers_an_unreadable_version_with_the_command():
+    note = gdb._version_note(TEST_VERIFIED, None)
+    assert "could not read `dsh --version`" in note
+    assert "--dsh-version" in note
+    assert "installs either way" in note
+
+
+def test_main_warns_on_a_mismatch_and_still_exits_zero(
+    plugin_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+):
+    make_bundle(plugin_root)
+    monkeypatch.chdir(plugin_root)
+    assert gdb.main([
+        "--plugin-root", ".", "--bundle", "bundle", "--dsh-version", "0.1.6-alpha.2",
+    ]) == 0
+    out = capsys.readouterr().out
+    assert f"verified against {gdb.DSH_PACKAGE} {TEST_VERIFIED}" in out
+    assert "reports 0.1.6-alpha.2" in out
+    assert gdb.DSH_REVERIFY_URL in out
+    assert str(plugin_root / "bundle" / "cordis.patch.yml") in out
+
+
+def test_main_prints_the_record_without_a_warning_when_the_version_matches(
+    plugin_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+):
+    make_bundle(plugin_root)
+    monkeypatch.chdir(plugin_root)
+    assert gdb.main([
+        "--plugin-root", ".", "--bundle", "bundle", "--dsh-version", TEST_VERIFIED,
+    ]) == 0
+    out = capsys.readouterr().out
+    assert "the same version" in out
+    assert gdb.DSH_REVERIFY_URL not in out
+
+
+# ---------------------------------------------------------------------------
 # the contract — the generator against the REAL canonical sources
 # ---------------------------------------------------------------------------
+
+
+def test_real_bundle_manifest_records_a_plausible_dsh_version():
+    """The one committed copy of the record (#537). It moves only when a person
+    re-walks the surface map against a new DSH, so this guards its shape."""
+    recorded = gdb.manifest_verified_against(REAL_BUNDLE)
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", recorded), recorded
 
 
 def test_real_canonical_sources_generate_the_four_expected_rows(tmp_path: Path):

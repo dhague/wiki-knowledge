@@ -11,6 +11,7 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    }
+    },
+    "verifiedAgainst": "0.1.5-rc.2"
   }
 }

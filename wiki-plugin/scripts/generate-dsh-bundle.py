@@ -30,6 +30,17 @@ committed. Re-run it after moving the plugin checkout. The committed half is
 ``package.json`` alone: it carries no plugin-derived value, so nothing here
 joins ``scripts/release.sh`` or CI's freshness guard.
 
+The bundle also records the DSH version it was verified against. The record
+lives in the committed manifest as ``dsh.verifiedAgainst`` — the bundle's one
+committed artifact, and the copy a person finds under the profile's
+``node_modules`` when an install misbehaves. The generator *reads* it, never
+writes it (it moves only when a person re-verifies against a new DSH), and
+renders it twice: in the patch banner that ``dsh --dump-config`` and the
+installed patch both show, and in the install output, which compares it with
+``dsh --version`` and warns on a mismatch. Nothing is ever refused on a version
+mismatch — DSH is pre-GA and ships often, so a hard gate would turn every DSH
+patch release into a broken install (#537).
+
 Translation rules, mirroring ``generate-opencode.py``:
 
 - ``name`` becomes the model-facing ``toolName``. Kebab-case is kept (the
@@ -55,12 +66,15 @@ script's "stay in step with the canonical sources" contract.
 CLI::
 
     python generate-dsh-bundle.py [--plugin-root DIR] [--bundle DIR]
+                                  [--dsh-version VERSION]
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import shutil
+import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
@@ -78,6 +92,16 @@ PATCH_FILENAME = "cordis.patch.yml"
 #: The bundle's committed manifest. The generator validates it rather than
 #: writing it: it is durable source, and nothing in it derives from the plugin.
 MANIFEST_FILENAME = "package.json"
+
+#: The manifest key — under ``dsh`` — recording the DSH version this bundle was
+#: verified against. A bare version, never a dependency range: nothing resolves
+#: against it. It is a statement of when a person last walked the surface map.
+MANIFEST_VERIFIED_AGAINST_KEY = "verifiedAgainst"
+
+#: The DSH CLI package the record names, and where a mismatch sends its reader:
+#: the map's GA re-verification ticket, not a bug report here (#536).
+DSH_PACKAGE = "@deepseek-ai/dsh"
+DSH_REVERIFY_URL = "https://github.com/dhague/wiki-knowledge/issues/536"
 
 #: Marks a patch file as this script's output, so a re-run recognises its own
 #: file and refuses to clobber one it did not write. Also the banner's first
@@ -269,21 +293,28 @@ def _literalize(value: object) -> object:
     return value
 
 
-def render_patch(patch: list[dict], plugin_root: Path, skills: list[str]) -> str:
+def render_patch(
+    patch: list[dict], plugin_root: Path, skills: list[str],
+    verified_against: str,
+) -> str:
     """Render the patch as the bundle's ``cordis.patch.yml``.
 
     Prefixed with the generated-file banner that :func:`generate` uses as its
-    own-file marker, and carrying the plugin root and the discovered skills so a
-    reader can see what the absolute path resolved to without running anything.
-    Lines are never folded (``width``), matching ADR-0024's posture for emitted
-    files, and multi-line scalars are block scalars, so the personas read as
-    prose rather than as escapes.
+    own-file marker, and carrying the plugin root, the discovered skills and the
+    DSH version the bundle was verified against, so a reader — including one
+    reading the patch through ``dsh --dump-config``, or the copy under the
+    profile's ``node_modules`` — can see what an install composed without
+    running anything. Lines are never folded (``width``), matching ADR-0024's
+    posture for emitted files, and multi-line scalars are block scalars, so the
+    personas read as prose rather than as escapes.
     """
     banner = [
         f"# {GENERATED_MARKER} — DO NOT EDIT BY HAND.",
         "# Regenerate: python wiki-plugin/scripts/generate-dsh-bundle.py",
         f"# Plugin root: {plugin_root}",
         f"# Skills discovered: {', '.join(skills)}",
+        f"# Verified against: {DSH_PACKAGE} {verified_against}",
+        f"#   Installs on any version; re-verify the surface map at {DSH_REVERIFY_URL}",
         "#",
         "# One insert appending four rows to the profile's composed root: a new",
         "# skill provider carrying customSkillDirs, then one dsh-tool-subagent row",
@@ -331,11 +362,9 @@ def _guard_unmanaged(target: Path) -> None:
         )
 
 
-def _guard_manifest(bundle_dir: Path) -> None:
-    """The bundle's committed manifest must be present and must declare the
-    patch file this script writes — DSH fails loud at boot on a bundle that
-    declares no ``dsh.bundle`` patch, and failing here names the real problem.
-    """
+def _read_manifest(bundle_dir: Path) -> dict:
+    """Parse the bundle's committed manifest, naming the real problem when it is
+    absent or malformed rather than raising a bare OSError/JSONDecodeError."""
     manifest_path = bundle_dir / MANIFEST_FILENAME
     if not manifest_path.is_file():
         raise GenerationError(
@@ -343,25 +372,67 @@ def _guard_manifest(bundle_dir: Path) -> None:
             "only the patch; package.json is committed source)"
         )
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise GenerationError(f"{manifest_path} is not valid JSON: {exc}") from exc
+
+
+def _verified_against(manifest: dict, manifest_path: Path) -> str:
+    """The DSH version the manifest records as verified-against.
+
+    Required, not optional: a bundle that cannot say when its rows were last
+    checked against the host is exactly the bundle whose mismatch warning a
+    reader needs, so a missing record is a generation error rather than a silent
+    ``unknown``.
+    """
+    value = (manifest.get("dsh") or {}).get(MANIFEST_VERIFIED_AGAINST_KEY)
+    if not isinstance(value, str) or not value.strip():
+        raise GenerationError(
+            f"{manifest_path} must record the DSH version this bundle was "
+            f"verified against, as dsh.{MANIFEST_VERIFIED_AGAINST_KEY}"
+        )
+    return value.strip()
+
+
+def manifest_verified_against(bundle_dir: Path | str) -> str:
+    """Read the verified-against record out of the committed manifest.
+
+    Public because it is also the install-output half of the record: the patch
+    banner is stamped at generation, but ``main`` prints the same value beside
+    the command a person runs.
+    """
+    out = Path(bundle_dir)
+    return _verified_against(_read_manifest(out), out / MANIFEST_FILENAME)
+
+
+def _guard_manifest(bundle_dir: Path) -> str:
+    """Validate the manifest and return the verified-against record.
+
+    The manifest must declare the patch file this script writes — DSH fails loud
+    at boot on a bundle that declares no ``dsh.bundle`` patch, and failing here
+    names the real problem — and must carry the verified-against record the
+    patch banner and the install output are rendered from.
+    """
+    manifest_path = bundle_dir / MANIFEST_FILENAME
+    manifest = _read_manifest(bundle_dir)
     declared = (manifest.get("dsh") or {}).get("bundle", {}).get("patch")
     if declared != f"./{PATCH_FILENAME}":
         raise GenerationError(
             f"{manifest_path} must declare dsh.bundle.patch as "
             f"'./{PATCH_FILENAME}', found {declared!r}"
         )
+    return _verified_against(manifest, manifest_path)
 
 
 def generate(plugin_root: Path | str, bundle_dir: Path | str) -> list[Path]:
     """Generate the bundle's patch into ``bundle_dir``.
 
     Reads the canonical agents and resolves the skill directory from
-    ``plugin_root``; validates the bundle's committed manifest; writes
-    ``<bundle_dir>/cordis.patch.yml`` and returns the paths written. Calling
-    twice with the same inputs writes identical bytes (idempotent). Errors on
-    any missing canonical source rather than silently skipping it.
+    ``plugin_root``; validates the bundle's committed manifest and reads the
+    DSH version it records as verified-against, which the banner carries;
+    writes ``<bundle_dir>/cordis.patch.yml`` and returns the paths written.
+    Calling twice with the same inputs writes identical bytes (idempotent).
+    Errors on any missing canonical source rather than silently skipping it.
     """
     root = Path(plugin_root).resolve()
     out = Path(bundle_dir).resolve()
@@ -377,12 +448,13 @@ def generate(plugin_root: Path | str, bundle_dir: Path | str) -> list[Path]:
             raise GenerationError(f"canonical agent {filename} carries no name")
         agents.append((frontmatter, body))
 
-    patch = build_patch(root, agents)
-    text = render_patch(patch, root, skills)
-
     # Every guard runs before the directory is created, so a bad --plugin-root
-    # or a missing manifest leaves no new directory behind.
-    _guard_manifest(out)
+    # or a missing manifest leaves no new directory behind. The manifest read
+    # comes first because the banner is rendered from what it records.
+    verified_against = _guard_manifest(out)
+    patch = build_patch(root, agents)
+    text = render_patch(patch, root, skills, verified_against)
+
     target = out / PATCH_FILENAME
     _guard_unmanaged(target)
     out.mkdir(parents=True, exist_ok=True)
@@ -414,6 +486,64 @@ def _next_steps(bundle_dir: Path) -> str:
     )
 
 
+def installed_dsh_version() -> str | None:
+    """The DSH version the install will run under, or ``None`` if unreadable.
+
+    ``dsh --version`` is the read the generator takes: it is the same CLI whose
+    ``plugin add`` the install output prints, it needs no knowledge of a profile
+    (the generator never touches one — #530), and it is independent of pnpm's
+    ``nodeLinker``. The two alternatives the ticket weighed were dropped on
+    evidence: the live ``web`` profile declares an empty ``dependencies``, so
+    there is no range to read, and resolving the profile's copies of the bundle
+    packages would mean the generator knowing ``$DSH_HOME``, the profile name and
+    pnpm's hoisting layout. A caller with a better read passes ``--dsh-version``.
+
+    Unreadable is a normal outcome, not an error: a mismatch warning must never
+    be the thing that fails an install, so every failure here returns ``None``
+    and the note says how to read the version by hand.
+    """
+    executable = shutil.which("dsh")
+    if not executable:
+        return None
+    try:
+        done = subprocess.run(
+            [executable, "--version"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    first = (done.stdout or "").strip().splitlines()
+    return first[0].strip() if first and first[0].strip() else None
+
+
+def _version_note(verified_against: str, installed_version: str | None) -> str:
+    """The verified-against record, and what to do when the host differs.
+
+    Every branch is informational and none changes the exit status (#537): the
+    record is printed whether or not the version could be read, a mismatch
+    points at the surface-map re-verification ticket rather than implying
+    breakage, and an unreadable version is answered with the command that reads
+    it by hand.
+    """
+    head = f"\nverified against {DSH_PACKAGE} {verified_against}"
+    if installed_version is None:
+        return (
+            f"{head}; could not read `dsh --version`\n"
+            "  run `dsh --version` yourself, or pass --dsh-version, and compare\n"
+            "  with the version above — the bundle installs either way\n"
+        )
+    if installed_version == verified_against:
+        return f"{head}; `dsh --version` reports the same version\n"
+    return (
+        f"{head}; `dsh --version` reports {installed_version}\n"
+        "  not a gate: DSH is pre-GA and ships often, so this installs either\n"
+        "  way. If a row misbehaves, re-check the surface map:\n"
+        f"  {DSH_REVERIFY_URL}\n"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     parser = argparse.ArgumentParser(
         description="Generate the DeepSeek Harness bundle package's patch from "
@@ -431,18 +561,27 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         help="the bundle directory to write into (defaults to "
         "<plugin-root>/wiring/dsh)",
     )
+    parser.add_argument(
+        "--dsh-version",
+        default=None,
+        help="the installed DSH version to compare the recorded one against; "
+        "defaults to reading `dsh --version`",
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.plugin_root).resolve()
     bundle_dir = Path(args.bundle).resolve() if args.bundle else root / "wiring" / "dsh"
 
     try:
+        verified_against = manifest_verified_against(bundle_dir)
         written = generate(root, bundle_dir)
     except (GenerationError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     for path in written:
         print(path)
+    installed = args.dsh_version or installed_dsh_version()
+    print(_version_note(verified_against, installed), end="")
     print(_next_steps(bundle_dir), end="")
     return 0
 
