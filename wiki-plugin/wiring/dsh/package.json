@@ -1,0 +1,16 @@
+{
+  "name": "@dhague/wiki-knowledge-dsh",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DeepSeek Harness bundle for the wiki-knowledge plugin: one insert adding a skill provider pointed at the plugin's skills/ plus one wiki subagent tool per agent. Installed by path; the patch beside this manifest is generated.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhague/wiki-knowledge"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
