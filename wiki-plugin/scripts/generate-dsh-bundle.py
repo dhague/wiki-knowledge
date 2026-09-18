@@ -391,16 +391,26 @@ def generate(plugin_root: Path | str, bundle_dir: Path | str) -> list[Path]:
 
 
 def _next_steps(bundle_dir: Path) -> str:
-    """The install output: the one command a person runs, and the restart.
+    """The install output: the one command a person runs, the restart, and the
+    one host capability this bundle does not carry.
 
     The restart is not optional — a profile's bundle list is read once at boot,
     and adding a bundle is exactly what the install does, so ``patchReload``
     does not help here.
+
+    The note is the user-facing half of #534: the plugin's hooks are not ported,
+    so a DSH session has no tool-call log, and both readers of that log behave
+    accordingly. Stated at install time because the installing person is who
+    will later look for the cost summary.
     """
     return (
         "\nnext:\n"
         f"  dsh plugin --profile <profile> add {bundle_dir}\n"
         "  then restart dsh — the profile's bundle list is read once at boot\n"
+        "\nnote: no hooks are installed — DSH keeps its own session log under\n"
+        "  $DSH_HOME/sessions/, so `enchiridion tool-call-stats` has nothing to\n"
+        "  summarise here and `enchiridion ingest` prints no cost summary (see\n"
+        "  the bundle README)\n"
     )
 
 
