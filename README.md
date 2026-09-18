@@ -6,7 +6,7 @@ Follows the [Karpathy LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf
 
 ## What's inside
 
-- **wiki-knowledge** — a Claude Code / OpenCode plugin that provides ingestion and retrieval over a markdown wiki vault
+- **wiki-knowledge** — a Claude Code / OpenCode / DeepSeek Harness plugin that provides ingestion and retrieval over a markdown wiki vault
 - **Agent pipeline** — Claude Sonnet for semantic ingestion (chunking, overlap classification, edge typing); Claude Haiku for retrieval (query expansion, BM25 search, frontier traversal, synthesis) - models are configurable for OpenCode
 - **Deterministic script layer** — a single TypeScript bundle for vault I/O, placement, FTS5 search indexing, and commit construction (no model calls, no runtime to install — it runs on the already-installed Node)
 - **Full-text search** — SQLite FTS5 via stdlib, zero extra search dependencies
@@ -32,6 +32,34 @@ npx @dhague/wiki-knowledge
 ```
 
 Deploys the plugin into the vault's `.opencode/` directory. Pass `--global` to install into `~/.config/opencode/` for query-from-anywhere mode.
+
+### DeepSeek Harness
+
+DSH reads no `.claude-plugin/plugin.json` and has no marketplace, so the plugin
+installs as a profile-level **bundle**: a generated patch that points DSH at the
+plugin's `skills/` directory and registers the three subagents as tools.
+
+From a checkout of this repo (the generator needs `ruamel.yaml` — the
+Development venv below provides it):
+
+```bash
+python wiki-plugin/scripts/generate-dsh-bundle.py
+dsh plugin --profile <profile> add "$PWD/wiki-plugin/wiring/dsh"
+```
+
+Then **restart** `dsh` — a profile's bundle list is read once at boot.
+Re-running either command is safe, and
+`dsh plugin --profile <profile> remove @dhague/wiki-knowledge-dsh` uninstalls it.
+The bundle is profile-level, so the skills and agents are available from any
+directory; export `WIKI_ROOT` before starting `dsh` to query a vault that isn't
+the current directory.
+
+The generator writes `wiki-plugin/wiring/dsh/cordis.patch.yml`, gitignored
+because it bakes in this checkout's absolute path — re-run it if you move the
+checkout. It compares the bundle's recorded DSH version with `dsh --version` and
+prints a warning on a mismatch, never refusing, since DSH is pre-GA. See
+[wiki-plugin/wiring/dsh/README.md](wiki-plugin/wiring/dsh/README.md) for what the
+bundle carries, including the hooks it deliberately leaves out.
 
 ### Joule Work Desktop
 
@@ -128,9 +156,11 @@ WIKI_ROOT=<path_to_vault> node dist/cli.cjs search "connection pooling" --limit 
 WIKI_ROOT=<path_to_vault> node dist/cli.cjs ingest-scan --json
 ```
 
-`wiki-plugin/scripts/` holds only OpenCode install-time tooling
-(`generate-opencode.py`, `install-opencode.py`) — see
-[README-opencode.md](README-opencode.md). It has its own small test suite:
+`wiki-plugin/scripts/` holds the install-time tooling for the other hosts:
+`generate-opencode.py` / `install-opencode.py` (see
+[README-opencode.md](README-opencode.md)) and `generate-dsh-bundle.py` (see
+[wiki-plugin/wiring/dsh/README.md](wiki-plugin/wiring/dsh/README.md)). It has
+its own small test suite:
 
 ```bash
 cd wiki-plugin
