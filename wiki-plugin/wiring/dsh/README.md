@@ -37,15 +37,41 @@ root:
 
 The skill provider is an insert, not an `id`-targeted config override on the
 `skill-filesystem` host row: `dsh-web-app` disables that row, and a patch entry
-matching a disabled row does nothing. There is deliberately **no hooks row** —
-DSH derives the session transcript path from `$DSH_SESSION_ID` instead of
-recording it, and the plugin's tool-call log is not ported.
+matching a disabled row does nothing.
 
 Each subagent row carries `provider: spawn`, the agent's own name as its
 model-facing `toolName`, `toolFilter.allow` translated from the canonical
 `agents/*.md` `tools:` line onto DSH's global tool names, a `persona` built from
 the agent body, and `maxDepth: 1` so a wiki subagent delegates no further. All
 three default to the `deepseek-flash` route.
+
+## What it does not carry: the hooks
+
+No hooks row, deliberately (#534). Both of the plugin's Claude Code hooks have a
+DSH answer that does not need one:
+
+- **`SessionStart`** existed only to record a session's `transcript_path` for
+  `/save-conversation`. The `dsh-hooks-claude-code` bridge hardcodes
+  `transcript_path: ""`, so the handler would be a silent no-op — and DSH
+  derives the path from `$DSH_SESSION_ID` instead of recording it, so nothing
+  needs the record.
+- **`PostToolUse`** existed only to append the plugin's tool-call log (#100),
+  which is deliberately not ported: DSH keeps its own session log.
+
+So a DSH session has **no tool-call log**. `enchiridion tool-call-stats` has
+nothing to summarise: its default form fails for want of
+`$CLAUDE_CODE_SESSION_ID`, which DSH does not set, and `--session-id` still
+looks under Claude Code's state tree, which DSH never writes. `enchiridion
+ingest` prints no post-commit cost summary, its documented behaviour when no log
+exists — the SHA stays the first line of its stdout either way.
+
+DSH's equivalent is its own session log,
+`$DSH_HOME/sessions/<projectKey>/<session-id>/session.v<N>.jsonl[.zstd]` — the
+same artifact `/save-conversation` decodes, carrying `tool/call` and
+`tool/result` records (measured: 23 calls and 22 results in one 101-record
+session). It is not a drop-in for the #100 log: it is a multi-frame zstd store,
+and a `tool/call` record carries turn, step, tool name and arguments rather than
+the Claude Code payload's `duration_ms`.
 
 ## What is committed, and why
 
