@@ -210,6 +210,38 @@ test("check 3: unquoted list item link is a violation", async () => {
   );
 });
 
+// #549: a bare path is a valid YAML string but not a markdown link — the shape
+// a pre-#548 `page merge` wrote. The record parser refuses it, so before this
+// check reported it, it was the one malformation no check named: every
+// record-reading check threw and printed nothing, and a JSON-Lines consumer
+// read the silence as "clean".
+test("check 3: an edge value that is not a markdown link is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/a.md": page("A"),
+    "wiki/concepts/b.md": page("B", "related:\n  - wiki/concepts/a.md\n"),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, [
+    {
+      pageRef: "wiki/concepts/b.md",
+      detail: 'related: not a markdown link: "wiki/concepts/a.md"',
+    },
+  ]);
+});
+
+test("check 3: a non-string edge entry is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/b.md": page("B", "related:\n  - 42\n"),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, [
+    {
+      pageRef: "wiki/concepts/b.md",
+      detail: "related entry is not a markdown link: 42",
+    },
+  ]);
+});
+
 // The settled anchor rule (#492 §1, recorded in `wiki-conventions`): a
 // frontmatter relationship link is the same link form as a body link, anchors
 // included. The `#` introducing an anchor is written literally; a literal `#`
@@ -358,6 +390,38 @@ test("check 5: page missing source_date is a violation", async () => {
   const findings = await missingVolatilitySourceDate(root);
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /source_date/);
+});
+
+// #549: a malformed edge on one page must not suppress every other page's
+// findings. The malformed page still reports its own — the rest of its
+// frontmatter decoded fine — so the run carries on instead of aborting empty.
+test("check 5: a malformed edge does not abort the run", async () => {
+  const root = writeVault({
+    "wiki/concepts/a-missing-both.md": page("A"),
+    "wiki/concepts/b-malformed.md": page(
+      "B",
+      "related:\n  - wiki/concepts/a-missing-both.md\n",
+    ),
+  });
+  const findings = await missingVolatilitySourceDate(root);
+  assert.deepEqual(findings, [
+    {
+      pageRef: "wiki/concepts/a-missing-both.md",
+      detail: "missing volatility field",
+    },
+    {
+      pageRef: "wiki/concepts/a-missing-both.md",
+      detail: "missing source_date field",
+    },
+    {
+      pageRef: "wiki/concepts/b-malformed.md",
+      detail: "missing volatility field",
+    },
+    {
+      pageRef: "wiki/concepts/b-malformed.md",
+      detail: "missing source_date field",
+    },
+  ]);
 });
 
 // ---------------------------------------------------------------------------

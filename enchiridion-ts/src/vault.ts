@@ -22,7 +22,7 @@ import {
   splitFrontmatter,
 } from "./wikipage.js";
 import { loadRecords } from "./pagerecord.js";
-import type { PageRecord } from "./pagerecord.js";
+import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";
 import { FolderKinds, KindFolders, folderToKind } from "./place.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
 
@@ -258,8 +258,11 @@ export class Vault {
     return pages;
   }
 
-  /** Return every `wiki/**` page as a {pageRef: record + text} map. */
-  pagesWithText(): Record<string, PageWithText> {
+  /** Return every `wiki/**` page as a {pageRef: record + text} map.
+   *
+   * `opts.skipMalformedEdges` selects the tolerant read a check run needs
+   * (#549); see [LoadRecordsOptions]. */
+  pagesWithText(opts: LoadRecordsOptions = {}): Record<string, PageWithText> {
     const pages = this.loadWikiPages();
     // Build a folder→kind override map from discoveredKinds() so that custom
     // folders with a KIND.md declaration read back with their declared value.
@@ -268,7 +271,7 @@ export class Vault {
     for (const [kind, folder] of Object.entries(discovered)) {
       kindByFolder[folder] = kind;
     }
-    const records = loadRecords(pages, kindByFolder);
+    const records = loadRecords(pages, kindByFolder, opts);
     const out: Record<string, PageWithText> = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: pages[ref] };
@@ -277,9 +280,9 @@ export class Vault {
   }
 
   /** Return every `wiki/**` page as a {pageRef: record} map. `raw/` is never
-   * walked. */
-  pages(): Record<string, PageRecord> {
-    const withText = this.pagesWithText();
+   * walked. Options pass through to [pagesWithText]. */
+  pages(opts: LoadRecordsOptions = {}): Record<string, PageRecord> {
+    const withText = this.pagesWithText(opts);
     const out: Record<string, PageRecord> = {};
     for (const ref of Object.keys(withText)) out[ref] = withText[ref].record;
     return out;

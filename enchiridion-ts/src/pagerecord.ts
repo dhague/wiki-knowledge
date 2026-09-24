@@ -72,28 +72,81 @@ export function supersedes(r: PageRecord): string[] | null {
   return null;
 }
 
-function linkTarget(markdownLink: string, pageDir: string): string {
-  const { dest, ok } = linkDest(markdownLink);
-  if (!ok) {
-    throw new Error(`not a markdown link: "${markdownLink}"`);
+/**
+ * Decode one edge key's YAML value into vault-relative targets, collecting
+ * every value the schema refuses rather than raising on the first.
+ *
+ * Absence is not malformation: a missing, null or empty value is simply no
+ * edge.
+ */
+function decodeEdge(
+  key: string,
+  raw: unknown,
+  pageDir: string,
+): { targets: string[]; errors: string[] } {
+  const errors: string[] = [];
+  let values: unknown[];
+  if (isSingleLinkEdgeKey(key)) {
+    if (typeof raw !== "string" || raw === "") return { targets: [], errors };
+    values = [raw];
+  } else {
+    if (!Array.isArray(raw) || raw.length === 0) return { targets: [], errors };
+    values = raw;
   }
-  return resolveLinkDest(dest, pageDir);
+
+  const targets: string[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") {
+      errors.push(`${key} entry is not a markdown link: ${String(value)}`);
+      continue;
+    }
+    const { dest, ok } = linkDest(value);
+    if (!ok) {
+      errors.push(`${key}: not a markdown link: "${value}"`);
+      continue;
+    }
+    targets.push(resolveLinkDest(dest, pageDir));
+  }
+  return { targets, errors };
 }
 
 /**
- * Decodes one page's frontmatter. SupersededBy is always empty here — it needs
- * every other page, so only [loadRecords] fills it in.
+ * Decode every [EdgeKeys] value in a parsed frontmatter map: the vault-relative
+ * targets, and the refusal message for each value the schema refuses. One
+ * enumeration feeds both [newPageRecord]'s strict raise and [malformedEdges]'s
+ * report, so what one refuses the other names (#549). A key with no usable
+ * links contributes no edge and no message.
  *
- * `kindByFolder` is an optional folder→kind override map (e.g. populated by
- * [Vault.discoveredKinds]), checked before [FolderKinds] and the
- * [folderToKind] heuristic. Canonical four folders are always resolved via
- * [FolderKinds], which is checked first and takes precedence.
+ * Each message spells its own key, which is what lets [malformedEdges] hand a
+ * page's refusals back as plain strings.
  */
-export function newPageRecord(
+function decodeEdges(
+  data: Record<string, unknown>,
+  pageDir: string,
+): { edges: Edge[]; malformed: string[] } {
+  const edges: Edge[] = [];
+  const malformed: string[] = [];
+  for (const key of EdgeKeys) {
+    const raw = data[key];
+    if (raw === undefined || raw === null) continue;
+    const { targets, errors } = decodeEdge(key, raw, pageDir);
+    malformed.push(...errors);
+    if (targets.length > 0) edges.push({ key, targets });
+  }
+  return { edges, malformed };
+}
+
+/**
+ * The record-decoding core. Malformed edges are *collected*, never raised
+ * here: [newPageRecord] turns the first into the strict error, and a tolerant
+ * read drops them (#549). A frontmatter block the YAML parser refuses still
+ * raises — that is a page-level malformation, not an edge one.
+ */
+function decodeRecord(
   pageRef: string,
   text: string,
-  kindByFolder?: Record<string, string>,
-): PageRecord {
+  kindByFolder: Record<string, string> | undefined,
+): { record: PageRecord; malformed: string[] } {
   // The kind-folder is the directory directly under `wiki/` that holds this
   // page (`wiki/concepts/a.md` → folder `concepts`). A page not at that exact
   // depth (e.g. `wiki/foo.md` or `wiki/concepts/nested/deep.md`) is a
@@ -108,49 +161,59 @@ export function newPageRecord(
     FolderKinds[folder] ?? kindByFolder?.[folder] ?? folderToKind(folder);
 
   const data = frontmatterMap(text);
-
-  const edges: Edge[] = [];
-  for (const key of EdgeKeys) {
-    const raw = data[key];
-    if (raw === undefined || raw === null) continue;
-    let links: string[];
-    if (isSingleLinkEdgeKey(key)) {
-      if (typeof raw !== "string" || raw === "") continue;
-      links = [raw];
-    } else {
-      if (!Array.isArray(raw) || raw.length === 0) continue;
-      links = raw.map((item) => {
-        if (typeof item !== "string") {
-          throw new Error(
-            `${pageRef}: ${key} entry is not a markdown link: ${String(item)}`,
-          );
-        }
-        return item;
-      });
-    }
-    const targets = links.map((link) => {
-      try {
-        return linkTarget(link, pageDir);
-      } catch (err) {
-        throw new Error(`${pageRef}: ${key}: ${(err as Error).message}`, {
-          cause: err,
-        });
-      }
-    });
-    edges.push({ key, targets });
-  }
+  const { edges, malformed } = decodeEdges(data, pageDir);
 
   return {
-    pageRef,
-    kind,
-    title: scalar(data["title"]),
-    summary: scalar(data["summary"]),
-    tags: stringList(data["tags"]),
-    sourceDate: sourceDate(data["source_date"]),
-    volatility: scalar(data["volatility"]),
-    edges,
-    supersededBy: [],
+    record: {
+      pageRef,
+      kind,
+      title: scalar(data["title"]),
+      summary: scalar(data["summary"]),
+      tags: stringList(data["tags"]),
+      sourceDate: sourceDate(data["source_date"]),
+      volatility: scalar(data["volatility"]),
+      edges,
+      supersededBy: [],
+    },
+    malformed,
   };
+}
+
+/**
+ * Decodes one page's frontmatter, raising on the first edge value the schema
+ * refuses. SupersededBy is always empty here — it needs every other page, so
+ * only [loadRecords] fills it in.
+ *
+ * `kindByFolder` is an optional folder→kind override map (e.g. populated by
+ * [Vault.discoveredKinds]), checked before [FolderKinds] and the
+ * [folderToKind] heuristic. Canonical four folders are always resolved via
+ * [FolderKinds], which is checked first and takes precedence.
+ */
+export function newPageRecord(
+  pageRef: string,
+  text: string,
+  kindByFolder?: Record<string, string>,
+): PageRecord {
+  const { record, malformed } = decodeRecord(pageRef, text, kindByFolder);
+  if (malformed.length > 0) throw new Error(`${pageRef}: ${malformed[0]}`);
+  return record;
+}
+
+/**
+ * Every frontmatter edge value in a page's text that the record parser
+ * refuses, as the parser's own refusal messages. Never raises — this is what
+ * `check frontmatter-link-format` reports, and a scan that raised on the
+ * defect it exists to name would abort the run instead (#549). A block the
+ * YAML parser refuses yields nothing: that shape is not an edge's.
+ */
+export function malformedEdges(text: string): string[] {
+  let data: Record<string, unknown>;
+  try {
+    data = frontmatterMap(text);
+  } catch {
+    return [];
+  }
+  return decodeEdges(data, "").malformed;
 }
 
 /**
@@ -208,6 +271,15 @@ function stringList(v: unknown): string[] {
   return v.map((item) => scalar(item));
 }
 
+/** How [loadRecords] treats what the schema refuses. */
+export interface LoadRecordsOptions {
+  /** Decode the tolerant way a **check run** reads (#549): a malformed edge is
+   * left out of its page's record — the page itself survives, so its other
+   * findings are still reported. Off by default: a caller that acts on a
+   * record must not silently read one with edges missing. */
+  skipMalformedEdges?: boolean;
+}
+
 /**
  * Decodes every page in pages ({pageRef: text}, keys vault-relative), filling
  * in SupersededBy by inverting the `supersedes` edges.
@@ -218,15 +290,19 @@ function stringList(v: unknown): string[] {
  *
  * `kindByFolder` is an optional folder→kind override map, passed through to
  * [newPageRecord] so that KIND.md declarations take precedence over
- * [folderToKind] for custom folders.
+ * [folderToKind] for custom folders. `opts` selects the tolerant read a check
+ * run needs; see [LoadRecordsOptions].
  */
 export function loadRecords(
   pages: Record<string, string>,
   kindByFolder?: Record<string, string>,
+  opts: LoadRecordsOptions = {},
 ): Record<string, PageRecord> {
   const records: Record<string, PageRecord> = {};
   for (const [pageRef, text] of Object.entries(pages)) {
-    records[pageRef] = newPageRecord(pageRef, text, kindByFolder);
+    records[pageRef] = opts.skipMalformedEdges
+      ? decodeRecord(pageRef, text, kindByFolder).record
+      : newPageRecord(pageRef, text, kindByFolder);
   }
 
   const supersededBy: Record<string, string[]> = {};
