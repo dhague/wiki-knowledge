@@ -103,8 +103,12 @@ _Avoid_: Format, layout — and note `wiki.html` is an output *of* single-file m
 The generated site in multi-page mode, at `web/` under the vault root by default (`--out` overrides). A gitignored, reproducible artifact — never committed, never a source of truth. Mirrors the vault tree, `.md`→`.html`. Single-file mode writes no tree at all; `--out` names its one file instead.
 _Avoid_: Site, output dir (informal — `web/` is the default, but the term is the tree it holds).
 
+**Page header**:
+The exported page's own title and summary, lifted out of the frontmatter and rendered above the article — the title as the page's `<h1>`, the summary as a subtitle paragraph. Those two keys are not repeated in the footer frontmatter table. A body H1 that merely repeats the title is dropped and its anchor moves onto the header's `<h1>`; a wiki page with neither key gets no header, and `raw/` pages get none at all ([ADR-0022](docs/adr/0022-static-html-export.md)).
+_Avoid_: Masthead, hero (a page header is the page's own identity, not site chrome).
+
 **Section**:
-One page's worth of a single-file export: a `<section>` of the one document carrying that page's nav bar, frontmatter table and article, hidden until the hash names it. Its `id` is the page's vault-relative output path with the extension dropped and every other run of non-alphanumerics collapsed to `-`; the front page alone takes the reserved `__front`. Derived by the one function used both when writing a section and when rewriting a link to it, so a rewritten link cannot miss ([ADR-0022](docs/adr/0022-static-html-export.md)).
+One page's worth of a single-file export: a `<section>` of the one document carrying that page's nav bar, page header (the frontmatter's title and summary), article and footer frontmatter table, hidden until the hash names it. Its `id` is the page's vault-relative output path with the extension dropped and every other run of non-alphanumerics collapsed to `-`; the front page alone takes the reserved `__front`. Derived by the one function used both when writing a section and when rewriting a link to it, so a rewritten link cannot miss ([ADR-0022](docs/adr/0022-static-html-export.md)).
 _Avoid_: Page (a section is a page of the export — prose still says "page" for the thing itself; "section" names its form in the document), fragment (the `#id` that names a section).
 
 **Wiki title**:

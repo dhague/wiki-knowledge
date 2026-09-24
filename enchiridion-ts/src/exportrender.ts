@@ -65,7 +65,8 @@ export interface PageParts {
   title: string;
   /** The sticky navigation bar, already positioned for this page's depth. */
   nav: string;
-  /** Everything below the nav: frontmatter table then article. */
+  /** Everything below the nav: the page header (title and summary, when the
+   *  page has them), then the article, then the frontmatter table as a footer. */
   main: string;
 }
 
@@ -357,6 +358,14 @@ function rewriteBodyLinks(
 const FM_LINK_KEYS = new Set(EdgeKeys);
 
 /**
+ * The two frontmatter keys lifted out of the table and into the page header.
+ * They are the page's identity and its one-line abstract, so they belong above
+ * the article rather than with the provenance below it; the table keeps every
+ * other authored key.
+ */
+const HEADER_KEYS = new Set(["title", "summary"]);
+
+/**
  * Render a frontmatter value that is a markdown link string as HTML — a typed
  * edge, a `supersedes`, or the `raw_source` pointer, which is the reason this
  * is not a `.md`-only path: a raw artifact keeps its own extension, so a
@@ -478,14 +487,18 @@ function renderFrontmatterTable(
   const fmMap = fm as Record<string, unknown>;
   const rows: string[] = [];
 
-  // Literal keys in original order
+  // Literal keys in original order — except the two the page header has
+  // already lifted to the top of the page. They are shown once, there.
   for (const [key, value] of Object.entries(fmMap)) {
+    if (HEADER_KEYS.has(key)) continue;
     rows.push(
       `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef, exported, tagSlugMap, mode)}</td></tr>`,
     );
   }
 
-  // Divider
+  // Divider — the table keeps it wherever the remaining authored rows leave
+  // it, including with nothing above it, so the block's shape stays what the
+  // relocation promised: the same table, minus the two rows the header owns.
   rows.push(`<tr class="fm-divider"><td colspan="2"></td></tr>`);
 
   // Derived: kind
@@ -570,6 +583,92 @@ export function buildHtmlShell(parts: PageParts, assetsRoot: string): string {
   return buildDocument(parts.title, style, `${parts.nav}\n${parts.main}`);
 }
 
+/**
+ * A page's `<article>` and the frontmatter table that follows it — or the
+ * article alone when the page carries no frontmatter. The table is a footer,
+ * never a header: provenance trails the content it describes, and both
+ * assembly sites below share this one spelling so they cannot drift apart on
+ * which side of the article the table falls.
+ */
+function articleWithFooter(bodyHtml: string, fmHtml: string): string {
+  const article = `<article>\n${bodyHtml}</article>`;
+  return fmHtml ? `${article}\n${fmHtml}` : article;
+}
+
+/**
+ * The page header: the frontmatter's `title` and `summary`, above the article
+ * where a reader meets them first. Empty when the page has neither, so a page
+ * with no frontmatter gets no header at all — and no empty one.
+ *
+ * `anchor` is the slug of a body heading this header replaced (see
+ * [liftTitleEcho]); the `<h1>` carries it so a link to that heading still
+ * lands.
+ */
+function renderPageHeader(
+  title: string,
+  summary: string,
+  anchor: string | null,
+): string {
+  const parts: string[] = [];
+  if (title) {
+    const id = anchor ? ` id="${escHtml(anchor)}"` : "";
+    parts.push(`<h1${id}>${escHtml(title)}</h1>`);
+  }
+  if (summary) {
+    parts.push(`<p class="page-summary">${escHtml(summary)}</p>`);
+  }
+  if (parts.length === 0) return "";
+  return `<header class="page-header">\n${parts.join("\n")}\n</header>`;
+}
+
+/**
+ * The visible text of a small HTML fragment, for comparing a rendered heading
+ * against the frontmatter title it may echo. Enough to undo the escapes
+ * markdown-it's `html: false` renderer emits.
+ */
+function htmlText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
+/**
+ * A page's rendered body, with a leading H1 removed when it merely repeats the
+ * frontmatter title — plus that heading's `id` when one was removed.
+ *
+ * The vault repeats the frontmatter title as a body H1 on many pages, and the
+ * header now shows the title itself, so rendering both would give the page two
+ * identical top-level headings. Removing the body copy must not remove the
+ * anchor it carried, so the header's `<h1>` takes the removed heading's own
+ * `id` and `page.html#the-title` still resolves.
+ *
+ * Detection is on the rendered HTML rather than the markdown on purpose:
+ * markdown-it is what decided this was an H1 and what its `id` is, so ATX
+ * (`#`, closed or not) and setext (`===`) spellings all work, and the anchor
+ * is the one markdown-it would have written — not a second slug that could
+ * disagree with it. A leading H1 that says something else is the author's own
+ * heading, and stays.
+ */
+function liftTitleEcho(
+  bodyHtml: string,
+  title: string,
+): { bodyHtml: string; anchor: string | null } {
+  if (!title) return { bodyHtml, anchor: null };
+  const heading = /^\s*<h1(\s[^>]*)?>([\s\S]*?)<\/h1>/.exec(bodyHtml);
+  if (!heading || htmlText(heading[2]) !== title.trim()) {
+    return { bodyHtml, anchor: null };
+  }
+  const anchor = /\sid="([^"]+)"/.exec(heading[1] ?? "")?.[1] ?? null;
+  const rest =
+    bodyHtml.slice(0, heading.index) +
+    bodyHtml.slice(heading.index + heading[0].length);
+  return { bodyHtml: rest, anchor };
+}
+
 function buildPageParts(
   pageRef: string,
   record: PageRecord,
@@ -594,7 +693,10 @@ function buildPageParts(
   const bodyHtml = mdRender.render(
     rewriteBodyLinks(body, pageRef, exported, mode),
   );
-  const main = `${fmTable}\n<article>\n${bodyHtml}</article>`;
+  const lifted = liftTitleEcho(bodyHtml, record.title);
+  const header = renderPageHeader(record.title, record.summary, lifted.anchor);
+  const article = articleWithFooter(lifted.bodyHtml, fmTable);
+  const main = header ? `${header}\n${article}` : article;
   return { title: record.title || pageRef, nav, main };
 }
 
@@ -622,7 +724,7 @@ function buildRawPageParts(
   const bodyHtml = mdRender.render(
     rewriteBodyLinks(body, pageRef, exported, mode),
   );
-  const main = `${fmSection}\n<article>\n${bodyHtml}</article>`;
+  const main = articleWithFooter(bodyHtml, fmSection);
   return { title: pageRef, nav, main };
 }
 

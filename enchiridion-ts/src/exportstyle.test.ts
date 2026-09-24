@@ -66,6 +66,20 @@ test("EXPORT_STYLESHEET: drops the bespoke dark-mode block", () => {
   );
 });
 
+test("EXPORT_STYLESHEET: sets the page header's summary apart from body text", () => {
+  // The title is the page's own h1, so it needs no new rule beyond the
+  // header's tighter margin; the summary must not read as the article's first
+  // paragraph.
+  const heading = /\.page-header h1\s*\{([^}]*)\}/.exec(EXPORT_STYLESHEET)?.[1];
+  assert.ok(heading, "the header's title has a rule of its own");
+  assert.match(heading, /margin-bottom:/);
+
+  const summary = /\.page-summary\s*\{([^}]*)\}/.exec(EXPORT_STYLESHEET)?.[1];
+  assert.ok(summary, "the summary has a rule of its own");
+  assert.match(summary, /font-size:/);
+  assert.match(summary, /color:/, "it reads as a subtitle, not as prose");
+});
+
 test("EXPORT_STYLESHEET: keeps the frontmatter table legible", () => {
   const frontmatterRules = EXPORT_STYLESHEET.match(
     /table\.frontmatter[^{]*\{[^}]*\}/g,
@@ -77,6 +91,13 @@ test("EXPORT_STYLESHEET: keeps the frontmatter table legible", () => {
   assert.ok(
     frontmatterRules.some((rule) => rule.includes("white-space: nowrap")),
     "the key column is a label column, not wrapping prose",
+  );
+  // As a footer the table needs its own separation from whatever the article
+  // ends with; the margin collapses with the preceding block's, so this only
+  // supplies the gap when that block has none.
+  assert.ok(
+    frontmatterRules.some((rule) => /margin-top:\s*[\d.]+rem/.test(rule)),
+    "the footer table keeps a gap above it",
   );
 
   // Borders collapse under Sakura's own `td` rule, so the divider must

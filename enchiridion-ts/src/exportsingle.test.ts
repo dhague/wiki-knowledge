@@ -184,7 +184,7 @@ test("renderSingleFile: names the sections the links and the front page rely on"
   }
 });
 
-test("renderSingleFile: each section holds its own nav and article", () => {
+test("renderSingleFile: each section holds its own nav, header and article", () => {
   const html = render(wikiPages, { title: "Test Vault" });
   const section =
     /<section id="wiki-concepts-alpha-concept"[^>]*>([\s\S]*?)<\/section>/.exec(
@@ -195,10 +195,65 @@ test("renderSingleFile: each section holds its own nav and article", () => {
     section.includes('class="wiki-nav"'),
     "the section carries its own nav bar",
   );
+  assert.ok(
+    section.includes('<header class="page-header">') &&
+      section.includes('<h1 id="alpha-concept">Alpha Concept</h1>') &&
+      section.includes('<p class="page-summary">The first concept.</p>'),
+    "the section carries the extracted title and summary",
+  );
+  assert.ok(
+    section.indexOf('<header class="page-header">') <
+      section.indexOf("<article>"),
+    "the header comes before the article",
+  );
   assert.ok(section.includes("<article>"), "the section carries its article");
   assert.ok(
     section.includes('id="section-two"'),
     "its own headings stay inside it",
+  );
+});
+
+test("renderSingleFile: no section leads with a frontmatter table", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["wiki/sources/source-with-raw.md", sourceWithRaw],
+    ["raw/raw-doc.md", rawDoc],
+    ["raw/notes/transcript.txt", rawTranscript],
+  ]);
+  const html = render(pages, { title: "Test Vault", includeRaw: true });
+
+  const sections = [
+    ...html.matchAll(/<section id="([^"]+)"[^>]*>([\s\S]*?)<\/section>/g),
+  ];
+  assert.ok(sections.length > 0, "fixture should produce sections");
+  let sectionsWithTable = 0;
+  for (const [, id, body] of sections) {
+    // The nav is the section's first element; what follows it is the page's
+    // own content, and the first of that must be the article, not metadata.
+    assert.ok(body.includes("</nav>"), `section ${id} should carry its nav`);
+    const afterNav = body
+      .slice(body.indexOf("</nav>") + "</nav>".length)
+      .trimStart();
+    assert.ok(
+      !afterNav.startsWith('<table class="frontmatter">'),
+      `section ${id} must not open with a frontmatter table`,
+    );
+    // Where the section carries a table at all, it trails the article — the
+    // wiki page's own builder and the raw page's inline one both.
+    const table = body.indexOf('<table class="frontmatter">');
+    const article = body.indexOf("<article>");
+    if (table !== -1) {
+      sectionsWithTable++;
+      assert.ok(
+        article !== -1 && article < table,
+        `section ${id}: the article should precede its frontmatter table`,
+      );
+    }
+  }
+  assert.equal(
+    sectionsWithTable,
+    3,
+    "the loop must actually meet the fixture's frontmatter tables",
   );
 });
 
