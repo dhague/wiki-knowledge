@@ -55,7 +55,7 @@ Run all ten with `"$RUNTIME" "$ENCHIRIDION" check <name> --json`. Each emits JSO
 
 **Check 2 — Ingestion source integrity:** Every `wiki/sources/*.md` must carry a `raw_source:` frontmatter field. Fix level: **auto-fix** if body contains an unambiguous `raw/` link; otherwise **report only**.
 
-**Check 3 — Frontmatter link format:** Links in frontmatter edge keys must be quoted YAML strings (`"[title](path)"`) with percent-encoded destinations (space, `%`, `(`, `)`, `<`, `>` encoded; unicode stays literal). `#` is the anchor separator and stays literal — frontmatter links carry the same link form as body links, anchors included; only a `#` inside a *filename* is `%23`. Fix level: **auto-fix**.
+**Check 3 — Frontmatter link format:** Links in frontmatter edge keys must be quoted YAML strings (`"[title](path)"`) with percent-encoded destinations (space, `%`, `(`, `)`, `<`, `>` encoded; unicode stays literal). `#` is the anchor separator and stays literal — frontmatter links carry the same link form as body links, anchors included; only a `#` inside a *filename* is `%23`. An edge value that is no markdown link at all — a bare path like `wiki/concepts/foo.md`, a non-string entry — is reported here too: the record parser refuses it, so the other checks read on past it rather than aborting blank. Fix level: **auto-fix** the quoting and encoding; **report only** the no-link shape, where a fix cannot invent a label — repair it by re-setting the edge with `page set` (or `page merge` with a JSON list), which composes a vault-relative ref into a link.
 
 **Check 4 — Stale synthesis:** Synthesis pages whose last git commit is > 30 days ago. Fix level: **report only**.
 

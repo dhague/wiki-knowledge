@@ -1427,6 +1427,60 @@ test("check: an unknown name errors non-zero, naming the known ones", () => {
   assert.match(stderr, /unknown check "nope"/);
 });
 
+/** A lintable vault plus one page whose frontmatter carries a bare-path edge —
+ * the shape a pre-#548 `page merge` wrote (#549). Unlike the unquoted link in
+ * [buildQuotelessVault], this is valid YAML, so the page's own fields still
+ * decode and only the edge is refused. */
+function buildBareEdgeVault(): string {
+  const root = buildLintableVault();
+  fs.writeFileSync(
+    path.join(root, "wiki/concepts/a.md"),
+    "---\ntitle: A\nsummary: s\nrelated:\n  - wiki/concepts/b.md\n---\n\n",
+  );
+  return root;
+}
+
+test("check frontmatter-link-format --json: a bare-path edge is a finding, not a crash", () => {
+  const root = buildBareEdgeVault();
+  const { status, stdout, stderr } = runEnv(
+    ["check", "frontmatter-link-format", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.deepEqual(rows, [
+    {
+      pageRef: "wiki/concepts/a.md",
+      detail: 'related: not a markdown link: "wiki/concepts/b.md"',
+    },
+  ]);
+});
+
+test("check missing-volatility-source-date --json: a bare-path edge does not blank the run", () => {
+  const root = buildBareEdgeVault();
+  const { status, stdout, stderr } = runEnv(
+    ["check", "missing-volatility-source-date", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.deepEqual(
+    rows.map((r) => r.pageRef),
+    [
+      "wiki/concepts/a.md",
+      "wiki/concepts/a.md",
+      "wiki/concepts/b.md",
+      "wiki/concepts/b.md",
+    ],
+  );
+});
+
 /** A committed vault with one fragmented concept pair, for check 10 at the
  * CLI seam. Committed because the check reads the search index, which is a
  * view of HEAD (ADR-0015). */

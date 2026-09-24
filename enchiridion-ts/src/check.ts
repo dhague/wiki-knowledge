@@ -16,6 +16,7 @@ import {
   codeLineRanges,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
+import { malformedEdges } from "./pagerecord.js";
 
 /** Options the CLI threads into a check. Only `concept-fragmentation` reads
  * `minSimilarity`; every other check ignores the bag. */
@@ -114,7 +115,7 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
 export async function ingestionSourceIntegrity(
   root: string,
 ): Promise<Finding[]> {
-  const pages = new Vault(root).pages();
+  const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -130,7 +131,7 @@ export async function ingestionSourceIntegrity(
   return findings;
 }
 
-// Check 3 — operates on raw text, not parsed records: malformed YAML that would choke the record parser is what this check surfaces.
+// Check 3 — operates on raw text, not parsed records: frontmatter the record parser refuses — an unquoted link, an edge value that is not a markdown link — is what this check surfaces.
 export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   const pages = new Vault(root).loadWikiPages();
   const findings: Finding[] = [];
@@ -167,13 +168,20 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
           detail: `unencoded destination in frontmatter link: "${link.dest}" (should be "${reencoded}")`,
         });
     }
+
+    // Edge values the schema refuses — a bare path, a non-string entry
+    // (#549). Valid YAML, so the raw-text scans above go blind to it, yet the
+    // record parser raises on it: without this scan the abort was the only
+    // signal the tool gave anywhere.
+    for (const detail of malformedEdges(text))
+      findings.push({ pageRef: ref, detail });
   }
   return findings;
 }
 
 /** Check 4 — synthesis pages whose last git commit is more than 30 days ago. */
 export async function staleSynthesis(root: string): Promise<Finding[]> {
-  const pages = new Vault(root).pages();
+  const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const vaultGit = new VaultGit(root);
   const findings: Finding[] = [];
   const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -197,7 +205,7 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
 export async function missingVolatilitySourceDate(
   root: string,
 ): Promise<Finding[]> {
-  const pages = new Vault(root).pages();
+  const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (!record.volatility)
@@ -211,7 +219,9 @@ export async function missingVolatilitySourceDate(
 // Check 6 — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
 // Pages with contradicts + active callout are live contradictions (check 7's domain), not a violation here.
 export async function unresolvedSupersession(root: string): Promise<Finding[]> {
-  const pagesWithText = new Vault(root).pagesWithText();
+  const pagesWithText = new Vault(root).pagesWithText({
+    skipMalformedEdges: true,
+  });
   const findings: Finding[] = [];
   for (const [ref, { record, text }] of Object.entries(pagesWithText)) {
     const hasContradicts = record.edges.some(
@@ -235,7 +245,9 @@ export async function unresolvedSupersession(root: string): Promise<Finding[]> {
 
 /** Check 7 — pages with an active `> [!warning] Contradiction` callout in the body. */
 export async function contradictionCallouts(root: string): Promise<Finding[]> {
-  const pagesWithText = new Vault(root).pagesWithText();
+  const pagesWithText = new Vault(root).pagesWithText({
+    skipMalformedEdges: true,
+  });
   const findings: Finding[] = [];
   for (const [ref, { text }] of Object.entries(pagesWithText)) {
     const { body } = splitFrontmatter(text);
@@ -247,7 +259,9 @@ export async function contradictionCallouts(root: string): Promise<Finding[]> {
 
 /** Check 8 — pages with zero inbound links from other wiki pages (body or frontmatter). */
 export async function orphans(root: string): Promise<Finding[]> {
-  const pagesWithText = new Vault(root).pagesWithText();
+  const pagesWithText = new Vault(root).pagesWithText({
+    skipMalformedEdges: true,
+  });
   const allRefs = new Set(Object.keys(pagesWithText));
   const inbound = new Map<string, number>();
   for (const ref of allRefs) inbound.set(ref, 0);
@@ -960,7 +974,9 @@ export async function fixIngestionSourceIntegrity(
 export async function fixMissingCrossReferences(
   root: string,
 ): Promise<string[]> {
-  const pagesWithText = new Vault(root).pagesWithText();
+  const pagesWithText = new Vault(root).pagesWithText({
+    skipMalformedEdges: true,
+  });
 
   // Build title → ref map; drop titles shared by multiple pages (ambiguous)
   const titleToRef = new Map<string, string>();
