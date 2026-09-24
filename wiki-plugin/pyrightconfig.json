@@ -1,7 +1,6 @@
 {
   "venvPath": ".",
   "venv": ".venv",
-  "include": ["scripts", "tests"],
-  "extraPaths": ["scripts", "hooks"],
+  "include": ["tests"],
   "pythonVersion": "3.10"
 }

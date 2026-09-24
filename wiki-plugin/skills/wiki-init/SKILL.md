@@ -1,18 +1,21 @@
 ---
 name: wiki-init
-description: Scaffold a brand-new wiki vault — folder structure, git repo, and (optionally) query-from-anywhere plugin registration. Invoke via /wiki-init [path] when standing up a vault that doesn't exist yet, as opposed to ingesting into one that already does.
+description: Scaffold a brand-new wiki vault — folder structure, git repo, and (optionally) query-from-anywhere plugin registration. Use when standing up a vault that doesn't exist yet, as opposed to ingesting into one that already does.
 ---
 # Wiki Init
 
 New empty vault at target dir. One-time scaffold. Not `wiki-ingest` (that fills existing vault) — don't run on existing vault.
 
-Folder layout, `.gitignore`, git init, `settings.json`, scaffold commit — all handled by `bin/enchiridion init` (see `enchiridion-ts/src/initwiki.ts`). Only decision left: deployment mode.
+Folder layout, `.gitignore`, git init, `settings.json`, scaffold commit — all handled by `enchiridion init` (see `enchiridion-ts/src/initwiki.ts`). Only decision left: deployment mode.
 
-**On Claude Code**, resolve the binary once before running anything:
+The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+
 ```bash
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+RUNTIME=$(command -v node || command -v bun)
+ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
-Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["init", ...])` instead.
+
+Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
 
 ## Procedure
 
@@ -20,16 +23,16 @@ Given target dir `<vault>` (path arg, or `cwd` if omitted):
 
 1. **Ask user which deployment mode**, unless already stated:
    - **query-from-anywhere** — common for personal/dogfooding vault: plugin stays installed user-scope elsewhere, new vault just needs registration.
-   - **dedicated** — vault *is* a Claude Code project with plugin installed project-scope inside it. `enchiridion init` won't attempt that install (not its job) — only skips writing `settings.json`; tell user to install plugin into `<vault>` and launch Claude Code from `<vault>` root after.
+   - **dedicated** — the vault is the project the session runs in. `enchiridion init` never installs agent tooling — it only skips writing session registration; launch the session from the vault root after.
 
-2. **Run the binary.** On OpenCode, `plugin_root` comes from `.opencode/wiki-knowledge/config.json`. Pass plugin root straight through as `--plugin-root`:
+2. **Run the binary.** Pass `--plugin-root` only for a host that registers plugins from a local directory (see `enchiridion init --help`):
    ```
    # query-from-anywhere:
-   "$ENCHIRIDION" init "<vault>" --mode query-from-anywhere --plugin-root "$(dirname "$(dirname "$ENCHIRIDION")")"
+   "$RUNTIME" "$ENCHIRIDION" init "<vault>" --mode query-from-anywhere --plugin-root "<this skill's base directory>/../.."
 
    # dedicated:
-   "$ENCHIRIDION" init "<vault>" --mode dedicated
+   "$RUNTIME" "$ENCHIRIDION" init "<vault>" --mode dedicated
    ```
    Non-zero exit (e.g. `<vault>` already a vault): report stderr, stop — don't scaffold over existing vault by hand.
 
-3. **Report** vault path (the only stdout line), deployment mode used, next step: run `wiki-ingest` (or `/save-conversation`) against it.
+3. **Report** vault path (the only stdout line), deployment mode used, next step: run the `wiki-ingest` procedure (or `save-conversation`) against it.

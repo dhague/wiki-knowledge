@@ -1,35 +1,37 @@
 #!/usr/bin/env bash
 #
 # Cut a release: bump the plugin version, rebuild the TypeScript bundle from
-# source, commit the freshly-built artifacts into wiki-plugin/scripts/, and
-# assemble the OpenCode npm package (wiki-plugin/opencode-npm/) so a
-# marketplace install and `npm publish` ship the same build.
+# source, commit the freshly-built artifacts into wiki-plugin/scripts/ and into
+# every skill that calls them, regenerate the distribution tree at repo-root
+# skills/, and push the release commit so a PR can be opened/updated.
 #
 # Usage:  scripts/release.sh <new-version>
-#   e.g.  scripts/release.sh 0.10.0
+#   e.g.  scripts/release.sh 0.16.0
 #
 # Version coupling: plugin.json is the single source of truth for the version.
-# This script bumps plugin.json; assemble-opencode-package.py then reads it and
-# writes the version into wiki-plugin/opencode-npm/package.json, so one bump
-# drives both artifacts. `npm publish` runs automatically in tag-release.yml
-# after merge via npm Trusted Publishing (OIDC) — no NPM_TOKEN secret.
+# wiki-plugin/skills/ is the canonical, hand-edited skill tree; repo-root
+# skills/ is a generated copy of it, and `npx skills add dhague/wiki-knowledge
+# --all` installs from that copy. Nothing else is published — there is no npm
+# package and no per-host installer.
 #
 # Must be run from the repo root, on a worktree/PR branch (never main, which
 # is protected). Commits the version bump plus the regenerated artifacts, then
 # pushes to the current branch's remote so a PR can be opened/updated. The
-# freshness guard in ts-enchiridion.yml then independently re-verifies on the
-# PR that the committed bundle equals a fresh build.
+# freshness jobs in ts-enchiridion.yml then independently re-verify on the PR
+# that the committed bundle equals a fresh build and that the generated tree
+# equals the canonical one.
 #
 # Do NOT manually tag or run `gh release create`: tag-release.yml derives the
-# tag from plugin.json on merge to main and creates the GitHub Release from it
-# in the same workflow — a separate release.yml was inlined because a
-# fine-grained PAT cannot trigger a downstream on:push workflow.
+# tag from plugin.json on merge to main and creates the GitHub Release (with
+# the per-skill Joule ZIPs) from it in the same workflow — a separate
+# release.yml was inlined because a fine-grained PAT cannot trigger a
+# downstream on:push workflow.
 
 set -euo pipefail
 
 if [ "$#" -ne 1 ]; then
   echo "usage: $0 <new-version>" >&2
-  echo "  e.g. $0 0.10.0" >&2
+  echo "  e.g. $0 0.16.0" >&2
   exit 1
 fi
 
@@ -54,8 +56,7 @@ current_version="$(jq -r .version "$plugin_json")"
 
 echo "Cutting release $current_version -> $new_version on branch '$current_branch'"
 
-# 1. Bump the version in plugin.json (the single source tag-release.yml and
-#    the npm package both read).
+# 1. Bump the version in plugin.json (the single source tag-release.yml reads).
 jq --arg v "$new_version" '.version = $v' "$plugin_json" > "$plugin_json.tmp"
 mv "$plugin_json.tmp" "$plugin_json"
 
@@ -69,44 +70,40 @@ rm -f CLAUDE.md.bak
 # 2. Rebuild the bundle + wasm from source (fresh, no stale dist/).
 (cd enchiridion-ts && npm ci && npm run build)
 
-# 3. Copy the built artifacts into the shipped paths.
+# 3. Copy the built artifacts into the shipped Claude Code host path, which
+#    bin/enchiridion and hooks.json resolve.
 cp enchiridion-ts/dist/cli.cjs wiki-plugin/scripts/cli.cjs
 cp enchiridion-ts/dist/node-sqlite3-wasm.wasm wiki-plugin/scripts/node-sqlite3-wasm.wasm
 
-# 4. Copy the same artifacts to the Joule skills directories. The AI Skills
-#    Library fetches them directly from the repo; the freshness guard in
-#    ts-enchiridion.yml verifies they match wiki-plugin/scripts/ before merge.
-cp enchiridion-ts/dist/cli.cjs skills/wiki-ask/scripts/enchiridion.cjs
-cp enchiridion-ts/dist/node-sqlite3-wasm.wasm skills/wiki-ask/scripts/node-sqlite3-wasm.wasm
-cp enchiridion-ts/dist/cli.cjs skills/wiki-ingest/scripts/enchiridion.cjs
-cp enchiridion-ts/dist/node-sqlite3-wasm.wasm skills/wiki-ingest/scripts/node-sqlite3-wasm.wasm
+# 4. Ship the bundle inside every skill that calls it. The portable skill text
+#    resolves the script from the skill's own base directory, so each of these
+#    directories carries its own copy. The copies are byte-identical, and git
+#    is content-addressed, so the repository stores one blob however many
+#    skills bundle it. wiki-conventions documents the script layer but runs no
+#    script of its own, so it ships none.
+for skill in save-conversation wiki-ask wiki-export wiki-ingest wiki-init wiki-lint wiki-watch; do
+  mkdir -p "wiki-plugin/skills/$skill/scripts"
+  cp enchiridion-ts/dist/cli.cjs "wiki-plugin/skills/$skill/scripts/enchiridion.cjs"
+  cp enchiridion-ts/dist/node-sqlite3-wasm.wasm "wiki-plugin/skills/$skill/scripts/node-sqlite3-wasm.wasm"
+done
 
-# 5. Assemble the OpenCode npm package: regenerates
-#    agents/commands, copies the six skill dirs + session-tracker + the
-#    runtime above, and writes package.json's version from plugin.json. The
-#    generated surface is gitignored; package.json + templates/ are the
-#    committed durable source and land in the release commit.
-#    The assembly subprocesses generate-opencode.py, which imports
-#    ruamel.yaml — the only interpreter guaranteed to have it is the
-#    gitignored wiki-plugin/.venv (CLAUDE.md).
-python="${repo_root}/wiki-plugin/.venv/bin/python"
-if [ ! -x "$python" ]; then
-  echo "error: $python not found — recreate wiki-plugin/.venv (CLAUDE.md) so" >&2
-  echo "generate-opencode.py's ruamel.yaml dependency resolves." >&2
-  exit 1
-fi
-"$python" wiki-plugin/scripts/assemble-opencode-package.py
+# 5. Regenerate the distribution tree. Repo-root skills/ is a verbatim copy of
+#    the canonical wiki-plugin/skills/ tree; the skills CLI walks repo-root
+#    skills/ first, so this copy is what `npx skills add` installs, and Joule
+#    Desktop's per-skill ZIPs are built from it by tag-release.yml.
+rm -rf skills
+cp -R wiki-plugin/skills skills
 
 # 6. Commit and push to the current branch's remote.
 git add "$plugin_json" CLAUDE.md wiki-plugin/scripts/cli.cjs wiki-plugin/scripts/node-sqlite3-wasm.wasm
-git add skills/wiki-ask/scripts/enchiridion.cjs skills/wiki-ask/scripts/node-sqlite3-wasm.wasm
-git add skills/wiki-ingest/scripts/enchiridion.cjs skills/wiki-ingest/scripts/node-sqlite3-wasm.wasm
-git add wiki-plugin/opencode-npm/package.json wiki-plugin/opencode-npm/templates/
-git commit -m "chore: release v$new_version (bundle + wasm + npm package)"
+# Both skills trees are generated (one by hand into the other), so a whole-tree
+# add is the point: a removed skill has to stage as a deletion too.
+git add -A -- wiki-plugin/skills skills
+git commit -m "chore: release v$new_version (bundle + wasm + skills package)"
 git push origin "$current_branch"
 
 echo
 echo "Pushed v$new_version on '$current_branch'. Open (or update) the PR; CI's"
-echo "freshness guard will re-verify the committed bundle before merge."
-echo "After merge, tag-release.yml will tag, create the GitHub Release, and"
-echo "publish @dhague/wiki-knowledge@$new_version to npm automatically."
+echo "freshness jobs will re-verify the committed bundle and the generated"
+echo "skills tree before merge. After merge, tag-release.yml tags the release,"
+echo "creates the GitHub Release with the per-skill Joule ZIPs, and nothing else."

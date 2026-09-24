@@ -6,12 +6,22 @@ Follows the [Karpathy LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf
 
 ## What's inside
 
-- **wiki-knowledge** — a Claude Code / OpenCode / DeepSeek Harness plugin that provides ingestion and retrieval over a markdown wiki vault
-- **Agent pipeline** — Claude Sonnet for semantic ingestion (chunking, overlap classification, edge typing); Claude Haiku for retrieval (query expansion, BM25 search, frontier traversal, synthesis) - models are configurable for OpenCode
-- **Deterministic script layer** — a single TypeScript bundle for vault I/O, placement, FTS5 search indexing, and commit construction (no model calls, no runtime to install — it runs on the already-installed Node)
+- **wiki-knowledge** — a host-neutral Agent Skills package (Claude Code, OpenCode, DeepSeek Harness, and any host that reads the standard's skill directory) providing ingestion and retrieval over a markdown wiki vault
+- **Agent pipeline** — on Claude Code, Sonnet for semantic ingestion (chunking, overlap classification, edge typing) and Haiku for retrieval (query expansion, BM25 search, frontier traversal, synthesis); every other host runs the same procedures on its session model
+- **Deterministic script layer** — a single TypeScript bundle for vault I/O, placement, FTS5 search indexing, and commit construction (no model calls, no runtime to install — it runs on the Node or Bun the host already has)
 - **Full-text search** — SQLite FTS5 via stdlib, zero extra search dependencies
 
 ## Install
+
+### Any host (Agent Skills package)
+
+```bash
+npx skills add dhague/wiki-knowledge --all
+```
+
+Installs all eight skills into the host's own skill directory — `.agents/skills/` for OpenCode and DeepSeek Harness (which reads `<projectRoot>/.agents/skills` natively), `.claude/skills/` for Claude Code, and the equivalent for the other hosts the [skills CLI](https://skills.sh/docs/cli) supports. Add `-g` to install for your user rather than the current project.
+
+The package is host-neutral, so it carries no model tiers and no hooks: every host runs the procedures on its own session model. For the model-pinned install, use the Claude Code plugin below.
 
 ### Claude Code
 
@@ -25,64 +35,30 @@ Follows the [Karpathy LLM-wiki pattern](https://gist.github.com/karpathy/442a6bf
    - **Local**: `/wiki-init .` inside a project to keep the vault alongside your codebase.
    - **Remote**: `/wiki-init /some/remote/path` then set `WIKI_ROOT` to query it from anywhere. Useful when a wiki spans multiple projects or lives on a shared drive.
 
-### OpenCode
-
-```bash
-npx @dhague/wiki-knowledge
-```
-
-Deploys the plugin into the vault's `.opencode/` directory. Pass `--global` to install into `~/.config/opencode/` for query-from-anywhere mode.
-
-### DeepSeek Harness
-
-DSH reads no `.claude-plugin/plugin.json` and has no marketplace, so the plugin
-installs as a profile-level **bundle**: a generated patch that points DSH at the
-plugin's `skills/` directory and registers the three subagents as tools.
-
-From a checkout of this repo (the generator needs `ruamel.yaml` — the
-Development venv below provides it):
-
-```bash
-python wiki-plugin/scripts/generate-dsh-bundle.py
-dsh plugin --profile <profile> add "$PWD/wiki-plugin/wiring/dsh"
-```
-
-Then **restart** `dsh` — a profile's bundle list is read once at boot.
-Re-running either command is safe, and
-`dsh plugin --profile <profile> remove @dhague/wiki-knowledge-dsh` uninstalls it.
-The bundle is profile-level, so the skills and agents are available from any
-directory; export `WIKI_ROOT` before starting `dsh` to query a vault that isn't
-the current directory.
-
-The generator writes `wiki-plugin/wiring/dsh/cordis.patch.yml`, gitignored
-because it bakes in this checkout's absolute path — re-run it if you move the
-checkout. It compares the bundle's recorded DSH version with `dsh --version` and
-prints a warning on a mismatch, never refusing, since DSH is pre-GA. See
-[wiki-plugin/wiring/dsh/README.md](wiki-plugin/wiring/dsh/README.md) for what the
-bundle carries, including the hooks it deliberately leaves out.
+The plugin is the fuller install: the same eight skills, plus the three model-pinned subagents and the session hooks.
 
 ### Joule Work Desktop
 
-Install individual skills into Joule Work Desktop via the AI Skills Library:
-
-Download the per-skill ZIP files from the [latest GitHub Release](https://github.com/dhague/wiki-knowledge/releases/latest) (`wiki-ingest.zip`, `wiki-ask.zip`) and install each via Joule Desktop's "Install from file" option (Extensions > Add Skill > Upload).
+Download the per-skill ZIP files from the [latest GitHub Release](https://github.com/dhague/wiki-knowledge/releases/latest) — one per skill — and install each via Joule Desktop's "Install from file" option (Extensions > Add Skill > Upload).
 
 ### Standalone CLI
 
-The script layer ships as a TypeScript bundle invoked through
-`wiki-plugin/bin/enchiridion` (a thin shim that execs `node` against it).
+The script layer is a TypeScript bundle shipped inside each skill's `scripts/`
+directory, run by `node` (or `bun` where that is the only runtime available).
+In a checkout, `wiki-plugin/bin/enchiridion` is a thin shim that execs `node`
+against the plugin's own copy of the bundle.
 
 ## Design principles
 
 **Cost-optimised by design.** Ingestion and retrieval run as subagents with model selection tuned to task. Sonnet handles the expensive judgment work (semantic chunking, edge typing); Haiku handles high-volume retrieval at a fraction of the cost. Each query only explores the frontier it needs — no expensive vector re-ranking, no full-graph traversal.
 
-**Predictability through scripts, not prompts.** Everything that can be deterministic *is*. Page placement, frontmatter parsing, link rewriting, search indexing, and commit construction run as subcommands of a single CLI (`bin/enchiridion` — a TypeScript bundle run on Node) — no model in the loop. The agents call it for side effects and read its output; they never generate file paths, YAML, or git operations from a prompt.
+**Predictability through scripts, not prompts.** Everything that can be deterministic *is*. Page placement, frontmatter parsing, link rewriting, search indexing, and commit construction run as subcommands of a single CLI (the `enchiridion` bundle, run on Node or Bun) — no model in the loop. The agents call it for side effects and read its output; they never generate file paths, YAML, or git operations from a prompt.
 
-**No new infrastructure.** SQLite FTS5 search runs in-process with zero extra dependencies. No additional runtime to install — the script layer runs on the already-installed Node interpreter. No vector database, no MCP server, no background daemons. The vault is just a git repo of markdown files — portable, diffable, and backup-friendly.
+**No new infrastructure.** SQLite FTS5 search runs in-process with zero extra dependencies. No additional runtime to install — the script layer runs on the Node or Bun the host already has. No vector database, no MCP server, no background daemons. The vault is just a git repo of markdown files — portable, diffable, and backup-friendly.
 
 **Trust and provenance.** Every derived page traces back to its raw source through a chain of evidence. Bitemporal metadata (when the knowledge is *from* vs. when it was *written*) and explicit volatility annotations make staleness visible, not hidden.
 
-**Agent-native, not API-native.** Ingestion and retrieval are skills that Claude Code agents execute by reading instructions and running scripts. This means the full context window, tool use, and reasoning of frontier models are available — not limited by a fixed RAG pipeline or a hardcoded prompt template.
+**Agent-native, not API-native.** Ingestion and retrieval are skills that the host's agent executes by reading instructions and running scripts. This means the full context window, tool use, and reasoning of frontier models are available — not limited by a fixed RAG pipeline or a hardcoded prompt template.
 
 ## Commands
 
@@ -156,16 +132,16 @@ WIKI_ROOT=<path_to_vault> node dist/cli.cjs search "connection pooling" --limit 
 WIKI_ROOT=<path_to_vault> node dist/cli.cjs ingest-scan --json
 ```
 
-`wiki-plugin/scripts/` holds the install-time tooling for the other hosts:
-`generate-opencode.py` / `install-opencode.py` (see
-[README-opencode.md](README-opencode.md)) and `generate-dsh-bundle.py` (see
-[wiki-plugin/wiring/dsh/README.md](wiki-plugin/wiring/dsh/README.md)). It has
-its own small test suite:
+`wiki-plugin/skills/` is the canonical, hand-edited skill tree; repo-root
+`skills/` is a generated copy of it, and `scripts/release.sh` regenerates that
+copy (and refreshes the bundle inside every skill that ships one) at release
+time. CI fails a PR if the two trees diverge. `wiki-plugin/tests/` holds the
+shim's `bats` suite and a structural test of the `wiki-watch` skill:
 
 ```bash
 cd wiki-plugin
 python3 -m venv .venv && source .venv/bin/activate
-pip install ruamel.yaml pytest
+pip install pytest
 python -m pytest
 ```
 
@@ -178,6 +154,7 @@ Key decisions are documented in [docs/adr/](docs/adr/):
 - No embeddings — lexical FTS5 search + agent comprehension
 - Bitemporal data model (valid time + transaction time)
 - Chain of evidence from every derived page back to its raw source
+- Skills authored host-neutrally and published as one Agent Skills package ([ADR-0026](docs/adr/0026-host-neutral-skill-package.md))
 
 See [CONTEXT.md](CONTEXT.md) for the domain glossary.
 

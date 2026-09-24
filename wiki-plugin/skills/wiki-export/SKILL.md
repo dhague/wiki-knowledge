@@ -1,6 +1,6 @@
 ---
 name: wiki-export
-description: Export the wiki vault as a static HTML site — multi-page, or one self-contained file. Asks which format, picks entry-point pages using LLM judgment over the ranked candidates, then calls enchiridion export --starters to write the output. Invoke via /wiki-export ["Wiki Title"] [--single-file] [--out <path>] [--raw] [--force] [--allow-dirty] — a quoted positional title names the wiki for this run and offers to save it as the default.
+description: Export the wiki vault as a static HTML site — multi-page, or one self-contained file. Asks which format, picks entry-point pages using LLM judgment over the ranked candidates, then calls enchiridion export --starters to write the output. A quoted title argument names the wiki for this run and offers to save it as the default.
 ---
 # Wiki Export
 
@@ -18,11 +18,14 @@ subcommand, not here: `--title` for this run → the title saved in
 `.wiki-knowledge/config.json` → the vault directory name. The skill only
 passes a title through, and saves one when the user says so.
 
-**On Claude Code**, resolve the binary once before any step that calls it:
+The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+
 ```bash
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+RUNTIME=$(command -v node || command -v bun)
+ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
-Use `"$ENCHIRIDION"` for every call below.
+
+Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
 
 ## Procedure
 
@@ -43,15 +46,15 @@ Use `"$ENCHIRIDION"` for every call below.
    multi-page as the answer to silence. Pass `--single-file` in step 7 when
    single-file was chosen.
 
-3. **Take the positional title, if there is one.** `/wiki-export "My
-   Knowledge Base"` names the wiki for this run — pass it as `--title` in
-   step 7, and offer to save it in step 8. With no positional argument there
+3. **Take the positional title, if there is one.** A quoted title argument
+   (`"My Knowledge Base"`) names the wiki for this run — pass it as `--title`
+   in step 7, and offer to save it in step 8. With no positional argument there
    is nothing to do here: the output already carries the saved title, or the
    vault directory name.
 
 4. **Get the ranked candidates:**
    ```bash
-   "$ENCHIRIDION" export --candidates
+   "$RUNTIME" "$ENCHIRIDION" export --candidates
    ```
    Emits one compact JSON array on a single stdout line — each entry is an object with fields
    `pageRef`, `title`, `summary`, `kind`, `tags`, `inboundCount`. No files
@@ -85,7 +88,7 @@ Use `"$ENCHIRIDION"` for every call below.
 
 7. **Run the export:**
    ```bash
-   "$ENCHIRIDION" export [--single-file] [--out <path>] [--raw] [--force] \
+   "$RUNTIME" "$ENCHIRIDION" export [--single-file] [--out <path>] [--raw] [--force] \
      [--allow-dirty] [--title "<title>"] \
      --starters \
        "wiki/concepts/foo.md=A good starting point for X" \
@@ -103,7 +106,7 @@ Use `"$ENCHIRIDION"` for every call below.
 8. **Offer to save the title** — only when step 3 found one. Ask the user
    whether to save it as this vault's persistent title; on yes:
    ```bash
-   "$ENCHIRIDION" export --save-title "<title>"
+   "$RUNTIME" "$ENCHIRIDION" export --save-title "<title>"
    ```
    That writes `.wiki-knowledge/config.json` at the vault root and exports
    nothing, so it is a second, cheap call rather than a re-run. Every later
@@ -140,5 +143,5 @@ Use `"$ENCHIRIDION"` for every call below.
 | `--title <title>` | Wiki title for this run only; leaves the saved default alone |
 | `--save-title <title>` | Save the title as the persistent default and exit (exports nothing) |
 
-The positional title (`/wiki-export "My Knowledge Base"`) is this skill's
-spelling of `--title` plus the step-8 offer to save it.
+A quoted title argument is this skill's spelling of `--title` plus the step-8
+offer to save it.

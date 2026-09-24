@@ -153,9 +153,10 @@ jobs:
         working-directory: enchiridion-ts
 
       # scripts/release.sh commits bundle artifacts to wiki-plugin/scripts/ and
-      # skills/*/scripts/ as part of the release PR. This job rebuilds from
-      # source and fails the PR if any committed artifact drifts from a fresh
-      # build, so a source change can never silently ship a stale bundle.
+      # to every skill that bundles the script layer, as part of the release
+      # PR. This job rebuilds from source and fails the PR if any committed
+      # artifact drifts from a fresh build, so a source change can never
+      # silently ship a stale bundle.
       # Paths are repo-root relative; fresh build output is enchiridion-ts/dist/.
       - name: Fail if committed artifacts differ from a fresh build
         run: |
@@ -168,12 +169,40 @@ jobs:
           fail=0
           check wiki-plugin/scripts/cli.cjs enchiridion-ts/dist/cli.cjs || fail=1
           check wiki-plugin/scripts/node-sqlite3-wasm.wasm enchiridion-ts/dist/node-sqlite3-wasm.wasm || fail=1
-          check skills/wiki-ask/scripts/enchiridion.cjs enchiridion-ts/dist/cli.cjs || fail=1
-          check skills/wiki-ask/scripts/node-sqlite3-wasm.wasm enchiridion-ts/dist/node-sqlite3-wasm.wasm || fail=1
-          check skills/wiki-ingest/scripts/enchiridion.cjs enchiridion-ts/dist/cli.cjs || fail=1
-          check skills/wiki-ingest/scripts/node-sqlite3-wasm.wasm enchiridion-ts/dist/node-sqlite3-wasm.wasm || fail=1
+          # Every skill that calls the script layer bundles it. Repo-root
+          # skills/ is a byte-identical copy, covered by skills-freshness.
+          for d in wiki-plugin/skills/*/scripts; do
+            [ -d "$d" ] || continue
+            check "$d/enchiridion.cjs" enchiridion-ts/dist/cli.cjs || fail=1
+            check "$d/node-sqlite3-wasm.wasm" enchiridion-ts/dist/node-sqlite3-wasm.wasm || fail=1
+          done
           if [ "$fail" = "1" ]; then
             echo ""
             echo "Run scripts/release.sh <new-version> to rebuild and commit all bundle artifacts."
+            exit 1
+          fi
+
+  skills-freshness:
+    name: Verify generated skills tree matches the canonical one
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      # wiki-plugin/skills/ is the hand-edited canonical tree; repo-root
+      # skills/ is the generated distribution copy that `npx skills add`
+      # installs from and that tag-release.yml builds the Joule ZIPs from.
+      # They must stay byte-identical, so this job runs on every PR rather
+      # than only on a version bump: editing either tree without regenerating
+      # the other is exactly the drift that would ship stale skill text to
+      # consumers while the canonical text looked right in the repo.
+      - name: Fail if the generated tree differs from the canonical one
+        run: |
+          if ! diff -r wiki-plugin/skills skills; then
+            echo ""
+            echo "STALE: repo-root skills/ differs from wiki-plugin/skills/."
+            echo "Regenerate it with: rm -rf skills && cp -R wiki-plugin/skills skills"
+            echo "(or run scripts/release.sh <new-version> for a release)."
             exit 1
           fi

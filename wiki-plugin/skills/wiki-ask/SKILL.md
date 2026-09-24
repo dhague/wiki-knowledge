@@ -1,6 +1,6 @@
 ---
 name: wiki-ask
-description: Answer questions from the wiki vault — search, follow typed edges, synthesise, cite with age and volatility. Invoke via /wiki-ask <question>, or whenever the vault should be queried.
+description: Answer questions from the wiki vault — search, follow typed edges, synthesise, cite with age and volatility. Use whenever the vault should be queried.
 ---
 # Wiki Ask
 
@@ -8,20 +8,23 @@ Reads `wiki-conventions` for anything this procedure doesn't cover — folder st
 
 Retrieval **never modifies an existing page** — no edit, no move, no delete, ever. One write: new `synthesis/` page, only on explicit user confirmation ([saving-synthesis.md](saving-synthesis.md)).
 
-**On Claude Code**, resolve the binary once before any step that calls it:
+The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+
 ```bash
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+RUNTIME=$(command -v node || command -v bun)
+ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
-Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<subcommand>", ...])` instead — see `## Scripts` in `wiki-conventions`.
+
+Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
 
 ## Invocation
 
-- **If not already running as `wiki-researcher` agent** (system prompt doesn't identify you as it — e.g. invoked directly via `/wiki-ask <question>`): only action is delegate. Call `Task` with `subagent_type: "wiki-researcher"` and prompt containing the question, then relay the answer. Keeps reading and link-following inside subagent's context — on its Haiku model — regardless of invoking session's model.
+- **If this session can spawn a subagent** (and is not already running the retrieval procedure as one): the only action is to spawn one to run the procedure below on the question, then relay the answer. That keeps reading and link-following inside the subagent's context regardless of the invoking session's model.
 
   If returned answer carries `save-candidate` block, you also **put the offer to user and perform save on yes** — see [saving-synthesis.md](saving-synthesis.md). You hold the conversation; confirmation can only happen here.
-- **If you are `wiki-researcher` agent**: continue directly with procedure below using own tools. **Recommend** save (step 8); never perform one — subagent can't ask user, and unconfirmed save is the exact failure this design prevents.
+- **If already running the retrieval procedure as a subagent**: continue directly with procedure below using own tools. **Recommend** save (step 8); never perform one — a subagent can't ask the user, and unconfirmed save is the exact failure this design prevents.
 
-Scripts live in the plugin's install directory and resolve vault root themselves.
+Scripts resolve vault root themselves — see `## Scripts` in `wiki-conventions`.
 
 Search `wiki/**` only — `raw/` is not indexed; its `source/` stub has the summary.
 
@@ -34,7 +37,7 @@ Given a question:
 2. **Single search call.** One call to `enchiridion search` does the work — composes BM25 text matching with metadata filters, ranks results, defaults to excluding superseded pages. Pass **only term list** from step 1 as single space-separated string (it tokenizes and phrase-quotes each term). Use `--json` and read the records:
 
    ```bash
-   "$ENCHIRIDION" search \
+   "$RUNTIME" "$ENCHIRIDION" search \
        "<term1> <term2> <term3>" \
        --kind concept \
        --since 2026-07-01 --date-field source_date \
@@ -48,7 +51,7 @@ Given a question:
    - `--include-superseded` only when discussing history, not answering "what is current". Default excludes superseded.
    - `--raw` is escape hatch for callers who need FTS5 operators (`NEAR`, `OR`, prefix `*`). Don't reach for it without specific reason.
 
-3. **Expand frontier, frontmatter-first.** Hits are candidates, not answers. Judge each by **`summary`** field — that is what `summary` exists for — discard ones that don't bear on question. **Only candidate surviving summary judgment earns full `Read` of its body.** Most frontier should die at summary; body read is expensive and never the first move. Where more than one candidate survives the same hop's summary judgment, issue their `Read` calls together in one message, not serially; each extra turn re-reads full context.
+3. **Expand frontier, frontmatter-first.** Hits are candidates, not answers. Judge each by **`summary`** field — that is what `summary` exists for — discard ones that don't bear on question. **Only candidate surviving summary judgment earns a full read of its body.** Most frontier should die at summary; body read is expensive and never the first move. Where more than one candidate survives the same hop's summary judgment, issue their body reads together in one message, not serially; each extra turn re-reads full context.
 
    From each page read, harvest outbound relationships — typed-edge keys and `supersedes` in frontmatter, plus body links to other `wiki/` pages — as **next-hop candidates**; judge those same way (summary first, body only on survival).
 
@@ -56,10 +59,10 @@ Given a question:
 
    `source` excluded from fallback — belongs to provenance path, not general expansion. Only follow it when question matches provenance row below.
 
-4. **Filter frontier for currency.** Superseded page is never an answer — `supersedes` is a *recorded fact* (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)), and recorded fact beats any recency guess. Run `"$ENCHIRIDION" superseded-by` with every candidate's `page_ref` as positional arg (`--json` for machine-readable line per candidate); walks each one's `supersedes` inversions in-process and returns each candidate's *active* page:
+4. **Filter frontier for currency.** Superseded page is never an answer — `supersedes` is a *recorded fact* (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)), and recorded fact beats any recency guess. Run `"$RUNTIME" "$ENCHIRIDION" superseded-by` with every candidate's `page_ref` as positional arg (`--json` for machine-readable line per candidate); walks each one's `supersedes` inversions in-process and returns each candidate's *active* page:
 
    ```
-   "$ENCHIRIDION" superseded-by wiki/concepts/a.md wiki/concepts/x.md --json
+   "$RUNTIME" "$ENCHIRIDION" superseded-by wiki/concepts/a.md wiki/concepts/x.md --json
    ```
 
    Each result: `{"seed": ..., "active": ..., "chain": [...]}`. Apply directly — **no need to re-derive by hand:**
@@ -97,7 +100,7 @@ Given a question:
    - **Durable** — not a one-off lookup expiring with session, and not a single page's content restated (if one page answered the question, cite it; synthesis duplicating it is vault noise).
    - **Reusable** — drew several pages into something next asker would otherwise re-derive, and still true next month.
 
-   When both hold, append `save-candidate` block to report — **proposal, not a write**. No `Write` tool, no way to ask user; invoking session puts the offer and, on explicit yes, performs save — see [saving-synthesis.md](saving-synthesis.md).
+   When both hold, append `save-candidate` block to report — **proposal, not a write**. No way to ask the user; invoking session puts the offer and, on explicit yes, performs save — see [saving-synthesis.md](saving-synthesis.md).
 
    ````markdown
    ```save-candidate

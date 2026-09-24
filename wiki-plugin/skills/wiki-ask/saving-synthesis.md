@@ -1,6 +1,6 @@
 # Saving an answer as a synthesis page
 
-For **session holding the conversation** — invoked `wiki-researcher` and got `save-candidate` block back (or ran procedure and reached step 8 itself). Researcher subagent never gets here.
+For the **session holding the conversation** — it received a `save-candidate` block back (or ran the procedure and reached step 8 itself). A retrieval subagent never gets here.
 
 **Gate:** vault not written unless user says yes to question you actually asked. Silence isn't yes; "sounds useful" isn't yes; fresh session isn't holding earlier yes. If unsure whether told to save — you were not.
 
@@ -47,7 +47,7 @@ For **session holding the conversation** — invoked `wiki-researcher` and got `
 4. **Run it and report.**
 
    ```bash
-   "$ENCHIRIDION" ingest --plan <plan.json>
+   "$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>
    ```
 
    Validates whole plan before touching disk, then writes page and makes one structured commit — printing SHA. Report path and SHA in one line. If it raises, nothing was committed; fix plan and rerun (writes are idempotent).

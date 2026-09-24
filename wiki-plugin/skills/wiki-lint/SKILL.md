@@ -1,6 +1,6 @@
 ---
 name: wiki-lint
-description: Vault health check against the wiki-conventions contract — structural and retrievability checks, prioritised findings, mechanical auto-fixes. Invoke via /wiki-lint.
+description: Vault health check against the wiki-conventions contract — structural and retrievability checks, prioritised findings, mechanical auto-fixes.
 ---
 
 # Wiki Lint
@@ -9,21 +9,24 @@ Reads `wiki-conventions` for anything this procedure doesn't cover — folder st
 
 Runs 16 checks across two dimensions: structural and retrievability. Reports findings by priority; auto-fixes the mechanical ones; asks before structural changes needing judgment.
 
-**On Claude Code**, resolve the binary once before any step that calls it:
+The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+
 ```bash
-ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
+RUNTIME=$(command -v node || command -v bun)
+ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
-Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<subcommand>", ...])` instead.
+
+Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
 
 ## Invocation
 
-- `/wiki-lint` — lint the current vault.
-- `/wiki-lint <vault-root>` — lint a specific vault root.
-- **If not already running as `wiki-linter` agent** (system prompt doesn't identify you): delegate the analysis and auto-fix work. Call `Task` with `subagent_type: "wiki-linter"` and a prompt containing the vault path (if given). Wait for the report. Then:
+- No argument — lint the current vault.
+- A vault-root argument — lint that vault root.
+- **If this session can spawn a subagent**: delegate the analysis and auto-fix work — hand the `wiki-lint` procedure the vault path (if given). Wait for the report. Then:
   - Relay the **auto-fixed** and **report-only findings** sections verbatim.
   - For each **confirm-first proposal** in the returned report, present it to the user and apply the stated command on yes, skip on no. One at a time, or offer accept-all / decline-all / choose — **except a Consolidation proposal (check 10)**: always one cluster at a time, never batched, never an accept-all, because each deletes committed pages.
   - After all confirms are resolved, print the final summary.
-- **If you are `wiki-linter` agent**: run the full procedure below with own tools. Apply auto-fixes. Return confirm-first proposals as a structured list with exact commands — never ask the user (subagent has no channel to user; confirm-first interaction belongs to the invoking session that called you).
+- **If already running the procedure as a subagent**: run the full procedure below with own tools. Apply auto-fixes. Return confirm-first proposals as a structured list with exact commands — never ask the user (a subagent has no channel to the user; confirm-first interaction belongs to the invoking session that called you).
 
 ## Procedure
 
@@ -33,19 +36,19 @@ Use `"$ENCHIRIDION"` for every call below. **On OpenCode** use `wiki(args=["<sub
 
 ### 2. Run mechanical checks
 
-Run all ten with `"$ENCHIRIDION" check <name> --json`. Each emits JSON Lines — one `{"pageRef": "...", "detail": "..."}` object per finding, one per line, and nothing at all when clean (no `[]` to unwrap). Check 10 adds a structured `cluster` key to each row (members, basis, similarity, suggested survivor). Run in parallel where the vault is large:
+Run all ten with `"$RUNTIME" "$ENCHIRIDION" check <name> --json`. Each emits JSON Lines — one `{"pageRef": "...", "detail": "..."}` object per finding, one per line, and nothing at all when clean (no `[]` to unwrap). Check 10 adds a structured `cluster` key to each row (members, basis, similarity, suggested survivor). Run in parallel where the vault is large:
 
 ```bash
-"$ENCHIRIDION" check kind-folder-conformance --json
-"$ENCHIRIDION" check ingestion-source-integrity --json
-"$ENCHIRIDION" check frontmatter-link-format --json
-"$ENCHIRIDION" check stale-synthesis --json
-"$ENCHIRIDION" check missing-volatility-source-date --json
-"$ENCHIRIDION" check unresolved-supersession --json
-"$ENCHIRIDION" check contradiction-callouts --json
-"$ENCHIRIDION" check orphans --json
-"$ENCHIRIDION" check split-links --json
-"$ENCHIRIDION" check concept-fragmentation --json
+"$RUNTIME" "$ENCHIRIDION" check kind-folder-conformance --json
+"$RUNTIME" "$ENCHIRIDION" check ingestion-source-integrity --json
+"$RUNTIME" "$ENCHIRIDION" check frontmatter-link-format --json
+"$RUNTIME" "$ENCHIRIDION" check stale-synthesis --json
+"$RUNTIME" "$ENCHIRIDION" check missing-volatility-source-date --json
+"$RUNTIME" "$ENCHIRIDION" check unresolved-supersession --json
+"$RUNTIME" "$ENCHIRIDION" check contradiction-callouts --json
+"$RUNTIME" "$ENCHIRIDION" check orphans --json
+"$RUNTIME" "$ENCHIRIDION" check split-links --json
+"$RUNTIME" "$ENCHIRIDION" check concept-fragmentation --json
 ```
 
 **Check 1 — Kind-folder conformance:** Every `.md` under `wiki/` (excluding `KIND.md` and `_index.md`) must sit directly under a valid kind-folder — canonical four or any pre-existing custom folder. Pages at the `wiki/` root or nested below a kind-folder are violations. Fix level: **confirm first** (uses `enchiridion vault move`).
@@ -78,7 +81,7 @@ find <vault-root>/wiki -name "*.md" | sort
 
 **Check 11 — Stale claims:** For pages whose last git commit is > 90 days ago, check whether a newer source on the same topic (by title/tag overlap) has been ingested since. Use `enchiridion search` to find related pages with more recent commits:
 ```bash
-"$ENCHIRIDION" search "<page-title-terms>" --limit 10 --json
+"$RUNTIME" "$ENCHIRIDION" search "<page-title-terms>" --limit 10 --json
 ```
 Compare `git_date` of related pages. If a related page's `git_date` is substantially newer and their content covers the same ground, flag. Finding: page's claims may be superseded by newer content. Fix level: **report only**.
 
@@ -113,10 +116,10 @@ Direction is the tell: 10 collapses pages that exist, 12 creates the missing one
 For each auto-fix finding, apply without asking:
 
 ```bash
-"$ENCHIRIDION" fix frontmatter-link-format
-"$ENCHIRIDION" fix ingestion-source-integrity
-"$ENCHIRIDION" fix missing-cross-references
-"$ENCHIRIDION" fix split-links
+"$RUNTIME" "$ENCHIRIDION" fix frontmatter-link-format
+"$RUNTIME" "$ENCHIRIDION" fix ingestion-source-integrity
+"$RUNTIME" "$ENCHIRIDION" fix missing-cross-references
+"$RUNTIME" "$ENCHIRIDION" fix split-links
 ```
 
 Each command prints the vault-relative refs of files it modified (one per line), or nothing if no changes were needed. `fix ingestion-source-integrity` only rewrites a source page when exactly one `raw/` link exists in the body; ambiguous pages are left for report-only. `fix missing-cross-references` only inserts a link when exactly one page bears the matching title; ambiguous or already-linked mentions are skipped. `fix split-links` joins folded frontmatter destinations and labels in place; body splits are never touched — those stay report-only, so surface them as findings and leave the join to the user.
@@ -125,7 +128,7 @@ After running, note each changed ref in the summary (file, what changed).
 
 ### 5. Confirm-first proposals
 
-**If running as `wiki-linter` subagent:** Do not ask the user. Instead, add each confirm-first finding to the `confirm-first proposals` section of the report as a structured entry — the invoking session presents these to the user and applies the commands on yes.
+**If running as a subagent:** Do not ask the user. Instead, add each confirm-first finding to the `confirm-first proposals` section of the report as a structured entry — the invoking session presents these to the user and applies the commands on yes.
 
 Each proposal entry must include:
 - The check number and finding description.
@@ -137,20 +140,20 @@ Each proposal entry must include:
 Proposal shapes:
 
 **Consolidation (check 10):** "Pages `<a>`, `<b>`[, `<c>`] read as one concept (basis: `<shared tags / shared title terms>`, weakest pairwise similarity `<s>`). Consolidate into `<suggested-survivor>`?" Name every member with its committed size and inbound-link count, so the user can judge the suggested survivor — and offer to override it, which is a judgment the ingest flow also gets to make.
-Command on yes: hand off to `/wiki-ingest --consolidate <survivor-ref> <absorbed-ref>...` — that flow reads each member's body, authors the merged survivor, and lands the one atomic commit. **Never author the merged body here**: the merge is a judgment call that belongs to the ingest flow. Never batch two clusters into one handoff.
+Command on yes: hand off to the `wiki-ingest` procedure with the survivor and the absorbed refs (a Consolidation) — that flow reads each member's body, authors the merged survivor, and lands the one atomic commit. **Never author the merged body here**: the merge is a judgment call that belongs to the ingest flow. Never batch two clusters into one handoff.
 On no: skip the cluster. Do not downgrade it to an edge — the pair was above the fragmentation bar, so check 13 does not own it.
 
 **Cross-reference insertion (check 13, ambiguous):** "Page `<page>` mentions '<title>' without linking to it, but multiple candidate pages match. Which page should be linked?"
 Present candidate list and wait for selection or "skip". On selection: insert relative markdown link inline at the first unlinked mention.
 
 **Kind-folder conformance (check 1):** "Page `<path>` is not directly under a valid kind-folder. Move it to `wiki/<correct-kind>/`? `enchiridion vault move` rewrites all inbound links."
-Command on yes: `"$ENCHIRIDION" vault move <old-ref> <new-ref>`
+Command on yes: `"$RUNTIME" "$ENCHIRIDION" vault move <old-ref> <new-ref>`
 
 **Implicit concept (check 12):** "Term '<term>' appears in N pages without its own concept page. Create one?"
-Command on yes: invoke `/wiki-ingest` with the term and the context pages as input.
+Command on yes: invoke the `wiki-ingest` procedure with the term and the context pages as input.
 
 **Edge retyping (check 16):** "In `<page>`, `related:` → `<target>` looks like `<specific-type>` because `<reason>`. Retype?"
-Command on yes: `"$ENCHIRIDION" page set <absolute-path> <specific-type> "<link-string>"` and remove the entry from `related:`.
+Command on yes: `"$RUNTIME" "$ENCHIRIDION" page set <absolute-path> <specific-type> "<link-string>"` and remove the entry from `related:`.
 
 **Delete orphan page:** "Page `<path>` has no inbound links and no apparent purpose. Delete it?"
 Command on yes: `git -C <vault-root> rm <vault-relative-path> && git -C <vault-root> commit -m "chore: remove orphan page <path>"`

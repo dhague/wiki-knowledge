@@ -1,6 +1,8 @@
 ---
 name: cut-release
 description: Cut a new release of the wiki-knowledge plugin. Use when asked to release, bump the version, or cut a release.
+metadata:
+  internal: true
 ---
 
 # Cut a release

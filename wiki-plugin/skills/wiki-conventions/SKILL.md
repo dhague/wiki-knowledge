@@ -1,11 +1,11 @@
 ---
 name: wiki-conventions
-description: The single source of truth for the wiki vault — folder structure, frontmatter schema, relative-markdown link rules, and the typed-edge vocabulary. Preloaded by both the ingestion and retrieval agents; it is the contract between them. Consult before creating, moving, linking, or reading any wiki page.
+description: The single source of truth for the wiki vault — folder structure, frontmatter schema, relative-markdown link rules, and the typed-edge vocabulary. Loaded on demand by both the ingestion and retrieval procedures; it is the contract between them. Consult before creating, moving, linking, or reading any wiki page.
 ---
 
 # Wiki conventions
 
-Shared contract between ingestion (`wiki-ingest`, Sonnet) and retrieval (`wiki-researcher`, Haiku). Ingestion writes to these rules; retrieval reads assuming them. On any conflict between this file and information from elsewhere, this file wins.
+Shared contract between the ingestion procedure (`wiki-ingest`) and retrieval (`wiki-ask`). Ingestion writes to these rules; retrieval reads assuming them. On any conflict between this file and information from elsewhere, this file wins.
 
 ## Vault structure
 
@@ -158,30 +158,19 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 
 Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else nearest ancestor holding `wiki/` directory or `.wiki-root` marker, else cwd). Set `WIKI_ROOT` before invoking any. `page` and `place` exceptions: operate only on what you hand them, no root resolved.
 
-**One `enchiridion` executable, nothing to install** — the script layer is a TypeScript bundle (`enchiridion-ts/dist/cli.cjs`), and `<plugin-root>/bin/enchiridion` is a thin shim that execs `node` against it.
-
-**Invocation differs by host:**
-
-- **Claude Code:** Resolve the binary once per Bash session, then reuse `$ENCHIRIDION` for every subsequent call:
-  ```bash
-  ENCHIRIDION=$(ls ~/.claude/plugins/cache/enchiridion-wiki-plugin/wiki-knowledge/*/bin/enchiridion | sort -V | tail -1)
-  "$ENCHIRIDION" <subcommand> <args...>
-  ```
-- **OpenCode:** skip `bin/enchiridion` and path resolution entirely — use the `wiki` tool directly: `wiki(args=["<subcommand>", "<arg1>", ...])` with the same subcommand and flags listed below. The tool runs the bundle in-process; no `node` on PATH required, no config.json lookup needed.
-
-`node` is the one already-installed runtime the shim depends on (Claude Code path only) — there is no binary to download and no lazy fetch. Works identically in dedicated mode or query-from-anywhere mode.
-
-**Batch independent invocations.** When a step needs more than one independent `enchiridion` call — e.g. several `search` queries for different terms or candidates — batch them into a single tool call rather than issuing each separately; each extra tool call costs a full turn. On Claude Code, chain with `;` in one `Bash` call; on OpenCode, the `wiki` tool handles one subcommand per call so issue them in parallel in one message. Examples:
+**One `enchiridion` bundle, nothing to install** — the script layer is a single file, `scripts/enchiridion.cjs`, shipped beside its `node-sqlite3-wasm.wasm` sidecar inside every skill that calls it. This skill calls none of it: it is the catalogue a calling skill consults, and that skill resolves the bundle from its own base directory (the host reports that path when it loads the skill), once per invocation:
 
 ```bash
-# Claude Code (Bash, chained) — $ENCHIRIDION already resolved above; chain calls
-"$ENCHIRIDION" search "prepared statements" --json; "$ENCHIRIDION" search "connection pooling" --json
+RUNTIME=$(command -v node || command -v bun)
+ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-```
-# OpenCode (wiki tool, parallel calls in one message)
-wiki(args=["search", "prepared statements", "--json"])
-wiki(args=["search", "connection pooling", "--json"])
+Every call is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>` — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun). No binary to download and no lazy fetch, and it works identically in dedicated mode and query-from-anywhere mode. If neither runtime is present, say so plainly and stop.
+
+**Batch independent invocations.** When a step needs more than one independent `enchiridion` call — e.g. several `search` queries for different terms or candidates — batch them into a single tool call rather than issuing each separately; each extra tool call costs a full turn. Chain them in one shell invocation, or issue them in parallel when your host batches tool calls in a single message:
+
+```bash
+"$RUNTIME" "$ENCHIRIDION" search "prepared statements" --json; "$RUNTIME" "$ENCHIRIDION" search "connection pooling" --json
 ```
 
 ### Script catalogue
@@ -195,16 +184,16 @@ Never indented, never pretty-printed. **Failure is the other half of the contrac
 
 | Subcommand | Call it for | Usage |
 |---|---|---|
-| `enchiridion discover` | Discovery before ingesting — BM25 overlap classification for every page a draft plan proposes, plus vault's tag vocabulary. Call during ingestion step 3, before writing real `IngestPlan`. Emits only actionable hints (`duplicate`/`refines`/`related`); `distinct` hits (score below `relatedThreshold`) are filtered before output — their absence means "safe to mint." Recall is unbounded by default; `--limit` is an optional safety cap (default 0 = unbounded). | `bin/enchiridion discover --plan <draft-plan.json> [--limit N] [--duplicate-threshold F] [--related-threshold F]` → `{"pages": [{"title", "candidates": [{page_ref, title, score, hint, summary, tags, volatility, superseded_by}]}], "vocabulary": [{"tag", "count"}]}`. Single-page mode (`--title`/`--summary`/`--body-file`) for ad-hoc checks, JSON Lines. `--tags-containing "a,b,c"` (case-insensitive substring OR match) and/or `--tag-count "x,y"` (exact match, 0 if the tag doesn't exist yet) each swap the `vocabulary` array for a named field in the same document — `tag_matches` (`["tag1","tag2"]`) for the former, `tag_counts` (`[{"tag","count"}]`) for the latter — so `--plan` output is exactly one JSON document whatever flags you pass. Pass both, derived from the draft's own candidate tags, instead of the full vocabulary dump. |
-| `enchiridion search` | Any vault search. | `bin/enchiridion search "<terms>" [--tag T] [--tag-any T] [--kind K] [--since DATE] [--until DATE] [--date-field FIELD] [--volatility V] [--limit N] [--include-superseded] [--raw] [--json]`. Also `--reindex [--full]` and `--status`. |
-| `enchiridion read-page` | Reading a page's full content by vault-relative ref — frontmatter + body. The read-only companion to `search`; a host with no Read tool uses this in place of one. | `bin/enchiridion read-page <page_ref>` prints the page's raw markdown; `--json` emits `{page_ref, frontmatter, body}` as one compact line. |
-| `enchiridion superseded-by` | Filtering retrieval candidate set for currency — resolving each candidate to its current page. Call during retrieval step 4, once frontier is expanded. | `bin/enchiridion superseded-by <page_ref> [<page_ref> ...] [--json]` → `--json` is JSON Lines, one `{seed, active, chain}` per candidate per line; `active == seed` means current. |
-| `enchiridion ingest` | Executing an `IngestPlan` — resolve, validate, write, commit — after agent assembles plan. | `bin/enchiridion ingest --plan <path>`; add `--dry-run` to validate and print without writing. `bin/enchiridion ingest --ignore <raw_rel> [--ignore <raw_rel> …] [--ignore-comment <text>]` appends to folder's `.ingestignore`; `--ignore` is repeatable so multiple paths can be bulk-added in one call. |
-| `enchiridion ingest-scan` | Sweeping `raw/` for files needing ingestion (never-ingested, changed-since-ingestion). | `bin/enchiridion ingest-scan [folder] --json` → JSON Lines, one scan row per line. |
-| `enchiridion watch` | Long-running filesystem watcher over `raw/` with per-file debounce, exclusive lock, queue file — launched by `/wiki-watch`. | `bin/enchiridion watch [--vault ROOT] [--debounce SECONDS] [--poll-interval SECONDS]`. `bin/enchiridion watch [--vault ROOT] --dequeue <raw_rel>` removes one queue entry. |
-| `enchiridion vault` | Resolving vault root, listing all available kinds, or moving a page (rewrites all inbound links across vault and outbound links inside moved page). | Bare `bin/enchiridion vault` (or `bin/enchiridion vault root`) prints resolved root. `bin/enchiridion vault kinds [--json]` lists every kind — the four canonical kinds (`canonical: true`) plus any custom kind-folder; each entry: `{kind, folder, canonical, definition}` (`definition` is `KIND.md` summary or `null`). `bin/enchiridion vault move <old-page-ref> <new-page-ref>` prints each changed page ref, one per line. |
-| `enchiridion init` | Scaffolding new empty vault: folders, `.gitignore`, git init, optional `settings.json`. | `bin/enchiridion init <path> --mode {query-from-anywhere|dedicated} [--plugin-root DIR]`. |
-| `enchiridion save-session` | Capturing current session's transcript as raw file in vault. Called from `/save-conversation`. | `bin/enchiridion save-session [--slug "<phrase>"]`. |
-| `enchiridion page` | Frontmatter edits during ingestion. Takes a **file path**, resolves no vault root. | `bin/enchiridion page get <file> <key>` (exits non-zero when key absent) · `page set <file> <key> <value> [--json]` · `page merge <file> <key> <json-list>` (unions list-valued keys — `tags`, edge keys). |
-| `enchiridion place` | Computing new page's vault-relative path from kind and title. Takes only what you hand it, resolves no vault root. | `bin/enchiridion place <kind> "<title>"`. |
-| `enchiridion commit` | Writing one structured git commit per ingestion/edit manifest: stages paths, gates on chain-of-evidence, returns SHA. Only for a hand-built manifest — `enchiridion ingest` commits its own plan. | `bin/enchiridion commit --manifest <path>`. |
+| `enchiridion discover` | Discovery before ingesting — BM25 overlap classification for every page a draft plan proposes, plus vault's tag vocabulary. Call during ingestion step 3, before writing real `IngestPlan`. Emits only actionable hints (`duplicate`/`refines`/`related`); `distinct` hits (score below `relatedThreshold`) are filtered before output — their absence means "safe to mint." Recall is unbounded by default; `--limit` is an optional safety cap (default 0 = unbounded). | `enchiridion discover --plan <draft-plan.json> [--limit N] [--duplicate-threshold F] [--related-threshold F]` → `{"pages": [{"title", "candidates": [{page_ref, title, score, hint, summary, tags, volatility, superseded_by}]}], "vocabulary": [{"tag", "count"}]}`. Single-page mode (`--title`/`--summary`/`--body-file`) for ad-hoc checks, JSON Lines. `--tags-containing "a,b,c"` (case-insensitive substring OR match) and/or `--tag-count "x,y"` (exact match, 0 if the tag doesn't exist yet) each swap the `vocabulary` array for a named field in the same document — `tag_matches` (`["tag1","tag2"]`) for the former, `tag_counts` (`[{"tag","count"}]`) for the latter — so `--plan` output is exactly one JSON document whatever flags you pass. Pass both, derived from the draft's own candidate tags, instead of the full vocabulary dump. |
+| `enchiridion search` | Any vault search. | `enchiridion search "<terms>" [--tag T] [--tag-any T] [--kind K] [--since DATE] [--until DATE] [--date-field FIELD] [--volatility V] [--limit N] [--include-superseded] [--raw] [--json]`. Also `--reindex [--full]` and `--status`. |
+| `enchiridion read-page` | Reading a page's full content by vault-relative ref — frontmatter + body. The read-only companion to `search`; a host that cannot read files directly uses this in place of one. | `enchiridion read-page <page_ref>` prints the page's raw markdown; `--json` emits `{page_ref, frontmatter, body}` as one compact line. |
+| `enchiridion superseded-by` | Filtering retrieval candidate set for currency — resolving each candidate to its current page. Call during retrieval step 4, once frontier is expanded. | `enchiridion superseded-by <page_ref> [<page_ref> ...] [--json]` → `--json` is JSON Lines, one `{seed, active, chain}` per candidate per line; `active == seed` means current. |
+| `enchiridion ingest` | Executing an `IngestPlan` — resolve, validate, write, commit — after agent assembles plan. | `enchiridion ingest --plan <path>`; add `--dry-run` to validate and print without writing. `enchiridion ingest --ignore <raw_rel> [--ignore <raw_rel> …] [--ignore-comment <text>]` appends to folder's `.ingestignore`; `--ignore` is repeatable so multiple paths can be bulk-added in one call. |
+| `enchiridion ingest-scan` | Sweeping `raw/` for files needing ingestion (never-ingested, changed-since-ingestion). | `enchiridion ingest-scan [folder] --json` → JSON Lines, one scan row per line. |
+| `enchiridion watch` | Long-running filesystem watcher over `raw/` with per-file debounce, exclusive lock, queue file — launched by the `wiki-watch` skill. | `enchiridion watch [--vault ROOT] [--debounce SECONDS] [--poll-interval SECONDS]`. `enchiridion watch [--vault ROOT] --dequeue <raw_rel>` removes one queue entry. |
+| `enchiridion vault` | Resolving vault root, listing all available kinds, or moving a page (rewrites all inbound links across vault and outbound links inside moved page). | Bare `enchiridion vault` (or `enchiridion vault root`) prints resolved root. `enchiridion vault kinds [--json]` lists every kind — the four canonical kinds (`canonical: true`) plus any custom kind-folder; each entry: `{kind, folder, canonical, definition}` (`definition` is `KIND.md` summary or `null`). `enchiridion vault move <old-page-ref> <new-page-ref>` prints each changed page ref, one per line. |
+| `enchiridion init` | Scaffolding new empty vault: folders, `.gitignore`, git init, optional `settings.json`. | `enchiridion init <path> --mode {query-from-anywhere|dedicated} [--plugin-root DIR]`. |
+| `enchiridion save-session` | Capturing current session's transcript as raw file in vault. Called by the `save-conversation` skill. | `enchiridion save-session [--slug "<phrase>"]`. |
+| `enchiridion page` | Frontmatter edits during ingestion. Takes a **file path**, resolves no vault root. | `enchiridion page get <file> <key>` (exits non-zero when key absent) · `page set <file> <key> <value> [--json]` · `page merge <file> <key> <json-list>` (unions list-valued keys — `tags`, edge keys). |
+| `enchiridion place` | Computing new page's vault-relative path from kind and title. Takes only what you hand it, resolves no vault root. | `enchiridion place <kind> "<title>"`. |
+| `enchiridion commit` | Writing one structured git commit per ingestion/edit manifest: stages paths, gates on chain-of-evidence, returns SHA. Only for a hand-built manifest — `enchiridion ingest` commits its own plan. | `enchiridion commit --manifest <path>`. |
