@@ -899,3 +899,138 @@ test("renderPageParts: the default is still multi-page relative links", () => {
     "omitting the href strategy must leave multi-page output alone",
   );
 });
+
+// ---------------------------------------------------------------------------
+// 9. The frontmatter table trails the page it describes
+// ---------------------------------------------------------------------------
+
+/**
+ * The frontmatter table is provenance, not the page: a reader who opens a page
+ * should meet its title and content first, and the metadata as a footer. Both
+ * assembly sites move together — a wiki page's `renderFrontmatterTable` and a
+ * raw page's own inline builder — and these tests pin the order at both, in
+ * both output modes (exportsingle.test.ts pins the single-file sections).
+ */
+
+test("renderPages: the article precedes the frontmatter table", () => {
+  const rendered = collectPages(wikiPages, { title: "Test Vault" });
+  for (const [path, html] of rendered) {
+    const article = html.indexOf("<article>");
+    const table = html.indexOf('<table class="frontmatter">');
+    assert.ok(article !== -1, `${path} should carry an article`);
+    assert.ok(table !== -1, `${path} should carry a frontmatter table`);
+    assert.ok(
+      article < table,
+      `${path}: frontmatter must follow the article, not lead it`,
+    );
+  }
+});
+
+test("renderPageParts: main leads with the article", () => {
+  const meta = buildExportMeta(wikiPages, { title: "Test Vault" });
+  const opts = { title: "Test Vault" };
+  for (const { path, parts } of renderPageParts(wikiPages, meta, opts)) {
+    assert.ok(
+      parts.main.startsWith("<article>"),
+      `${path}: the first thing after the nav should be the article`,
+    );
+  }
+});
+
+test("renderPages: a raw page's article precedes its frontmatter table", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["raw/raw-doc.md", rawDoc],
+  ]);
+  const rendered = collectPages(pages, { includeRaw: true });
+  const html = rendered.get("raw/raw-doc.html")!;
+  const article = html.indexOf("<article>");
+  const table = html.indexOf('<table class="frontmatter">');
+  assert.ok(article !== -1 && table !== -1, "the raw page carries both parts");
+  assert.ok(
+    article < table,
+    "raw frontmatter must follow the article, not lead it",
+  );
+});
+
+test("renderPages: moving the table leaves its rows and their order alone", () => {
+  const rendered = collectPages(wikiPages);
+  const html = rendered.get("wiki/concepts/alpha-concept.html")!;
+  const table = /<table class="frontmatter">([\s\S]*?)<\/table>/.exec(
+    html,
+  )?.[1];
+  assert.ok(table, "the page should carry a frontmatter table");
+  const labels = [
+    ...table.matchAll(/<tr[^>]*><td(?: colspan="2")?>([^<]*)<\/td>/g),
+  ].map((m) => m[1]);
+  assert.deepEqual(labels, [
+    "title",
+    "summary",
+    "tags",
+    "kind",
+    "refines", // the authored rows, in their own order
+    "", // the fm-divider
+    "kind",
+    "superseded_by", // the derived rows, still derived and still last
+  ]);
+});
+
+test("renderPageParts: a source edge relocates and still resolves", () => {
+  // `source` is the edge key AC2 and AC5 name, so it carries the two halves
+  // those criteria turn on: an exported target becomes a link, one the export
+  // does not carry becomes label text, and both move with the table.
+  const withSource = `---
+title: Sourcing Page
+kind: source
+source:
+  - "[Beta Concept](../concepts/beta-concept.md)"
+  - "[Missing Page](../concepts/missing-page.md)"
+---
+
+Body text.
+`;
+  const pages = makePages([
+    ["wiki/sources/source-one.md", withSource],
+    ["wiki/concepts/beta-concept.md", conceptB],
+  ]);
+  const main = renderOne(pages, {}, "multi-page");
+  const table = /<table class="frontmatter">([\s\S]*?)<\/table>/.exec(
+    main,
+  )?.[1];
+  assert.ok(table, "the page should carry a frontmatter table");
+  assert.ok(
+    main.indexOf("<article>") < main.indexOf('<table class="frontmatter">'),
+    "the source rows move with the table, after the article",
+  );
+  assert.ok(
+    table.includes('<a href="../concepts/beta-concept.html">Beta Concept</a>'),
+    "an exported source edge renders as a link",
+  );
+  assert.ok(
+    !table.includes("missing-page.html") && table.includes("Missing Page"),
+    "a source edge to a non-exported page renders as plain text",
+  );
+});
+
+test("renderPages: a page with no frontmatter carries no table", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["wiki/concepts/plain-concept.md", "A wiki body with no frontmatter.\n"],
+    ["raw/plain.md", "Just text, no frontmatter.\n"],
+  ]);
+  const rendered = collectPages(pages, { includeRaw: true });
+  // Both builders — the wiki page's and the raw page's — take their falsy
+  // branch here, and neither may leave an empty table or a stray divider.
+  for (const path of ["wiki/concepts/plain-concept.html", "raw/plain.html"]) {
+    const html = rendered.get(path)!;
+    assert.ok(html.includes("<article>"), `${path} still has an article`);
+    assert.ok(
+      !html.includes('class="frontmatter"'),
+      `${path} should emit no empty table`,
+    );
+    assert.ok(
+      !html.includes("fm-divider"),
+      `${path} should emit no stray divider`,
+    );
+  }
+});

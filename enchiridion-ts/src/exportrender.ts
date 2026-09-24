@@ -65,7 +65,8 @@ export interface PageParts {
   title: string;
   /** The sticky navigation bar, already positioned for this page's depth. */
   nav: string;
-  /** Everything below the nav: frontmatter table then article. */
+  /** Everything below the nav: the page's article, then — when the page has
+   *  one — the frontmatter table, as a footer rather than a header. */
   main: string;
 }
 
@@ -570,6 +571,18 @@ export function buildHtmlShell(parts: PageParts, assetsRoot: string): string {
   return buildDocument(parts.title, style, `${parts.nav}\n${parts.main}`);
 }
 
+/**
+ * A page's `<article>` and the frontmatter table that follows it — or the
+ * article alone when the page carries no frontmatter. The table is a footer,
+ * never a header: provenance trails the content it describes, and both
+ * assembly sites below share this one spelling so they cannot drift apart on
+ * which side of the article the table falls.
+ */
+function articleWithFooter(bodyHtml: string, fmHtml: string): string {
+  const article = `<article>\n${bodyHtml}</article>`;
+  return fmHtml ? `${article}\n${fmHtml}` : article;
+}
+
 function buildPageParts(
   pageRef: string,
   record: PageRecord,
@@ -594,7 +607,7 @@ function buildPageParts(
   const bodyHtml = mdRender.render(
     rewriteBodyLinks(body, pageRef, exported, mode),
   );
-  const main = `${fmTable}\n<article>\n${bodyHtml}</article>`;
+  const main = articleWithFooter(bodyHtml, fmTable);
   return { title: record.title || pageRef, nav, main };
 }
 
@@ -622,7 +635,7 @@ function buildRawPageParts(
   const bodyHtml = mdRender.render(
     rewriteBodyLinks(body, pageRef, exported, mode),
   );
-  const main = `${fmSection}\n<article>\n${bodyHtml}</article>`;
+  const main = articleWithFooter(bodyHtml, fmSection);
   return { title: pageRef, nav, main };
 }
 
