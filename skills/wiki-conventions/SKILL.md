@@ -51,6 +51,13 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
 
 **Subject tie-break:** page plausibly *about* two subjects filed by primary function; other subject becomes tag or typed edge.
 
+### Verify against the source
+
+**The edge makes a citation checkable; it does not make it checked.** Every claim — a figure, a date, a name, a superlative ("best", "first", "only") — is verified when it is written, against the artifact that owns it: the page's own `raw/` artifact, or the primary source behind it where the artifact is silent. A `synthesis/` page has no artifact of its own, so it follows the input page carrying the claim through to *that* page's artifact — the input page points at the evidence, it is not the evidence. **A sibling `wiki/` page is never evidence:** restating one copies whatever error it carries, which is how one wrong figure reaches six pages while every structural check stays green.
+
+- **The artifact decides a disagreement.** Two pages at odds → check each against its own artifact; the loser does not win by being read last. Record the loser as a `contradicts` edge, plus `supersedes` on the page that replaces it ([directions](#typed-edges)).
+- **Recompute derived figures.** Percentages, sums, totals and surplus/deficit are checked arithmetically against components already on the page or in the artifact — components sum to the stated total, income minus expenditure reconciles with the stated surplus/deficit. Needs no source, and catches what reading alone does not.
+
 ### The `raw/` layer
 
 `raw/` holds **content-immutable** originals. Ingestion **never edits a raw file's contents**. Links into `raw/` are percent-encoded (see [Links](#links)) so any filename is linkable. See [Naming](#naming) for filename and prefix rules.
