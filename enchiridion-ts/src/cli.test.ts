@@ -58,6 +58,23 @@ function writeTempPage(frontmatter: string, body: string): string {
   return file;
 }
 
+/** Write a throwaway vault holding files ({vault-relative ref: text}) and
+ * return its absolute root. */
+function makeVault(files: Record<string, string>): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  for (const [ref, text] of Object.entries(files)) {
+    const abs = path.join(root, ...ref.split("/"));
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, text);
+  }
+  return root;
+}
+
+/** The absolute path of a vault-relative page under root. */
+function pagePath(root: string, ref: string): string {
+  return path.join(root, ...ref.split("/"));
+}
+
 /** Run the CLI with `input` piped to its stdin, and optional extra env. */
 function runWithStdin(
   args: string[],
@@ -289,6 +306,211 @@ test("page merge: unions values into a list-valued key", () => {
     fs.readFileSync(file, "utf8"),
     "---\ntags:\n  - a\n  - b\n---\nbody\n",
   );
+});
+
+// #548: `page merge`/`page set` used to write the value verbatim, so a caller
+// reusing `ingest`'s documented vault-relative-ref shape produced malformed
+// frontmatter edges. These pin the asymmetric-fix: a ref is composed, a link
+// passes through, and anything else fails without touching the file.
+
+test("page merge: composes a vault-relative ref into an edge link", () => {
+  const root = makeVault({
+    "wiki/concepts/foo.md": "---\ntitle: Foo\n---\nbody\n",
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const { status, stderr } = runEnv(
+    ["page", "merge", file, "related", '["wiki/concepts/foo.md"]'],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    '---\ntitle: Bar\nrelated:\n  - "[Foo](foo.md)"\n---\nbody\n',
+  );
+});
+
+test("page merge: relativises across folders and percent-encodes", () => {
+  const root = makeVault({
+    "wiki/entities/A B.md": "---\ntitle: A B\n---\nbody\n",
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const { status, stderr } = runEnv(
+    ["page", "merge", file, "related", '["wiki/entities/A B.md"]'],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    '---\ntitle: Bar\nrelated:\n  - "[A B](../entities/A%20B.md)"\n---\nbody\n',
+  );
+});
+
+test("page set: on an edge key writes a list, replacing the old one", () => {
+  const root = makeVault({
+    "wiki/concepts/foo.md": "---\ntitle: Foo\n---\nbody\n",
+    "wiki/concepts/bar.md":
+      '---\ntitle: Bar\nrefines:\n  - "[Old](old.md)"\n---\nbody\n',
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const { status, stderr } = runEnv(
+    ["page", "set", file, "refines", "wiki/concepts/foo.md"],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    '---\ntitle: Bar\nrefines:\n  - "[Foo](foo.md)"\n---\nbody\n',
+  );
+});
+
+test("page set --json: an empty list clears a list-valued edge key", () => {
+  const root = makeVault({
+    "wiki/concepts/bar.md":
+      '---\ntitle: Bar\nrelated:\n  - "[Foo](foo.md)"\n---\nbody\n',
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const { status, stderr } = runEnv(
+    ["page", "set", file, "related", "[]", "--json"],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    "---\ntitle: Bar\nrelated: []\n---\nbody\n",
+  );
+});
+
+test("page set: passes an already-composed link through unchanged", () => {
+  const root = makeVault({
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const { status, stderr } = runEnv(
+    ["page", "set", file, "related", "[Foo](foo.md#ttl)"],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    '---\ntitle: Bar\nrelated:\n  - "[Foo](foo.md#ttl)"\n---\nbody\n',
+  );
+});
+
+test("page set: composes raw_source from a vault-relative raw path", () => {
+  const root = makeVault({
+    "wiki/sources/stub.md": "---\ntitle: Stub\n---\nbody\n",
+    "raw/notes/x y.txt": "raw body\n",
+  });
+  const file = pagePath(root, "wiki/sources/stub.md");
+  const { status, stderr } = runEnv(
+    ["page", "set", file, "raw_source", "raw/notes/x y.txt"],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    '---\ntitle: Stub\nraw_source: "[x y.txt](../../raw/notes/x%20y.txt)"\n---\nbody\n',
+  );
+});
+
+test("page set: a page's own vault wins over cwd", () => {
+  const root = makeVault({
+    "wiki/concepts/foo.md": "---\ntitle: Foo\n---\nbody\n",
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const { status, stderr } = runEnv(
+    ["page", "merge", file, "related", '["wiki/concepts/foo.md"]'],
+    { cwd: elsewhere, env: { WIKI_ROOT: "" } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.match(fs.readFileSync(file, "utf8"), /"\[Foo\]\(foo\.md\)"/);
+});
+
+test(
+  "page merge: composes through a symlinked vault path",
+  { skip: process.platform === "win32" },
+  () => {
+    const root = makeVault({
+      "wiki/concepts/foo.md": "---\ntitle: Foo\n---\nbody\n",
+      "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+    });
+    const linkDir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-link-"));
+    const link = path.join(linkDir, "vault");
+    fs.symlinkSync(root, link);
+    const file = path.join(link, "wiki", "concepts", "bar.md");
+    const { status, stderr } = runEnv(
+      ["page", "merge", file, "related", '["wiki/concepts/foo.md"]'],
+      { cwd: linkDir, env: { WIKI_ROOT: "" } },
+    );
+    assert.equal(status, 0, stderr);
+    assert.match(fs.readFileSync(file, "utf8"), /"\[Foo\]\(foo\.md\)"/);
+  },
+);
+
+test("page merge: refuses an unresolvable ref, naming key and value", () => {
+  const root = makeVault({
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const before = fs.readFileSync(file, "utf8");
+  const { status, stderr } = runEnv(
+    ["page", "merge", file, "related", '["wiki/concepts/nope.md"]'],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /related/);
+  assert.match(stderr, /wiki\/concepts\/nope\.md/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("page set: refuses a link embedded in prose", () => {
+  const root = makeVault({
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const before = fs.readFileSync(file, "utf8");
+  const { status, stderr } = runEnv(
+    ["page", "set", file, "related", "see [Foo](foo.md) here"],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /related/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("page set: refuses a value that is neither link nor ref", () => {
+  const root = makeVault({
+    "wiki/concepts/bar.md": "---\ntitle: Bar\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/bar.md");
+  const before = fs.readFileSync(file, "utf8");
+  const { status, stderr } = runEnv(["page", "set", file, "related", "junk"], {
+    cwd: root,
+    env: { WIKI_ROOT: "" },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /related/);
+  assert.match(stderr, /junk/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("page merge: raw_source is a single link, not a list", () => {
+  const root = makeVault({
+    "wiki/sources/stub.md": "---\ntitle: Stub\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/sources/stub.md");
+  const before = fs.readFileSync(file, "utf8");
+  const { status, stderr } = runEnv(
+    ["page", "merge", file, "raw_source", '["raw/notes/x.txt"]'],
+    { cwd: root, env: { WIKI_ROOT: "" } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /raw_source/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
 });
 
 test("hook session-start: reads stdin, records transcript path, exits 0", () => {

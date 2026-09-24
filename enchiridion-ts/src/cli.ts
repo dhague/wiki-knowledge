@@ -22,7 +22,7 @@ import { Page } from "./wikipage.js";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
 import { KindFolders, Kinds, path as placePath } from "./place.js";
-import { Vault, readKindMeta, resolveRoot } from "./vault.js";
+import { Vault, readKindMeta, resolveRoot, vaultForFile } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";
 import { scan as scanIngest } from "./ingestscan.js";
@@ -51,6 +51,13 @@ import {
   runWatch,
 } from "./watch.js";
 import { canonicalSourceDate } from "./sourcedate.js";
+import {
+  edgeLink,
+  edgeRefusal,
+  isEdgeKey,
+  isListEdgeKey,
+  type RefLookup,
+} from "./pageedge.js";
 import { CHECKS, DefaultMinSimilarity, FIXES } from "./check.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
@@ -75,6 +82,51 @@ function loadPage(file: string): Page {
 
 function writePageFile(file: string, page: Page): void {
   fs.writeFileSync(file, page.text, { mode: 0o644 });
+}
+
+/**
+ * A normalizer over one page's vault, so a list of values resolves the root
+ * and reads each target's title once rather than per item.
+ *
+ * The vault comes from the **file's own location** (see [vaultForFile]), not
+ * `$WIKI_ROOT` or cwd — a file path is authoritative about which vault it
+ * belongs to (#548).
+ */
+function edgeNormalizer(file: string): (key: string, value: string) => string {
+  const { vault, pageDir } = vaultForFile(file);
+  const lookup: RefLookup = (ref) =>
+    vault.exists(ref)
+      ? { exists: true, title: vault.load(ref).getString("title") }
+      : { exists: false, title: "" };
+  return (key, value) => edgeLink(key, value, pageDir, lookup);
+}
+
+/**
+ * The value `page set` writes for an edge key: a single link for
+ * `raw_source`, a list of links for every other edge key (#548).
+ *
+ * Coercing a single value to a one-element list is what makes
+ * `page set <file> related "<link>"` an actual edge — a bare scalar is a
+ * shape the record reader skips. `--json` may pass a longer list, or an empty
+ * one to clear the key.
+ */
+function edgeSetValue(
+  file: string,
+  key: string,
+  value: unknown,
+): string | string[] {
+  const normalize = edgeNormalizer(file);
+  if (!isListEdgeKey(key)) {
+    if (Array.isArray(value))
+      fail(`${key} holds a single link; pass one value`);
+    if (typeof value !== "string") fail(edgeRefusal(key, value));
+    return normalize(key, value);
+  }
+  const items = Array.isArray(value) ? value : [value];
+  return items.map((item) => {
+    if (typeof item !== "string") fail(edgeRefusal(key, item));
+    return normalize(key, item);
+  });
 }
 
 /**
@@ -725,10 +777,14 @@ export function buildProgram(): Command {
   void fix; // referenced only for side effect of registering the command
 
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no
-  // vault root (CLAUDE.md).
+  // vault root for a plain value (CLAUDE.md); an edge key's value may be a
+  // vault-relative ref, which is composed against the vault the file sits in
+  // (#548).
   const page = program
     .command("page")
-    .description("Read and edit one page's frontmatter");
+    .description(
+      "Read and edit one page's frontmatter (edge keys take a markdown link or a vault-relative page ref)",
+    );
 
   page
     .command("get")
@@ -748,9 +804,14 @@ export function buildProgram(): Command {
     .command("set")
     .argument("<file>", "markdown file")
     .argument("<key>", "frontmatter key")
-    .argument("<value>", "frontmatter value")
+    .argument(
+      "<value>",
+      "value; for an edge key, exactly one markdown link or a vault-relative page ref (a list-valued key is replaced)",
+    )
     .option("--json", "parse value as JSON")
-    .description("Set a frontmatter value in place")
+    .description(
+      "Set a frontmatter value in place — replaces the key, including a list-valued edge key",
+    )
     .action(
       (file: string, key: string, raw: string, opts: { json?: boolean }) => {
         const p = loadPage(file);
@@ -763,6 +824,7 @@ export function buildProgram(): Command {
           }
         }
         if (key === "source_date") value = canonicalSourceDate(value);
+        if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
         const updated = p.set(key, value);
         writePageFile(file, updated);
       },
@@ -772,8 +834,13 @@ export function buildProgram(): Command {
     .command("merge")
     .argument("<file>", "markdown file")
     .argument("<key>", "frontmatter key")
-    .argument("<json-list>", "JSON list of values to union in")
-    .description("Union a JSON list into an existing list-valued key")
+    .argument(
+      "<json-list>",
+      "JSON list of values to union in; edge links or vault-relative page refs",
+    )
+    .description(
+      "Union a JSON list into an existing list-valued key (page set replaces it instead)",
+    )
     .action((file: string, key: string, raw: string) => {
       const p = loadPage(file);
       let values: unknown[];
@@ -784,6 +851,16 @@ export function buildProgram(): Command {
       }
       if (!Array.isArray(values)) {
         fail(`merge expects a JSON list for ${key}`);
+      }
+      if (key === "raw_source") {
+        fail("raw_source holds a single link; use page set");
+      }
+      if (isEdgeKey(key)) {
+        const normalize = edgeNormalizer(file);
+        values = values.map((item) => {
+          if (typeof item !== "string") fail(edgeRefusal(key, item));
+          return normalize(key, item);
+        });
       }
       const updated = p.merge(key, values);
       writePageFile(file, updated);

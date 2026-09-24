@@ -388,3 +388,31 @@ export class Vault {
     }
   }
 }
+
+/**
+ * The vault a **file** lives in and that file's vault-relative directory —
+ * the two facts a `page` edge edit needs (#548).
+ *
+ * This is not [resolveRoot]'s question. ADR-0004 answers "which vault" for an
+ * invocation that names no path, from `$WIKI_ROOT` then cwd; a command handed
+ * a file path needs the vault that *file* belongs to, which the env var
+ * cannot answer — `$WIKI_ROOT` pointing at another vault must not redirect
+ * the edit. So the file's own location wins: the same nearest-ancestor marker
+ * walk ADR-0004 uses, started from the file. Cwd never enters it, so a `page`
+ * edge edit works from anywhere.
+ */
+export function vaultForFile(file: string): { vault: Vault; pageDir: string } {
+  // [resolveRoot] realpaths the root it finds, so the file's path must be
+  // realpathed too or `path.relative` mismatches across a symlink (/tmp on
+  // macOS is the everyday case). The fallback covers a path realpath refuses.
+  let abs: string;
+  try {
+    abs = fs.realpathSync(path.resolve(file));
+  } catch {
+    abs = path.resolve(file);
+  }
+  const { root } = resolveRoot(path.dirname(abs), () => [undefined, false]);
+  const rel = path.relative(root, abs).split(path.sep).join("/");
+  const dir = path.posix.dirname(rel);
+  return { vault: new Vault(root), pageDir: dir === "." ? "" : dir };
+}

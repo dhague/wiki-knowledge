@@ -9,6 +9,7 @@ import {
   hasMarker,
   readKindMeta,
   resolveRoot,
+  vaultForFile,
 } from "./vault.js";
 import type { LookupEnv } from "./vault.js";
 import { Page } from "./wikipage.js";
@@ -355,4 +356,34 @@ test("pages() round-trip: wiki/people page reads back as kind person via KIND.md
   );
   const pages = v.pages();
   assert.equal(pages["wiki/people/alice.md"].kind, "person");
+});
+
+test("vaultForFile: resolves the vault and page dir from the file's own path", () => {
+  const v = writeVault({ "wiki/concepts/a.md": "a\n" });
+  const { vault, pageDir } = vaultForFile(
+    path.join(v.root, "wiki", "concepts", "a.md"),
+  );
+  assert.equal(vault.root, resolve(v.root));
+  assert.equal(pageDir, "wiki/concepts");
+});
+
+test("vaultForFile: ignores $WIKI_ROOT in favour of the file's own vault", () => {
+  // #548: a `page` file path is authoritative about which vault it belongs
+  // to. The env rule (ADR-0004) is for query-from-anywhere, where no path is
+  // given — honouring it here would resolve the wrong vault whenever
+  // $WIKI_ROOT points elsewhere.
+  const own = writeVault({ "wiki/concepts/a.md": "a\n" });
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-other-"));
+  const saved = process.env.WIKI_ROOT;
+  process.env.WIKI_ROOT = other;
+  try {
+    const { vault, pageDir } = vaultForFile(
+      path.join(own.root, "wiki", "concepts", "a.md"),
+    );
+    assert.equal(vault.root, resolve(own.root));
+    assert.equal(pageDir, "wiki/concepts");
+  } finally {
+    if (saved === undefined) delete process.env.WIKI_ROOT;
+    else process.env.WIKI_ROOT = saved;
+  }
 });
