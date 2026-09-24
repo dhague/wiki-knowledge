@@ -158,7 +158,7 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 
 Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else nearest ancestor holding `wiki/` directory or `.wiki-root` marker, else cwd). Set `WIKI_ROOT` before invoking any. `page` and `place` exceptions: operate only on what you hand them, no root resolved.
 
-**One `enchiridion` bundle, nothing to install** — the script layer is a single file, `scripts/enchiridion.cjs`, shipped beside its `node-sqlite3-wasm.wasm` sidecar inside every skill that calls it. This skill calls none of it: it is the catalogue a calling skill consults, and that skill resolves the bundle from its own base directory (the host reports that path when it loads the skill), once per invocation:
+**One `enchiridion` bundle, nothing to install** — the script layer is a single file, `scripts/enchiridion.cjs`, shipped beside its `node-sqlite3-wasm.wasm` sidecar inside every skill directory, this one included. Resolve it once from this skill's base directory (the host reports that path when it loads the skill):
 
 ```bash
 RUNTIME=$(command -v node || command -v bun)
