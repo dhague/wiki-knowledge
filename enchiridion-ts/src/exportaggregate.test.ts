@@ -248,6 +248,77 @@ test("renderAggregatePages: kind index lists pages of that kind", () => {
 // Front page
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Front page — replaced by a nominated start page
+// ---------------------------------------------------------------------------
+
+const START_PAGE = "wiki/concepts/alpha-concept.md";
+
+test("renderAggregatePages: no generated front page when a start page is set", () => {
+  const opts = { startPage: START_PAGE };
+  const meta = buildExportMeta(wikiPages, opts);
+  const paths = new Set(
+    [...renderAggregatePages(wikiPages, meta, opts)].map((p) => p.path),
+  );
+  assert.ok(
+    !paths.has("index.html"),
+    "the generated aggregate must not also write the front page's path",
+  );
+  assert.ok(paths.has("tags/index.html"), "the tag index is still emitted");
+  assert.ok(
+    paths.has("wiki/entities/index.html"),
+    "the kind indexes are still emitted",
+  );
+});
+
+test("renderAggregatePages: a kind index excludes the start page", () => {
+  const opts = { startPage: START_PAGE };
+  const meta = buildExportMeta(wikiPages, opts);
+  const pages = [...renderAggregatePages(wikiPages, meta, opts)];
+  const conceptIndex = pages.find(
+    (p) => p.path === "wiki/concepts/index.html",
+  )!;
+  assert.ok(
+    conceptIndex.content.includes("Beta Concept"),
+    "the kind's other pages are still listed",
+  );
+  assert.ok(
+    !conceptIndex.content.includes("Alpha Concept"),
+    "the start page is not listed in its own kind's index",
+  );
+});
+
+test("renderAggregatePages: a kind left with no members writes no index page", () => {
+  const opts = { startPage: "wiki/sources/source-one.md" };
+  const meta = buildExportMeta(wikiPages, opts);
+  const paths = new Set(
+    [...renderAggregatePages(wikiPages, meta, opts)].map((p) => p.path),
+  );
+  assert.ok(
+    !paths.has("wiki/sources/index.html"),
+    "an emptied kind gets no index page at all",
+  );
+});
+
+test("renderAggregatePages: a tag page still lists the start page, at the landing page", () => {
+  const opts = { startPage: START_PAGE };
+  const meta = buildExportMeta(wikiPages, opts);
+  const pages = [...renderAggregatePages(wikiPages, meta, opts)];
+  const alphaTag = pages.find((p) => p.path === "tags/alpha.html")!;
+  assert.ok(
+    alphaTag.content.includes("Alpha Concept"),
+    "a start page is a legitimate member of its tags",
+  );
+  assert.ok(
+    alphaTag.content.includes('href="../index.html"'),
+    "the tag page's link resolves to the landing page, not the vacated path",
+  );
+  assert.ok(
+    !alphaTag.content.includes("concepts/alpha-concept.html"),
+    "nothing points at the vacated path",
+  );
+});
+
 test("renderAggregatePages: always yields index.html", () => {
   const meta = buildExportMeta(wikiPages);
   const pages = [...renderAggregatePages(wikiPages, meta)];
@@ -518,6 +589,43 @@ function resolveHref(fromHtmlPath: string, href: string): string {
   return path.posix.resolve("/" + fromDir, href).replace(/^\//, "");
 }
 
+test("property: every intra-site link resolves with a start page too", () => {
+  const opts = { startPage: START_PAGE };
+  const meta = buildExportMeta(wikiPages, opts);
+
+  const allPages = [
+    ...renderPages(wikiPages, meta, opts),
+    ...renderAggregatePages(wikiPages, meta, opts),
+  ];
+
+  const emittedPaths = new Set(allPages.map((p) => p.path));
+  assert.equal(
+    emittedPaths.size,
+    allPages.length,
+    "no output path may be written twice",
+  );
+  assert.ok(emittedPaths.has("index.html"), "the start page is the front page");
+  assert.ok(
+    !emittedPaths.has("wiki/concepts/alpha-concept.html"),
+    "nothing is written at the promoted page's old path",
+  );
+
+  const broken: string[] = [];
+  for (const page of allPages) {
+    for (const href of extractIntraSiteHrefs(page.content)) {
+      const resolved = resolveHref(page.path, href);
+      if (!emittedPaths.has(resolved)) {
+        broken.push(`${page.path}: href "${href}" → "${resolved}" not emitted`);
+      }
+    }
+  }
+  assert.deepEqual(
+    broken,
+    [],
+    `Broken intra-site links:\n${broken.join("\n")}`,
+  );
+});
+
 test("property: every intra-site link in full output resolves to an emitted path", () => {
   // Deterministic fixture: more than enough to exercise all link types
   const meta = buildExportMeta(wikiPages);
@@ -545,80 +653,140 @@ test("property: every intra-site link in full output resolves to an emitted path
   );
 });
 
+// ---------------------------------------------------------------------------
+// Random-vault properties
+// ---------------------------------------------------------------------------
+
+const kindPairs: Array<[string, string]> = [
+  ["concept", "concepts"],
+  ["entity", "entities"],
+  ["source", "sources"],
+  ["synthesis", "synthesis"],
+];
+
+const tagPool = ["alpha", "beta", "gamma", "foo-bar", "shared"];
+const titlePool = [
+  "Page One",
+  "Page Two",
+  "Page Three",
+  "Page Four",
+  "Page Five",
+];
+
+const pageSpecsArb = fc.array(
+  fc.record({
+    kindIdx: fc.integer({ min: 0, max: 3 }),
+    titleIdx: fc.integer({ min: 0, max: 4 }),
+    tagIdxs: fc.uniqueArray(fc.integer({ min: 0, max: 4 }), {
+      minLength: 0,
+      maxLength: 3,
+    }),
+  }),
+  { minLength: 1, maxLength: 10 },
+);
+
+interface PageSpec {
+  kindIdx: number;
+  titleIdx: number;
+  tagIdxs: number[];
+}
+
+/** A random vault's page entries, with refs made unique. */
+function specsToEntries(specs: PageSpec[]): Array<[string, string]> {
+  const entries: Array<[string, string]> = [];
+  const seen = new Map<string, number>();
+
+  for (const spec of specs) {
+    const [kind, folder] = kindPairs[spec.kindIdx];
+    const title = titlePool[spec.titleIdx];
+    const slug = title.toLowerCase().replace(/\s+/g, "-");
+    const key = `${folder}/${slug}`;
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    const filename = n === 1 ? `${slug}.md` : `${slug}-${n}.md`;
+    const ref = `wiki/${folder}/${filename}`;
+
+    const tags = spec.tagIdxs.map((i) => tagPool[i]);
+    const tagsYaml =
+      tags.length > 0
+        ? `tags:\n${tags.map((t) => `  - ${t}`).join("\n")}\n`
+        : "";
+    const text = `---\ntitle: ${title}\nsummary: Summary for ${title}.\n${tagsYaml}kind: ${kind}\n---\n\nBody text.\n`;
+    entries.push([ref, text]);
+  }
+  return entries;
+}
+
+/** Intra-site hrefs of an output set that do not resolve to an emitted path. */
+function brokenLinks(
+  allOutput: Array<{ path: string; content: string }>,
+): string[] {
+  const emittedPaths = new Set(allOutput.map((p) => p.path));
+  const broken: string[] = [];
+  for (const page of allOutput) {
+    for (const href of extractIntraSiteHrefs(page.content)) {
+      const resolved = resolveHref(page.path, href);
+      if (!emittedPaths.has(resolved)) {
+        broken.push(`${page.path}: href "${href}" → "${resolved}" not emitted`);
+      }
+    }
+  }
+  return broken;
+}
+
 test("property (fast-check): intra-site links resolve for random page sets", () => {
-  const kindPairs: Array<[string, string]> = [
-    ["concept", "concepts"],
-    ["entity", "entities"],
-    ["source", "sources"],
-    ["synthesis", "synthesis"],
-  ];
-
-  const tagPool = ["alpha", "beta", "gamma", "foo-bar", "shared"];
-  const titlePool = [
-    "Page One",
-    "Page Two",
-    "Page Three",
-    "Page Four",
-    "Page Five",
-  ];
-
   fc.assert(
-    fc.property(
-      fc.array(
-        fc.record({
-          kindIdx: fc.integer({ min: 0, max: 3 }),
-          titleIdx: fc.integer({ min: 0, max: 4 }),
-          tagIdxs: fc.uniqueArray(fc.integer({ min: 0, max: 4 }), {
-            minLength: 0,
-            maxLength: 3,
-          }),
-        }),
-        { minLength: 1, maxLength: 10 },
-      ),
-      (specs) => {
-        const entries: Array<[string, string]> = [];
-        const seen = new Map<string, number>();
+    fc.property(pageSpecsArb, (specs) => {
+      const pages = makePages(specsToEntries(specs));
+      const meta = buildExportMeta(pages);
+      const allOutput = [
+        ...renderPages(pages, meta),
+        ...renderAggregatePages(pages, meta),
+      ];
+      return brokenLinks(allOutput).length === 0;
+    }),
+    { numRuns: 100 },
+  );
+});
 
-        for (const spec of specs) {
-          const [kind, folder] = kindPairs[spec.kindIdx];
-          const title = titlePool[spec.titleIdx];
-          const slug = title.toLowerCase().replace(/\s+/g, "-");
-          const key = `${folder}/${slug}`;
-          const n = (seen.get(key) ?? 0) + 1;
-          seen.set(key, n);
-          const filename = n === 1 ? `${slug}.md` : `${slug}-${n}.md`;
-          const ref = `wiki/${folder}/${filename}`;
+test("property (fast-check): with a random start page, links resolve and no path repeats", () => {
+  fc.assert(
+    fc.property(pageSpecsArb, fc.nat(), (specs, pick) => {
+      const entries = specsToEntries(specs);
+      const pages = makePages(entries);
+      // Any page of the vault can be the start page, kind index membership
+      // included — an arbitrary pick is part of the generated input so a
+      // failure names it.
+      const startPage = entries[pick % entries.length][0];
+      const opts = { startPage };
+      const meta = buildExportMeta(pages, opts);
+      const allOutput = [
+        ...renderPages(pages, meta, opts),
+        ...renderAggregatePages(pages, meta, opts),
+      ];
 
-          const tags = spec.tagIdxs.map((i) => tagPool[i]);
-          const tagsYaml =
-            tags.length > 0
-              ? `tags:\n${tags.map((t) => `  - ${t}`).join("\n")}\n`
-              : "";
-          const text = `---\ntitle: ${title}\nsummary: Summary for ${title}.\n${tagsYaml}kind: ${kind}\n---\n\nBody text.\n`;
-          entries.push([ref, text]);
-        }
+      const paths = allOutput.map((p) => p.path);
+      assert.equal(
+        new Set(paths).size,
+        paths.length,
+        `a start-page export wrote one path twice (start page ${startPage})`,
+      );
+      assert.ok(
+        paths.includes("index.html"),
+        `the start page ${startPage} should be the front page`,
+      );
+      assert.ok(
+        !paths.includes(startPage.replace(/\.md$/, ".html")),
+        `nothing may be written at the promoted page's old path (${startPage})`,
+      );
 
-        const pages = makePages(entries);
-        const meta = buildExportMeta(pages);
-
-        const allOutput = [
-          ...renderPages(pages, meta),
-          ...renderAggregatePages(pages, meta),
-        ];
-
-        const emittedPaths = new Set(allOutput.map((p) => p.path));
-
-        for (const page of allOutput) {
-          for (const href of extractIntraSiteHrefs(page.content)) {
-            const resolved = resolveHref(page.path, href);
-            if (!emittedPaths.has(resolved)) {
-              return false; // fast-check will report the failing input
-            }
-          }
-        }
-        return true;
-      },
-    ),
+      const broken = brokenLinks(allOutput);
+      assert.deepEqual(
+        broken,
+        [],
+        `broken links with start page ${startPage}: ${broken.join("; ")}`,
+      );
+    }),
     { numRuns: 100 },
   );
 });

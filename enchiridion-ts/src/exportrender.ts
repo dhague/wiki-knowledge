@@ -23,6 +23,15 @@
  * Aggregate pages (tag pages, tag index, per-kind index pages, front page)
  * are a separate pass in exportaggregate.ts, in the same two layers —
  * concatenate the page generators to get the full output set.
+ *
+ * When a start page is nominated (`meta.startPage`), the promotion is an
+ * output-path redirect rather than a splice of finished HTML: the page is
+ * yielded at the front page's path and every link site asks
+ * `meta.outputPathFor` for both ends of an href, so "exported once" and "every
+ * reference resolves to the landing page" hold by construction. The generated
+ * front page is then not rendered at all (exportaggregate), and the promoted
+ * page carries a list of the remaining kind indexes at the foot of its
+ * article.
  */
 
 import path from "node:path";
@@ -32,8 +41,13 @@ import { PageRecord, EdgeKeys } from "./pagerecord.js";
 import {
   ExportMeta,
   ExportOptions,
+  FRONT_PAGE_PATH,
+  OutputPathFor,
   buildTagSlugMap,
   exportTitle,
+  kindFolder,
+  kindLabel,
+  mdToHtml,
 } from "./exportmeta.js";
 import {
   isVaultRelativeDest,
@@ -60,8 +74,10 @@ export interface RenderedPage {
  */
 export interface PageParts {
   /** Text for the document's <title> — this page's own title (a tag name, a
-   *  kind's label, a page title); a page that *is* the wiki's front door
-   *  carries the wiki's title. Unescaped: the shell escapes it. */
+   *  kind's label, a page title); the generated front page alone carries the
+   *  wiki's title. A nominated start page is an ordinary page here: its own
+   *  title, exported at the front page's path. Unescaped: the shell escapes
+   *  it. */
   title: string;
   /** The sticky navigation bar, already positioned for this page's depth. */
   nav: string;
@@ -110,11 +126,6 @@ export function escHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Convert a vault-relative .md path to a .html path. */
-export function mdToHtml(ref: string): string {
-  return ref.endsWith(".md") ? ref.slice(0, -3) + ".html" : ref;
-}
-
 /** Vault-relative directory of a page's HTML file. */
 function pageHtmlDir(pageRef: string): string {
   return path.posix.dirname(mdToHtml(pageRef));
@@ -153,9 +164,6 @@ export function assetsRootFor(htmlPath: string): string {
 // ---------------------------------------------------------------------------
 // Where a link points: the one thing that differs between the two output modes
 // ---------------------------------------------------------------------------
-
-/** The front page's output path, at the output root. */
-const FRONT_PAGE_PATH = "index.html";
 
 /** The tag index's output path. */
 const TAGS_INDEX_PATH = "tags/index.html";
@@ -231,6 +239,68 @@ const hashHref: HrefFor = (_fromHtmlPath, toHtmlPath) =>
  *  ones that resolve an author's destination ask the rewriters above instead. */
 export function hrefFor(mode: LinkMode): HrefFor {
   return mode === "single-file" ? hashHref : relativeHref;
+}
+
+/**
+ * Everything a link site needs to spell a destination: which refs the export
+ * carries, which mode's href strategy to use, and where each ref is written.
+ *
+ * They travel together because no site ever wants one without the others — a
+ * link written with one mode's strategy and another's path is exactly the bug
+ * the single mapper exists to prevent — so bundling them keeps a site's
+ * parameters about *what it links*, not about the export's shape.
+ */
+export interface LinkContext {
+  /** `meta.exported` — the one owner of "the export carries this ref". */
+  exported: Set<string>;
+  mode: LinkMode;
+  /** `meta.outputPathFor` — the start page's promotion lives here. */
+  outputPathFor: OutputPathFor;
+}
+
+/** The link context a render pass threads through its link sites. */
+export function linkContext(meta: ExportMeta, mode: LinkMode): LinkContext {
+  return { exported: meta.exported, mode, outputPathFor: meta.outputPathFor };
+}
+
+/**
+ * One kind index page as a list entry: the label, count and href both the
+ * generated front page's browse block and a start page's foot list need.
+ *
+ * The two lists are never rendered together — a start page replaces the
+ * generated front page — but they must agree on *which* kinds appear, in what
+ * order, and at what href, so that set-and-order decision is made once, here.
+ */
+export interface KindIndexEntry {
+  kind: string;
+  folder: string;
+  label: string;
+  count: number;
+  href: string;
+}
+
+/**
+ * The kind index entries, in the display order both lists use — by kind name.
+ * `fromHtmlPath` is the listing page's own output path, which is `index.html`
+ * for both lists.
+ */
+export function kindIndexEntries(
+  meta: ExportMeta,
+  fromHtmlPath: string,
+  mode: LinkMode,
+): KindIndexEntry[] {
+  return [...meta.kindMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([kind, refs]) => {
+      const folder = kindFolder(kind, refs);
+      return {
+        kind,
+        folder,
+        label: kindLabel(folder),
+        count: refs.length,
+        href: hrefFor(mode)(fromHtmlPath, `wiki/${folder}/index.html`),
+      };
+    });
 }
 
 /**
@@ -310,20 +380,21 @@ function claimsDest(dest: string, mode: LinkMode): boolean {
 function rewriteBodyLinks(
   bodyText: string,
   pageRef: string,
-  exported: Set<string>,
-  mode: LinkMode,
+  link: LinkContext,
 ): string {
+  const { exported, mode, outputPathFor } = link;
   const pageDir = vaultPageDir(pageRef);
   const href = hrefFor(mode);
+  const fromHtmlPath = outputPathFor(pageRef);
   const edits: Edit[] = [];
 
-  for (const link of iterLinks(bodyText)) {
+  for (const anchor of iterLinks(bodyText)) {
     // A picture cannot navigate anywhere, so single-file output has no reason
     // to touch one — and stripping it would replace the picture with its alt
     // text. Multi-page output goes on rewriting the export's own `.md` links
     // wherever they appear, images included, exactly as it always has.
-    if (link.isImage && mode === "single-file") continue;
-    const p = link.decodedPath;
+    if (anchor.isImage && mode === "single-file") continue;
+    const p = anchor.decodedPath;
     if (!claimsDest(p, mode)) continue;
 
     const target = resolveLinkDest(p, pageDir);
@@ -331,19 +402,19 @@ function rewriteBodyLinks(
     edits.push(
       exported.has(target)
         ? {
-            start: link.start,
-            end: link.end,
+            start: anchor.start,
+            end: anchor.end,
             replacement: href(
-              mdToHtml(pageRef),
-              mdToHtml(target),
-              link.decodedAnchor,
+              fromHtmlPath,
+              outputPathFor(target),
+              anchor.decodedAnchor,
             ),
           }
         : // Strip link: replace full [label](dest) with label text
           {
-            start: link.fullStart,
-            end: link.fullEnd,
-            replacement: link.label,
+            start: anchor.fullStart,
+            end: anchor.fullEnd,
+            replacement: anchor.label,
           },
     );
   }
@@ -378,9 +449,9 @@ const HEADER_KEYS = new Set(["title", "summary"]);
 function renderFmLink(
   markdownLink: string,
   pageRef: string,
-  exported: Set<string>,
-  mode: LinkMode,
+  context: LinkContext,
 ): string {
+  const { exported, mode, outputPathFor } = context;
   const links = iterLinks(markdownLink);
   if (links.length === 0) return escHtml(markdownLink);
   const link = links[0];
@@ -393,7 +464,7 @@ function renderFmLink(
   const target = resolveLinkDest(p, vaultPageDir(pageRef));
   if (!exported.has(target)) return escHtml(link.label);
   const href = hrefFor(mode);
-  return `<a href="${escHtml(href(mdToHtml(pageRef), mdToHtml(target), link.decodedAnchor))}">${escHtml(link.label)}</a>`;
+  return `<a href="${escHtml(href(outputPathFor(pageRef), outputPathFor(target), link.decodedAnchor))}">${escHtml(link.label)}</a>`;
 }
 
 /** Render a tag as a link to its tag page. */
@@ -401,10 +472,13 @@ function renderTagLink(
   tag: string,
   pageRef: string,
   tagSlugMap: Map<string, string>,
-  mode: LinkMode,
+  context: LinkContext,
 ): string {
   const slug = tagSlugMap.get(tag) ?? slugify(tag, 0);
-  const href = hrefFor(mode)(mdToHtml(pageRef), `tags/${slug}.html`);
+  const href = hrefFor(context.mode)(
+    context.outputPathFor(pageRef),
+    `tags/${slug}.html`,
+  );
   return `<a href="${escHtml(href)}">${escHtml(tag)}</a>`;
 }
 
@@ -413,9 +487,8 @@ function renderFmValue(
   key: string,
   value: unknown,
   pageRef: string,
-  exported: Set<string>,
   tagSlugMap: Map<string, string>,
-  mode: LinkMode,
+  context: LinkContext,
 ): string {
   if (value === null || value === undefined) return "";
 
@@ -423,7 +496,7 @@ function renderFmValue(
     if (!Array.isArray(value)) return escHtml(String(value));
     const items = value.map(
       (tag) =>
-        `<li>${renderTagLink(typeof tag === "string" ? tag : String(tag), pageRef, tagSlugMap, mode)}</li>`,
+        `<li>${renderTagLink(typeof tag === "string" ? tag : String(tag), pageRef, tagSlugMap, context)}</li>`,
     );
     return `<ul>${items.join("")}</ul>`;
   }
@@ -432,15 +505,14 @@ function renderFmValue(
     if (Array.isArray(value)) {
       const items = value.map(
         (item) =>
-          `<li>${renderFmLink(typeof item === "string" ? item : String(item), pageRef, exported, mode)}</li>`,
+          `<li>${renderFmLink(typeof item === "string" ? item : String(item), pageRef, context)}</li>`,
       );
       return `<ul>${items.join("")}</ul>`;
     }
     return renderFmLink(
       typeof value === "string" ? value : String(value),
       pageRef,
-      exported,
-      mode,
+      context,
     );
   }
 
@@ -458,14 +530,16 @@ function renderFmValue(
 function renderPageLink(
   targetRef: string,
   pageRef: string,
-  exported: Set<string>,
   allPages: Map<string, { record?: PageRecord; text: string }>,
-  mode: LinkMode,
+  context: LinkContext,
 ): string {
   const entry = allPages.get(targetRef);
   const label = entry?.record?.title ?? targetRef;
-  if (!exported.has(targetRef)) return escHtml(label);
-  const href = hrefFor(mode)(mdToHtml(pageRef), mdToHtml(targetRef));
+  if (!context.exported.has(targetRef)) return escHtml(label);
+  const href = hrefFor(context.mode)(
+    context.outputPathFor(pageRef),
+    context.outputPathFor(targetRef),
+  );
   return `<a href="${escHtml(href)}">${escHtml(label)}</a>`;
 }
 
@@ -473,10 +547,9 @@ function renderFrontmatterTable(
   pageRef: string,
   record: PageRecord,
   text: string,
-  exported: Set<string>,
   allPages: Map<string, { record?: PageRecord; text: string }>,
   tagSlugMap: Map<string, string>,
-  mode: LinkMode,
+  context: LinkContext,
 ): string {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
   if (!hasFrontmatter) return "";
@@ -492,7 +565,7 @@ function renderFrontmatterTable(
   for (const [key, value] of Object.entries(fmMap)) {
     if (HEADER_KEYS.has(key)) continue;
     rows.push(
-      `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef, exported, tagSlugMap, mode)}</td></tr>`,
+      `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef, tagSlugMap, context)}</td></tr>`,
     );
   }
 
@@ -510,9 +583,9 @@ function renderFrontmatterTable(
   if (sb.length === 0) {
     sbHtml = "";
   } else if (sb.length === 1) {
-    sbHtml = renderPageLink(sb[0], pageRef, exported, allPages, mode);
+    sbHtml = renderPageLink(sb[0], pageRef, allPages, context);
   } else {
-    sbHtml = `<ul>${sb.map((ref) => `<li>${renderPageLink(ref, pageRef, exported, allPages, mode)}</li>`).join("")}</ul>`;
+    sbHtml = `<ul>${sb.map((ref) => `<li>${renderPageLink(ref, pageRef, allPages, context)}</li>`).join("")}</ul>`;
   }
   rows.push(`<tr><td>superseded_by</td><td>${sbHtml}</td></tr>`);
 
@@ -584,15 +657,55 @@ export function buildHtmlShell(parts: PageParts, assetsRoot: string): string {
 }
 
 /**
- * A page's `<article>` and the frontmatter table that follows it — or the
- * article alone when the page carries no frontmatter. The table is a footer,
- * never a header: provenance trails the content it describes, and both
- * assembly sites below share this one spelling so they cannot drift apart on
- * which side of the article the table falls.
+ * A page's `<article>` followed by the blocks that trail it: the start page's
+ * kind-index list (when there is one), then the frontmatter table. The table is
+ * a footer, never a header: provenance trails the content it describes, and it
+ * stays last — the kind list is navigation, and provenance is the last thing on
+ * the page. Both assembly sites below share this one spelling so they cannot
+ * drift apart on the order of the blocks.
  */
-function articleWithFooter(bodyHtml: string, fmHtml: string): string {
-  const article = `<article>\n${bodyHtml}</article>`;
-  return fmHtml ? `${article}\n${fmHtml}` : article;
+function articleWithFooter(
+  bodyHtml: string,
+  kindListHtml: string,
+  fmHtml: string,
+): string {
+  const blocks = [`<article>\n${bodyHtml}</article>`];
+  if (kindListHtml) blocks.push(kindListHtml);
+  if (fmHtml) blocks.push(fmHtml);
+  return blocks.join("\n");
+}
+
+/**
+ * The list of kind index pages a start page carries at the foot of its
+ * article. The generated front page is the only other place a kind index is
+ * linked from, and a start page replaces it — so without this list the kind
+ * indexes become unreachable. It is the same arrangement the generated page
+ * used (same heading, same labels, same counts), moved to the page that took
+ * its place; the counts come from the kind-index membership `meta.kindMap`
+ * already holds, so the start page is absent from its own kind's row exactly
+ * as it is from the index page.
+ *
+ * Empty when no kind remains — the start page was its kind's only member —
+ * since a "Browse by Kind" heading over nothing is worse than no heading.
+ */
+function renderKindIndexList(
+  meta: ExportMeta,
+  fromHtmlPath: string,
+  mode: LinkMode,
+): string {
+  const rows = kindIndexEntries(meta, fromHtmlPath, mode).map(
+    ({ href, label, count }) =>
+      `<li><a href="${escHtml(href)}">${escHtml(label)}</a> (${count})</li>`,
+  );
+  if (rows.length === 0) return "";
+  return [
+    `<section>`,
+    `<h2>Browse by Kind</h2>`,
+    `<ul>`,
+    ...rows,
+    `</ul>`,
+    `</section>`,
+  ].join("\n");
 }
 
 /**
@@ -673,29 +786,32 @@ function buildPageParts(
   pageRef: string,
   record: PageRecord,
   text: string,
-  exported: Set<string>,
+  meta: ExportMeta,
   allPages: Map<string, { record?: PageRecord; text: string }>,
   tagSlugMap: Map<string, string>,
   wikiTitle: string,
   mode: LinkMode,
 ): PageParts {
-  const nav = buildNavBar(mdToHtml(pageRef), wikiTitle, mode);
+  // The page's own output path — `index.html` when it is the start page. Both
+  // the nav bar and every href are spelled from it, never from the ref.
+  const htmlPath = meta.outputPathFor(pageRef);
+  const context = linkContext(meta, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
   const fmTable = renderFrontmatterTable(
     pageRef,
     record,
     text,
-    exported,
     allPages,
     tagSlugMap,
-    mode,
+    context,
   );
   const { body } = splitFrontmatter(text);
-  const bodyHtml = mdRender.render(
-    rewriteBodyLinks(body, pageRef, exported, mode),
-  );
+  const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef, context));
   const lifted = liftTitleEcho(bodyHtml, record.title);
   const header = renderPageHeader(record.title, record.summary, lifted.anchor);
-  const article = articleWithFooter(lifted.bodyHtml, fmTable);
+  const kindList =
+    meta.startPage === pageRef ? renderKindIndexList(meta, htmlPath, mode) : "";
+  const article = articleWithFooter(lifted.bodyHtml, kindList, fmTable);
   const main = header ? `${header}\n${article}` : article;
   return { title: record.title || pageRef, nav, main };
 }
@@ -704,11 +820,13 @@ function buildPageParts(
 function buildRawPageParts(
   pageRef: string,
   text: string,
-  exported: Set<string>,
+  meta: ExportMeta,
   wikiTitle: string,
   mode: LinkMode,
 ): PageParts {
-  const nav = buildNavBar(mdToHtml(pageRef), wikiTitle, mode);
+  const htmlPath = meta.outputPathFor(pageRef);
+  const context = linkContext(meta, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
   const { body, hasFrontmatter, frontmatter } = splitFrontmatter(text);
   let fmSection = "";
   if (hasFrontmatter && frontmatter.trim()) {
@@ -721,10 +839,13 @@ function buildRawPageParts(
       fmSection = `<table class="frontmatter">\n${rows.join("\n")}\n</table>`;
     }
   }
-  const bodyHtml = mdRender.render(
-    rewriteBodyLinks(body, pageRef, exported, mode),
-  );
-  const main = articleWithFooter(bodyHtml, fmSection);
+  const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef, context));
+  // A raw page can be the start page too, so it needs the same foot-of-page
+  // kind list the ordinary builder adds — the parts, not the HTML, are where
+  // the promotion is spelled.
+  const kindList =
+    meta.startPage === pageRef ? renderKindIndexList(meta, htmlPath, mode) : "";
+  const main = articleWithFooter(bodyHtml, kindList, fmSection);
   return { title: pageRef, nav, main };
 }
 
@@ -747,6 +868,10 @@ function buildRawPageParts(
  * default, and what renderPages wraps) links a relative `.html` file, while a
  * single-file caller assembling its own document links sections by fragment
  * and claims every relative destination. See [LinkMode].
+ *
+ * A page is yielded at `meta.outputPathFor(pageRef)` — the front page's path
+ * for the start page, its own otherwise — so the promoted page is exported
+ * exactly once and nothing is written at its old path.
  */
 export function* renderPageParts(
   pages: Map<string, { record?: PageRecord; text: string }>,
@@ -761,11 +886,11 @@ export function* renderPageParts(
   for (const pageRef of meta.exported) {
     const entry = pages.get(pageRef)!;
     const { record, text } = entry;
-    const htmlPath = mdToHtml(pageRef);
+    const htmlPath = meta.outputPathFor(pageRef);
     if (!record) {
       yield {
         path: htmlPath,
-        parts: buildRawPageParts(pageRef, text, meta.exported, wikiTitle, mode),
+        parts: buildRawPageParts(pageRef, text, meta, wikiTitle, mode),
       };
       continue;
     }
@@ -775,7 +900,7 @@ export function* renderPageParts(
         pageRef,
         record,
         text,
-        meta.exported,
+        meta,
         pages,
         tagSlugMap,
         wikiTitle,

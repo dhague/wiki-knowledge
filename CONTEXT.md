@@ -103,6 +103,14 @@ _Avoid_: Format, layout — and note `wiki.html` is an output *of* single-file m
 The generated site in multi-page mode, at `web/` under the vault root by default (`--out` overrides). A gitignored, reproducible artifact — never committed, never a source of truth. Mirrors the vault tree, `.md`→`.html`. Single-file mode writes no tree at all; `--out` names its one file instead.
 _Avoid_: Site, output dir (informal — `web/` is the default, but the term is the tree it holds).
 
+**Front page**:
+An export's landing destination — `index.html` in the web tree, the `__front` section of a single-file document, and the target of the nav bar's `Home` link in either mode. It carries either the generated aggregate (page count, per-kind counts, get-started set) or, when a **start page** is nominated, that page's own header, article, a list of the **kind index pages**, and its footer frontmatter table. The generated page count and get-started blocks are dropped in that case, never repeated below the promoted content; the kind list survives at the foot of the page because it is the only route to the kind indexes. One destination with two possible fillings: it is the role, not the content, that the nav bar, the no-hash deep link and the reserved id all name.
+_Avoid_: Landing page, home page, and bare "index" (the tag index and a **kind index page** are generated listings; "index" names those, not this).
+
+**Start page**:
+The vault page nominated to fill an export's **front page** — named by `--start-page <ref>` for one run, or saved in the **vault config** as the vault's standing choice. Its content becomes the landing page, it is exported nowhere else, it is not listed in its own kind's index, and every link to it is rewritten to the front page's destination, so it appears exactly once in the export. A nomination about the export rather than a property of the page: nothing in the page itself records the choice, and the same vault exports with or without one.
+_Avoid_: Home page, and `kind: home` — `home` is not a kind (the canonical four are `concept`, `entity`, `source` and `synthesis`); a vault whose front-door page sits in `wiki/home/` is using a custom kind folder, which the export must not key off.
+
 **Page header**:
 The exported page's own title and summary, lifted out of the frontmatter and rendered above the article — the title as the page's `<h1>`, the summary as a subtitle paragraph. Those two keys are not repeated in the footer frontmatter table. A body H1 that merely repeats the title is dropped and its anchor moves onto the header's `<h1>`; a wiki page with neither key gets no header, and `raw/` pages get none at all ([ADR-0022](docs/adr/0022-static-html-export.md)).
 _Avoid_: Masthead, hero (a page header is the page's own identity, not site chrome).
@@ -116,15 +124,15 @@ The name an exported site carries — in the sticky nav bar on every page, and a
 _Avoid_: Wiki name, site name.
 
 **Vault config**:
-`.wiki-knowledge/config.json` at the vault root, beside the search index and the lock files — gitignored, absent until something writes it, and every kind of broken-or-missing read as "nothing configured" rather than an error. Holds the saved wiki title today; unknown keys survive a save ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)).
+`.wiki-knowledge/config.json` at the vault root, beside the search index and the lock files — gitignored, absent until something writes it, and every kind of broken-or-missing *file* read as "nothing configured" rather than an error. Holds the saved wiki title and the saved **start page**; unknown keys survive a save ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)). A well-formed saved **start page** naming a page the export does not carry is the one exception: it fails the export rather than degrading, because silently falling back to the generated front page is the bug the setting exists to prevent.
 _Avoid_: Settings, preferences (this is the vault's own state, not user configuration of the plugin).
 
 **Tag page**:
-One generated HTML page per tag (`web/tags/<slug>.html`) listing every page that carries the tag, plus a tag index (`web/tags/index.html`) of all tags with counts. Export-only — tags themselves are just a frontmatter list; the tag page is their materialised, browsable form.
+One generated HTML page per tag (`web/tags/<slug>.html`) listing every page that carries the tag, plus a tag index (`web/tags/index.html`) of all tags with counts. Export-only — tags themselves are just a frontmatter list; the tag page is their materialised, browsable form. A **start page** is listed like any other member of its tags.
 
 **Kind index page**:
-A generated `web/wiki/<folder>/index.html` listing every page of one kind, linked from the front page's per-kind counts. Exists so every exported page is reachable from the front page without listing them all there.
+A generated `web/wiki/<folder>/index.html` listing every page of one kind — every exported page being reachable is what these exist for. Linked from the generated front page's per-kind counts, or, when a **start page** fills the front page, from the list at the foot of that start page: after its article, before its footer frontmatter table. A **start page** is absent from the index of its own kind, since it is already the front page.
 
 **Get-started set**:
-The 10–12 pages the exported front page links as entry points. Chosen by the `/wiki-export` skill's LLM judgment over the script's ranked candidates (and the vault's own root docs), or, when the script runs bare, by a deterministic inbound-link-count fallback ([ADR-0022](docs/adr/0022-static-html-export.md)). The script emits candidates and accepts the chosen set via `--starters`; it never authors the judgment and never depends on it.
+The 10–12 pages the generated front page links as entry points. Chosen by the `/wiki-export` skill's LLM judgment over the script's ranked candidates (and the vault's own root docs), or, when the script runs bare, by a deterministic inbound-link-count fallback ([ADR-0022](docs/adr/0022-static-html-export.md)). The script emits candidates and accepts the chosen set via `--starters`; it never authors the judgment and never depends on it. Rendered only when the front page is the generated aggregate: a **start page** supplies the entrance itself, so the set is dropped and `--starters` changes nothing about the output — the script says so on stderr rather than failing.
 _Avoid_: Featured pages, index (the front page is more than this set).

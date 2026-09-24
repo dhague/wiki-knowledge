@@ -1231,3 +1231,174 @@ test("renderPages: a page with no frontmatter carries no table", () => {
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// Start page — output-path promotion and the links that follow from it
+// ---------------------------------------------------------------------------
+
+/** A front-door page in a custom `wiki/home/` folder: the shape this feature
+ *  exists for (there is no `home` kind — the folder is just a folder). */
+const homePage = `---
+title: Home
+summary: The front door.
+tags:
+  - index
+kind: home
+supersedes:
+  - "[Beta Concept](../concepts/beta-concept.md)"
+---
+
+Start at [Alpha Concept](../concepts/alpha-concept.md).
+`;
+
+const conceptLinksHome = `---
+title: Beta Concept
+summary: The second concept.
+tags:
+  - beta
+kind: concept
+related:
+  - "[Home](../home/home.md)"
+---
+
+See [the front door](../home/home.md).
+`;
+
+const startPages = makePages([
+  ["wiki/home/home.md", homePage],
+  ["wiki/concepts/alpha-concept.md", conceptA],
+  ["wiki/concepts/beta-concept.md", conceptLinksHome],
+  ["wiki/entities/alpha-entity.md", entityA],
+]);
+
+const START_PAGE = "wiki/home/home.md";
+
+test("renderPages: a start page is exported at index.html and nowhere else", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  assert.ok(rendered.has("index.html"), "the start page is the front page");
+  assert.ok(
+    !rendered.has("wiki/home/home.html"),
+    "nothing is written at the promoted page's old path, and no stub either",
+  );
+  assert.ok(
+    rendered.get("index.html")!.includes("<h1>Home</h1>"),
+    "the promoted page's own content is what the landing page carries",
+  );
+});
+
+test("renderPages: the start page's document title is its own title", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  assert.ok(
+    rendered.get("index.html")!.includes("<title>Home</title>"),
+    "the start page keeps its own <title>, like every other page",
+  );
+});
+
+test("renderPages: the start page's nav Home link is the document root", () => {
+  const rendered = collectPages(startPages, {
+    startPage: START_PAGE,
+    title: "Team Wiki",
+  });
+  const html = rendered.get("index.html")!;
+  assert.ok(
+    html.includes('<a href="./index.html">Home</a>'),
+    "the nav bar's Home link points at the page itself from the root",
+  );
+  assert.ok(
+    html.includes('<span class="wiki-nav-title">Team Wiki</span>'),
+    "the wiki title still appears in the nav bar",
+  );
+});
+
+test("renderPages: a body link to the start page resolves to the landing page", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  const beta = rendered.get("wiki/concepts/beta-concept.html")!;
+  assert.ok(
+    beta.includes('href="../../index.html"'),
+    "the relative prefix is computed from the linking page's own depth",
+  );
+  assert.ok(
+    !beta.includes("home/home.html"),
+    "no link may point at the vacated path",
+  );
+});
+
+test("renderPages: a frontmatter edge and superseded_by resolve to the landing page", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  const beta = rendered.get("wiki/concepts/beta-concept.html")!;
+  const table = /<table class="frontmatter">([\s\S]*?)<\/table>/.exec(
+    beta,
+  )?.[1];
+  assert.ok(table, "beta should carry its frontmatter table");
+  assert.ok(
+    beta.includes('See <a href="../../index.html">the front door</a>.') ||
+      beta.includes('<a href="../../index.html">the front door</a>'),
+    "the body link to the start page resolves to the landing page",
+  );
+  assert.ok(
+    table.includes('<a href="../../index.html">Home</a>'),
+    "both the supersedes edge and superseded_by point at the landing page",
+  );
+});
+
+test("renderPages: the start page carries the kind-index list at its foot", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  const html = rendered.get("index.html")!;
+  const articleEnd = html.indexOf("</article>");
+  const list = html.indexOf("Browse by Kind");
+  const footer = html.indexOf('<table class="frontmatter">');
+  assert.ok(articleEnd !== -1, "the page should carry an article");
+  assert.ok(list !== -1, "the start page should carry the kind list");
+  assert.ok(footer !== -1, "the start page should carry its footer table");
+  assert.ok(articleEnd < list, "the kind list follows the article");
+  assert.ok(list < footer, "the footer frontmatter table stays last");
+
+  assert.ok(
+    /<a href="wiki\/concepts\/index\.html">Concepts<\/a> \(2\)/.test(html),
+    "each kind index is listed with its remaining count",
+  );
+  assert.ok(
+    /<a href="wiki\/entities\/index\.html">Entities<\/a> \(1\)/.test(html),
+    "every remaining kind index is listed",
+  );
+});
+
+test("renderPages: the start page's own kind is absent from the kind list", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  const html = rendered.get("index.html")!;
+  assert.ok(
+    !html.includes("wiki/home/index.html"),
+    "the start page's kind has no remaining member, so it is listed nowhere",
+  );
+  assert.ok(!/>Home<\/a> \(/.test(html), "the start page does not list itself");
+});
+
+test("renderPages: the generated front page's blocks are not repeated", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  const html = rendered.get("index.html")!;
+  assert.ok(!html.includes("Get Started"), "no get-started block");
+  assert.ok(!html.includes("pages ·"), "no page-count line");
+  assert.ok(!html.includes("<h1>Wiki</h1>"), "no generated wiki-title H1");
+});
+
+test("renderPages: only the start page carries the kind list", () => {
+  const rendered = collectPages(startPages, { startPage: START_PAGE });
+  for (const path of [
+    "wiki/concepts/alpha-concept.html",
+    "wiki/concepts/beta-concept.html",
+    "wiki/entities/alpha-entity.html",
+  ]) {
+    assert.ok(
+      !rendered.get(path)!.includes("Browse by Kind"),
+      `${path} should not carry the front page's kind list`,
+    );
+  }
+});
+
+test("renderPages: with no start page nothing about the output changes", () => {
+  const rendered = collectPages(startPages);
+  const home = rendered.get("wiki/home/home.html")!;
+  assert.ok(home, "without a start page the page keeps its own path");
+  assert.ok(!home.includes("Browse by Kind"), "no kind list is injected");
+  assert.ok(!home.includes("Get Started"), "no front page blocks leak in");
+});

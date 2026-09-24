@@ -134,6 +134,89 @@ test("buildExportMeta: kindMap partitions by kind", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Start page — output paths and kind-listing membership
+// ---------------------------------------------------------------------------
+
+test("outputPathFor: with no start page it is the plain .md→.html rename", () => {
+  const meta = buildExportMeta(wikiPages);
+  assert.equal(meta.startPage, undefined);
+  assert.equal(
+    meta.outputPathFor("wiki/concepts/alpha-concept.md"),
+    "wiki/concepts/alpha-concept.html",
+  );
+});
+
+test("outputPathFor: the start page is written at the front page's path", () => {
+  const meta = buildExportMeta(wikiPages, {
+    startPage: "wiki/concepts/alpha-concept.md",
+  });
+  assert.equal(
+    meta.outputPathFor("wiki/concepts/alpha-concept.md"),
+    "index.html",
+    "the promoted page takes the front page's output path",
+  );
+  assert.equal(
+    meta.outputPathFor("wiki/concepts/beta-concept.md"),
+    "wiki/concepts/beta-concept.html",
+    "every other page keeps its own path",
+  );
+});
+
+test("buildExportMeta: a start page keeps its tags", () => {
+  const meta = buildExportMeta(wikiPages, {
+    startPage: "wiki/concepts/alpha-concept.md",
+  });
+  assert.deepEqual(meta.tagMap.get("alpha")?.sort(), [
+    "wiki/concepts/alpha-concept.md",
+    "wiki/entities/alpha-entity.md",
+  ]);
+  assert.deepEqual(meta.tagMap.get("shared")?.sort(), [
+    "wiki/concepts/alpha-concept.md",
+    "wiki/concepts/beta-concept.md",
+  ]);
+});
+
+test("buildExportMeta: a start page is absent from its own kind index", () => {
+  const meta = buildExportMeta(wikiPages, {
+    startPage: "wiki/concepts/alpha-concept.md",
+  });
+  assert.deepEqual(meta.kindMap.get("concept"), [
+    "wiki/concepts/beta-concept.md",
+  ]);
+  assert.deepEqual(meta.kindMap.get("entity"), [
+    "wiki/entities/alpha-entity.md",
+  ]);
+});
+
+test("buildExportMeta: a kind left with no members drops out entirely", () => {
+  const meta = buildExportMeta(wikiPages, {
+    startPage: "wiki/sources/source-one.md",
+  });
+  assert.equal(
+    meta.kindMap.has("source"),
+    false,
+    "the start page's kind has no remaining member, so it has no index",
+  );
+  assert.ok(meta.kindMap.has("concept"), "other kinds are untouched");
+});
+
+test("buildExportMeta: a raw start page is promoted under --raw", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["raw/transcript.md", rawDoc],
+  ]);
+  const meta = buildExportMeta(pages, {
+    includeRaw: true,
+    startPage: "raw/transcript.md",
+  });
+  assert.equal(meta.outputPathFor("raw/transcript.md"), "index.html");
+  assert.equal(
+    meta.kindMap.get("concept")?.includes("wiki/concepts/alpha-concept.md"),
+    true,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Inbound-link counting
 // ---------------------------------------------------------------------------
 

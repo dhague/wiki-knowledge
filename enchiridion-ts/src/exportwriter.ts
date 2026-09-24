@@ -10,7 +10,11 @@ import {
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
 import { renderSingleFile, singleFileSizeWarning } from "./exportsingle.js";
-import { resolveExportTitle } from "./exportconfig.js";
+import {
+  isSupplied,
+  resolveExportStartPage,
+  resolveExportTitle,
+} from "./exportconfig.js";
 import {
   EXPORT_STYLESHEET,
   STYLESHEET_DIR,
@@ -50,6 +54,12 @@ export interface ExportWriterOptions {
    * root directory name (see resolveExportTitle).
    */
   title?: string;
+  /**
+   * Start page for this run only — the per-run flag, not a resolved ref.
+   * Leave it unset to take the vault's saved start page, or failing that none
+   * (the export keeps its generated front page). See resolveExportStartPage.
+   */
+  startPage?: string;
 }
 
 export class ExportDirtyError extends Error {
@@ -76,6 +86,19 @@ export class ExportTargetIsDirectoryError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ExportTargetIsDirectoryError";
+  }
+}
+
+/** The resolved start page is not a page this export carries — an unknown
+ *  ref, a raw/ page without `--raw`, or a saved ref the export no longer
+ *  includes. Deliberately fatal rather than falling back to the generated
+ *  front page: that fallback is the silent behaviour the setting exists to
+ *  replace, and it is exactly where a `--save-start-page` that stopped
+ *  matching would otherwise hide. See ADR-0023. */
+export class ExportStartPageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExportStartPageError";
   }
 }
 
@@ -109,6 +132,51 @@ function enumerateRawRefs(root: string): string[] {
   }
   walk(rawDir);
   return refs.sort();
+}
+
+/**
+ * Every page ref the vault holds — every `wiki/` page plus every file under
+ * `raw/`. This is the vault's page enumeration without the export's `--raw`
+ * filter: `--save-start-page` validates a ref against *the vault*, because
+ * whether the export carries a `raw/` page is a question only a run can
+ * answer. A ref that names no page here is rejected at save time; a ref that
+ * names a `raw/` page is saved, and validated again at export time.
+ */
+export function vaultPageRefs(root: string): Set<string> {
+  const refs = new Set<string>(Object.keys(new Vault(root).pagesWithText()));
+  for (const ref of enumerateRawRefs(root)) refs.add(ref);
+  return refs;
+}
+
+/**
+ * The refusal for a start page the export cannot fill the front page with.
+ * Names the source — the flag, or the config file the operator has to re-save
+ * or clear — and, for a `raw/` page without `--raw`, names the one flag that
+ * would make it legal. The two sources get different advice because only the
+ * flag can be fixed by re-running the same command.
+ */
+function startPageErrorMessage(
+  root: string,
+  ref: string,
+  fromFlag: boolean,
+  includeRaw: boolean,
+): string {
+  const source = fromFlag
+    ? `--start-page "${ref}"`
+    : `the saved start page "${ref}" (${path.join(".wiki-knowledge", "config.json")})`;
+
+  if (
+    !includeRaw &&
+    ref.startsWith("raw/") &&
+    fs.existsSync(path.join(root, ...ref.split("/")))
+  ) {
+    return `${source} is a raw/ page, which this run does not include. Pass --raw to include raw/ pages, or nominate a wiki/ page.`;
+  }
+
+  if (fromFlag) {
+    return `${source} does not name a page in this export. Check the ref, or drop --start-page to use the generated front page.`;
+  }
+  return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is under raw/.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +257,12 @@ export async function runExport(
   // vault fall back to a neutral label rather than an empty nav; see
   // exportTitle.)
   const title = resolveExportTitle(root, opts.title);
+  // And the one place the start page is resolved: flag → saved ref → none.
+  // Resolved here even though validation needs the exported set below, so no
+  // caller can invent a different order (the same reason the title resolves
+  // here).
+  const startPageRef = resolveExportStartPage(root, opts.startPage);
+  const startPageFromFlag = isSupplied(opts.startPage);
 
   // 1. Dirty-tree check. The fact comes from vaultgit, the module that owns
   // every git question about a vault — this module has no git opinion of its
@@ -257,8 +331,32 @@ export async function runExport(
   }
 
   // 4. Build metadata
-  const exportOpts: ExportOptions = { includeRaw, starters, title };
+  const exportOpts: ExportOptions = {
+    includeRaw,
+    starters,
+    title,
+    startPage: startPageRef,
+  };
   const meta = buildExportMeta(pagesMap, exportOpts);
+
+  // 4a. The start page must be a page this export carries. Checked before any
+  // write, and fatal rather than falling back: silently reverting to the
+  // generated front page is the behaviour the setting exists to replace.
+  if (startPageRef !== undefined && !meta.exported.has(startPageRef)) {
+    throw new ExportStartPageError(
+      startPageErrorMessage(root, startPageRef, startPageFromFlag, includeRaw),
+    );
+  }
+
+  // 4b. A supplied get-started set is meaningless beside a start page — the
+  // page supplies its own entrance. Deletion is what --starters means, so this
+  // is a note on stderr, not a failure: the documented skill flow
+  // (--candidates → pick → --starters) must keep working.
+  if (startPageRef !== undefined && starters.length > 0) {
+    console.error(
+      `Warning: --starters is ignored because "${startPageRef}" is the start page. Exporting the start page without a get-started block.`,
+    );
+  }
 
   // 5. Render all pages
   function* allPages(): Generator<{ path: string; content: string }> {
