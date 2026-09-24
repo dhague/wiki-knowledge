@@ -79,7 +79,7 @@ The pipeline is `Resolve → Validate → Execute → commit`; validation reads 
 
 [![Session capture type diagram](diagrams/types-session-capture.png)](https://dhague.github.io/wiki-knowledge/docs/diagrams/types-session-capture.html)
 
-`enchiridion save-session` reads the transcript path the SessionStart hook recorded (under `.claude/wiki-knowledge/sessions/`), renders the JSONL transcript to markdown, and writes `raw/conversations/<YYYY-MM-DD-hhmm>-<slug>-<short-id>.md`, printing the vault-relative path. It serves both hosts — Claude Code's hook-recorded transcript path on disk, or OpenCode's tracker-plugin state (fetched by shelling out to `opencode export`).
+`enchiridion save-session` reads the transcript path the SessionStart hook recorded (under `.claude/wiki-knowledge/sessions/`), renders the JSONL transcript to markdown, and writes `raw/conversations/<YYYY-MM-DD-hhmm>-<slug>-<short-id>.md`, printing the vault-relative path. Both the hook and the session-id environment the capture depends on are Claude Code surfaces. The code still carries an OpenCode adapter — `$OPENCODE_SESSION_ID` plus `opencode export`, tie-broken on tracker state — but nothing installs the session-tracker plugin that injected that variable since ADR-0026 retired the OpenCode wiring, so no current install path reaches it.
 
 ### Watch
 

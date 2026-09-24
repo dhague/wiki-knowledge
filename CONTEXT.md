@@ -71,6 +71,14 @@ A small (~15–30 page), hand-authored ground-truth vault used as the eval and m
 **Deployment mode**:
 Whether the plugin resolves the vault as the launch directory (**dedicated**) or via `$WIKI_ROOT` while installed user-scope for use from any repo (**query-from-anywhere**). Both are supported; the vault-root resolution order is what makes either possible (see [ADR-0004](docs/adr/0004-deployment-modes-and-vault-root-resolution.md)).
 
+**Plugin**:
+The Claude Code install of this project — the eight skills plus the three model-pinned subagents, the session hooks and the marketplace entry. The only surface that can pin a model tier or run a hook, and therefore the only one where ingestion and retrieval deliberately run on different models ([ADR-0026](docs/adr/0026-host-neutral-skill-package.md)).
+_Avoid_: skill package (that is the host-neutral install), extension, app.
+
+**Skill package**:
+The same eight skills published as one host-neutral install (`npx skills add dhague/wiki-knowledge --all`), each self-contained with its own bundled script layer. Authored once under `wiki-plugin/skills/` and copied to repo-root `skills/` at release; installed by any host that reads the Agent Skills standard's skill directory, including OpenCode and DeepSeek Harness. Carries no model tier, no hook and no subagent — everything a host cannot express portably belongs to the **plugin**.
+_Avoid_: plugin (the two installs do not carry the same thing), bundle (that named the deleted per-host DSH artifact), skills repo.
+
 **Session root**:
 The project a host session's state belongs to — under which that host keeps its session state (`.claude/wiki-knowledge/sessions/` for Claude Code, `.opencode/…` for OpenCode), and **never the vault**, which in query-from-anywhere mode is somewhere else entirely. Resolved per host by one order: the host's env override (`$CLAUDE_PROJECT_DIR` for Claude Code; OpenCode exports none) → the nearest ancestor of cwd carrying the host's marker directory → **stop at `$HOME`**, "no project" rather than a cwd fallback ([ADR-0025](docs/adr/0025-session-root-per-host-no-cwd-fallback.md)). Deliberately *not* the vault-root order ([ADR-0004](docs/adr/0004-deployment-modes-and-vault-root-resolution.md)): that one ends in a cwd fallback, and a session-state writer that fell back would create a state tree wherever the caller stood (#485).
 _Avoid_: Project root, project dir (the vault root is the project dir in dedicated mode; this names whose session state it is), session directory (that is the `sessions/` directory under this root, not the root itself).
