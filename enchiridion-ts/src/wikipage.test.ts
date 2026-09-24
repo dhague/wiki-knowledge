@@ -264,6 +264,39 @@ describe("iterLinks", () => {
     );
   });
 
+  it("recognises a link whose label and destination are split by a fold", () => {
+    // The third fold shape (#550): the break falls between `]` and `(`. A YAML
+    // reader resolves `"]\⏎  ("` to `"]("`, so this is one link — but a matcher
+    // demanding `](` adjacency yielded nothing, which blinded every raw-text
+    // scan: check 3 missed its encoding and check 9 could not join it.
+    const fm = 'related:\n  - "[A missing both]\\\n    (a-missing-both.md)"\n';
+    const links = iterLinks(fm);
+    assert.equal(links.length, 1);
+    assert.equal(links[0].label, "A missing both");
+    assert.equal(links[0].decodedPath, "a-missing-both.md");
+    // The boundary fold is bracketed on its own so the split check can splice
+    // it; the destination's span still starts after the `(`.
+    const fold = links[0].labelDestFold;
+    assert.ok(fold, "boundary fold span is reported");
+    assert.equal(fm.slice(fold.start, fold.end), "\\\n    ");
+    assert.equal(fm.slice(links[0].start, links[0].end), "a-missing-both.md");
+  });
+
+  it("reports no boundary fold for a link whose brackets are adjacent", () => {
+    assert.equal(iterLinks("[a](a.md)")[0].labelDestFold, null);
+  });
+
+  it("does not stretch a finished link over a following hard line break", () => {
+    // A `\` at the end of a body line is a CommonMark hard break, not part of
+    // the link before it: the boundary tolerance sits between `]` and `(` and
+    // must not pull a break that follows a closed `)` into the match.
+    const text = "Old [A](a.md)\\\nand more text.\n";
+    const links = iterLinks(text);
+    assert.equal(links.length, 1);
+    assert.equal(text.slice(links[0].fullStart, links[0].fullEnd), "[A](a.md)");
+    assert.equal(links[0].line, 0);
+  });
+
   it("joins a folded destination on a top-level scalar", () => {
     // A bare key folds with a two-space continuation, which can itself begin
     // with `-` — inside the scalar it is just a filename character.
@@ -859,13 +892,15 @@ const genVaultArb = fc
  * inside a code block.
  *
  * The frontmatter is rendered by [Page.set] — the emitter's own shape — and
- * then one destination per page is folded **by hand**, because the emitter
- * folds nothing any more (ADR-0024). The fold matters more than the fidelity
- * that used to be the reason to let the writer produce it: it is the shape
- * every raw-text reader has to cope with, and the thing the YAML oracle below
- * exists to compare, so the fixture has to carry one whatever the writer does.
- * What keeps the hand-written form honest is that the value still has to
- * survive the YAML parser, which is what the oracle reads it back through. */
+ * then the items are folded **by hand**, because the emitter folds nothing any
+ * more (ADR-0024): every item at the label/destination boundary (#550), and
+ * the longest also inside its destination (#486). The folds matter more than
+ * the fidelity that used to be the reason to let the writer produce them: they
+ * are the shapes every raw-text reader has to cope with, and the thing the
+ * YAML oracle below exists to compare, so the fixture has to carry them
+ * whatever the writer does. What keeps the hand-written form honest is that
+ * each value still has to survive the YAML parser, which is what the oracle
+ * reads it back through. */
 function buildVault(refs: string[]): Record<string, string> {
   const pages: Record<string, string> = {};
   for (const ref of refs) {
@@ -877,7 +912,7 @@ function buildVault(refs: string[]): Record<string, string> {
     let body = "";
     for (const dest of dests) body += `Body link [t](${dest})\n`;
     body += "\n```\n[frozen](never-touched.md)\n```\n";
-    pages[ref] = foldLongestItem(
+    pages[ref] = foldLinkItems(
       new Page(body).set("title", posixBasename(ref)).set("related", links)
         .text,
     );
@@ -893,31 +928,45 @@ const LINK_ITEM_RE = /^(\s*- ")(.*)(")$/;
  * second half of a destination. */
 const FOLD_CONTINUATION = "    ";
 
-/** Split the longest quoted list item in text with a YAML escaped line break,
- * in the shape the emitter produced before ADR-0024: a trailing `\`, a break,
- * then the continuation indent, all three dropped by a conforming reader.
+/** Fold every quoted link item the way the pre-ADR-0024 writer could: a
+ * trailing `\`, a break, then the continuation indent, all three dropped by a
+ * conforming reader.
  *
- * Any cut point preserves the value, which is why this can be a blunt
- * midpoint rather than a search for a space: the fold drops the break and the
- * indentation after it, and nothing else. */
-function foldLongestItem(text: string): string {
+ * Each item folds at the label/destination boundary (#550), which is the shape
+ * a raw-text link scan went blind to; the longest item additionally folds
+ * inside its destination (#486). Any cut point preserves the value, which is
+ * why the destination cut can be a blunt midpoint rather than a search for a
+ * space: the fold drops the break and the indentation after it, and nothing
+ * else. */
+function foldLinkItems(text: string): string {
   const lines = text.split("\n");
-  let at = -1;
-  let longest = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const match = LINK_ITEM_RE.exec(lines[i]);
-    if (match && match[2]!.length > longest) {
-      longest = match[2]!.length;
-      at = i;
-    }
+  const items = lines
+    .map((line, i) => ({ i, match: LINK_ITEM_RE.exec(line) }))
+    .filter(
+      (e): e is { i: number; match: RegExpExecArray } => e.match !== null,
+    );
+  if (items.length === 0) return text;
+
+  let longest = items[0]!;
+  for (const item of items) {
+    if (item.match[2]!.length > longest.match[2]!.length) longest = item;
   }
-  if (at < 0) return text;
-  const [, open, value, close] = LINK_ITEM_RE.exec(
-    lines[at]!,
-  ) as RegExpExecArray;
-  const cut = Math.ceil(value!.length / 2);
-  lines[at] =
-    `${open}${value!.slice(0, cut)}\\\n${FOLD_CONTINUATION}${value!.slice(cut)}${close}`;
+
+  for (const { i, match } of items) {
+    const [, open, value, close] = match;
+    const boundary = value!.indexOf("](");
+    if (boundary < 0) continue;
+    const dest = value!.slice(boundary + 2, -1);
+    let folded = dest;
+    if (i === longest.i) {
+      const cut = Math.ceil(dest.length / 2);
+      folded =
+        dest.slice(0, cut) + "\\\n" + FOLD_CONTINUATION + dest.slice(cut);
+    }
+    lines[i] =
+      `${open}${value!.slice(0, boundary + 1)}\\\n` +
+      `${FOLD_CONTINUATION}(${folded})${close}`;
+  }
   return lines.join("\n");
 }
 
@@ -971,7 +1020,7 @@ function movedRef(ref: string, oldRel: string, newRel: string): string {
 }
 
 /** Whether a link destination in text's frontmatter is folded across two
- * lines — written by hand by [foldLongestItem], since the emitter no longer
+ * lines — written by hand by [foldLinkItems], since the emitter no longer
  * produces one, or inherited from a page written before ADR-0024.
  *
  * Read from raw bytes and the YAML parser, never through [iterLinks]: a guard

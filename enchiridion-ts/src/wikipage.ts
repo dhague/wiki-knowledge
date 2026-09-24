@@ -111,14 +111,23 @@ const ANGLE_DEST = `<[^<>\\n]*(?:${ESCAPED_LINE_BREAK_RE.source}[^<>\\n]*)*>`;
  * `dest` is either `<...>` or a whitespace-free run that may contain balanced
  * parens; an optional title after the dest is matched but excluded.
  *
- * A destination may also carry YAML escaped line breaks — see
- * [ESCAPED_LINE_BREAK_RE]. They are part of the match (so the span is the raw
- * folded region) and are joined out of the destination's value.
+ * A YAML escaped line break may fall inside the destination *or* at the
+ * label/destination boundary — see [ESCAPED_LINE_BREAK_RE]. Either is part of
+ * the match, so the span brackets the raw fold while the destination's value
+ * is the joined one. The boundary fold is captured on its own (group 3) for
+ * the split check to splice; the destination is group 4.
+ *
+ * The scan is context-free — frontmatter and body by one rule, per
+ * [iterLinks] — so a boundary fold in a *body* is matched too, though
+ * CommonMark reads a hard line break and literal parens there, not a link.
+ * That is deliberate: the fold is the same bytes a reader resolves, and one
+ * scanner is what keeps a typed edge and a body link from drifting apart.
  *
  * The `d` (hasIndices) flag exposes each group's source offsets.
  */
 const LINK_RE = new RegExp(
   `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]` +
+    `((?:${ESCAPED_LINE_BREAK_RE.source})*)` +
     `\\([ \\t]*` +
     `(${ANGLE_DEST}|${nestedParenDest(4)})` +
     `(?:[ \\t]+(?:"[^"]*"|'[^']*'|\\([^)]*\\)))?` +
@@ -216,7 +225,9 @@ export interface LinkMatch {
   /** splitDest(dest).anchor — decoded, "" if no anchor */
   decodedAnchor: string;
   isImage: boolean;
-  /** 0-based */
+  /** 0-based line the link's opening `[` (or `!`) falls on — the line a
+   * reader sees the link begin on, even when a boundary fold puts the
+   * destination on a later one */
   line: number;
   /** start of the full `[label](dest)` / `![label](dest)` expression */
   fullStart: number;
@@ -224,6 +235,12 @@ export interface LinkMatch {
   fullEnd: number;
   /** the link label text (the content between `[` and `]`) */
   label: string;
+  /** Raw source offsets of the YAML escaped line break run between the
+   * label's `]` and the destination's `(`, or null when they are adjacent. A
+   * reader joins the run with nothing (`"]\⏎  ("` reads as `"]("`), so a
+   * splice replaces `src.slice(start, end)` with "" — the shape #550's
+   * split check could not see. */
+  labelDestFold: { start: number; end: number } | null;
 }
 
 const md = new MarkdownIt();
@@ -268,25 +285,32 @@ function lineOf(src: string, offset: number): number {
  * typed edges, `supersedes` and `raw_source` are found by the same rule as
  * body links — including a destination the frontmatter writer folded across
  * lines, whose escaped line breaks are joined out of [LinkMatch.dest] while
- * [LinkMatch.start]/[LinkMatch.end] still bracket the raw fold.
+ * [LinkMatch.start]/[LinkMatch.end] still bracket the raw fold, and a fold at
+ * the label/destination boundary, bracketed by [LinkMatch.labelDestFold].
  */
 export function iterLinks(src: string): LinkMatch[] {
   const codeLines = codeLineRanges(src);
   const out: LinkMatch[] = [];
   for (const m of src.matchAll(LINK_RE)) {
-    const idx = m.indices![3];
+    const idx = m.indices![4];
     let start = idx[0];
     let end = idx[1];
-    let dest = joinEscapedLineBreaks(m[3]!);
+    let dest = joinEscapedLineBreaks(m[4]!);
     // Unwrap an angle-bracketed destination: `<path>` -> `path`.
     if (dest.startsWith("<") && dest.endsWith(">")) {
       start += 1;
       end -= 1;
       dest = dest.slice(1, -1);
     }
-    const line = lineOf(src, start);
+    // Anchored on the opening bracket, not the destination: a boundary fold
+    // puts the destination a line later, and every line-keyed reader — the
+    // code-block skip, `check 3`'s unquoted-line suppression — means the line
+    // the link begins on.
+    const fullStart = m.index!;
+    const line = lineOf(src, fullStart);
     if (codeLines.has(line)) continue;
     const { path: decodedPath, anchor: decodedAnchor } = splitDest(dest);
+    const foldIdx = m.indices![3];
     out.push({
       start,
       end,
@@ -295,9 +319,13 @@ export function iterLinks(src: string): LinkMatch[] {
       decodedAnchor,
       isImage: m[1] === "!",
       line,
-      fullStart: m.index!,
-      fullEnd: m.index! + m[0]!.length,
+      fullStart,
+      fullEnd: fullStart + m[0]!.length,
       label: m[2]!,
+      labelDestFold:
+        foldIdx[0] === foldIdx[1]
+          ? null
+          : { start: foldIdx[0], end: foldIdx[1] },
     });
   }
   return out;

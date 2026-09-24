@@ -320,6 +320,46 @@ test("check 3: a folded destination is checked, not skipped", async () => {
   );
 });
 
+test("check 3: a boundary fold does not hide an unencoded destination", async () => {
+  // #550: the link was invisible to the raw-text scan, so its unencoded parens
+  // went unreported — the same blindness that hid the destination fold.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[Bar]\\\n    (../entities/my(page).md#ttl)"\n',
+    ),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.ok(
+    findings.some(
+      (f) =>
+        f.pageRef === "wiki/concepts/foo.md" &&
+        f.detail.includes(`should be "../entities/my%28page%29.md#ttl"`),
+    ),
+  );
+});
+
+test("check 3: an unquoted boundary-shaped line is reported once, not twice", async () => {
+  // A plain scalar is not a link: YAML folds the break to a space and keeps
+  // the backslash, so `[A]\ (…)` is literal. The scan is quote-blind and does
+  // match the boundary shape, so the unquoted-line suppression has to key on
+  // the line the link *opens* on — otherwise the encoding pass adds a second,
+  // bogus finding beside the real unquoted one.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "related:\n  - [A]\\\n    (../entities/my(page).md)\n",
+    ),
+  });
+  const findings = await frontmatterLinkFormat(root);
+  assert.deepEqual(findings, [
+    {
+      pageRef: "wiki/concepts/foo.md",
+      detail: "unquoted markdown link in frontmatter: - [A]\\",
+    },
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // Check 4 — staleSynthesis (requires real git)
 // ---------------------------------------------------------------------------
@@ -577,6 +617,38 @@ test("check 9: folded label is a finding", async () => {
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   assert.match(findings[0].detail, /label/);
   assert.match(findings[0].detail, /RBWM Council Political Composition/);
+});
+
+test("check 9: a fold between label and destination is a finding", async () => {
+  // #550's third shape: the break falls at the label/destination boundary,
+  // which the parser resolves with nothing (`"]\⏎  ("` reads as `"]("`).
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[A missing both]\\\n    (../concepts/a-missing-both.md)"\n',
+    ),
+  });
+  const findings = await splitLinks(root);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
+  assert.match(findings[0].detail, /boundary/);
+  // The fold begins on the file's fourth line: the fence, `title:`, `related:`.
+  assert.match(findings[0].detail, /line 4/);
+});
+
+test("check 9: a boundary fold does not mask a fold in the destination", async () => {
+  // The field shape (#550): one link carrying both, which the missing link
+  // match hid entirely — `check split-links` certified a three-line link clean.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'related:\n  - "[A missing both]\\\n    (../sources/a-really-long-slug-that-wraps-across-l\\\n    ines.md)"\n',
+    ),
+  });
+  const findings = await splitLinks(root);
+  assert.equal(findings.length, 2);
+  assert.ok(findings.some((f) => /boundary/.test(f.detail)));
+  assert.ok(findings.some((f) => /destination/.test(f.detail)));
 });
 
 test("check 9: a well-formed link on one line is not a finding", async () => {
@@ -933,6 +1005,60 @@ test("fix split-links: joins a folded label with a single space", async () => {
     ),
   );
   assert.deepEqual(await splitLinks(root), []);
+});
+
+test("fix split-links: joins a boundary fold with nothing", async () => {
+  // YAML's escaped line break at the label/destination boundary drops the
+  // backslash and the continuation's indent, so the join inserts nothing and
+  // `]\⏎  (` becomes `](` — the value the parser already read.
+  const src = page(
+    "Foo",
+    'related:\n  - "[A missing both]\\\n    (../concepts/a-missing-both.md)"\n',
+  );
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
+  assert.equal(text, src.replace("]\\\n    (", "]("));
+  assert.deepEqual(await splitLinks(root), []);
+
+  // The edge reads back through the YAML parser exactly as it did before.
+  assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
+    {
+      key: "related",
+      targets: ["wiki/concepts/a-missing-both.md"],
+    },
+  ]);
+});
+
+test("fix split-links: joins a boundary fold and a destination fold together", async () => {
+  // The field shape #550 reports: one link split across three lines, both a
+  // boundary fold and a destination fold, which the fixer left untouched while
+  // reporting the vault clean.
+  const src = page(
+    "Foo",
+    'raw_source: "[2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md]\\\n  (../../raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-wind\\\n  sor.md)"\n',
+  );
+  const root = writeVault({ "wiki/sources/foo.md": src });
+  const changed = await fixSplitLinks(root);
+  assert.deepEqual(changed, ["wiki/sources/foo.md"]);
+  const text = fs.readFileSync(path.join(root, "wiki/sources/foo.md"), "utf8");
+  assert.equal(
+    text,
+    src.replace(
+      "]\\\n  (../../raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-wind\\\n  sor.md)",
+      "](../../raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md)",
+    ),
+  );
+  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(newPageRecord("wiki/sources/foo.md", text).edges, [
+    {
+      key: "raw_source",
+      targets: [
+        "raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md",
+      ],
+    },
+  ]);
 });
 
 test("fix split-links: both folds on one link, every other byte untouched", async () => {

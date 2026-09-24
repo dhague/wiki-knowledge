@@ -298,7 +298,7 @@ interface FrontmatterSplit {
   end: number;
   /** the value a YAML reader reads for that region — what a fix splices in */
   joined: string;
-  kind: "destination" | "label";
+  kind: "destination" | "label" | "boundary";
   /** the link's first line, 1-based in the file */
   line: number;
 }
@@ -357,22 +357,24 @@ function joinLabel(raw: string): string {
  * Every line-break split in one frontmatter block's double-quoted link
  * scalars, in source order.
  *
- * The two shapes are told apart by *where* the break falls in the link, not by
- * where the link lives: a break inside the destination joins with nothing (the
- * backslash and the continuation's indentation are not content), and a break
- * inside the label joins with a single space (YAML folds one there). One
- * enumeration decides both what [splitLinks] reports and what [fixSplitLinks]
- * splices, so the two cannot drift apart.
+ * The three shapes are told apart by *where* the break falls in the link, not
+ * by where the link lives: a break inside the destination joins with nothing
+ * (the backslash and the continuation's indentation are not content), a break
+ * inside the label joins with a single space (YAML folds one there), and a
+ * break at the label/destination boundary joins with nothing (YAML's escaped
+ * line continuation). One enumeration decides both what [splitLinks] reports
+ * and what [fixSplitLinks] splices, so the two cannot drift apart.
  */
 function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
   const spans = doubleQuotedSpans(frontmatter);
   const splits: FrontmatterSplit[] = [];
   for (const link of iterLinks(frontmatter)) {
-    // The line the link opens on. The frontmatter block's own line 0 is the
-    // file's line 2, since `---` opens it on line 1.
+    // The link's own first line. The block's own line 0 is the file's line 2,
+    // since `---` opens it on line 1.
     const line = link.line + 2;
 
-    // Label first: it opens the scalar, so source order is label, destination.
+    // Source order is label, boundary, destination — each region opens after
+    // the one before it.
     const labelStart = link.fullStart + (link.isImage ? 2 : 1);
     const labelEnd = labelStart + link.label.length;
     const rawLabel = frontmatter.slice(labelStart, labelEnd);
@@ -382,6 +384,21 @@ function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
         end: labelEnd,
         joined: joinLabel(rawLabel),
         kind: "label",
+        line,
+      });
+    }
+
+    if (
+      link.labelDestFold &&
+      insideAny(spans, link.labelDestFold.start, link.labelDestFold.end)
+    ) {
+      splits.push({
+        start: link.labelDestFold.start,
+        end: link.labelDestFold.end,
+        // An escaped continuation drops the backslash, the break and the next
+        // line's indent, so `"]\⏎  ("` reads as `"]("`.
+        joined: "",
+        kind: "boundary",
         line,
       });
     }
@@ -421,7 +438,7 @@ const OPEN_DEST_RE = /\]\(([^\s)]+)$/;
 const DEST_CONTINUATION_RE = /^[^\s"'()][^\s)]*\)/;
 
 /**
- * Body destinations split across a line break — the third shape, and the one
+ * Body destinations split across a line break — the fourth shape, and the one
  * no fix may touch.
  *
  * This split is the crux of the check: the same bytes mean different things in
@@ -463,18 +480,20 @@ function bodySplits(
 /**
  * Check 9 — no link is split across lines.
  *
- * Three shapes, one vocabulary (`wiki-conventions`, "Links";
+ * Four shapes, one vocabulary (`wiki-conventions`, "Links";
  * docs/adr/0024-emitted-lines-are-not-folded.md):
  *
  *   1. a destination fold — a YAML escaped line break inside a frontmatter
  *      link scalar, the writer's mid-token break before #502;
  *   2. a label fold — a plain newline inside a quoted frontmatter link scalar,
  *      which YAML folds to a space;
- *   3. a body almost-link — a destination broken across a line break in a
+ *   3. a boundary fold — a YAML escaped line break between the label's `]` and
+ *      the destination's `(`, which YAML resolves with nothing (#550);
+ *   4. a body almost-link — a destination broken across a line break in a
  *      body, which CommonMark does not read as a link at all.
  *
- * Shapes 1 and 2 are auto-fixed by [fixSplitLinks], each join
- * semantics-preserving; shape 3 is reported only, because a break after a
+ * Shapes 1, 2 and 3 are auto-fixed by [fixSplitLinks], each join
+ * semantics-preserving; shape 4 is reported only, because a break after a
  * destination is legal markdown and joining on sight can silently repoint the
  * link. Nothing is reported outside a double-quoted scalar, where raw text
  * cannot tell a fold from content.
@@ -1058,9 +1077,9 @@ export async function fixMissingCrossReferences(
   return changed;
 }
 
-// Fix for check 9 — join the two frontmatter shapes in place. Body splits are
-// never joined (a break after a destination is legal markdown, so a join on
-// sight can silently repoint the link); they stay a report-only finding.
+// Fix for check 9 — join the three frontmatter shapes in place. Body splits
+// are never joined (a break after a destination is legal markdown, so a join
+// on sight can silently repoint the link); they stay a report-only finding.
 export async function fixSplitLinks(root: string): Promise<string[]> {
   const pages = new Vault(root).loadWikiPages();
   const changed: string[] = [];
