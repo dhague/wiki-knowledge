@@ -42873,6 +42873,10 @@ init_vaultgit();
 
 // src/exportmeta.ts
 var import_node_path22 = __toESM(require("node:path"), 1);
+var FRONT_PAGE_PATH = "index.html";
+function mdToHtml(ref) {
+  return ref.endsWith(".md") ? ref.slice(0, -3) + ".html" : ref;
+}
 var UNNAMED_VAULT_TITLE = "Wiki";
 function exportTitle(opts) {
   return opts.title?.trim() || UNNAMED_VAULT_TITLE;
@@ -42913,6 +42917,8 @@ function outboundRefs(pageRef2, body) {
 }
 function buildExportMeta(pages, opts = {}) {
   const includeRaw = opts.includeRaw ?? false;
+  const startPage = opts.startPage;
+  const outputPathFor = (pageRef2) => startPage !== void 0 && pageRef2 === startPage ? FRONT_PAGE_PATH : mdToHtml(pageRef2);
   const exported = /* @__PURE__ */ new Set();
   for (const pageRef2 of pages.keys()) {
     if (pageRef2.startsWith("wiki/") || includeRaw && pageRef2.startsWith("raw/")) {
@@ -42934,8 +42940,10 @@ function buildExportMeta(pages, opts = {}) {
         tagMap.get(tag).push(pageRef2);
       }
       const kind = record.kind;
-      if (!kindMap.has(kind)) kindMap.set(kind, []);
-      kindMap.get(kind).push(pageRef2);
+      if (pageRef2 !== startPage) {
+        if (!kindMap.has(kind)) kindMap.set(kind, []);
+        kindMap.get(kind).push(pageRef2);
+      }
     }
     const refs = outboundRefs(pageRef2, entry.text);
     for (const target of refs) {
@@ -42966,7 +42974,26 @@ function buildExportMeta(pages, opts = {}) {
     return a.title.localeCompare(b.title, void 0, { sensitivity: "base" });
   });
   const getStarted = wikiEntries.slice(0, GET_STARTED_COUNT);
-  return { exported, tagMap, kindMap, inboundCounts: inboundCounts2, getStarted };
+  return {
+    exported,
+    tagMap,
+    kindMap,
+    inboundCounts: inboundCounts2,
+    getStarted,
+    startPage,
+    outputPathFor
+  };
+}
+function kindFolder(kind, pageRefs) {
+  if (KindFolders[kind]) return KindFolders[kind];
+  if (pageRefs.length > 0) {
+    const parts = pageRefs[0].split("/");
+    if (parts.length >= 2) return parts[1];
+  }
+  return kind;
+}
+function kindLabel(folder) {
+  return folder.charAt(0).toUpperCase() + folder.slice(1);
 }
 
 // src/exportrender.ts
@@ -43222,7 +43249,8 @@ var STYLESHEET_FILE = "style.css";
 var EXPORT_SUPPLEMENT_CSS = `/* enchiridion export supplement
  * =============================
  * What a classless framework cannot know: the sticky navigation bar every
- * page carries, and the two-column frontmatter table's leading column.
+ * page carries, the title-and-summary page header above the article, and the
+ * two-column frontmatter table's leading column.
  * Kept deliberately small \u2014 everything else is Sakura's job.
  */
 
@@ -43256,9 +43284,26 @@ nav.wiki-nav a:hover {
   text-decoration: underline;
 }
 
+/* The page header: the frontmatter's title and summary, lifted above the
+ * article. The title is the page's own h1, so it needs no new rule; the
+ * summary is set apart from the article's first paragraph as a subtitle
+ * rather than left to read as content. */
+.page-header h1 {
+  margin-bottom: 0.5rem;
+}
+
+.page-summary {
+  font-size: 0.95em;
+  color: #6a6a6a;
+}
+
 table.frontmatter {
   font-size: 0.9em;
   text-align: left;
+  /* As a footer the table butts against whatever the article ends with. The
+   * margin collapses with the preceding block's own bottom margin, so it only
+   * supplies the separation when that block has none. */
+  margin-top: 2rem;
 }
 
 table.frontmatter td {
@@ -43306,9 +43351,6 @@ mdRender.renderer.rules.heading_open = (tokens, idx) => {
 function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function mdToHtml(ref) {
-  return ref.endsWith(".md") ? ref.slice(0, -3) + ".html" : ref;
-}
 function pageHtmlDir(pageRef2) {
   return import_node_path23.default.posix.dirname(mdToHtml(pageRef2));
 }
@@ -43327,7 +43369,6 @@ function rootPrefix(htmlPath) {
 function assetsRootFor(htmlPath) {
   return `${rootPrefix(htmlPath)}${STYLESHEET_DIR}`;
 }
-var FRONT_PAGE_PATH = "index.html";
 var TAGS_INDEX_PATH = "tags/index.html";
 var FRONT_SECTION_ID = "__front";
 function sectionIdFor(htmlPath) {
@@ -43339,6 +43380,21 @@ var relativeHref = (fromHtmlPath, toHtmlPath, anchor = "") => relHtmlPath(fromHt
 var hashHref = (_fromHtmlPath, toHtmlPath) => `#${sectionIdFor(toHtmlPath)}`;
 function hrefFor(mode) {
   return mode === "single-file" ? hashHref : relativeHref;
+}
+function linkContext(meta, mode) {
+  return { exported: meta.exported, mode, outputPathFor: meta.outputPathFor };
+}
+function kindIndexEntries(meta, fromHtmlPath, mode) {
+  return [...meta.kindMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([kind, refs]) => {
+    const folder = kindFolder(kind, refs);
+    return {
+      kind,
+      folder,
+      label: kindLabel(folder),
+      count: refs.length,
+      href: hrefFor(mode)(fromHtmlPath, `wiki/${folder}/index.html`)
+    };
+  });
 }
 function navHref(htmlPath, targetPath, mode) {
   if (mode === "single-file") return hashHref(htmlPath, targetPath);
@@ -43360,30 +43416,32 @@ function claimsDest(dest, mode) {
   if (dest.endsWith(".md")) return true;
   return mode === "single-file";
 }
-function rewriteBodyLinks(bodyText, pageRef2, exported, mode) {
+function rewriteBodyLinks(bodyText, pageRef2, link2) {
+  const { exported, mode, outputPathFor } = link2;
   const pageDir = vaultPageDir(pageRef2);
   const href = hrefFor(mode);
+  const fromHtmlPath = outputPathFor(pageRef2);
   const edits = [];
-  for (const link2 of iterLinks(bodyText)) {
-    if (link2.isImage && mode === "single-file") continue;
-    const p = link2.decodedPath;
+  for (const anchor of iterLinks(bodyText)) {
+    if (anchor.isImage && mode === "single-file") continue;
+    const p = anchor.decodedPath;
     if (!claimsDest(p, mode)) continue;
     const target = resolveLinkDest(p, pageDir);
     edits.push(
       exported.has(target) ? {
-        start: link2.start,
-        end: link2.end,
+        start: anchor.start,
+        end: anchor.end,
         replacement: href(
-          mdToHtml(pageRef2),
-          mdToHtml(target),
-          link2.decodedAnchor
+          fromHtmlPath,
+          outputPathFor(target),
+          anchor.decodedAnchor
         )
       } : (
         // Strip link: replace full [label](dest) with label text
         {
-          start: link2.fullStart,
-          end: link2.fullEnd,
-          replacement: link2.label
+          start: anchor.fullStart,
+          end: anchor.fullEnd,
+          replacement: anchor.label
         }
       )
     );
@@ -43391,7 +43449,9 @@ function rewriteBodyLinks(bodyText, pageRef2, exported, mode) {
   return applyEdits2(bodyText, edits);
 }
 var FM_LINK_KEYS = new Set(EdgeKeys);
-function renderFmLink(markdownLink, pageRef2, exported, mode) {
+var HEADER_KEYS = /* @__PURE__ */ new Set(["title", "summary"]);
+function renderFmLink(markdownLink, pageRef2, context) {
+  const { exported, mode, outputPathFor } = context;
   const links = iterLinks(markdownLink);
   if (links.length === 0) return escHtml(markdownLink);
   const link2 = links[0];
@@ -43402,34 +43462,36 @@ function renderFmLink(markdownLink, pageRef2, exported, mode) {
   const target = resolveLinkDest(p, vaultPageDir(pageRef2));
   if (!exported.has(target)) return escHtml(link2.label);
   const href = hrefFor(mode);
-  return `<a href="${escHtml(href(mdToHtml(pageRef2), mdToHtml(target), link2.decodedAnchor))}">${escHtml(link2.label)}</a>`;
+  return `<a href="${escHtml(href(outputPathFor(pageRef2), outputPathFor(target), link2.decodedAnchor))}">${escHtml(link2.label)}</a>`;
 }
-function renderTagLink(tag, pageRef2, tagSlugMap, mode) {
+function renderTagLink(tag, pageRef2, tagSlugMap, context) {
   const slug = tagSlugMap.get(tag) ?? slugify(tag, 0);
-  const href = hrefFor(mode)(mdToHtml(pageRef2), `tags/${slug}.html`);
+  const href = hrefFor(context.mode)(
+    context.outputPathFor(pageRef2),
+    `tags/${slug}.html`
+  );
   return `<a href="${escHtml(href)}">${escHtml(tag)}</a>`;
 }
-function renderFmValue(key, value, pageRef2, exported, tagSlugMap, mode) {
+function renderFmValue(key, value, pageRef2, tagSlugMap, context) {
   if (value === null || value === void 0) return "";
   if (key === "tags") {
     if (!Array.isArray(value)) return escHtml(String(value));
     const items = value.map(
-      (tag) => `<li>${renderTagLink(typeof tag === "string" ? tag : String(tag), pageRef2, tagSlugMap, mode)}</li>`
+      (tag) => `<li>${renderTagLink(typeof tag === "string" ? tag : String(tag), pageRef2, tagSlugMap, context)}</li>`
     );
     return `<ul>${items.join("")}</ul>`;
   }
   if (FM_LINK_KEYS.has(key)) {
     if (Array.isArray(value)) {
       const items = value.map(
-        (item) => `<li>${renderFmLink(typeof item === "string" ? item : String(item), pageRef2, exported, mode)}</li>`
+        (item) => `<li>${renderFmLink(typeof item === "string" ? item : String(item), pageRef2, context)}</li>`
       );
       return `<ul>${items.join("")}</ul>`;
     }
     return renderFmLink(
       typeof value === "string" ? value : String(value),
       pageRef2,
-      exported,
-      mode
+      context
     );
   }
   if (Array.isArray(value)) {
@@ -43440,14 +43502,17 @@ function renderFmValue(key, value, pageRef2, exported, tagSlugMap, mode) {
   }
   return escHtml(String(value));
 }
-function renderPageLink(targetRef, pageRef2, exported, allPages, mode) {
+function renderPageLink(targetRef, pageRef2, allPages, context) {
   const entry = allPages.get(targetRef);
   const label = entry?.record?.title ?? targetRef;
-  if (!exported.has(targetRef)) return escHtml(label);
-  const href = hrefFor(mode)(mdToHtml(pageRef2), mdToHtml(targetRef));
+  if (!context.exported.has(targetRef)) return escHtml(label);
+  const href = hrefFor(context.mode)(
+    context.outputPathFor(pageRef2),
+    context.outputPathFor(targetRef)
+  );
   return `<a href="${escHtml(href)}">${escHtml(label)}</a>`;
 }
-function renderFrontmatterTable(pageRef2, record, text2, exported, allPages, tagSlugMap, mode) {
+function renderFrontmatterTable(pageRef2, record, text2, allPages, tagSlugMap, context) {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
   if (!hasFrontmatter) return "";
   const fm = frontmatter.trim() ? (0, import_yaml5.parse)(frontmatter) : null;
@@ -43455,8 +43520,9 @@ function renderFrontmatterTable(pageRef2, record, text2, exported, allPages, tag
   const fmMap = fm;
   const rows = [];
   for (const [key, value] of Object.entries(fmMap)) {
+    if (HEADER_KEYS.has(key)) continue;
     rows.push(
-      `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef2, exported, tagSlugMap, mode)}</td></tr>`
+      `<tr><td>${escHtml(key)}</td><td>${renderFmValue(key, value, pageRef2, tagSlugMap, context)}</td></tr>`
     );
   }
   rows.push(`<tr class="fm-divider"><td colspan="2"></td></tr>`);
@@ -43466,9 +43532,9 @@ function renderFrontmatterTable(pageRef2, record, text2, exported, allPages, tag
   if (sb.length === 0) {
     sbHtml = "";
   } else if (sb.length === 1) {
-    sbHtml = renderPageLink(sb[0], pageRef2, exported, allPages, mode);
+    sbHtml = renderPageLink(sb[0], pageRef2, allPages, context);
   } else {
-    sbHtml = `<ul>${sb.map((ref) => `<li>${renderPageLink(ref, pageRef2, exported, allPages, mode)}</li>`).join("")}</ul>`;
+    sbHtml = `<ul>${sb.map((ref) => `<li>${renderPageLink(ref, pageRef2, allPages, context)}</li>`).join("")}</ul>`;
   }
   rows.push(`<tr><td>superseded_by</td><td>${sbHtml}</td></tr>`);
   return `<table class="frontmatter">
@@ -43502,28 +43568,80 @@ function buildHtmlShell(parts, assetsRoot) {
   return buildDocument(parts.title, style, `${parts.nav}
 ${parts.main}`);
 }
-function buildPageParts(pageRef2, record, text2, exported, allPages, tagSlugMap, wikiTitle, mode) {
-  const nav = buildNavBar(mdToHtml(pageRef2), wikiTitle, mode);
+function articleWithFooter(bodyHtml, kindListHtml, fmHtml) {
+  const blocks = [`<article>
+${bodyHtml}</article>`];
+  if (kindListHtml) blocks.push(kindListHtml);
+  if (fmHtml) blocks.push(fmHtml);
+  return blocks.join("\n");
+}
+function renderKindIndexList(meta, fromHtmlPath, mode) {
+  const rows = kindIndexEntries(meta, fromHtmlPath, mode).map(
+    ({ href, label, count }) => `<li><a href="${escHtml(href)}">${escHtml(label)}</a> (${count})</li>`
+  );
+  if (rows.length === 0) return "";
+  return [
+    `<section>`,
+    `<h2>Browse by Kind</h2>`,
+    `<ul>`,
+    ...rows,
+    `</ul>`,
+    `</section>`
+  ].join("\n");
+}
+function renderPageHeader(title, summary, anchor) {
+  const parts = [];
+  if (title) {
+    const id = anchor ? ` id="${escHtml(anchor)}"` : "";
+    parts.push(`<h1${id}>${escHtml(title)}</h1>`);
+  }
+  if (summary) {
+    parts.push(`<p class="page-summary">${escHtml(summary)}</p>`);
+  }
+  if (parts.length === 0) return "";
+  return `<header class="page-header">
+${parts.join("\n")}
+</header>`;
+}
+function htmlText(html) {
+  return html.replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&").trim();
+}
+function liftTitleEcho(bodyHtml, title) {
+  if (!title) return { bodyHtml, anchor: null };
+  const heading2 = /^\s*<h1(\s[^>]*)?>([\s\S]*?)<\/h1>/.exec(bodyHtml);
+  if (!heading2 || htmlText(heading2[2]) !== title.trim()) {
+    return { bodyHtml, anchor: null };
+  }
+  const anchor = /\sid="([^"]+)"/.exec(heading2[1] ?? "")?.[1] ?? null;
+  const rest = bodyHtml.slice(0, heading2.index) + bodyHtml.slice(heading2.index + heading2[0].length);
+  return { bodyHtml: rest, anchor };
+}
+function buildPageParts(pageRef2, record, text2, meta, allPages, tagSlugMap, wikiTitle, mode) {
+  const htmlPath = meta.outputPathFor(pageRef2);
+  const context = linkContext(meta, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
   const fmTable = renderFrontmatterTable(
     pageRef2,
     record,
     text2,
-    exported,
     allPages,
     tagSlugMap,
-    mode
+    context
   );
   const { body } = splitFrontmatter(text2);
-  const bodyHtml = mdRender.render(
-    rewriteBodyLinks(body, pageRef2, exported, mode)
-  );
-  const main2 = `${fmTable}
-<article>
-${bodyHtml}</article>`;
+  const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef2, context));
+  const lifted = liftTitleEcho(bodyHtml, record.title);
+  const header = renderPageHeader(record.title, record.summary, lifted.anchor);
+  const kindList = meta.startPage === pageRef2 ? renderKindIndexList(meta, htmlPath, mode) : "";
+  const article = articleWithFooter(lifted.bodyHtml, kindList, fmTable);
+  const main2 = header ? `${header}
+${article}` : article;
   return { title: record.title || pageRef2, nav, main: main2 };
 }
-function buildRawPageParts(pageRef2, text2, exported, wikiTitle, mode) {
-  const nav = buildNavBar(mdToHtml(pageRef2), wikiTitle, mode);
+function buildRawPageParts(pageRef2, text2, meta, wikiTitle, mode) {
+  const htmlPath = meta.outputPathFor(pageRef2);
+  const context = linkContext(meta, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, mode);
   const { body, hasFrontmatter, frontmatter } = splitFrontmatter(text2);
   let fmSection = "";
   if (hasFrontmatter && frontmatter.trim()) {
@@ -43537,12 +43655,9 @@ ${rows.join("\n")}
 </table>`;
     }
   }
-  const bodyHtml = mdRender.render(
-    rewriteBodyLinks(body, pageRef2, exported, mode)
-  );
-  const main2 = `${fmSection}
-<article>
-${bodyHtml}</article>`;
+  const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef2, context));
+  const kindList = meta.startPage === pageRef2 ? renderKindIndexList(meta, htmlPath, mode) : "";
+  const main2 = articleWithFooter(bodyHtml, kindList, fmSection);
   return { title: pageRef2, nav, main: main2 };
 }
 function* renderPageParts(pages, meta, opts = {}, mode = "multi-page") {
@@ -43551,11 +43666,11 @@ function* renderPageParts(pages, meta, opts = {}, mode = "multi-page") {
   for (const pageRef2 of meta.exported) {
     const entry = pages.get(pageRef2);
     const { record, text: text2 } = entry;
-    const htmlPath = mdToHtml(pageRef2);
+    const htmlPath = meta.outputPathFor(pageRef2);
     if (!record) {
       yield {
         path: htmlPath,
-        parts: buildRawPageParts(pageRef2, text2, meta.exported, wikiTitle, mode)
+        parts: buildRawPageParts(pageRef2, text2, meta, wikiTitle, mode)
       };
       continue;
     }
@@ -43565,7 +43680,7 @@ function* renderPageParts(pages, meta, opts = {}, mode = "multi-page") {
         pageRef2,
         record,
         text2,
-        meta.exported,
+        meta,
         pages,
         tagSlugMap,
         wikiTitle,
@@ -43600,23 +43715,15 @@ function kindBlurb(kind, pages) {
   if (typeof fm !== "object" || fm === null) return "";
   return String(fm["summary"] ?? "");
 }
-function kindFolder(kind, pageRefs) {
-  if (KindFolders[kind]) return KindFolders[kind];
-  if (pageRefs.length > 0) {
-    const parts = pageRefs[0].split("/");
-    if (parts.length >= 2) return parts[1];
-  }
-  return kind;
+function pageLink(fromHtmlPath, toPageRef, title, context) {
+  return `<a href="${escHtml(hrefFor(context.mode)(fromHtmlPath, context.outputPathFor(toPageRef)))}">${escHtml(title)}</a>`;
 }
-function pageLink(fromHtmlPath, toPageRef, title, mode) {
-  return `<a href="${escHtml(hrefFor(mode)(fromHtmlPath, mdToHtml(toPageRef)))}">${escHtml(title)}</a>`;
-}
-function renderTagPage(tag, slug, pageRefs, pages, wikiTitle, mode) {
+function renderTagPage(tag, slug, pageRefs, pages, wikiTitle, context) {
   const htmlPath = `tags/${slug}.html`;
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const items = pageRefs.map((ref) => {
     const title = pages.get(ref)?.record?.title ?? ref;
-    const link2 = pageLink(htmlPath, ref, title, mode);
+    const link2 = pageLink(htmlPath, ref, title, context);
     return `<li>${link2}</li>`;
   }).join("\n");
   const main2 = `<h1>${escHtml(tag)}</h1>
@@ -43625,14 +43732,14 @@ ${items}
 </ul>`;
   return { path: htmlPath, parts: { title: tag, nav, main: main2 } };
 }
-function renderTagIndex(tagSlugMap, meta, wikiTitle, mode) {
+function renderTagIndex(tagSlugMap, meta, wikiTitle, context) {
   const htmlPath = "tags/index.html";
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const sortedTags = [...tagSlugMap.keys()].sort();
   const rows = sortedTags.map((tag) => {
     const slug = tagSlugMap.get(tag);
     const count = meta.tagMap.get(tag)?.length ?? 0;
-    const href = escHtml(hrefFor(mode)(htmlPath, `tags/${slug}.html`));
+    const href = escHtml(hrefFor(context.mode)(htmlPath, `tags/${slug}.html`));
     return `<li><a href="${href}">${escHtml(tag)}</a> (${count})</li>`;
   });
   const main2 = `<h1>Tags</h1>
@@ -43641,15 +43748,15 @@ ${rows.join("\n")}
 </ul>`;
   return { path: htmlPath, parts: { title: "Tags", nav, main: main2 } };
 }
-function renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, mode) {
+function renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, context) {
   const htmlPath = `wiki/${folder}/index.html`;
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
-  const label = folder.charAt(0).toUpperCase() + folder.slice(1);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
+  const label = kindLabel(folder);
   const items = pageRefs.map((ref) => {
     const record = pages.get(ref)?.record;
     const title = record?.title ?? ref;
     const summary = record?.summary ?? "";
-    const link2 = pageLink(htmlPath, ref, title, mode);
+    const link2 = pageLink(htmlPath, ref, title, context);
     const summaryHtml = summary ? ` \u2014 ${escHtml(summary)}` : "";
     return `<li>${link2}${summaryHtml}</li>`;
   }).join("\n");
@@ -43659,23 +43766,20 @@ ${items}
 </ul>`;
   return { path: htmlPath, parts: { title: label, nav, main: main2 } };
 }
-function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode) {
+function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, context) {
   const htmlPath = "index.html";
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const totalPages = Array.from(meta.kindMap.values()).reduce(
     (sum, refs) => sum + refs.length,
     0
   );
-  const kindRows = [...meta.kindMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([kind, refs]) => {
-    const folder = kindFolder(kind, refs);
-    const blurb = kindBlurb(kind, pages);
-    const label = folder.charAt(0).toUpperCase() + folder.slice(1);
-    const blurbHtml = blurb ? ` \u2014 ${escHtml(blurb)}` : "";
-    const href = escHtml(
-      hrefFor(mode)(htmlPath, `wiki/${folder}/index.html`)
-    );
-    return `<li><a href="${href}">${escHtml(label)}</a> (${refs.length})${blurbHtml}</li>`;
-  });
+  const kindRows = kindIndexEntries(meta, htmlPath, context.mode).map(
+    ({ kind, href, label, count }) => {
+      const blurb = kindBlurb(kind, pages);
+      const blurbHtml = blurb ? ` \u2014 ${escHtml(blurb)}` : "";
+      return `<li><a href="${escHtml(href)}">${escHtml(label)}</a> (${count})${blurbHtml}</li>`;
+    }
+  );
   let startedItems;
   const suppliedStarters = opts.starters?.filter(
     (s) => meta.exported.has(s.pageRef)
@@ -43683,18 +43787,18 @@ function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode) {
   if (suppliedStarters && suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef: pageRef2, annotation }) => {
       const title = pages.get(pageRef2)?.record?.title ?? pageRef2;
-      const link2 = pageLink(htmlPath, pageRef2, title, mode);
+      const link2 = pageLink(htmlPath, pageRef2, title, context);
       const annHtml = annotation ? ` \u2014 ${escHtml(annotation)}` : "";
       return `<li>${link2}${annHtml}</li>`;
     });
   } else {
     startedItems = meta.getStarted.map((entry) => {
-      const link2 = pageLink(htmlPath, entry.pageRef, entry.title, mode);
+      const link2 = pageLink(htmlPath, entry.pageRef, entry.title, context);
       const summaryHtml = entry.summary ? ` \u2014 ${escHtml(entry.summary)}` : "";
       return `<li>${link2}${summaryHtml}</li>`;
     });
   }
-  const tagsHref = escHtml(hrefFor(mode)(htmlPath, "tags/index.html"));
+  const tagsHref = escHtml(hrefFor(context.mode)(htmlPath, "tags/index.html"));
   const main2 = [
     `<h1>${escHtml(wikiTitle)}</h1>`,
     `<p>${totalPages} page${totalPages === 1 ? "" : "s"} \xB7 <a href="${tagsHref}">Tags</a></p>`,
@@ -43716,16 +43820,19 @@ function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode) {
 function* renderAggregateParts(pages, meta, opts = {}, mode = "multi-page") {
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
   const wikiTitle = exportTitle(opts);
+  const context = linkContext(meta, mode);
   for (const [tag, pageRefs] of meta.tagMap) {
     const slug = tagSlugMap.get(tag);
-    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle, mode);
+    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle, context);
   }
-  yield renderTagIndex(tagSlugMap, meta, wikiTitle, mode);
+  yield renderTagIndex(tagSlugMap, meta, wikiTitle, context);
   for (const [kind, pageRefs] of meta.kindMap) {
     const folder = kindFolder(kind, pageRefs);
-    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, mode);
+    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, context);
   }
-  yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode);
+  if (!meta.startPage) {
+    yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, context);
+  }
 }
 function* renderAggregatePages(pages, meta, opts = {}) {
   yield* shellPages(renderAggregateParts(pages, meta, opts));
@@ -43852,6 +43959,9 @@ function readExportConfig(root) {
   if (config2.title !== void 0 && typeof config2.title !== "string") {
     delete config2.title;
   }
+  if (config2.startPage !== void 0 && typeof config2.startPage !== "string") {
+    delete config2.startPage;
+  }
   return config2;
 }
 function writeExportConfig(root, config2) {
@@ -43862,18 +43972,44 @@ function writeExportConfig(root, config2) {
     "utf8"
   );
 }
+function isSupplied(value) {
+  return value !== void 0 && value.trim() !== "";
+}
 function saveExportTitle(root, title) {
-  if (title.trim() === "") {
+  if (!isSupplied(title)) {
     throw new Error("a wiki title must not be empty");
   }
   writeExportConfig(root, { ...readExportConfig(root), title: title.trim() });
 }
 function resolveExportTitle(root, flagTitle) {
-  const fromFlag = flagTitle?.trim();
-  if (fromFlag) return fromFlag;
-  const fromConfig = readExportConfig(root).title?.trim();
-  if (fromConfig) return fromConfig;
+  if (isSupplied(flagTitle)) return flagTitle.trim();
+  const fromConfig = readExportConfig(root).title;
+  if (isSupplied(fromConfig)) return fromConfig.trim();
   return import_node_path24.default.basename(import_node_path24.default.resolve(root));
+}
+function normalizeStartPageRef(ref) {
+  let normalized = ref.trim();
+  while (normalized.startsWith("./")) normalized = normalized.slice(2);
+  if (normalized !== "" && !normalized.endsWith(".md")) normalized += ".md";
+  return normalized;
+}
+function resolveExportStartPage(root, flagStartPage) {
+  for (const candidate of [flagStartPage, readExportConfig(root).startPage]) {
+    if (!isSupplied(candidate)) continue;
+    const ref = normalizeStartPageRef(candidate);
+    if (ref !== "") return ref;
+  }
+  return void 0;
+}
+function saveExportStartPage(root, ref) {
+  const config2 = readExportConfig(root);
+  const normalized = normalizeStartPageRef(ref);
+  if (normalized === "") {
+    delete config2.startPage;
+  } else {
+    config2.startPage = normalized;
+  }
+  writeExportConfig(root, config2);
 }
 
 // src/exportwriter.ts
@@ -43894,6 +44030,12 @@ var ExportTargetIsDirectoryError = class extends Error {
   constructor(message) {
     super(message);
     this.name = "ExportTargetIsDirectoryError";
+  }
+};
+var ExportStartPageError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ExportStartPageError";
   }
 };
 function enumerateRawRefs(root) {
@@ -43918,6 +44060,21 @@ function enumerateRawRefs(root) {
   }
   walk2(rawDir);
   return refs.sort();
+}
+function vaultPageRefs(root) {
+  const refs = new Set(Object.keys(new Vault(root).pagesWithText()));
+  for (const ref of enumerateRawRefs(root)) refs.add(ref);
+  return refs;
+}
+function startPageErrorMessage(root, ref, fromFlag, includeRaw) {
+  const source = fromFlag ? `--start-page "${ref}"` : `the saved start page "${ref}" (${import_node_path25.default.join(".wiki-knowledge", "config.json")})`;
+  if (!includeRaw && ref.startsWith("raw/") && import_node_fs20.default.existsSync(import_node_path25.default.join(root, ...ref.split("/")))) {
+    return `${source} is a raw/ page, which this run does not include. Pass --raw to include raw/ pages, or nominate a wiki/ page.`;
+  }
+  if (fromFlag) {
+    return `${source} does not name a page in this export. Check the ref, or drop --start-page to use the generated front page.`;
+  }
+  return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is under raw/.`;
 }
 function writeFileIn(tempDir, relPath2, content) {
   const abs = import_node_path25.default.join(tempDir, ...relPath2.split("/"));
@@ -43955,6 +44112,8 @@ async function runExport2(root, opts) {
   const force = opts.force ?? false;
   const starters = opts.starters ?? [];
   const title = resolveExportTitle(root, opts.title);
+  const startPageRef = resolveExportStartPage(root, opts.startPage);
+  const startPageFromFlag = isSupplied(opts.startPage);
   if (!allowDirty) {
     const subtrees = ["wiki"];
     if (includeRaw) subtrees.push("raw");
@@ -44006,8 +44165,23 @@ async function runExport2(root, opts) {
       }
     }
   }
-  const exportOpts = { includeRaw, starters, title };
+  const exportOpts = {
+    includeRaw,
+    starters,
+    title,
+    startPage: startPageRef
+  };
   const meta = buildExportMeta(pagesMap, exportOpts);
+  if (startPageRef !== void 0 && !meta.exported.has(startPageRef)) {
+    throw new ExportStartPageError(
+      startPageErrorMessage(root, startPageRef, startPageFromFlag, includeRaw)
+    );
+  }
+  if (startPageRef !== void 0 && starters.length > 0) {
+    console.error(
+      `Warning: --starters is ignored because "${startPageRef}" is the start page. Exporting the start page without a get-started block.`
+    );
+  }
   function* allPages() {
     yield* renderPages(pagesMap, meta, exportOpts);
     yield* renderAggregatePages(pagesMap, meta, exportOpts);
@@ -44803,6 +44977,12 @@ function buildProgram() {
     "--save-title <title>",
     "save the wiki title as the persistent default and exit (writes no site)"
   ).option(
+    "--start-page <ref>",
+    "vault-relative page ref to export as the site's front page for this run only (default: the saved start page, else the generated front page)"
+  ).option(
+    "--save-start-page <ref>",
+    "save a page ref as the vault's persistent start page and exit (a blank ref clears it; writes no site)"
+  ).option(
     "--candidates",
     "emit the ranked candidate list as one JSON line to stdout and exit (writes nothing)"
   ).option(
@@ -44819,6 +44999,19 @@ function buildProgram() {
         }
         console.log(
           `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`
+        );
+        return;
+      }
+      if (opts.saveStartPage !== void 0) {
+        const ref = normalizeStartPageRef(opts.saveStartPage);
+        if (ref !== "" && !vaultPageRefs(root).has(ref)) {
+          fail(
+            `enchiridion export: --save-start-page "${ref}" does not name a page of this vault`
+          );
+        }
+        saveExportStartPage(root, opts.saveStartPage);
+        console.log(
+          ref === "" ? `Cleared the saved start page in ${exportConfigPath(root)}` : `Saved start page "${ref}" to ${exportConfigPath(root)}`
         );
         return;
       }
@@ -44849,11 +45042,13 @@ function buildProgram() {
           // The per-run flag, not the resolved title: runExport owns the
           // resolution order (flag → saved title → directory name).
           title: opts.title,
+          // Likewise the raw flag: runExport owns flag → saved ref → none.
+          startPage: opts.startPage,
           starters
         });
         console.log(`Exported to ${outPath}`);
       } catch (err) {
-        if (err instanceof ExportDirtyError || err instanceof ExportTargetNotEmptyError || err instanceof ExportTargetIsDirectoryError) {
+        if (err instanceof ExportDirtyError || err instanceof ExportTargetNotEmptyError || err instanceof ExportTargetIsDirectoryError || err instanceof ExportStartPageError) {
           fail(`enchiridion export: ${err.message}`);
         } else {
           throw err;
