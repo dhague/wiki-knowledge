@@ -59,7 +59,7 @@ If you're tempted to write a new standalone design doc, don't — extend one of 
 
 **One contract a future edit must not break** (property-tested in `wikipage.test.ts` via `fast-check`): a page **move changes nothing outside a link, and all links still resolve** — including frontmatter markdown links (typed edges, `supersedes`, `raw_source`), spliced by the same whole-document rule as body links. Two independent oracles guard it: the raw-text scan (`iterLinks`) and frontmatter edges read through the YAML parser (`newPageRecord`), so a link the scan goes blind to cannot make both sides agree (#489). Byte-level, not line-level, because a flattened fold means a correct move can cost a line. Frontmatter round-trip is likewise not byte-identical, though key *order* is preserved: the divergence is scalar quote style plus long scalars folded past the line width on pages written before [ADR-0024](docs/adr/0024-emitted-lines-are-not-folded.md) ([ADR-0012](docs/adr/0012-frontmatter-round-trip-relaxed.md)).
 
-**Dev setup:** `enchiridion-ts/package.json` holds the scripts and the `engines.node` floor; CI (`ts-enchiridion.yml`) runs the matrix on Node.js LTS and Bun, and both must pass. `npm run build` emits the bundle + `.wasm` sidecar, `npm test` is Node's built-in runner via `tsx`, and `test:bun` needs `bun` on PATH. Two things the files don't advertise: `wiki-plugin/tests/bin_enchiridion.bats` covers the shim (`brew install bats-core`; run it from the repo root), and `wiki-plugin/.venv` (gitignored) carries `pytest` among its dev tooling — not an editable install of this project — so run `<venv python> -m pytest` from `wiki-plugin/`.
+**Dev setup:** `enchiridion-ts/package.json` holds the scripts and the `engines.node` floor; CI (`ts-enchiridion.yml`) runs the matrix on Node.js LTS and Bun, and both must pass. `npm run build` emits the bundle + `.wasm` sidecar, `npm test` is Node's built-in runner via `tsx`, and `test:bun` needs `bun` on PATH. Two things the files don't advertise: `wiki-plugin/tests/bin_enchiridion.bats` covers the shim (`brew install bats-core`; run it from the repo root), and the skill tree's structural checks live in `enchiridion-ts/src/skills.test.ts` — frontmatter `name` matches the directory, descriptions are non-empty, no host-specific spelling in portable prose, and `cut-release` carries a real `metadata.internal: true` — so `npm test` covers the package contract too.
 
 ### Current state
 
@@ -82,7 +82,7 @@ If you're tempted to write a new standalone design doc, don't — extend one of 
 
 ### Misc
 
-- `.mcp.json` (gitignored, per-checkout) configures a pyright language server and `gopls` for the Python tooling that remains under `wiki-plugin/tests/`. Check its `rootUri` points at this checkout after cloning or switching worktrees. For the TypeScript layer use the editor's native tooling.
+- `.mcp.json` (gitignored, per-checkout) configures this workspace's MCP servers, including the `chrome-devtools` one the render checks need ([docs/agents/render-check.md](docs/agents/render-check.md)). Check its `rootUri` points at this checkout after cloning or switching worktrees. For the TypeScript layer use the editor's native tooling.
 - `/handoff` and `/improve-codebase-architecture` both default to the OS temp dir; in this repo put their output in the gitignored `temp/` instead.
 
 ## Caveman

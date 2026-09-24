@@ -137,18 +137,11 @@ WIKI_ROOT=<path_to_vault> node dist/cli.cjs ingest-scan --json
 copy (and refreshes the bundle inside every skill) at release time. CI fails a
 PR if the two trees diverge.
 
-`wiki-plugin/tests/` holds the shim's `bats` suite and the one Python test left
-in the repo — `test_wiki_watch_skill.py`, a structural check that the
-`wiki-watch` skill still names the `watch` subcommand it orchestrates. The rest
-of the Python tooling was deleted with [ADR-0026](docs/adr/0026-host-neutral-skill-package.md),
-so the venv exists only for that:
-
-```bash
-cd wiki-plugin
-python3 -m venv .venv && source .venv/bin/activate
-pip install pytest
-python -m pytest
-```
+`wiki-plugin/tests/` holds the shim's `bats` suite (`brew install bats-core`).
+The skill tree's structural checks — frontmatter `name` matches the directory,
+descriptions are non-empty, no host-specific spelling in portable prose, and
+`cut-release` carries a real `metadata.internal: true` — live in the TypeScript
+suite (`enchiridion-ts/src/skills.test.ts`) and run with `npm test`.
 
 ## Architecture
 

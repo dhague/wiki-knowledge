@@ -6,7 +6,7 @@ A **render check** is looking at what generated HTML actually draws — a real b
 
 The `chrome-devtools` MCP server (Chrome DevTools MCP) drives a real Chrome. Two things gate it before it will run at all:
 
-- **The server is configured in `.mcp.json` at the repo root**, alongside the pyright server. It is gitignored, so each checkout has its own copy — the one in a worktree is not the one in the main checkout. A project-scoped server also needs approving once per project, which is a prompt only the user can answer: `claude mcp list` reports `⏸ Pending approval` until then, and no amount of editing `.mcp.json` gets past it.
+- **The server is configured in `.mcp.json` at the repo root.** It is gitignored, so each checkout has its own copy — the one in a worktree is not the one in the main checkout. A project-scoped server also needs approving once per project, which is a prompt only the user can answer: `claude mcp list` reports `⏸ Pending approval` until then, and no amount of editing `.mcp.json` gets past it.
 - **Chrome is installed system-wide, not downloaded.** WSL ships without a graphical browser, so:
 
   ```
