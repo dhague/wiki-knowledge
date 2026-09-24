@@ -7,6 +7,7 @@
  *   - tags/index.html    — all tags with page counts
  *   - wiki/<folder>/index.html — per-kind listing pages
  *   - index.html         — front page (counts, kind summaries, get-started)
+ *     omitted entirely when a start page fills the front page instead
  *
  * Two layers, matching exportrender: renderAggregateParts yields pages with
  * no document shell, renderAggregatePages wraps them in the multi-page shape.
@@ -24,15 +25,19 @@ import {
   GetStartedEntry,
   buildTagSlugMap,
   exportTitle,
+  kindFolder,
+  kindLabel,
 } from "./exportmeta.js";
 import {
+  LinkContext,
   LinkMode,
   RenderedParts,
   RenderedPage,
   buildNavBar,
   escHtml,
   hrefFor,
-  mdToHtml,
+  kindIndexEntries,
+  linkContext,
   shellPages,
 } from "./exportrender.js";
 import { KindFolders } from "./place.js";
@@ -58,19 +63,9 @@ function kindBlurb(
   return String((fm as Record<string, unknown>)["summary"] ?? "");
 }
 
-// ---------------------------------------------------------------------------
-// Folder for a kind — canonical first, then infer from page paths
-// ---------------------------------------------------------------------------
-
-function kindFolder(kind: string, pageRefs: string[]): string {
-  if (KindFolders[kind]) return KindFolders[kind];
-  // Infer from first page: wiki/<folder>/...
-  if (pageRefs.length > 0) {
-    const parts = pageRefs[0].split("/");
-    if (parts.length >= 2) return parts[1];
-  }
-  return kind;
-}
+// `kindFolder` — the folder a kind's pages live in — now lives in exportmeta,
+// because the start page's kind-index list needs it too and exportrender (which
+// builds that list) must not import this module.
 
 // ---------------------------------------------------------------------------
 // Page link helper (used by tag pages and kind index pages)
@@ -80,9 +75,9 @@ function pageLink(
   fromHtmlPath: string,
   toPageRef: string,
   title: string,
-  mode: LinkMode,
+  context: LinkContext,
 ): string {
-  return `<a href="${escHtml(hrefFor(mode)(fromHtmlPath, mdToHtml(toPageRef)))}">${escHtml(title)}</a>`;
+  return `<a href="${escHtml(hrefFor(context.mode)(fromHtmlPath, context.outputPathFor(toPageRef)))}">${escHtml(title)}</a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,14 +90,14 @@ function renderTagPage(
   pageRefs: string[],
   pages: Map<string, { record?: PageRecord; text: string }>,
   wikiTitle: string,
-  mode: LinkMode,
+  context: LinkContext,
 ): RenderedParts {
   const htmlPath = `tags/${slug}.html`;
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const items = pageRefs
     .map((ref) => {
       const title = pages.get(ref)?.record?.title ?? ref;
-      const link = pageLink(htmlPath, ref, title, mode);
+      const link = pageLink(htmlPath, ref, title, context);
       return `<li>${link}</li>`;
     })
     .join("\n");
@@ -118,16 +113,16 @@ function renderTagIndex(
   tagSlugMap: Map<string, string>,
   meta: ExportMeta,
   wikiTitle: string,
-  mode: LinkMode,
+  context: LinkContext,
 ): RenderedParts {
   const htmlPath = "tags/index.html";
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
 
   const sortedTags = [...tagSlugMap.keys()].sort();
   const rows = sortedTags.map((tag) => {
     const slug = tagSlugMap.get(tag)!;
     const count = meta.tagMap.get(tag)?.length ?? 0;
-    const href = escHtml(hrefFor(mode)(htmlPath, `tags/${slug}.html`));
+    const href = escHtml(hrefFor(context.mode)(htmlPath, `tags/${slug}.html`));
     return `<li><a href="${href}">${escHtml(tag)}</a> (${count})</li>`;
   });
 
@@ -145,18 +140,18 @@ function renderKindIndex(
   pageRefs: string[],
   pages: Map<string, { record?: PageRecord; text: string }>,
   wikiTitle: string,
-  mode: LinkMode,
+  context: LinkContext,
 ): RenderedParts {
   const htmlPath = `wiki/${folder}/index.html`;
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
 
-  const label = folder.charAt(0).toUpperCase() + folder.slice(1);
+  const label = kindLabel(folder);
   const items = pageRefs
     .map((ref) => {
       const record = pages.get(ref)?.record;
       const title = record?.title ?? ref;
       const summary = record?.summary ?? "";
-      const link = pageLink(htmlPath, ref, title, mode);
+      const link = pageLink(htmlPath, ref, title, context);
       const summaryHtml = summary ? ` — ${escHtml(summary)}` : "";
       return `<li>${link}${summaryHtml}</li>`;
     })
@@ -176,10 +171,10 @@ function renderFrontPage(
   pages: Map<string, { record?: PageRecord; text: string }>,
   tagSlugMap: Map<string, string>,
   wikiTitle: string,
-  mode: LinkMode,
+  context: LinkContext,
 ): RenderedParts {
   const htmlPath = "index.html";
-  const nav = buildNavBar(htmlPath, wikiTitle, mode);
+  const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
 
   // Total page count
   const totalPages = Array.from(meta.kindMap.values()).reduce(
@@ -187,19 +182,15 @@ function renderFrontPage(
     0,
   );
 
-  // Per-kind section
-  const kindRows = [...meta.kindMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([kind, refs]) => {
-      const folder = kindFolder(kind, refs);
+  // Per-kind section. The same entries a start page's foot list uses, plus the
+  // KIND.md blurb this page is the only one to carry.
+  const kindRows = kindIndexEntries(meta, htmlPath, context.mode).map(
+    ({ kind, href, label, count }) => {
       const blurb = kindBlurb(kind, pages);
-      const label = folder.charAt(0).toUpperCase() + folder.slice(1);
       const blurbHtml = blurb ? ` — ${escHtml(blurb)}` : "";
-      const href = escHtml(
-        hrefFor(mode)(htmlPath, `wiki/${folder}/index.html`),
-      );
-      return `<li><a href="${href}">${escHtml(label)}</a> (${refs.length})${blurbHtml}</li>`;
-    });
+      return `<li><a href="${escHtml(href)}">${escHtml(label)}</a> (${count})${blurbHtml}</li>`;
+    },
+  );
 
   // Get-started block. An explicitly supplied starter is admitted when the
   // export carries it — `meta.exported` is that set, raw/ included under
@@ -213,19 +204,19 @@ function renderFrontPage(
   if (suppliedStarters && suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef, annotation }) => {
       const title = pages.get(pageRef)?.record?.title ?? pageRef;
-      const link = pageLink(htmlPath, pageRef, title, mode);
+      const link = pageLink(htmlPath, pageRef, title, context);
       const annHtml = annotation ? ` — ${escHtml(annotation)}` : "";
       return `<li>${link}${annHtml}</li>`;
     });
   } else {
     startedItems = meta.getStarted.map((entry: GetStartedEntry) => {
-      const link = pageLink(htmlPath, entry.pageRef, entry.title, mode);
+      const link = pageLink(htmlPath, entry.pageRef, entry.title, context);
       const summaryHtml = entry.summary ? ` — ${escHtml(entry.summary)}` : "";
       return `<li>${link}${summaryHtml}</li>`;
     });
   }
 
-  const tagsHref = escHtml(hrefFor(mode)(htmlPath, "tags/index.html"));
+  const tagsHref = escHtml(hrefFor(context.mode)(htmlPath, "tags/index.html"));
   const main = [
     `<h1>${escHtml(wikiTitle)}</h1>`,
     `<p>${totalPages} page${totalPages === 1 ? "" : "s"} · <a href="${tagsHref}">Tags</a></p>`,
@@ -254,8 +245,10 @@ function renderFrontPage(
  * Lazy generator yielding the aggregate pages' parts, with no document shell
  * wrapped around them.
  *
- * Yields (in order): tag pages, tag index, per-kind index pages, front page.
- * Concatenate with renderPageParts for the complete set of page fragments.
+ * Yields (in order): tag pages, tag index, per-kind index pages, front page —
+ * the last unless a start page has taken the front page's path, in which case
+ * only the listing pages are yielded. Concatenate with renderPageParts for the
+ * complete set of page fragments.
  *
  * `mode` is the same choice renderPageParts takes: multi-page output (the
  * default) links relative `.html` files, a single-file caller links sections
@@ -270,24 +263,31 @@ export function* renderAggregateParts(
 ): Generator<RenderedParts> {
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
   const wikiTitle = exportTitle(opts);
+  const context = linkContext(meta, mode);
 
   // Tag pages
   for (const [tag, pageRefs] of meta.tagMap) {
     const slug = tagSlugMap.get(tag)!;
-    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle, mode);
+    yield renderTagPage(tag, slug, pageRefs, pages, wikiTitle, context);
   }
 
   // Tag index (always emit — nav on every page links to it)
-  yield renderTagIndex(tagSlugMap, meta, wikiTitle, mode);
+  yield renderTagIndex(tagSlugMap, meta, wikiTitle, context);
 
-  // Per-kind index pages
+  // Per-kind index pages. `meta.kindMap` is the membership, so a kind whose
+  // only member was the start page has no entry and gets no index page.
   for (const [kind, pageRefs] of meta.kindMap) {
     const folder = kindFolder(kind, pageRefs);
-    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, mode);
+    yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, context);
   }
 
-  // Front page
-  yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, mode);
+  // Front page — the generated aggregate, unless a start page has taken the
+  // front page's path. Writing both would put two files at `index.html` (two
+  // sections in single-file mode), and this pass runs last, so it would win
+  // silently; skipping it here is what makes the promotion exclusive.
+  if (!meta.startPage) {
+    yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, context);
+  }
 }
 
 /**

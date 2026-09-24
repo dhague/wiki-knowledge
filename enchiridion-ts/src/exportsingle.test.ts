@@ -131,6 +131,14 @@ function sectionIds(html: string): string[] {
   return [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
 }
 
+/** One section's HTML, from its opening tag to the next section (or the end). */
+function sectionHtml(html: string, id: string): string {
+  const start = html.indexOf(`<section id="${id}"`);
+  assert.ok(start !== -1, `section ${id} should exist`);
+  const next = html.indexOf("<section id=", start + 1);
+  return html.slice(start, next === -1 ? undefined : next);
+}
+
 /** The ids of every element in the document that carries one. */
 function elementIds(html: string): Set<string> {
   return new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
@@ -610,4 +618,117 @@ test("renderSingleFile: an empty vault still yields a front page", () => {
     "the front page is always there to land on",
   );
   assert.ok(html.startsWith("<!DOCTYPE html>"));
+});
+
+// ---------------------------------------------------------------------------
+// Start page — the promoted page is the `__front` section
+// ---------------------------------------------------------------------------
+
+const homePage = `---
+title: Home
+summary: The front door.
+tags:
+  - front-door
+kind: home
+---
+
+Start at [Alpha Concept](../concepts/alpha-concept.md).
+`;
+
+const startPages = makePages([
+  ["wiki/home/home.md", homePage],
+  ["wiki/concepts/alpha-concept.md", conceptA],
+  ["wiki/concepts/beta-concept.md", conceptB],
+  ["wiki/entities/alpha-entity.md", entityA],
+]);
+
+const START_PAGE = "wiki/home/home.md";
+
+test("renderSingleFile: the start page is the reserved __front section", () => {
+  const html = render(startPages, { startPage: START_PAGE });
+  const ids = sectionIds(html);
+  assert.ok(
+    ids.includes("__front"),
+    "the front page section is the start page",
+  );
+  assert.ok(
+    !ids.includes("wiki-home-home"),
+    "the promoted page is not also a section of its own",
+  );
+  assert.equal(
+    new Set(ids).size,
+    ids.length,
+    "no two sections may share an id",
+  );
+});
+
+test("renderSingleFile: links to the start page become #__front", () => {
+  const html = render(startPages, { startPage: START_PAGE });
+  assert.ok(
+    !hrefs(html).some((h) => h.includes("wiki-home-home")),
+    "no link may point at the vacated section",
+  );
+  // Both a body link and a frontmatter edge point at the landing section.
+  const beta = sectionHtml(html, "wiki-concepts-beta-concept");
+  assert.ok(
+    beta.includes('href="#__front"'),
+    "beta's body link to the start page is the front section",
+  );
+});
+
+test("renderSingleFile: the nav Home link and no-hash deep link still work", () => {
+  const html = render(startPages, { startPage: START_PAGE });
+  assert.deepEqual(
+    walkHasher(html, ["#wiki-home-home"]),
+    ["__front", "__front"],
+    "a hash naming the vacated section leaves the front page on screen",
+  );
+  const front = sectionHtml(html, "__front");
+  assert.ok(
+    front.includes('href="#__front"'),
+    "the nav Home link is the front page",
+  );
+});
+
+test("renderSingleFile: the start page carries the kind-index list", () => {
+  const html = render(startPages, { startPage: START_PAGE });
+  const front = sectionHtml(html, "__front");
+  assert.ok(
+    front.includes("Browse by Kind"),
+    "the front section carries the list",
+  );
+  assert.ok(
+    front.includes('href="#wiki-concepts-index"'),
+    "a kind index is linked by its section id",
+  );
+  assert.ok(
+    !front.includes('href="#wiki-home-index"'),
+    "the emptied kind is listed nowhere",
+  );
+  assert.ok(
+    !front.includes("Get Started"),
+    "the generated front page's blocks are gone",
+  );
+});
+
+test("renderSingleFile: a raw/ page can be the start page under --raw", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["raw/transcript.md", rawDoc],
+  ]);
+  const html = render(pages, {
+    includeRaw: true,
+    startPage: "raw/transcript.md",
+  });
+  const ids = sectionIds(html);
+  assert.ok(ids.includes("__front"), "the raw page becomes the front page");
+  assert.ok(
+    !ids.includes("raw-transcript"),
+    "the raw page is exported exactly once",
+  );
+  const front = sectionHtml(html, "__front");
+  assert.ok(
+    front.includes("Browse by Kind"),
+    "a raw start page still carries the kind list",
+  );
 });

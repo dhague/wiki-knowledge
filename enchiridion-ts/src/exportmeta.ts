@@ -13,12 +13,33 @@
  * the parts generators read it there rather than re-deriving it from the ref
  * prefixes. Inbound-link counts only count links whose sources and targets are
  * both within the exported set.
+ *
+ * A nominated start page (ExportOptions.startPage) is handled here too, for
+ * the same reason: ExportMeta owns the export's shape, so the output-path
+ * mapper and the kind-index listing membership are decided once, from the one
+ * fact "this ref lives at the front page's path", rather than by each consumer
+ * recognising the promoted page for itself.
  */
 
 import path from "node:path";
 import { PageRecord } from "./pagerecord.js";
 import { iterLinks, resolveLinkDest } from "./wikipage.js";
-import { slugify } from "./place.js";
+import { KindFolders, slugify } from "./place.js";
+
+/** The front page's output path, at the output root. The one path that names
+ *  a role rather than a page's own name: whichever page fills the front page
+ *  is written here. */
+export const FRONT_PAGE_PATH = "index.html";
+
+/** Convert a vault-relative `.md` path to its `.html` output path. A ref that
+ *  is not markdown (a `raw/` artifact keeping its own extension) is left
+ *  alone. The base rule behind [ExportMeta.outputPathFor]. */
+export function mdToHtml(ref: string): string {
+  return ref.endsWith(".md") ? ref.slice(0, -3) + ".html" : ref;
+}
+
+/** Where a page's output goes, given its vault-relative ref. */
+export type OutputPathFor = (pageRef: string) => string;
 
 /** One user-supplied entry for the get-started block. */
 export interface StarterEntry {
@@ -45,6 +66,14 @@ export interface ExportOptions {
    * passes, tests — omit it and get `exportTitle`'s neutral label.
    */
   title?: string;
+  /**
+   * The resolved, normalised vault-relative ref of the page nominated to fill
+   * the front page. Callers with a vault resolve it first (`runExport`, flag →
+   * saved ref → none, via `resolveExportStartPage`); pure render passes and
+   * tests set it directly. Undefined means no start page, and then every
+   * consumer behaves exactly as it did before the feature existed.
+   */
+  startPage?: string;
 }
 
 /** The nav bar title for a caller that has no vault to name. A neutral label
@@ -76,9 +105,21 @@ export interface ExportMeta {
    * counts cannot come to disagree about what "exported" means.
    */
   exported: Set<string>;
-  /** Map from tag string to sorted list of pageRefs carrying that tag. */
+  /**
+   * Map from tag string to sorted list of pageRefs carrying that tag. A start
+   * page is listed like any other member of its tags: promotion to the front
+   * page does not strip it of its tags.
+   */
   tagMap: Map<string, string[]>;
-  /** Map from kind string to sorted list of pageRefs of that kind. */
+  /**
+   * The **kind-index listing membership**: map from kind string to sorted list
+   * of the pageRefs that kind's index page lists. A start page is absent — it
+   * is already the front page, so listing it in its own kind's index would
+   * print the front page under its old title — and a kind left with no members
+   * is absent entirely, so no index page is written for it. Every consumer
+   * (the kind index pages, the front page's counts, the start page's kind
+   * list) reads this one map rather than re-deriving the rule.
+   */
   kindMap: Map<string, string[]>;
   /** Map from pageRef to count of exported pages that link to it. */
   inboundCounts: Map<string, number>;
@@ -88,6 +129,22 @@ export interface ExportMeta {
    * includeRaw is true.
    */
   getStarted: GetStartedEntry[];
+  /**
+   * The vault-relative ref of the page filling the front page, when one was
+   * nominated. The single fact behind [outputPathFor], the kind-listing
+   * membership rule and the generated front page's absence. Undefined when no
+   * start page resolved.
+   */
+  startPage?: string;
+  /**
+   * Where a pageRef's output is written. The start page is written at the
+   * front page's own path ([FRONT_PAGE_PATH]); every other page at its own
+   * `.html` path. With no start page this is [mdToHtml] and nothing else,
+   * which is what makes "an export with no start page is unchanged"
+   * structural rather than a golden-file hope: "exported once" and "every
+   * reference resolves" hold because every link site asks this same mapper.
+   */
+  outputPathFor: OutputPathFor;
 }
 
 /** Number of pages in the fallback get-started list. */
@@ -155,6 +212,17 @@ export function buildExportMeta(
   opts: ExportOptions = {},
 ): ExportMeta {
   const includeRaw = opts.includeRaw ?? false;
+  const startPage = opts.startPage;
+
+  // Where each page's output lands. With no start page this is just the
+  // `.md`→`.html` rename every link site already spelled for itself; with one,
+  // the nominated page takes the front page's path. One function, asked by
+  // every link site and by the parts generator, is why "exported once" and
+  // "every reference resolves to the landing page" hold together.
+  const outputPathFor: OutputPathFor = (pageRef) =>
+    startPage !== undefined && pageRef === startPage
+      ? FRONT_PAGE_PATH
+      : mdToHtml(pageRef);
 
   // Build the exported set — which pageRefs are included. This is the single
   // spelling of the rule (wiki/ always, raw/ under includeRaw); it goes out on
@@ -193,8 +261,14 @@ export function buildExportMeta(
       }
 
       const kind = record.kind;
-      if (!kindMap.has(kind)) kindMap.set(kind, []);
-      kindMap.get(kind)!.push(pageRef);
+      // The start page is the front page; it is not a member of its own kind's
+      // index. Every other page of the kind is, and a kind whose only member
+      // was the start page never gets an entry at all — so no index page is
+      // written for it and no listing has to re-derive either rule.
+      if (pageRef !== startPage) {
+        if (!kindMap.has(kind)) kindMap.set(kind, []);
+        kindMap.get(kind)!.push(pageRef);
+      }
     }
 
     // Inbound-link counts — walk all links in the page text.
@@ -242,5 +316,37 @@ export function buildExportMeta(
 
   const getStarted = wikiEntries.slice(0, GET_STARTED_COUNT);
 
-  return { exported, tagMap, kindMap, inboundCounts, getStarted };
+  return {
+    exported,
+    tagMap,
+    kindMap,
+    inboundCounts,
+    getStarted,
+    startPage,
+    outputPathFor,
+  };
+}
+
+/**
+ * The folder a kind's pages live in — the canonical kind folder when the
+ * plugin fixes one, else inferred from the page's own path (`wiki/<folder>/…`,
+ * which is how a custom kind folder is recognised). Lives here because both
+ * the aggregate pass and the start page's kind list need it, and the render
+ * layer must not import the aggregate layer.
+ */
+export function kindFolder(kind: string, pageRefs: string[]): string {
+  if (KindFolders[kind]) return KindFolders[kind];
+  // Infer from first page: wiki/<folder>/...
+  if (pageRefs.length > 0) {
+    const parts = pageRefs[0].split("/");
+    if (parts.length >= 2) return parts[1];
+  }
+  return kind;
+}
+
+/** The human label a kind index carries — its folder, capitalised. One place,
+ *  because the generated front page, the kind index page and the start page's
+ *  kind list all name the same kind and must spell it identically. */
+export function kindLabel(folder: string): string {
+  return folder.charAt(0).toUpperCase() + folder.slice(1);
 }

@@ -2162,3 +2162,180 @@ test("export --single-file: a vault with uncommitted changes is still refused", 
     "no file should be written when the check fails",
   );
 });
+
+// ---------------------------------------------------------------------------
+// export: the start page (#567)
+// ---------------------------------------------------------------------------
+
+test("export --save-start-page: persists the ref, normalised, and writes no site", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["export", "--save-start-page", "./wiki/concepts/connection-pooling"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, ".wiki-knowledge", "config.json"),
+        "utf8",
+      ),
+    ).startPage,
+    "wiki/concepts/connection-pooling.md",
+    "the ref should be persisted in its normalised spelling",
+  );
+  assert.ok(
+    stdout.includes("connection-pooling.md"),
+    "the confirmation names it",
+  );
+  assert.ok(
+    !fs.existsSync(path.join(root, "web")),
+    "saving a start page must not export a site",
+  );
+});
+
+test("export --save-start-page: refuses a ref that names no page of the vault", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    ["export", "--save-start-page", "wiki/nope/nope.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /nope\.md/);
+  assert.ok(
+    !fs.existsSync(path.join(root, ".wiki-knowledge", "config.json")),
+    "a refused save writes no config",
+  );
+});
+
+test("export --save-start-page: a blank ref clears the saved key", async () => {
+  const root = await buildCommittedVault();
+  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  runEnv(
+    ["export", "--save-start-page", "wiki/concepts/connection-pooling.md"],
+    env,
+  );
+  const { status, stdout } = runEnv(
+    ["export", "--save-start-page", "   "],
+    env,
+  );
+  assert.equal(status, 0);
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, ".wiki-knowledge", "config.json"),
+        "utf8",
+      ),
+    ).startPage,
+    undefined,
+    "a blank ref returns the vault to having no start page",
+  );
+  assert.match(stdout, /[Cc]leared/, "the operator is told what happened");
+});
+
+test("export --start-page: the nominated page becomes the landing page", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    ["export", "--start-page", "wiki/concepts/connection-pooling.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
+  assert.ok(
+    idx.includes("Connection Pooling in Postgres"),
+    "the nominated page's own content is the front page",
+  );
+  assert.ok(idx.includes("Browse by Kind"), "the kind list is at its foot");
+  assert.ok(
+    !fs.existsSync(
+      path.join(root, "web", "wiki", "concepts", "connection-pooling.html"),
+    ),
+    "nothing is written at the promoted page's old path",
+  );
+});
+
+test("export --start-page: an unknown ref exits non-zero with no fallback site", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    ["export", "--start-page", "wiki/nope/nope.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0, "a bad start page is fatal, not a warning");
+  assert.match(stderr, /nope\.md/);
+  assert.ok(
+    !fs.existsSync(path.join(root, "web")),
+    "no generated-front-page fallback may be written",
+  );
+});
+
+test("export: a saved start page persists; --start-page overrides one run only", async () => {
+  const root = await buildCommittedVault();
+  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  const configPath = path.join(root, ".wiki-knowledge", "config.json");
+
+  runEnv(
+    ["export", "--save-start-page", "wiki/concepts/sourdough-starter.md"],
+    env,
+  );
+  runEnv(["export", "--force"], env);
+  let idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
+  assert.ok(
+    idx.includes("Feeding a Sourdough Starter"),
+    "the saved ref should apply",
+  );
+
+  runEnv(
+    [
+      "export",
+      "--force",
+      "--start-page",
+      "wiki/concepts/connection-pooling.md",
+    ],
+    env,
+  );
+  idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
+  assert.ok(
+    idx.includes("Connection Pooling in Postgres"),
+    "--start-page should win for this run",
+  );
+  assert.equal(
+    JSON.parse(fs.readFileSync(configPath, "utf8")).startPage,
+    "wiki/concepts/sourdough-starter.md",
+    "--start-page must leave the saved ref untouched",
+  );
+});
+
+test("export --candidates: --start-page is ignored by the persist-and-exit flag", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout } = runEnv(
+    ["export", "--candidates", "--start-page", "wiki/nope/nope.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, "an ignored flag must not fail the run");
+  assert.ok(Array.isArray(JSON.parse(stdout)), "the candidate list is emitted");
+});
+
+test("export --save-title: --start-page is ignored by the persist-and-exit flag", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    [
+      "export",
+      "--save-title",
+      "Team Wiki",
+      "--start-page",
+      "wiki/nope/nope.md",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, ".wiki-knowledge", "config.json"),
+        "utf8",
+      ),
+    ).title,
+    "Team Wiki",
+    "the title saves without the start-page ref being validated",
+  );
+});

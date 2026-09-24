@@ -114,6 +114,10 @@ attachment, with no unzip, no server and no network.
 | `--allow-dirty` | Export with uncommitted changes in the exported subtree |
 | `--title <title>` | Wiki title for this run only |
 | `--save-title <title>` | Save the title as the persistent default (exports nothing) |
+| `--start-page <ref>` | Export this page as the site's landing page for this run only |
+| `--save-start-page <ref>` | Save the ref as the vault's persistent start page (a blank ref clears it; exports nothing) |
+| `--candidates` | Emit the ranked entry-point candidates as one JSON line, then exit (writes nothing) |
+| `--starters <refs...>` | The entry-point pages for the front page, optionally as `ref=annotation` |
 
 A single-file export over 5 MB is still written, with a note on stderr
 suggesting multi-page mode.
@@ -123,6 +127,16 @@ The site's title — the sticky nav bar and the front page heading — resolves
 "My Knowledge Base"` sets it for one run and then offers to save it; the saved
 title lives in `.wiki-knowledge/config.json` at the vault root, gitignored
 beside the search index ([ADR-0023](docs/adr/0023-vault-config-and-title-resolution.md)).
+
+`--start-page` nominates a page as the site's landing page. That page is
+exported at the front page's path instead of its own — so it appears exactly
+once, and every link to it resolves to the landing page — the generated
+title/page-count/get-started blocks are dropped, and a list of the kind index
+pages is added at the foot of the page. The choice resolves the same way as
+the title: `--start-page` → the saved `startPage` → the generated front page.
+`--save-start-page` persists it (a blank value clears it). A nominated page
+the export does not carry is a hard error rather than a quiet fallback to the
+generated front page ([ADR-0022](docs/adr/0022-static-html-export.md)).
 
 ## Vault structure
 

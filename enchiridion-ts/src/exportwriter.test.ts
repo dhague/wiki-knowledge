@@ -12,7 +12,9 @@ import path from "node:path";
 import * as git from "isomorphic-git";
 import {
   runExport,
+  vaultPageRefs,
   ExportDirtyError,
+  ExportStartPageError,
   ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
@@ -701,4 +703,284 @@ test("runExport: --single-file pointed at a directory fails clearly", async () =
   );
   // The directory is left alone.
   assert.ok(fs.existsSync(outDir) && fs.statSync(outDir).isDirectory());
+});
+
+// ---------------------------------------------------------------------------
+// runExport — start page
+// ---------------------------------------------------------------------------
+
+const HOME_PAGE = `---
+title: Home
+summary: The front door.
+tags:
+  - front-door
+kind: home
+---
+
+Start at [Alpha Concept](../concepts/alpha-concept.md).
+`;
+
+const START_PAGE_REF = "wiki/home/home.md";
+
+/** A vault whose front door is a real page — a custom `wiki/home/` folder,
+ *  since `home` is not a kind. */
+async function setupVaultWithHome(root: string): Promise<void> {
+  await initRepo(root);
+  writeFile(root, "wiki/home/home.md", HOME_PAGE);
+  writeFile(root, "wiki/concepts/alpha-concept.md", CONCEPT_A);
+  writeFile(root, "wiki/concepts/beta-concept.md", CONCEPT_B);
+  await commitAll(root, "initial");
+}
+
+function readOut(outDir: string, rel: string): string {
+  return fs.readFileSync(path.join(outDir, ...rel.split("/")), "utf8");
+}
+
+test("runExport: --start-page makes the nominated page the landing page", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, {
+    out: outDir,
+    allowDirty: true,
+    startPage: START_PAGE_REF,
+  });
+
+  const idx = readOut(outDir, "index.html");
+  assert.ok(idx.includes("<h1>Home</h1>"), "the start page's content lands");
+  assert.ok(idx.includes("Browse by Kind"), "the kind list is at its foot");
+  assert.ok(!idx.includes("Get Started"), "no get-started block");
+  assert.ok(
+    !fs.existsSync(path.join(outDir, "wiki", "home", "home.html")),
+    "nothing is written at the promoted page's old path",
+  );
+});
+
+test("runExport: --start-page normalises a leading ./ and a missing .md", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, {
+    out: outDir,
+    allowDirty: true,
+    startPage: "./wiki/home/home",
+  });
+  assert.ok(readOut(outDir, "index.html").includes("<h1>Home</h1>"));
+});
+
+test("runExport: an unknown --start-page fails loudly and writes nothing", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  const outDir = path.join(root, "web");
+  await assert.rejects(
+    () =>
+      runExport(root, {
+        out: outDir,
+        allowDirty: true,
+        startPage: "wiki/nowhere/missing.md",
+      }),
+    (err: unknown) => {
+      assert.ok(
+        err instanceof ExportStartPageError,
+        `expected ExportStartPageError, got ${String(err)}`,
+      );
+      assert.match((err as Error).message, /--start-page/);
+      assert.match((err as Error).message, /missing\.md/);
+      return true;
+    },
+  );
+  assert.ok(
+    !fs.existsSync(outDir),
+    "a refused start page writes no site, not even a partial one",
+  );
+});
+
+test("runExport: a raw/ start page without --raw names --raw", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(root, "raw/transcript.md", "# Raw\n\nText.\n");
+  await commitAll(root, "add raw");
+
+  await assert.rejects(
+    () =>
+      runExport(root, {
+        out: path.join(root, "web"),
+        allowDirty: true,
+        startPage: "raw/transcript.md",
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof ExportStartPageError);
+      assert.match((err as Error).message, /raw\//);
+      assert.match((err as Error).message, /--raw/);
+      return true;
+    },
+  );
+});
+
+test("runExport: a raw/ start page works under --raw", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(root, "raw/transcript.md", "# Raw transcript\n\nText.\n");
+  await commitAll(root, "add raw");
+  const outDir = path.join(root, "web");
+  await runExport(root, {
+    out: outDir,
+    allowDirty: true,
+    raw: true,
+    startPage: "raw/transcript.md",
+  });
+
+  const idx = readOut(outDir, "index.html");
+  assert.ok(idx.includes("Raw transcript"), "the raw page is the landing page");
+  assert.ok(idx.includes("Browse by Kind"), "it carries the kind list");
+  assert.ok(
+    !fs.existsSync(path.join(outDir, "raw", "transcript.html")),
+    "the raw page is exported exactly once",
+  );
+});
+
+test("runExport: a saved start page is used when no flag is given", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(
+    root,
+    ".wiki-knowledge/config.json",
+    JSON.stringify({ startPage: START_PAGE_REF }),
+  );
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+  assert.ok(
+    readOut(outDir, "index.html").includes("<h1>Home</h1>"),
+    "the saved ref is the vault's standing choice",
+  );
+});
+
+test("runExport: the --start-page flag overrides the saved ref", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(
+    root,
+    ".wiki-knowledge/config.json",
+    JSON.stringify({ startPage: "wiki/concepts/alpha-concept.md" }),
+  );
+  const outDir = path.join(root, "web");
+  await runExport(root, {
+    out: outDir,
+    allowDirty: true,
+    startPage: START_PAGE_REF,
+  });
+  assert.ok(readOut(outDir, "index.html").includes("<h1>Home</h1>"));
+});
+
+test("runExport: a saved start page the export does not carry fails, naming the config", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(
+    root,
+    ".wiki-knowledge/config.json",
+    JSON.stringify({ startPage: "wiki/gone/gone.md" }),
+  );
+  await assert.rejects(
+    () => runExport(root, { out: path.join(root, "web"), allowDirty: true }),
+    (err: unknown) => {
+      assert.ok(
+        err instanceof ExportStartPageError,
+        `expected ExportStartPageError, got ${String(err)}`,
+      );
+      assert.match((err as Error).message, /config\.json/);
+      assert.match((err as Error).message, /--save-start-page/);
+      return true;
+    },
+  );
+});
+
+test("runExport: a malformed config still degrades to the generated front page", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(root, ".wiki-knowledge/config.json", "{ not json");
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true });
+
+  const idx = readOut(outDir, "index.html");
+  assert.ok(idx.includes("pages"), "the generated front page is used");
+  assert.ok(
+    idx.includes("Get Started"),
+    "the generated get-started block is back",
+  );
+  assert.ok(!idx.includes("<h1>Home</h1>"), "no start page was resolved");
+});
+
+test("runExport: --starters beside a start page warns and still writes the export", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  // Swapped by hand rather than via `t.mock`: Bun's node:test shim does not
+  // implement `mock` yet, and this test must pass on both runtimes.
+  const warnings: string[] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  try {
+    const outDir = path.join(root, "web");
+    await runExport(root, {
+      out: outDir,
+      allowDirty: true,
+      startPage: START_PAGE_REF,
+      starters: [{ pageRef: "wiki/concepts/alpha-concept.md" }],
+    });
+
+    assert.equal(warnings.length, 1, "exactly one warning");
+    assert.match(warnings[0], /--starters/);
+    assert.match(warnings[0], /start page/);
+    const idx = readOut(outDir, "index.html");
+    assert.ok(idx.includes("<h1>Home</h1>"), "the export was written anyway");
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("runExport: --single-file with a start page makes it the __front section", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  const outFile = path.join(root, "wiki.html");
+  await runExport(root, {
+    out: outFile,
+    allowDirty: true,
+    singleFile: true,
+    startPage: START_PAGE_REF,
+  });
+
+  const html = fs.readFileSync(outFile, "utf8");
+  assert.ok(
+    html.includes('id="__front"'),
+    "the start page is the front section",
+  );
+  assert.ok(!html.includes('id="wiki-home-home"'), "and not also its own");
+  assert.ok(
+    html.includes("Browse by Kind"),
+    "the kind list is in the front section",
+  );
+  assert.ok(
+    html.includes('href="#__front"'),
+    "links resolve to the front section",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// vaultPageRefs — the save-time validation set
+// ---------------------------------------------------------------------------
+
+test("vaultPageRefs: enumerates wiki/ pages and raw/ files alike", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeFile(root, "raw/transcript.md", "# Raw\n");
+  await commitAll(root, "add raw");
+
+  const refs = vaultPageRefs(root);
+  assert.ok(refs.has("wiki/home/home.md"), "wiki pages are listed");
+  assert.ok(
+    refs.has("raw/transcript.md"),
+    "raw files are listed even though the export may not carry them",
+  );
+  assert.ok(!refs.has("wiki/nowhere/missing.md"));
 });

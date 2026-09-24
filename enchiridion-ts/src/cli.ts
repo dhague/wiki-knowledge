@@ -63,12 +63,19 @@ import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
   runExport,
   buildCandidates,
+  vaultPageRefs,
   ExportDirtyError,
+  ExportStartPageError,
   ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
 import { SINGLE_FILE_DEFAULT_NAME } from "./exportsingle.js";
-import { exportConfigPath, saveExportTitle } from "./exportconfig.js";
+import {
+  exportConfigPath,
+  normalizeStartPageRef,
+  saveExportStartPage,
+  saveExportTitle,
+} from "./exportconfig.js";
 import type { StarterEntry } from "./exportmeta.js";
 
 /** Prints the standard stub message and marks the process failed. */
@@ -1259,6 +1266,14 @@ export function buildProgram(): Command {
       "save the wiki title as the persistent default and exit (writes no site)",
     )
     .option(
+      "--start-page <ref>",
+      "vault-relative page ref to export as the site's front page for this run only (default: the saved start page, else the generated front page)",
+    )
+    .option(
+      "--save-start-page <ref>",
+      "save a page ref as the vault's persistent start page and exit (a blank ref clears it; writes no site)",
+    )
+    .option(
       "--candidates",
       "emit the ranked candidate list as one JSON line to stdout and exit (writes nothing)",
     )
@@ -1275,6 +1290,8 @@ export function buildProgram(): Command {
         allowDirty?: boolean;
         title?: string;
         saveTitle?: string;
+        startPage?: string;
+        saveStartPage?: string;
         candidates?: boolean;
         starters?: string[];
       }) => {
@@ -1291,6 +1308,26 @@ export function buildProgram(): Command {
           }
           console.log(
             `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`,
+          );
+          return;
+        }
+
+        // Same shape for the start page. The one thing this path validates is
+        // that the ref names a page *of the vault* — the export's own set is a
+        // run-time question (--raw), so it is checked when the export runs. A
+        // blank ref is not an error here: it is how "no start page" is spelled.
+        if (opts.saveStartPage !== undefined) {
+          const ref = normalizeStartPageRef(opts.saveStartPage);
+          if (ref !== "" && !vaultPageRefs(root).has(ref)) {
+            fail(
+              `enchiridion export: --save-start-page "${ref}" does not name a page of this vault`,
+            );
+          }
+          saveExportStartPage(root, opts.saveStartPage);
+          console.log(
+            ref === ""
+              ? `Cleared the saved start page in ${exportConfigPath(root)}`
+              : `Saved start page "${ref}" to ${exportConfigPath(root)}`,
           );
           return;
         }
@@ -1329,6 +1366,8 @@ export function buildProgram(): Command {
             // The per-run flag, not the resolved title: runExport owns the
             // resolution order (flag → saved title → directory name).
             title: opts.title,
+            // Likewise the raw flag: runExport owns flag → saved ref → none.
+            startPage: opts.startPage,
             starters,
           });
           console.log(`Exported to ${outPath}`);
@@ -1336,7 +1375,8 @@ export function buildProgram(): Command {
           if (
             err instanceof ExportDirtyError ||
             err instanceof ExportTargetNotEmptyError ||
-            err instanceof ExportTargetIsDirectoryError
+            err instanceof ExportTargetIsDirectoryError ||
+            err instanceof ExportStartPageError
           ) {
             fail(`enchiridion export: ${(err as Error).message}`);
           } else {

@@ -13,9 +13,12 @@ import os from "node:os";
 import path from "node:path";
 import {
   exportConfigPath,
+  normalizeStartPageRef,
   readExportConfig,
   writeExportConfig,
+  saveExportStartPage,
   saveExportTitle,
+  resolveExportStartPage,
   resolveExportTitle,
 } from "./exportconfig.js";
 
@@ -176,4 +179,141 @@ test("resolveExportTitle: a blank config title falls through to the directory na
 test("resolveExportTitle: titles are trimmed", () => {
   const root = tmpDirNamed("vault-dir");
   assert.equal(resolveExportTitle(root, "  Padded  "), "Padded");
+});
+
+// ---------------------------------------------------------------------------
+// Start page — normalisation, save, clear, resolution
+// ---------------------------------------------------------------------------
+
+test("normalizeStartPageRef: strips a leading ./", () => {
+  assert.equal(
+    normalizeStartPageRef("./wiki/home/home.md"),
+    "wiki/home/home.md",
+  );
+});
+
+test("normalizeStartPageRef: appends .md when the extension is absent", () => {
+  assert.equal(normalizeStartPageRef("wiki/home/home"), "wiki/home/home.md");
+});
+
+test("normalizeStartPageRef: leaves an already-normalised ref alone", () => {
+  assert.equal(normalizeStartPageRef("wiki/home/home.md"), "wiki/home/home.md");
+});
+
+test("normalizeStartPageRef: a blank ref stays blank", () => {
+  assert.equal(normalizeStartPageRef("   "), "");
+});
+
+test("readExportConfig: a non-string startPage is ignored", () => {
+  const root = tmpDir();
+  writeConfigFile(root, '{"startPage": 42, "title": "Keep"}');
+  const config = readExportConfig(root);
+  assert.equal(config.startPage, undefined);
+  assert.equal(config.title, "Keep");
+});
+
+test("saveExportStartPage: round-trips the ref, normalised", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "./wiki/home/home");
+  assert.equal(readExportConfig(root).startPage, "wiki/home/home.md");
+});
+
+test("saveExportStartPage: preserves other keys already in the file", () => {
+  const root = tmpDir();
+  writeConfigFile(root, '{"title": "Team Wiki", "future_key": "keep me"}');
+  saveExportStartPage(root, "wiki/home/home.md");
+  const config = readExportConfig(root);
+  assert.equal(config.startPage, "wiki/home/home.md");
+  assert.equal(config.title, "Team Wiki");
+  assert.equal(config.future_key, "keep me");
+});
+
+test("saveExportTitle: preserves a saved start page", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "wiki/home/home.md");
+  saveExportTitle(root, "Team Wiki");
+  const config = readExportConfig(root);
+  assert.equal(config.title, "Team Wiki");
+  assert.equal(config.startPage, "wiki/home/home.md");
+});
+
+test("saveExportStartPage: a blank ref clears the key", () => {
+  const root = tmpDir();
+  writeConfigFile(
+    root,
+    '{"title": "Team Wiki", "startPage": "wiki/home/home.md"}',
+  );
+  saveExportStartPage(root, "   ");
+  const config = readExportConfig(root);
+  assert.equal(config.startPage, undefined);
+  assert.equal(config.title, "Team Wiki", "other keys survive the clear");
+});
+
+test("saveExportStartPage: a blank ref on an absent config writes nothing new", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "");
+  assert.deepEqual(readExportConfig(root), {});
+});
+
+test("resolveExportStartPage: the flag wins over the saved ref", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "wiki/saved/saved.md");
+  assert.equal(
+    resolveExportStartPage(root, "wiki/flag/flag.md"),
+    "wiki/flag/flag.md",
+  );
+});
+
+test("resolveExportStartPage: the saved ref is used when no flag is given", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "wiki/saved/saved.md");
+  assert.equal(resolveExportStartPage(root), "wiki/saved/saved.md");
+});
+
+test("resolveExportStartPage: no flag and no saved ref resolves to none", () => {
+  const root = tmpDir();
+  assert.equal(resolveExportStartPage(root), undefined);
+});
+
+test("resolveExportStartPage: normalises the flag", () => {
+  const root = tmpDir();
+  assert.equal(
+    resolveExportStartPage(root, "./wiki/home/home"),
+    "wiki/home/home.md",
+  );
+});
+
+test("resolveExportStartPage: a blank flag falls through to the saved ref", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "wiki/saved/saved.md");
+  assert.equal(resolveExportStartPage(root, "   "), "wiki/saved/saved.md");
+});
+
+test("resolveExportStartPage: a malformed config resolves to none", () => {
+  const root = tmpDir();
+  writeConfigFile(root, "}{");
+  assert.equal(resolveExportStartPage(root), undefined);
+});
+
+test("resolveExportStartPage: a hand-written blank saved ref resolves to none", () => {
+  const root = tmpDir();
+  writeConfigFile(root, '{"startPage": "   "}');
+  assert.equal(resolveExportStartPage(root), undefined);
+});
+
+test("resolveExportStartPage: a ref that normalises away falls through", () => {
+  const root = tmpDir();
+  saveExportStartPage(root, "wiki/saved/saved.md");
+  assert.equal(
+    resolveExportStartPage(root, "./"),
+    "wiki/saved/saved.md",
+    "a bare ./ is not a ref, so the saved one applies",
+  );
+});
+
+test("resolveExportStartPage: a ref that normalises away with nothing saved resolves to none", () => {
+  const root = tmpDir();
+  assert.equal(resolveExportStartPage(root, "./"), undefined);
+  writeConfigFile(root, '{"startPage": "./"}');
+  assert.equal(resolveExportStartPage(root), undefined);
 });
