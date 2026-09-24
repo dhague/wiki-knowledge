@@ -37,6 +37,14 @@ export const EdgeKeys: string[] = [
  * them. */
 const singleLinkKeys: Record<string, boolean> = { raw_source: true };
 
+/** Report whether key's YAML value is one link rather than a list of them —
+ * `raw_source` alone. Exported so a module that must treat this key
+ * differently reads the fact from the schema's one owner rather than
+ * respelling `raw_source` (#548). */
+export function isSingleLinkEdgeKey(key: string): boolean {
+  return singleLinkKeys[key] === true;
+}
+
 /** One frontmatter edge key with its resolved, vault-relative targets. */
 export interface Edge {
   key: string;
@@ -106,7 +114,7 @@ export function newPageRecord(
     const raw = data[key];
     if (raw === undefined || raw === null) continue;
     let links: string[];
-    if (singleLinkKeys[key]) {
+    if (isSingleLinkEdgeKey(key)) {
       if (typeof raw !== "string" || raw === "") continue;
       links = [raw];
     } else {

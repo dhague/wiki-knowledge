@@ -153,7 +153,7 @@ Command on yes: `"$RUNTIME" "$ENCHIRIDION" vault move <old-ref> <new-ref>`
 Command on yes: invoke the `wiki-ingest` procedure with the term and the context pages as input.
 
 **Edge retyping (check 16):** "In `<page>`, `related:` → `<target>` looks like `<specific-type>` because `<reason>`. Retype?"
-Command on yes: `"$RUNTIME" "$ENCHIRIDION" page set <absolute-path> <specific-type> "<link-string>"` and remove the entry from `related:`.
+Command on yes: `"$RUNTIME" "$ENCHIRIDION" page merge <absolute-path> <specific-type> '["<vault-relative-ref>"]'`, then rewrite `related:` without that target via `page set <absolute-path> related --json '<remaining-links>'`. An edge value is a markdown link or a vault-relative ref (`wiki/concepts/foo.md`) — the command composes the link. `page set` **replaces** a list-valued key; `page merge` **unions** into it.
 
 **Delete orphan page:** "Page `<path>` has no inbound links and no apparent purpose. Delete it?"
 Command on yes: `git -C <vault-root> rm <vault-relative-path> && git -C <vault-root> commit -m "chore: remove orphan page <path>"`

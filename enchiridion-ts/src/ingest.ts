@@ -64,10 +64,10 @@ import path from "node:path";
 import {
   Page,
   canonicalizeLinkTargets,
-  composeLink,
   normalizeBodyLinks,
   splitFrontmatter,
 } from "./wikipage.js";
+import { composeEdgeLink } from "./pageedge.js";
 import { path as placePath, Kinds } from "./place.js";
 import { Vault } from "./vault.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
@@ -848,8 +848,9 @@ function pageRef(
  *
  * This plan's own page for that pageRef wins (titles), so an update that
  * corrects a title propagates to every link the same plan writes. Then the
- * on-disk title; then the basename, reachable only if validation let an
- * unresolvable target through. */
+ * on-disk title; then `""`, letting [composeEdgeLink] fall back to the
+ * basename — reachable only if validation let an unresolvable target
+ * through. */
 function resolveTitle(
   targetRef: string,
   titles: Map<string, string>,
@@ -863,7 +864,7 @@ function resolveTitle(
     const diskTitle = page.getString("title");
     if (diskTitle !== "") return diskTitle;
   }
-  return path.posix.basename(targetRef);
+  return "";
 }
 
 /** The **only** frontmatter projection in this module — see [resolve]. */
@@ -891,7 +892,7 @@ function applyFrontmatter(
         // Nothing to point at; validate reports it as a shape error.
         continue;
       }
-      v_ = composeLink(path.posix.basename(plan.raw), plan.raw, pageDir);
+      v_ = composeEdgeLink("raw_source", plan.raw, pageDir, "");
     }
     if (Array.isArray(v_) && merging) {
       page = page.merge(key, v_);
@@ -902,7 +903,7 @@ function applyFrontmatter(
 
   for (const [key, refs] of planPage.edges.all()) {
     const links = refs.map((ref) =>
-      composeLink(resolveTitle(ref, titles, v), ref, pageDir),
+      composeEdgeLink(key, ref, pageDir, resolveTitle(ref, titles, v)),
     );
     if (merging) {
       page = page.mergeStrings(key, links);
