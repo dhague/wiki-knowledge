@@ -134,9 +134,14 @@ WIKI_ROOT=<path_to_vault> node dist/cli.cjs ingest-scan --json
 
 `wiki-plugin/skills/` is the canonical, hand-edited skill tree; repo-root
 `skills/` is a generated copy of it, and `scripts/release.sh` regenerates that
-copy (and refreshes the bundle inside every skill that ships one) at release
-time. CI fails a PR if the two trees diverge. `wiki-plugin/tests/` holds the
-shim's `bats` suite and a structural test of the `wiki-watch` skill:
+copy (and refreshes the bundle inside every skill) at release time. CI fails a
+PR if the two trees diverge.
+
+`wiki-plugin/tests/` holds the shim's `bats` suite and the one Python test left
+in the repo — `test_wiki_watch_skill.py`, a structural check that the
+`wiki-watch` skill still names the `watch` subcommand it orchestrates. The rest
+of the Python tooling was deleted with [ADR-0026](docs/adr/0026-host-neutral-skill-package.md),
+so the venv exists only for that:
 
 ```bash
 cd wiki-plugin

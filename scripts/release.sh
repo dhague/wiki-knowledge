@@ -75,16 +75,17 @@ rm -f CLAUDE.md.bak
 cp enchiridion-ts/dist/cli.cjs wiki-plugin/scripts/cli.cjs
 cp enchiridion-ts/dist/node-sqlite3-wasm.wasm wiki-plugin/scripts/node-sqlite3-wasm.wasm
 
-# 4. Ship the bundle inside every skill that calls it. The portable skill text
-#    resolves the script from the skill's own base directory, so each of these
-#    directories carries its own copy. The copies are byte-identical, and git
-#    is content-addressed, so the repository stores one blob however many
-#    skills bundle it. wiki-conventions documents the script layer but runs no
-#    script of its own, so it ships none.
-for skill in save-conversation wiki-ask wiki-export wiki-ingest wiki-init wiki-lint wiki-watch; do
-  mkdir -p "wiki-plugin/skills/$skill/scripts"
-  cp enchiridion-ts/dist/cli.cjs "wiki-plugin/skills/$skill/scripts/enchiridion.cjs"
-  cp enchiridion-ts/dist/node-sqlite3-wasm.wasm "wiki-plugin/skills/$skill/scripts/node-sqlite3-wasm.wasm"
+# 4. Ship the bundle inside every skill. The portable text resolves the script
+#    from the skill's own base directory, so each directory carries its own
+#    copy — wiki-conventions included, even though it is the catalogue rather
+#    than a caller: iterating the tree is uniform, and a skill added later
+#    needs no list edited here. The copies are byte-identical, and git is
+#    content-addressed, so the repository stores one blob however many skills
+#    bundle it.
+for skill_dir in wiki-plugin/skills/*/; do
+  mkdir -p "${skill_dir}scripts"
+  cp enchiridion-ts/dist/cli.cjs "${skill_dir}scripts/enchiridion.cjs"
+  cp enchiridion-ts/dist/node-sqlite3-wasm.wasm "${skill_dir}scripts/node-sqlite3-wasm.wasm"
 done
 
 # 5. Regenerate the distribution tree. Repo-root skills/ is a verbatim copy of
