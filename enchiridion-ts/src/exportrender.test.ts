@@ -205,19 +205,212 @@ kind: concept
 // 3. Frontmatter table
 // ---------------------------------------------------------------------------
 
-test("renderPages: frontmatter table contains all literal keys", () => {
+test("renderPages: frontmatter table keeps every literal key the header did not lift", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
-  // alpha-concept has title, summary, tags, kind (literal), refines
-  assert.ok(html.includes("<td>title</td>"), "title key should be in table");
+  const table = /<table class="frontmatter">([\s\S]*?)<\/table>/.exec(
+    html,
+  )?.[1];
+  assert.ok(table, "the page should carry a frontmatter table");
+  // alpha-concept has title, summary, tags, kind (literal), refines — and the
+  // title and summary are the header's now, not rows.
+  assert.ok(table.includes("<td>tags</td>"), "tags key should be in the table");
   assert.ok(
-    html.includes("<td>summary</td>"),
-    "summary key should be in table",
+    table.includes("<td>refines</td>"),
+    "refines key should be in the table",
   );
-  assert.ok(html.includes("<td>tags</td>"), "tags key should be in table");
   assert.ok(
-    html.includes("<td>refines</td>"),
-    "refines key should be in table",
+    !table.includes("<td>title</td>"),
+    "title belongs to the header, not the table",
+  );
+  assert.ok(
+    !table.includes("<td>summary</td>"),
+    "summary belongs to the header, not the table",
+  );
+});
+
+test("renderPages: the frontmatter title and summary lead the page", () => {
+  const rendered = collectPages(wikiPages);
+  const html = rendered.get("wiki/concepts/alpha-concept.html")!;
+  assert.ok(
+    html.includes('<header class="page-header">') &&
+      html.includes('<h1 id="alpha-concept">Alpha Concept</h1>') &&
+      html.includes('<p class="page-summary">The first concept.</p>'),
+    "the header should carry the frontmatter title and summary",
+  );
+  assert.ok(
+    html.indexOf('<header class="page-header">') < html.indexOf("<article>"),
+    "the header should precede the article",
+  );
+});
+
+test("renderPages: a page with no summary gets a header with no empty paragraph", () => {
+  const pages = makePages([
+    [
+      "wiki/concepts/no-summary.md",
+      `---\ntitle: No Summary\nkind: concept\n---\n\nBody.\n`,
+    ],
+  ]);
+  const html = collectPages(pages).get("wiki/concepts/no-summary.html")!;
+  assert.ok(
+    html.includes("<h1>No Summary</h1>"),
+    "the title still heads the page",
+  );
+  assert.ok(
+    !html.includes("page-summary"),
+    "no empty summary paragraph should be emitted",
+  );
+});
+
+test("renderPages: a page whose frontmatter was only title and summary keeps the divider", () => {
+  const pages = makePages([
+    [
+      "wiki/concepts/bare.md",
+      `---\ntitle: Bare\nsummary: Only these two.\n---\n\nBody.\n`,
+    ],
+  ]);
+  const html = collectPages(pages).get("wiki/concepts/bare.html")!;
+  const table = /<table class="frontmatter">([\s\S]*?)<\/table>/.exec(
+    html,
+  )?.[1];
+  assert.ok(table, "the derived rows still get their table");
+  assert.ok(
+    table.includes("fm-divider"),
+    "the divider stays where the relocation left it",
+  );
+  assert.ok(
+    table.indexOf("fm-divider") < table.indexOf("<td>kind</td>"),
+    "and still separates the derived rows from what came before",
+  );
+});
+
+test("renderPageParts: a summary with no title still leads the page", () => {
+  const pages = makePages([
+    [
+      "wiki/concepts/summary-only.md",
+      `---\nsummary: Just a summary.\nkind: concept\n---\n\nBody.\n`,
+    ],
+  ]);
+  const meta = buildExportMeta(pages);
+  const main = [...renderPageParts(pages, meta)].find(
+    (p) => p.path === "wiki/concepts/summary-only.html",
+  )!.parts.main;
+  assert.ok(
+    main.startsWith('<header class="page-header">'),
+    "the header still leads the page",
+  );
+  assert.ok(
+    main.includes('<p class="page-summary">Just a summary.</p>'),
+    "the summary is shown",
+  );
+  assert.ok(!main.includes("<h1"), "no empty title heading is invented");
+});
+
+test("renderPageParts: a body H1 that repeats the title is lifted, anchor and all", () => {
+  const pages = makePages([
+    [
+      "wiki/concepts/echo.md",
+      `---\ntitle: Echo Title\nkind: concept\n---\n\n# Echo Title\n\nBody after the heading.\n`,
+    ],
+  ]);
+  const meta = buildExportMeta(pages);
+  const main = [...renderPageParts(pages, meta)].find(
+    (p) => p.path === "wiki/concepts/echo.html",
+  )!.parts.main;
+  assert.equal(
+    (main.match(/<h1/g) ?? []).length,
+    1,
+    "the page should carry exactly one H1",
+  );
+  assert.ok(
+    main.includes('<h1 id="echo-title">Echo Title</h1>'),
+    "the header H1 should carry the suppressed heading's anchor",
+  );
+  assert.ok(
+    main.includes("Body after the heading."),
+    "the rest of the body should survive",
+  );
+});
+
+test("renderPageParts: a setext H1 that repeats the title is lifted too", () => {
+  // Suppression runs on the rendered HTML, so it does not care which spelling
+  // of a level-one heading produced it.
+  const pages = makePages([
+    [
+      "wiki/concepts/setext.md",
+      `---\ntitle: Setext Title\nkind: concept\n---\n\nSetext Title\n============\n\nBody.\n`,
+    ],
+  ]);
+  const meta = buildExportMeta(pages);
+  const main = [...renderPageParts(pages, meta)].find(
+    (p) => p.path === "wiki/concepts/setext.html",
+  )!.parts.main;
+  assert.equal(
+    (main.match(/<h1/g) ?? []).length,
+    1,
+    "the page should carry exactly one H1",
+  );
+  assert.ok(
+    main.includes('<h1 id="setext-title">Setext Title</h1>'),
+    "the header carries the setext heading's own anchor",
+  );
+});
+
+test("renderPageParts: the lifted heading keeps markdown-it's own id", () => {
+  // The body H1 carries a link, so markdown-it slugs the heading's *text*
+  // ("Guide"), not the title's markup. Reusing the rendered id — rather than
+  // slugging the frontmatter title again — is what keeps them in step.
+  const pages = makePages([
+    [
+      "wiki/concepts/guide.md",
+      `---\ntitle: Guide\nkind: concept\n---\n\n# [Guide](guide.md)\n\nBody.\n`,
+    ],
+  ]);
+  const meta = buildExportMeta(pages);
+  const main = [...renderPageParts(pages, meta)].find(
+    (p) => p.path === "wiki/concepts/guide.html",
+  )!.parts.main;
+  assert.equal((main.match(/<h1/g) ?? []).length, 1, "one H1 on the page");
+  assert.ok(
+    main.includes('<h1 id="guide">Guide</h1>'),
+    "the header takes the id markdown-it gave the heading it replaced",
+  );
+});
+
+test("renderPageParts: a body H1 that says something else is the author's", () => {
+  const pages = makePages([
+    [
+      "wiki/concepts/other.md",
+      `---\ntitle: Page Title\nkind: concept\n---\n\n# A Different Heading\n\nBody.\n`,
+    ],
+  ]);
+  const meta = buildExportMeta(pages);
+  const main = [...renderPageParts(pages, meta)].find(
+    (p) => p.path === "wiki/concepts/other.html",
+  )!.parts.main;
+  assert.equal(
+    (main.match(/<h1/g) ?? []).length,
+    2,
+    "a heading that is not the title's echo should stay",
+  );
+  assert.ok(main.includes("A Different Heading"), "the author's heading stays");
+});
+
+test("renderPages: a raw page keeps its frontmatter in the table and gets no header", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["raw/raw-doc.md", rawDoc],
+  ]);
+  const html = collectPages(pages, { includeRaw: true }).get(
+    "raw/raw-doc.html",
+  )!;
+  assert.ok(
+    !html.includes("page-header"),
+    "a raw page gets no extracted header",
+  );
+  assert.ok(
+    html.includes("<td>title</td>") && html.includes("Raw Document"),
+    "its table still carries the authored rows",
   );
 });
 
@@ -912,27 +1105,29 @@ test("renderPageParts: the default is still multi-page relative links", () => {
  * both output modes (exportsingle.test.ts pins the single-file sections).
  */
 
-test("renderPages: the article precedes the frontmatter table", () => {
+test("renderPages: the header, the article and the table come in that order", () => {
   const rendered = collectPages(wikiPages, { title: "Test Vault" });
   for (const [path, html] of rendered) {
+    const header = html.indexOf('<header class="page-header">');
     const article = html.indexOf("<article>");
     const table = html.indexOf('<table class="frontmatter">');
+    assert.ok(header !== -1, `${path} should carry a page header`);
     assert.ok(article !== -1, `${path} should carry an article`);
     assert.ok(table !== -1, `${path} should carry a frontmatter table`);
     assert.ok(
-      article < table,
-      `${path}: frontmatter must follow the article, not lead it`,
+      header < article && article < table,
+      `${path}: the header, article and footer table must come in that order`,
     );
   }
 });
 
-test("renderPageParts: main leads with the article", () => {
+test("renderPageParts: main leads with the page header", () => {
   const meta = buildExportMeta(wikiPages, { title: "Test Vault" });
   const opts = { title: "Test Vault" };
   for (const { path, parts } of renderPageParts(wikiPages, meta, opts)) {
     assert.ok(
-      parts.main.startsWith("<article>"),
-      `${path}: the first thing after the nav should be the article`,
+      parts.main.startsWith('<header class="page-header">'),
+      `${path}: the first thing after the nav should be the page header`,
     );
   }
 });
@@ -964,11 +1159,9 @@ test("renderPages: moving the table leaves its rows and their order alone", () =
     ...table.matchAll(/<tr[^>]*><td(?: colspan="2")?>([^<]*)<\/td>/g),
   ].map((m) => m[1]);
   assert.deepEqual(labels, [
-    "title",
-    "summary",
     "tags",
     "kind",
-    "refines", // the authored rows, in their own order
+    "refines", // the authored rows the header did not lift, in their own order
     "", // the fm-divider
     "kind",
     "superseded_by", // the derived rows, still derived and still last
@@ -1031,6 +1224,10 @@ test("renderPages: a page with no frontmatter carries no table", () => {
     assert.ok(
       !html.includes("fm-divider"),
       `${path} should emit no stray divider`,
+    );
+    assert.ok(
+      !html.includes("page-header"),
+      `${path} should emit no empty header`,
     );
   }
 });

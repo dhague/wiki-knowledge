@@ -269,13 +269,15 @@ label, legend, fieldset {
 export const STYLESHEET_DIR = "assets";
 export const STYLESHEET_FILE = "style.css";
 
-/** Rules Sakura does not carry: the sticky nav bar, and the frontmatter
- *  table's leading column (which is a key, not prose). The nav's background
- *  matches Sakura's body colour, so scrolled content cannot show through. */
+/** Rules Sakura does not carry: the sticky nav bar, the page header's
+ *  subtitle treatment, and the frontmatter table's leading column (which is a
+ *  key, not prose). The nav's background matches Sakura's body colour, so
+ *  scrolled content cannot show through. */
 const EXPORT_SUPPLEMENT_CSS = `/* enchiridion export supplement
  * =============================
  * What a classless framework cannot know: the sticky navigation bar every
- * page carries, and the two-column frontmatter table's leading column.
+ * page carries, the title-and-summary page header above the article, and the
+ * two-column frontmatter table's leading column.
  * Kept deliberately small — everything else is Sakura's job.
  */
 
@@ -309,9 +311,26 @@ nav.wiki-nav a:hover {
   text-decoration: underline;
 }
 
+/* The page header: the frontmatter's title and summary, lifted above the
+ * article. The title is the page's own h1, so it needs no new rule; the
+ * summary is set apart from the article's first paragraph as a subtitle
+ * rather than left to read as content. */
+.page-header h1 {
+  margin-bottom: 0.5rem;
+}
+
+.page-summary {
+  font-size: 0.95em;
+  color: #6a6a6a;
+}
+
 table.frontmatter {
   font-size: 0.9em;
   text-align: left;
+  /* As a footer the table butts against whatever the article ends with. The
+   * margin collapses with the preceding block's own bottom margin, so it only
+   * supplies the separation when that block has none. */
+  margin-top: 2rem;
 }
 
 table.frontmatter td {

@@ -184,7 +184,7 @@ test("renderSingleFile: names the sections the links and the front page rely on"
   }
 });
 
-test("renderSingleFile: each section holds its own nav and article", () => {
+test("renderSingleFile: each section holds its own nav, header and article", () => {
   const html = render(wikiPages, { title: "Test Vault" });
   const section =
     /<section id="wiki-concepts-alpha-concept"[^>]*>([\s\S]*?)<\/section>/.exec(
@@ -194,6 +194,17 @@ test("renderSingleFile: each section holds its own nav and article", () => {
   assert.ok(
     section.includes('class="wiki-nav"'),
     "the section carries its own nav bar",
+  );
+  assert.ok(
+    section.includes('<header class="page-header">') &&
+      section.includes('<h1 id="alpha-concept">Alpha Concept</h1>') &&
+      section.includes('<p class="page-summary">The first concept.</p>'),
+    "the section carries the extracted title and summary",
+  );
+  assert.ok(
+    section.indexOf('<header class="page-header">') <
+      section.indexOf("<article>"),
+    "the header comes before the article",
   );
   assert.ok(section.includes("<article>"), "the section carries its article");
   assert.ok(
