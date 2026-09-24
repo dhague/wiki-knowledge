@@ -68,8 +68,33 @@ against the plugin's own copy of the bundle.
 | `/wiki-ingest <path>` | Ingest one file, a folder, or sweep `raw/` |
 | `/wiki-watch` | Long-running auto-ingest watcher for `raw/` |
 | `/wiki-ask <question>` | Grounded, cited answer from the vault |
+| `/wiki-lint [vault-path]` | Vault health check — prioritised findings against the conventions contract, plus mechanical auto-fixes |
 | `/wiki-export ["Title"]` | Render the vault as a static HTML site — multi-page, or one self-contained file |
 | `/save-conversation` | Capture and ingest the current session |
+
+### Vault lint
+
+`/wiki-lint` runs 16 checks in two dimensions — structural (kind-folder
+conformance, frontmatter link format, split links, orphans, concept
+fragmentation) and retrievability (missing `volatility`/`source_date`,
+unresolved supersession, data gaps, summary quality, under-typed edges) — and
+reports what it finds ordered HIGH, MEDIUM, LOW.
+
+Ten of the checks are mechanical, run through `enchiridion check <name> --json`;
+the other six need page judgment. Every finding carries a fix level:
+**auto-fix** (applied without asking — link format, unambiguous `raw_source`
+and cross-reference repairs, folded frontmatter links), **report-only** (the fix
+needs author judgment), or **confirm-first** (a proposed change you approve or
+skip — a page move, an edge retype, an orphan delete, or a concept
+consolidation).
+
+A concept consolidation (check 10) is proposed one cluster at a time and never
+batched, because it deletes committed pages: on yes it hands off to the
+`wiki-ingest` procedure, which reads every member and authors the merged
+survivor.
+
+Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
+path argument, else the current directory.
 
 ### Export flags
 
