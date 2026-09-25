@@ -1,8 +1,4 @@
-/**
- * Tests for the searchindex module. Table-driven, in-memory DB.
- * No assertions on internal SQL strings or prepared statement counts —
- * only the public Hit-returning API is exercised.
- */
+/** Tests for the searchindex module: table-driven, in-memory DB, public API only. */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -29,17 +25,13 @@ class FakeGit implements Git {
   }
 }
 
-/**
- * Build a Fake whose full-tree read (`since == ""`) yields exactly `pages`
- * at the given HEAD SHA.
- */
+/** A Fake whose full-tree read (`since == ""`) yields exactly `pages` at `head`. */
 function fakeAtHead(head: string, ...pages: PageChange[]): FakeGit {
   const fake = new FakeGit();
   fake.snapshots.set("", { head, fullRebuild: true, pages });
   return fake;
 }
 
-/** Render a simple markdown page from its parts. */
 function page(
   title: string,
   summary: string,
@@ -57,7 +49,6 @@ function page(
   return text;
 }
 
-/** Build a scripted PageChange from page() output. */
 function pageChange(
   pageRef: string,
   title: string,
@@ -75,7 +66,6 @@ function pageChange(
   };
 }
 
-/** Extract pageRef from Hit array. */
 function refsOf(hits: Awaited<ReturnType<Index["search"]>>): string[] {
   return hits.map((h) => h.pageRef);
 }
@@ -594,9 +584,7 @@ describe("search", () => {
   });
 
   it("uncommitted page is not searchable (ADR-0015)", async () => {
-    // No pages scripted into fake — writing bytes to disk (which we don't
-    // even do here) would not make them appear in search results because
-    // content comes from git blobs, not the filesystem.
+    // Content comes from git blobs, so writing bytes to disk would not surface.
     const index = await openIndex(new FakeGit());
     try {
       const hits = await index.search({ text: "body" });
@@ -608,7 +596,7 @@ describe("search", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Supersedes percent-decoding (#307)
+// Supersedes percent-decoding
 // ---------------------------------------------------------------------------
 
 describe("supersedes percent-decoding", () => {
@@ -646,7 +634,7 @@ describe("supersedes percent-decoding", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Malformed pages (#307)
+// Malformed pages
 // ---------------------------------------------------------------------------
 
 describe("malformed pages", () => {
@@ -677,11 +665,8 @@ describe("malformed pages", () => {
   });
 
   it("a wiki/_index.md page change is never indexed (#310)", async () => {
-    // Defense in depth: even if a snapshot were to hand the index the
-    // generated-index artifact, it must not be indexed or counted. The git
-    // walk now excludes it up front (vaultgit), so this path is unreachable in
-    // practice — but the index's own skip is what makes "never a page" hold
-    // even under a hand-built snapshot.
+    // Defence in depth: the git walk already excludes it, so a real vault never
+    // reaches this, but a hand-built snapshot must still not index it.
     const fake = fakeAtHead(
       "head1",
       pageChange("wiki/concepts/a.md", "A", "s", "shared word", [], "", ""),
@@ -732,8 +717,7 @@ describe("malformed pages", () => {
     try {
       await index.reindex(false);
 
-      // a.md gains a malformed edge at head2 (same ref, valid depth — the
-      // wrong-depth case is impossible here, since depth is fixed by pageRef).
+      // Same ref and depth, so the skip is the malformed edge, not the depth.
       fake.snapshots.set("head1", {
         head: "head2",
         fullRebuild: false,
@@ -762,15 +746,13 @@ describe("malformed pages", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Page predicate agreement (#310)
+// Page predicate agreement
 // ---------------------------------------------------------------------------
 
 describe("page predicate agreement", () => {
   it("disk, git, and status counts agree on an edge vault (#310)", async () => {
-    // One shared page rule across all three views, proven on the vault that
-    // used to disagree: a generated `wiki/_index.md`, a nested page, and a
-    // file at the wiki root sit on disk and are committed, and all three
-    // views must treat them identically — none of them are pages.
+    // A generated index, a nested page and a wiki-root file all sit on disk and
+    // are committed: all three views must treat them as non-pages.
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
     try {
       const write = (rel: string, text: string) => {
@@ -791,7 +773,7 @@ describe("page predicate agreement", () => {
       await git.add(["."]);
       await git.commit("seed edge vault");
 
-      // The three views, independently computed on the same vault:
+      // The three views, computed independently on the same vault:
       const onDisk = enumeratePageRefs(root);
       const index = await Index.openWithGit(root, git);
       try {
@@ -870,7 +852,7 @@ describe("reindex", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Vault is a git repository (#326)
+// Vault is a git repository
 // ---------------------------------------------------------------------------
 
 describe("Index.open on a candidate vault", () => {
@@ -878,8 +860,7 @@ describe("Index.open on a candidate vault", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
     try {
       const fake = fakeAtHead("head1");
-      // Create .wiki-knowledge as a file (not a directory) — replicates the
-      // condition that causes EEXIST with recursive:true on Node.js and Bun.
+      // A file where the directory should be — the EEXIST with recursive:true case.
       fs.writeFileSync(path.join(root, ".wiki-knowledge"), "not a directory");
 
       await assert.rejects(
@@ -935,7 +916,7 @@ describe("Index.open on a candidate vault", () => {
 
 describe("schema", () => {
   it("version mismatch triggers a full rebuild on reopen (on-disk DB)", async () => {
-    // Uses a real on-disk DB so we can close + reopen and verify the rebuild.
+    // A real on-disk DB so we can close, reopen and verify the rebuild.
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
     try {
       const fake = fakeAtHead(
@@ -943,13 +924,11 @@ describe("schema", () => {
         pageChange("wiki/concepts/a.md", "A", "s", "body", [], "", ""),
       );
 
-      // First open: index one page.
       const idx1 = await Index.openWithGit(tmpDir, fake);
       await idx1.reindex(false);
       idx1.close();
 
-      // Corrupt the schema version directly in the DB file.
-      // We re-open just to patch, then close again.
+      // Patch the schema version directly in the DB file.
       const { createRequire } = await import("node:module");
       const _req = createRequire(import.meta.url);
       const { Database } = _req("node-sqlite3-wasm") as {
@@ -963,7 +942,7 @@ describe("schema", () => {
       );
       patchDb.close();
 
-      // Reopen — should detect mismatch and rebuild from full tree.
+      // Reopen: the mismatch should trigger a rebuild from the full tree.
       const idx2 = await Index.openWithGit(tmpDir, fake);
       try {
         const status = await idx2.status();
@@ -1006,13 +985,10 @@ describe("status", () => {
   });
 
   // -- uncommittedPages (#496) ----------------------------------------------
-  //
-  // The number means "how many pages search could return if they were
-  // committed" — pages on disk the index does not hold. Everything below
-  // builds a *real* vault on disk (the git walk is what decides what HEAD
-  // holds, and no fake reproduces that), so each case pays a temp repo.
+  // Pages on disk the index does not hold — what search could return if they
+  // were committed. Each case builds a real vault, since the git walk decides
+  // what HEAD holds and no fake reproduces that.
 
-  /** Write one page file at a vault-relative ref, making parents as needed. */
   const writeFile = (root: string, ref: string, text: string): void => {
     const p = path.join(root, ...ref.split("/"));
     fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -1024,8 +1000,8 @@ describe("status", () => {
     page(title, "s", `${title} body`, [], "source_date: 2026-01-01\n");
 
   /**
-   * A real vault at a fresh temp root with `refs` committed at HEAD, plus the
-   * git seam so a test can commit a further change. The caller removes `root`.
+   * A fresh temp vault with `refs` committed at HEAD, plus the git seam so a
+   * test can commit a further change. The caller removes `root`.
    */
   const committedVault = async (
     refs: string[],
@@ -1112,16 +1088,9 @@ describe("status", () => {
   });
 
   it("does not let a committed deletion cancel an uncommitted addition (#496)", async () => {
-    // The cancelling case: one committed deletion and one uncommitted
-    // addition, with the index still holding the deleted page (it is a view
-    // of the HEAD it has accounted for, and `status` does not sync).
-    //
-    // Counted by subtraction this is `2 on disk - 2 indexed = 0` — the
-    // subtraction cancels an addition against a deletion and reports the
-    // state it exists to surface. As a set difference it is 1: the addition
-    // is the one page search could return if committed, and the deletion is
-    // not a page at all — it is on nobody's disk, so it cannot pay for the
-    // addition's absence from the index.
+    // The cancelling case: a committed deletion plus an uncommitted addition is
+    // 2 on disk - 2 indexed = 0 by subtraction, but 1 by set difference. The
+    // index stays at the HEAD it accounted for — `status` does not sync.
     const { root, git } = await committedVault([
       "wiki/concepts/a.md",
       "wiki/concepts/b.md",
@@ -1136,8 +1105,7 @@ describe("status", () => {
           "precondition: both seeded pages are indexed",
         );
 
-        // Commit the deletion of a.md, and leave the index where it is — a
-        // view of the HEAD it has accounted for, and `status` does not sync.
+        // Commit the deletion but leave the index at the HEAD it accounted for.
         fs.rmSync(path.join(root, "wiki/concepts/a.md"));
         await git.add(["wiki"]);
         await git.commit("delete a");
@@ -1213,7 +1181,7 @@ describe("tagCounts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// whole-vault read surface (#454)
+// whole-vault read surface
 // ---------------------------------------------------------------------------
 
 describe("indexedPages", () => {

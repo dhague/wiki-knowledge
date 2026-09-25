@@ -1,26 +1,11 @@
 /**
- * The one package that reads the frontmatter schema.
+ * The one reader of the frontmatter schema: frontmatter text in, one typed
+ * record out, so the schema changes in exactly one place. Canonicalising a
+ * value on the way to disk is `wikipage.ts`'s job, not this module's.
  *
- * Frontmatter text in, one typed record out. Every caller that needs a page's
- * frontmatter goes through here rather than re-parsing keys, so the schema
- * changes in exactly one place.
- *
- * **The reading half.** The *shape* a key's value must take is canonicalised on
- * the way to disk, in `wikipage.ts` — one rule per shape, applied by
- * [Page.set] because that is where frontmatter bytes are produced, so no
- * caller can skip them: `source_date`'s one spelling (#499), a markdown link
- * for an edge key (#548), and the one-element list a scalar becomes for a
- * list-valued key (#575). This module owns the other direction, and reads
- * leniently what a page already carries — which is why the writer's list is a
- * writer fact (`wikipage.isStringListKey`), not a second schema here.
- *
- * Every path this module touches is vault-relative — a page reference
- * (`wiki/concepts/a.md`), ADR-0009. Kind is derived from the page's folder via
- * [folderToKind] (ADR-0008 singularization rule): canonical folders resolve
- * from [FolderKinds]; custom folders are singularized and used verbatim.
- * Edges recovers each of [EdgeKeys]' targets, resolved from the page's own
- * directory to true vault-relative by construction; SupersededBy is derived by
- * inverting every other page's `supersedes` edge, never read from frontmatter.
+ * Paths are vault-relative (ADR-0009); kind is derived from the page's folder
+ * (ADR-0008); SupersededBy is inverted from every other page's `supersedes`
+ * edge, never read from frontmatter.
  */
 
 import path from "node:path";
@@ -29,9 +14,8 @@ import { linkDest, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
 import { FolderKinds, folderToKind } from "./place.js";
 import { parseSourceDate } from "./sourcedate.js";
 
-/** Lists the frontmatter keys that hold markdown links to other pages. Order
- * mirrors the frontmatter schema block in the conventions spec. `raw_source`
- * holds a single link; every other key holds a list. */
+/** Frontmatter keys holding markdown links to other pages, in conventions-spec
+ * order. `raw_source` is a single link; every other key is a list. */
 export const EdgeKeys: string[] = [
   "raw_source",
   "supersedes",
@@ -42,20 +26,13 @@ export const EdgeKeys: string[] = [
   "related",
 ];
 
-/** The [EdgeKeys] whose YAML value is one scalar link rather than a list of
- * them. */
+/** The [EdgeKeys] whose YAML value is one scalar link rather than a list. */
 const singleLinkKeys: Record<string, boolean> = { raw_source: true };
 
-/** The values the frontmatter schema allows for `volatility`, in the order the
- * conventions spec lists them. Exported so a module that must judge the field
- * reads its domain from the schema's one owner rather than respelling it — the
- * same reason [isSingleLinkEdgeKey] exports `raw_source`'s shape (#548). */
+/** The `volatility` values the schema allows, in conventions-spec order. */
 export const Volatilities = ["stable", "evolving", "volatile"] as const;
 
-/** Report whether key's YAML value is one link rather than a list of them —
- * `raw_source` alone. Exported so a module that must treat this key
- * differently reads the fact from the schema's one owner rather than
- * respelling `raw_source` (#548). */
+/** Whether key's YAML value is one link rather than a list — `raw_source`. */
 export function isSingleLinkEdgeKey(key: string): boolean {
   return singleLinkKeys[key] === true;
 }
@@ -87,13 +64,9 @@ export function supersedes(r: PageRecord): string[] | null {
   return null;
 }
 
-/**
- * Decode one edge key's YAML value into vault-relative targets, collecting
- * every value the schema refuses rather than raising on the first.
- *
- * Absence is not malformation: a missing, null or empty value is simply no
- * edge.
- */
+/** Decode one edge key's value into vault-relative targets, collecting every
+ * refusal rather than raising on the first. Absence is not malformation: a
+ * missing, null or empty value is simply no edge. */
 function decodeEdge(
   key: string,
   raw: unknown,
@@ -125,16 +98,9 @@ function decodeEdge(
   return { targets, errors };
 }
 
-/**
- * Decode every [EdgeKeys] value in a parsed frontmatter map: the vault-relative
- * targets, and the refusal message for each value the schema refuses. One
- * enumeration feeds both [newPageRecord]'s strict raise and [malformedEdges]'s
- * report, so what one refuses the other names (#549). A key with no usable
- * links contributes no edge and no message.
- *
- * Each message spells its own key, which is what lets [malformedEdges] hand a
- * page's refusals back as plain strings.
- */
+/** Decode every [EdgeKeys] value: the vault-relative targets, plus a refusal
+ * message per value the schema rejects. One enumeration feeds both
+ * [newPageRecord]'s strict raise and [malformedEdges]'s report. */
 function decodeEdges(
   data: Record<string, unknown>,
   pageDir: string,
@@ -151,21 +117,14 @@ function decodeEdges(
   return { edges, malformed };
 }
 
-/**
- * The record-decoding core. Malformed edges are *collected*, never raised
- * here: [newPageRecord] turns the first into the strict error, and a tolerant
- * read drops them (#549). A frontmatter block the YAML parser refuses still
- * raises — that is a page-level malformation, not an edge one.
- */
+/** The record-decoding core. Malformed edges are collected, never raised here;
+ * a frontmatter block the YAML parser refuses still raises. */
 function decodeRecord(
   pageRef: string,
   text: string,
   kindByFolder: Record<string, string> | undefined,
 ): { record: PageRecord; malformed: string[] } {
-  // The kind-folder is the directory directly under `wiki/` that holds this
-  // page (`wiki/concepts/a.md` → folder `concepts`). A page not at that exact
-  // depth (e.g. `wiki/foo.md` or `wiki/concepts/nested/deep.md`) is a
-  // structural error.
+  // A page not at exactly `wiki/<kind-folder>/<file>.md` is a structural error.
   let pageDir = path.posix.dirname(pageRef);
   if (pageDir === ".") pageDir = "";
   const folder = path.posix.basename(pageDir);
@@ -184,9 +143,7 @@ function decodeRecord(
       kind,
       title: scalar(data["title"]),
       summary: scalar(data["summary"]),
-      // The writer's list-valued-key rule (wikipage.ts's `isStringListKey`)
-      // guarantees this is a list on disk; a scalar here is a page written by
-      // something else, and reads as no tags rather than as a malformation.
+      // A scalar here means a page written by something else; read it as no tags.
       tags: stringList(data["tags"]),
       sourceDate: sourceDate(data["source_date"]),
       volatility: scalar(data["volatility"]),
@@ -197,16 +154,9 @@ function decodeRecord(
   };
 }
 
-/**
- * Decodes one page's frontmatter, raising on the first edge value the schema
- * refuses. SupersededBy is always empty here — it needs every other page, so
- * only [loadRecords] fills it in.
- *
- * `kindByFolder` is an optional folder→kind override map (e.g. populated by
- * [Vault.discoveredKinds]), checked before [FolderKinds] and the
- * [folderToKind] heuristic. Canonical four folders are always resolved via
- * [FolderKinds], which is checked first and takes precedence.
- */
+/** Decode one page's frontmatter, raising on the first refused edge value.
+ * SupersededBy stays empty here — only [loadRecords] can fill it in.
+ * `kindByFolder` overrides [folderToKind] but never [FolderKinds]. */
 export function newPageRecord(
   pageRef: string,
   text: string,
@@ -217,13 +167,9 @@ export function newPageRecord(
   return record;
 }
 
-/**
- * Every frontmatter edge value in a page's text that the record parser
- * refuses, as the parser's own refusal messages. Never raises — this is what
- * `check frontmatter-link-format` reports, and a scan that raised on the
- * defect it exists to name would abort the run instead (#549). A block the
- * YAML parser refuses yields nothing: that shape is not an edge's.
- */
+/** Every edge value the parser refuses, as its own refusal messages; never
+ * raises — this is what `check frontmatter-link-format` reports. A block the
+ * YAML parser refuses yields nothing. */
 export function malformedEdges(text: string): string[] {
   let data: Record<string, unknown>;
   try {
@@ -234,11 +180,8 @@ export function malformedEdges(text: string): string[] {
   return decodeEdges(data, "").malformed;
 }
 
-/**
- * Parses a page's YAML frontmatter into a plain map. A page with no
- * frontmatter, or with an empty block, decodes to an empty map rather than an
- * error — a body-only file is indexable, just featureless.
- */
+/** Parse a page's YAML frontmatter into a plain map. No frontmatter, or an
+ * empty block, decodes to an empty map — a body-only file is indexable. */
 function frontmatterMap(text: string): Record<string, unknown> {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
   if (!hasFrontmatter || frontmatter === "") return {};
@@ -247,28 +190,19 @@ function frontmatterMap(text: string): Record<string, unknown> {
   return data as Record<string, unknown>;
 }
 
-/**
- * Renders the frontmatter `source_date` scalar in its canonical YYYY-MM-DD
- * spelling, truncating any clock (the minimal wikitime analogue — #192). A
- * value that isn't a valid date at all is stored verbatim: the read path
- * tolerates legacy and hand-written values, while the write paths (ingest,
- * `page set`) reject them. The parse/validate/canonicalise rule itself lives
- * in [sourcedate.parseSourceDate], the one owner (#309).
- */
+/** The canonical YYYY-MM-DD `source_date`, truncating any clock. A value that
+ * isn't a valid date passes through verbatim — the read path tolerates legacy
+ * values while the write paths reject them. The rule lives in
+ * [sourcedate.parseSourceDate]. */
 function sourceDate(v: unknown): string {
   const date = parseSourceDate(v);
   if (date !== null) return date;
   return scalar(v);
 }
 
-/**
- * Renders a frontmatter value as a string — a missing key and an explicit
- * null both give "".
- *
- * `source_date` never reaches here — [sourceDate] canonicalises it first. A
- * date landing in any other field is rendered date-only when it has no clock,
- * RFC3339 otherwise.
- */
+/** Render a frontmatter value as a string; a missing key and an explicit null
+ * both give "". A Date is rendered date-only when it has no clock, RFC3339
+ * otherwise. ([sourceDate] canonicalises `source_date` before this.) */
 function scalar(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "string") return v;
@@ -291,26 +225,15 @@ function stringList(v: unknown): string[] {
 
 /** How [loadRecords] treats what the schema refuses. */
 export interface LoadRecordsOptions {
-  /** Decode the tolerant way a **check run** reads (#549): a malformed edge is
-   * left out of its page's record — the page itself survives, so its other
-   * findings are still reported. Off by default: a caller that acts on a
-   * record must not silently read one with edges missing. */
+  /** Tolerant read for a check run: a malformed edge is left out and the page
+   * survives, so its other findings still report. Off by default — a caller
+   * that acts on a record must not silently read one with edges missing. */
   skipMalformedEdges?: boolean;
 }
 
-/**
- * Decodes every page in pages ({pageRef: text}, keys vault-relative), filling
- * in SupersededBy by inverting the `supersedes` edges.
- *
- * Pages in any `wiki/<folder>/` are decoded and included; custom kind-folders
- * are fully supported via [folderToKind]. Pages at the wrong depth (not
- * directly under a kind-folder) are an error.
- *
- * `kindByFolder` is an optional folder→kind override map, passed through to
- * [newPageRecord] so that KIND.md declarations take precedence over
- * [folderToKind] for custom folders. `opts` selects the tolerant read a check
- * run needs; see [LoadRecordsOptions].
- */
+/** Decode every page ({pageRef: text}, keys vault-relative), filling in
+ * SupersededBy by inverting the `supersedes` edges. Custom kind-folders are
+ * supported via [folderToKind]; a page not directly under one is an error. */
 export function loadRecords(
   pages: Record<string, string>,
   kindByFolder?: Record<string, string>,

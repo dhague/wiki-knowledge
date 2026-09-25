@@ -1,9 +1,6 @@
 /**
- * Tests for exportconfig.ts — the vault config file and the one place the
- * wiki title is resolved.
- *
- * The config file is plain JSON on disk, so these tests write real files in a
- * temp directory; no git repo is needed (nothing here reads vault content).
+ * Tests for exportconfig.ts. The config is plain JSON, so each test writes real
+ * files in a temp dir; no git repo is needed.
  */
 
 import { test } from "node:test";
@@ -30,8 +27,8 @@ function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "export-config-test-"));
 }
 
-/** A temp directory whose basename is known, so the directory-name fallback
- *  is asserted against a value the test chose rather than a mkdtemp suffix. */
+/** A temp directory with a chosen basename, so the directory-name fallback
+ *  asserts against a known value rather than a mkdtemp suffix. */
 function tmpDirNamed(name: string): string {
   const parent = tmpDir();
   const dir = path.join(parent, name);

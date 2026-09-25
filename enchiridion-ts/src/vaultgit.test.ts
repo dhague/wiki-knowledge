@@ -1,15 +1,6 @@
 /**
- * Integration tests for the vaultgit module (#256). These use real
- * isomorphic-git repositories in temp directories, with these acceptance
- * criteria:
- *
- *   - strict methods throw on failure; lenient methods return defaults
- *   - committedPages covers all three paths (HEAD == watermark, reachable
- *     range, unreachable-watermark full rebuild)
- *   - merge-commit-changed paths are enumerated but merge commits don't
- *     attribute dates
- *   - content is read from HEAD's git blobs, never files on disk
- *   - commit falls back to OS-user@hostname without error
+ * Integration tests for vaultgit, against real isomorphic-git repositories in
+ * temp directories.
  */
 
 import { test } from "node:test";
@@ -29,7 +20,7 @@ function tmpRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "vaultgit-test-"));
 }
 
-/** Vault-relative path helper: write `content` to `rel` (mkdirs parents). */
+/** Write `content` to vault-relative `rel`, creating parents. */
 function writeFile(root: string, rel: string, content: string): void {
   const p = path.join(root, rel);
   fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -41,8 +32,7 @@ function removeFile(root: string, rel: string): void {
 }
 
 function deterministicSignature(offsetHours: number) {
-  // Deterministic but distinct per commit so LastCommitDate / date attribution
-  // is testable: base time + offsetHours, in seconds.
+  // Distinct per commit so date attribution is testable: base + offsetHours.
   const base = new Date("2026-01-01T00:00:00Z").getTime() / 1000;
   const offset = offsetHours * 3600;
   return {
@@ -69,8 +59,8 @@ async function commitAll(
 }
 
 /**
- * Stage the whole worktree including deletions — mirroring what the vaultgit
- * `add` does, since raw `git.add` alone won't stage a removal.
+ * Stage the whole worktree including deletions — raw `git.add` alone won't
+ * stage a removal.
  */
 async function stageEverything(root: string): Promise<void> {
   await git.add({ fs, dir: root, filepath: "." });
@@ -172,8 +162,7 @@ test("commit throws when there is nothing to commit (strict)", async () => {
 });
 
 test("commit falls back to OS-user@hostname without error", async () => {
-  // A freshly-initialised repo has no user.name/user.email; committing must
-  // fall back rather than fail.
+  // A freshly-initialised repo has no user.name/user.email.
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
@@ -182,8 +171,6 @@ test("commit falls back to OS-user@hostname without error", async () => {
   const sha = await repo.commit("first");
   assert.match(sha, /^[0-9a-f]{40}$/);
 
-  // Commit landed with the fallback identity: the current branch's single
-  // commit carries a name of `OS-user@host`.
   const { commit } = (await git.log({ fs, dir: root, depth: 1 }))[0];
   const expected = `${os.userInfo().username}@${os.hostname()}`;
   assert.equal(commit.author.email, expected);
@@ -227,11 +214,8 @@ test('committedPages("") returns the latest committed bytes', async () => {
 });
 
 test('committedPages("") excludes a committed wiki/_index.md — never a page (#310)', async () => {
-  // Q1 resolution: per ADR-0015 the index is a view of HEAD's committed wiki/
-  // tree, but the generated index artifact is *never* a page, so even a
-  // committed wiki/_index.md in HEAD's tree must not be enumerated — it can
-  // never be indexed or counted. The git walk and the disk walk share the
-  // page predicate, so they agree.
+  // The generated index artifact is never a page, even when committed
+  // (ADR-0015).
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
@@ -246,9 +230,8 @@ test('committedPages("") excludes a committed wiki/_index.md — never a page (#
 });
 
 test('committedPages("") excludes a committed nested page — a structural error (#310)', async () => {
-  // Q2 resolution: the schema reader treats "directly under a kind-folder" as
-  // the contract, so a nested page is a structural error, not a page — the git
-  // walk must not enumerate it, matching the disk walk and the status count.
+  // A nested page is a structural error, not a page — the git walk must match
+  // the disk walk.
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
@@ -302,8 +285,7 @@ test("committedPages range enumerates only changed paths", async () => {
 });
 
 test("committedPages range ignores a change to wiki/_index.md (#310)", async () => {
-  // A commit touching only the generated index is not a page change, so the
-  // range walk reports nothing — the index can never be indexed or counted.
+  // A commit touching only the generated index is not a page change.
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
@@ -428,7 +410,6 @@ test("merge commit-changed paths are enumerated but merge commits don't date the
   await commitAll(root, "base", deterministicSignature(1));
   const base = await repo.committedPages("");
 
-  // feature branch changes conflict.md
   const featureHead = await mergeBranch(
     root,
     "feature",
@@ -437,9 +418,8 @@ test("merge commit-changed paths are enumerated but merge commits don't date the
     "feature change",
     deterministicSignature(1),
   );
-  // main branch changes conflict.md too — hour 25 lands this on 2026-01-02,
-  // a day after the (hour-3, 2026-01-01) merge commit, so the assertion below
-  // proves the date comes from the non-merge commit, not the merge.
+  // Hour 25 lands this on 2026-01-02, a day after the hour-3 merge, so the
+  // assertion below proves the date comes from the non-merge commit.
   writeFile(root, "wiki/concepts/conflict.md", "main version\n");
   await commitAll(root, "main change", deterministicSignature(25));
   const mainHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
@@ -474,10 +454,9 @@ test("merge commit-changed paths are enumerated but merge commits don't date the
     "merged version\n",
     "content is HEAD's merge blob",
   );
-  // Merge commit itself must not attribute the date; the non-merge "main
-  // change" commit (later of the two non-merge contributors) does.
+  // Merge commit must not attribute the date; the later non-merge "main change"
+  // commit does.
   assert.equal(page!.date, "2026-01-02");
-  // base.md is untouched by the merge range, so it must not appear.
   assert.ok(!byRef.has("wiki/concepts/base.md"));
 });
 
@@ -489,7 +468,7 @@ test("committedPages attributes a date across a merge second parent", async () =
   await commitAll(root, "base", deterministicSignature(1));
   const base = await repo.committedPages("");
 
-  // feature branch adds x.md — hour 25 lands this on 2026-01-02
+  // Feature branch adds x.md at hour 25 — 2026-01-02.
   const featureHead = await mergeBranch(
     root,
     "feature",
@@ -498,13 +477,12 @@ test("committedPages attributes a date across a merge second parent", async () =
     "add x",
     deterministicSignature(25),
   );
-  // main branch adds y.md
   writeFile(root, "wiki/concepts/y.md", "y\n");
   await commitAll(root, "add y", deterministicSignature(2));
   const mainHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
 
-  // Merge (no conflict): both x.md and y.md present in the merge tree — write
-  // x.md back after the checkout to master removed it.
+  // Both x.md and y.md are in the merge tree; write x.md back after the
+  // checkout to master removed it.
   writeFile(root, "wiki/concepts/x.md", "x\n");
   await git.add({ fs, dir: root, filepath: "." });
   const mergeHash = await git.commit({
@@ -535,19 +513,18 @@ test("committedPages attributes a date across a merge second parent", async () =
 });
 
 test("committedPages range falls back behind a merge for a page it can't date (#491)", async () => {
-  // A page the bounded walk surfaces but can't date: only the merge touches it
-  // inside the range, and the commit that introduced it sits on a side branch
-  // older than the watermark — so the walk stops at `since` before reaching
-  // it. The fallback must find that commit through the shared rule, whose
-  // whole point is that a merge is skipped *over*, never read as "no date".
+  // Only the merge touches this page inside the range, and the commit that
+  // introduced it sits on a side branch older than the watermark — so the walk
+  // stops at `since` before reaching it. The fallback must find that commit
+  // through the shared rule: a merge is skipped *over*, never read as "no date".
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
   writeFile(root, "wiki/concepts/seed.md", "seed\n");
   await commitAll(root, "seed", deterministicSignature(1));
 
-  // Feature branch (off hour 1) adds the page at hour 1.5 — older than the
-  // watermark below, so the range walk never credits it.
+  // Feature add at hour 1.5 — older than the watermark, so never credited by
+  // the range walk.
   const featureHead = await mergeBranch(
     root,
     "feature-fallback",
@@ -557,8 +534,7 @@ test("committedPages range falls back behind a merge for a page it can't date (#
     deterministicSignature(1.5),
   );
 
-  // Watermark: hour 2. Then a master commit inside the range, so the merge has
-  // a non-empty range to walk.
+  // Watermark hour 2; a later master commit gives the merge a non-empty range.
   writeFile(root, "wiki/concepts/noted.md", "noted\n");
   await commitAll(root, "main add noted", deterministicSignature(2));
   const watermark = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
@@ -566,7 +542,7 @@ test("committedPages range falls back behind a merge for a page it can't date (#
   await commitAll(root, "main add other", deterministicSignature(3));
   const rangeHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
 
-  // The merge brings aged.md across (checkout to master removed it), so its
+  // The merge brings aged.md across (the checkout to master removed it), so its
   // own diff against its first parent surfaces the page.
   writeFile(root, "wiki/concepts/aged.md", "aged\n");
   await git.add({ fs, dir: root, filepath: "." });
@@ -617,8 +593,7 @@ test("lastCommitDate tracks the latest commit (strictly-newer)", async () => {
   await commitAll(root, "first", deterministicSignature(1));
   const first = await repo.lastCommitDate("raw/notes.md");
 
-  // Deterministic timestamps that cross a day boundary: hour 1 (2026-01-01)
-  // vs hour 25 (2026-01-02), so the dates are distinguishable.
+  // Hour 1 (2026-01-01) vs hour 25 (2026-01-02) — distinguishable dates.
   writeFile(root, "raw/notes.md", "v2\n");
   await commitAll(root, "second", deterministicSignature(25));
   const second = await repo.lastCommitDate("raw/notes.md");
@@ -640,16 +615,12 @@ test("lastCommitDate is lenient on a non-repo", async () => {
 });
 
 /**
- * A repo whose newest commit touching `wiki/concepts/merge-only.md` is a
- * merge. The feature branch adds the page at hour 2 (2026-01-01); master gains
- * an unrelated page; the two-parent merge at `mergeHours` writes the page back
- * — the shape `git merge` leaves for a page only one side ever had, and for a
- * conflict resolution both sides touched. The page's only non-merge
- * contributor is therefore the feature commit.
+ * A repo whose newest commit touching `wiki/concepts/merge-only.md` is a merge:
+ * the page's only non-merge contributor is the feature commit at hour 2.
  *
- * `mergeHours` is the test's whole point: pass one on a *different day* from
- * hour 2 and the merge commit's own diff touches the page, so a
- * merge-inclusive read is distinguishable from a merge-excluded one.
+ * `mergeHours` must be on a different day from hour 2 so the merge's own diff
+ * touches the page, making a merge-inclusive read distinguishable from a
+ * merge-excluded one.
  */
 async function newestTouchingCommitIsAMerge(mergeHours: number): Promise<{
   repo: VaultGit;
@@ -669,14 +640,13 @@ async function newestTouchingCommitIsAMerge(mergeHours: number): Promise<{
     "feature add merge-only",
     deterministicSignature(2),
   );
-  // master's own commit, so the merge is a genuine two-sided merge rather
-  // than a fast-forwardable one.
+  // master's own commit, so the merge is genuinely two-sided.
   writeFile(root, "wiki/concepts/other.md", "other\n");
   await commitAll(root, "main add other", deterministicSignature(10));
   const mainHead = await git.resolveRef({ fs, dir: root, ref: "HEAD" });
 
-  // Merge: write merge-only.md back (checkout to master removed it), commit
-  // with both branch tips as parents.
+  // Write merge-only.md back (the checkout to master removed it) and commit with
+  // both branch tips as parents.
   writeFile(root, "wiki/concepts/merge-only.md", "merge-only\n");
   await git.add({ fs, dir: root, filepath: "." });
   const mergeHash = await git.commit({
@@ -698,21 +668,17 @@ async function newestTouchingCommitIsAMerge(mergeHours: number): Promise<{
 }
 
 test("lastCommitDate does not attribute a merge commit (pruning rewrite, #419)", async () => {
-  // merge-only.md first appeared on the feature branch (non-merge commit at
-  // hour 2), but HEAD points to a merge commit a day later (hour 25). The
-  // merge's own diff against its first parent touches the page, so an
-  // unfiltered read returns 2026-01-02: the merge must not attribute a date,
-  // and the feature-branch non-merge commit must.
+  // merge-only.md's only non-merge commit is at hour 2; HEAD is a merge a day
+  // later (hour 25) whose diff touches the page. An unfiltered read would return
+  // 2026-01-02, so this proves the merge is excluded.
   const { repo, pageRef } = await newestTouchingCommitIsAMerge(25);
   const date = await repo.lastCommitDate(pageRef);
   assert.equal(date, "2026-01-01", "date from non-merge feature commit");
 });
 
 test("lastCommitDate and the sweep's ScanFacts agree on a merge-only path (#491)", async () => {
-  // The same path read two ways: the sweep reads precomputed maps
-  // (ScanFacts, batched by #415), check.ts's staleSynthesis walks per call.
-  // They must answer from the one rule — a merge sets no date, and the
-  // non-merge commit behind it does (#491).
+  // The same path read two ways must agree on the one rule: a merge sets no
+  // date, the non-merge commit behind it does.
   const { repo, pageRef } = await newestTouchingCommitIsAMerge(25);
   const viaRepo = await repo.lastCommitDate(pageRef);
   const viaFacts = await (await repo.scanFacts()).lastCommitDate(pageRef);
@@ -756,10 +722,8 @@ test("porcelainMentions is false for a clean committed file", async () => {
 });
 
 test("porcelainMentions ignores a CRLF/LF-only difference (autocrlf clean checkout)", async () => {
-  // Under core.autocrlf=true (the Windows norm) a clean checkout stores LF in
-  // the blob but writes CRLF to the working tree. isomorphic-git's status()
-  // doesn't apply autocrlf reliably and would report this as *modified; the
-  // working-tree-vs-blob comparison here must treat it as clean.
+  // Under core.autocrlf=true a clean checkout stores LF in the blob but writes
+  // CRLF on disk; isomorphic-git's status() would misreport this as *modified.
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
@@ -794,12 +758,11 @@ test("porcelainMentions reports a staged (git add) modification (#366)", async (
   await commitAll(root, "first");
   writeFile(root, "raw/notes.md", "modified\n");
   await git.add({ fs, dir: root, filepath: "raw/notes.md" });
-  // Working tree and index both have new content; HEAD has original.
   assert.equal(await repo.porcelainMentions("raw/notes.md"), true);
 });
 
 // ---------------------------------------------------------------------------
-// stageAndCommit — concurrent-safety (#405)
+// stageAndCommit — concurrent safety
 // ---------------------------------------------------------------------------
 
 test("stageAndCommit: two concurrent calls each commit exactly their own paths", async () => {
@@ -807,15 +770,13 @@ test("stageAndCommit: two concurrent calls each commit exactly their own paths",
   const repo = new VaultGit(root);
   await repo.init();
 
-  // Prime the repo with an initial commit so HEAD exists.
   writeFile(root, "wiki/concepts/seed.md", "seed\n");
   await commitAll(root, "seed");
 
-  // Write both plans' pages to disk without staging.
   writeFile(root, "wiki/concepts/a.md", "a content\n");
   writeFile(root, "wiki/concepts/b.md", "b content\n");
 
-  // Fire both stageAndCommit calls concurrently — no await between them.
+  // Fire both concurrently — no await between them.
   const [shaA, shaB] = await Promise.all([
     repo.stageAndCommit(
       ["wiki/concepts/a.md"],
@@ -832,11 +793,9 @@ test("stageAndCommit: two concurrent calls each commit exactly their own paths",
   assert.match(shaB, /^[0-9a-f]{40}$/);
   assert.notEqual(shaA, shaB);
 
-  // Each commit must contain exactly its own pages — no empty commits, no
-  // cross-contamination.
   const log = await git.log({ fs, dir: root });
-  // log[0] and log[1] are the two ingest commits (order not deterministic);
-  // log[2] is "seed".
+  // log[0..1] are the two ingest commits in nondeterministic order; log[2] is
+  // "seed".
   const commitMessages = log.slice(0, 2).map((c) => c.commit.message);
   assert.ok(
     commitMessages.some((m) => m.includes("ingest: A")),
@@ -877,7 +836,6 @@ test("dirtyFiles detects an untracked file in the subtree", async () => {
   writeFile(root, "wiki/concepts/foo.md", "# Foo\n");
   await commitAll(root, "seed");
 
-  // Add a new untracked file
   writeFile(root, "wiki/concepts/bar.md", "# Bar\n");
 
   const dirty = await repo.dirtyFiles(["wiki/"]);
@@ -922,7 +880,6 @@ test("dirtyFiles scopes to wiki/ — raw/ changes not reported when raw/ exclude
   writeFile(root, "raw/inbox/doc.md", "raw content\n");
   await commitAll(root, "seed");
 
-  // Modify raw file only
   fs.writeFileSync(path.join(root, "raw/inbox/doc.md"), "modified raw\n");
 
   const dirty = await repo.dirtyFiles(["wiki/"]);

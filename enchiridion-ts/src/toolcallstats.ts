@@ -1,31 +1,24 @@
 /**
- * Summarises the tool-call log written by the PostToolUse hook.
+ * Summarises the tool-call log written by the PostToolUse hook: totals, a
+ * per-tool histogram, and a prompt count with calls-per-prompt.
  *
- * Makes a run's cost visible: total tool calls, a per-tool histogram, and a
- * prompt count with calls-per-prompt.
- *
- * **"Prompts" is a proxy, not a turn count** (#99). The PostToolUse payload
- * carries no per-assistant-message identifier and no timestamp, so exact
- * assistant turns aren't recoverable. prompt_id is the closest grouping key
- * available, but it spans a whole user-prompt turn — which may itself cover
- * several assistant turns. Labelled honestly wherever it's printed.
+ * "Prompts" is a proxy, not a turn count: the payload carries no
+ * per-assistant-message id, and prompt_id spans a whole user turn.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { sessionsDir, processLookupEnv } from "./sessionstate.js";
 
-/** The tool-call log path for sessionID under stateDir. An empty stateDir
- * resolves the session state directory. */
+/** The log path for sessionID; an empty stateDir resolves the session state
+ * directory. */
 export function logPath(sessionID: string, stateDir: string): string {
   const dir = stateDir === "" ? sessionsDir("", processLookupEnv) : stateDir;
   return path.join(dir, `${sessionID}-tool-calls.jsonl`);
 }
 
-/**
- * The logged events for sessionID, oldest first. Empty array when no log
- * exists. Malformed or blank lines are skipped.
- */
+/** Logged events for sessionID, oldest first; empty when no log exists.
+ * Malformed and blank lines are skipped. */
 export function readLog(
   sessionID: string,
   stateDir: string,
@@ -45,25 +38,23 @@ export function readLog(
   return events;
 }
 
-/** One tool with the number of calls, in histogram order. */
 export interface ToolCount {
   tool: string;
   count: number;
 }
 
-/** The aggregate of one run's tool-call log. */
+/** One run's aggregate of its tool-call log. */
 export interface Summary {
   total: number;
-  /** The per-tool histogram, most-called first (ties broken by first-seen order). */
+  /** Per-tool histogram, most-called first; ties by first-seen order. */
   byTool: ToolCount[];
   /** The prompt-count proxy; see the module comment. */
   prompts: number;
-  /** Valid only when hasCallsPerPrompt is true (there is at least one prompt to divide by). */
+  /** Valid only when hasCallsPerPrompt (at least one prompt to divide by). */
   callsPerPrompt: number;
   hasCallsPerPrompt: boolean;
 }
 
-/** Aggregates events into totals, a per-tool histogram, and the prompt-count proxy. */
 export function summarize(events: Array<Record<string, unknown>>): Summary {
   const total = events.length;
 
@@ -83,7 +74,7 @@ export function summarize(events: Array<Record<string, unknown>>): Summary {
     tool,
     count: counts.get(tool) ?? 0,
   }));
-  // Stable sort by count descending, preserving first-seen order on ties.
+  // sort is stable, so ties keep first-seen order.
   byTool.sort((a, b) => b.count - a.count);
 
   const prompts = promptIDs.size;
@@ -101,7 +92,7 @@ export function summarize(events: Array<Record<string, unknown>>): Summary {
   return s;
 }
 
-/** Renders a summary as the fixed text the CLI prints. */
+/** The summary as the fixed text the CLI prints. */
 export function formatSummary(s: Summary): string {
   let out = `Total tool calls: ${s.total}\n`;
   for (const tc of s.byTool) {

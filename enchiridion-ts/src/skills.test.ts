@@ -1,18 +1,9 @@
 /**
- * Structural checks over the shipped skill tree.
- *
- * The skills are prose, so there is no behaviour to unit-test here. What this
- * guards is the packaging contract ADR-0026 makes load-bearing: `npx skills add`
- * requires a non-empty `name` and `description` and installs each skill into a
- * directory named after its frontmatter `name`, and the maintainer's own
- * `cut-release` skill must carry `metadata.internal: true` — as a real boolean,
- * because the installer compares `metadata?.internal === true` and silently
- * ignores a quoted string, which would leak the release skill into every
- * consumer install with nothing printed to explain it.
- *
- * It lives in the TypeScript suite because that is the repo's only test runner.
- * It reads the canonical tree at `wiki-plugin/skills/`, which repo-root
- * `skills/` is generated from; the two trees agreeing is a CI job of its own.
+ * Structural checks over the shipped skill tree, guarding the packaging contract
+ * ADR-0026 makes load-bearing: `npx skills add` requires a non-empty `name` and
+ * `description` and installs into a directory named after frontmatter `name`;
+ * `cut-release` needs a real boolean `metadata.internal: true`, since the
+ * installer ignores a quoted string.
  */
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -97,9 +88,8 @@ test("every skill has a non-empty description", () => {
 });
 
 test("the portable skill text names no host, tool, model or install path", () => {
-  // ADR-0026: one text is installed on every host, so a host-specific spelling
-  // is a portability bug rather than a style preference. `CLAUDE.md` as a vault
-  // filename is deliberately not matched — only the host name is.
+  // ADR-0026: one text installs on every host, so a host-specific spelling is a
+  // portability bug. `CLAUDE.md` as a vault filename is deliberately unmatched.
   const forbidden = [
     /\bClaude Code\b/,
     /\bOpenCode\b/,
@@ -124,11 +114,8 @@ test("the portable skill text names no host, tool, model or install path", () =>
   }
 });
 
-/**
- * Every markdown file the plugin ships as directions to an agent — each
- * skill's `SKILL.md` and its `reference/` files, plus the subagent briefs.
- * All of them name checks, so the vocabulary guard reads all of them.
- */
+/** Every markdown file the plugin ships as agent directions: each skill's
+ * `SKILL.md`, its `reference/` files, and the subagent briefs. */
 function pluginProse(): Array<{ label: string; text: string }> {
   const docs: Array<{ label: string; text: string }> = [];
   const walk = (dir: string): void => {
@@ -149,10 +136,8 @@ function pluginProse(): Array<{ label: string; text: string }> {
 }
 
 test("plugin prose references every check by slug, never by number", () => {
-  // Two numbering systems — the registry's registration order and wiki-lint's
-  // catalogue 1–16 — coincided only up to 10 and diverged after, so a bare
-  // number stopped saying which check it meant (#571). A number is always a
-  // bug now; the slug is the only spelling.
+  // A bare number is ambiguous across the two numbering systems; the slug is
+  // the only spelling.
   const numbered = /\bchecks?\s+\d+/i;
   for (const { label, text } of pluginProse()) {
     const match = numbered.exec(text);
@@ -164,16 +149,14 @@ test("plugin prose references every check by slug, never by number", () => {
   }
 });
 
-/** A check invoked as a command — `check <slug> --json`. The one shape that
- * tracks the CLI spelling, shared by the guard and the run-block test. */
+/** `check <slug> --json` — the one shape that tracks the CLI spelling, shared
+ * by the guard and the run-block test. */
 const CHECK_COMMAND = /\bcheck\s+([a-z][a-z0-9-]*)\s+--json/g;
 
 /**
  * Every shape plugin prose names a check by slug: the command above, the slug
- * beside the word ("the `split-links` check", "check `split-links`"), and a
- * heading's parenthetical ("**Split links (`split-links`):**"). A bare slug in
- * running prose is deliberately not one — it cannot be told apart from the
- * plugin's other kebab-case vocabulary.
+ * beside the word, or a heading's parenthetical. A bare slug in running prose is
+ * not one — it is indistinguishable from the plugin's other kebab-case words.
  */
 const CHECK_SPELLINGS = [
   CHECK_COMMAND,
@@ -183,8 +166,7 @@ const CHECK_SPELLINGS = [
 ];
 
 /** Every shape prose names a fix by slug: the run-block command and the
- * backticked form in running prose. Fixes are a registry of their own — a fix
- * slug need not be a check slug (`missing-cross-references` is not). */
+ * backticked form. Fixes are a registry of their own, not a subset of checks. */
 const FIX_SPELLINGS = [
   /"\$ENCHIRIDION"\s+fix\s+([a-z][a-z0-9-]*)/g,
   /`fix\s+([a-z][a-z0-9-]*)`/g,
@@ -192,8 +174,8 @@ const FIX_SPELLINGS = [
 ];
 
 test("every check slug named in plugin prose resolves to a registry key", () => {
-  // A judgment check has no CHECKS entry — its durable spelling is the fix
-  // registry's (`missing-cross-references`), so both count as a check name.
+  // A judgment check's durable spelling is a FIXES key, so both registries
+  // count as a check name.
   const keys = new Set([...Object.keys(CHECKS), ...Object.keys(FIXES)]);
   for (const { label, text } of pluginProse()) {
     for (const pattern of CHECK_SPELLINGS) {

@@ -1,19 +1,7 @@
 /**
- * In-process `run()` tests against the esbuild-bundled `dist/cli.cjs` artifact
- * (#330). These prove the import-safe entry: importing the bundle is inert
- * (no main() run, host process survives), and `run(argv)` executes a command
- * in-process — capturing all stdout/stderr, returning the exit code, never
- * calling process.exit, and never leaving process.exitCode set or the host's
- * streams swapped.
- *
- * This is the enabler for OpenCode's plugin-native execution: a plugin imports
- * the bundle and calls run() on the embedded Bun — no `node`/`bun` on PATH.
- *
- * Requires `npm run build` first so `dist/cli.cjs` (and its
- * `node-sqlite3-wasm.wasm` sidecar) exists. When it doesn't, every test is
- * skipped with a pointer to the build step rather than failing — mirroring
- * cli.smoke.test.ts. The `watch` and `hook` subcommands are deliberately not
- * exercised through run() (long-running loop / reads stdin).
+ * In-process `run()` tests against the esbuild-bundled `dist/cli.cjs`: importing
+ * the bundle must be inert and `run(argv)` captures output without touching the
+ * host. Skips (never fails) when the bundle is absent — `npm run build` first.
  */
 
 import { test } from "node:test";
@@ -28,8 +16,6 @@ import * as git from "isomorphic-git";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distCli = path.join(__dirname, "..", "dist", "cli.cjs");
 
-// Skipped (not failed) when the bundle isn't built, so the module tests can
-// run without it; CI and the verification workflow always build first.
 const skipReason = fs.existsSync(distCli)
   ? false
   : "dist/cli.cjs not built — run `npm run build` first";
@@ -40,10 +26,8 @@ interface RunResult {
   exitCode: number;
 }
 
-// Capture the host's pre-import state so the inert-import and stream-restore
-// tests can assert nothing leaked. The require happens at module scope, which
-// is itself part of the contract: if importing the bundle killed the host
-// (the pre-#330 behaviour), this test file would never reach a single test.
+// Snapshot the host's pre-import state. The require below runs at module scope,
+// and an import that killed the host would never reach a test.
 const exitCodeBeforeImport = process.exitCode;
 const realStdoutWrite = process.stdout.write;
 const realStderrWrite = process.stderr.write;
@@ -58,7 +42,7 @@ if (!skipReason) {
   });
 }
 
-/** Scaffold a small committed vault with one searchable page mentioning BM25. */
+/** A committed vault with one searchable page. */
 async function buildCommittedVault(): Promise<string> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-run-vault-"));
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
@@ -198,18 +182,6 @@ test(
   },
 );
 
-// save-session: OPENCODE_SESSION_ID visible to run() via process.env (#399)
-//
-// The wiki-enchiridion OpenCode plugin runs the bundle in-process — the
-// session-tracker's shell.env hook never fires for it. The plugin therefore
-// injects context.sessionID into process.env.OPENCODE_SESSION_ID before
-// calling run().  This test simulates the result of that injection by setting
-// OPENCODE_SESSION_ID directly in process.env, then calling run(['save-session',
-// ...]).  We assert that the command moves past the "neither ID is set" check
-// (i.e., it reads the env var) before failing further downstream.  Since #402
-// an untracked OpenCode session no longer errors on tracker state — it falls
-// through to `opencode export`, so in CI (no opencode CLI on PATH) the expected
-// failure is the missing-CLI error, which still proves the env var was read.
 test(
   "run(['save-session']): reads OPENCODE_SESSION_ID from process.env (not 'neither ID' error)",
   { skip: skipReason },
@@ -217,24 +189,18 @@ test(
     const prevSessionID = process.env.OPENCODE_SESSION_ID;
     const prevClaudeID = process.env.CLAUDE_CODE_SESSION_ID;
     process.env.OPENCODE_SESSION_ID = "test-opencode-session-id";
-    // Isolate the OpenCode dispatch: with both host IDs set the tie-break would
-    // route an untracked session to Claude Code. Unset the Claude ID so only the
-    // OpenCode path runs, regardless of the ambient session (this suite may run
-    // inside a Claude Code session that sets CLAUDE_CODE_SESSION_ID).
+    // This suite may itself run inside a Claude Code session that sets
+    // CLAUDE_CODE_SESSION_ID; unset it so only the OpenCode path runs.
     delete process.env.CLAUDE_CODE_SESSION_ID;
     try {
       const result = await run(["save-session", "--slug", "test-session"]);
-      // Must not succeed (no real OpenCode session), but the failure must NOT be
-      // the "neither $CLAUDE_CODE_SESSION_ID nor $OPENCODE_SESSION_ID" error —
-      // that error means the env var was invisible, i.e. the bug is present.
+      // The "neither ID" error would mean the env var was invisible.
       assert.notEqual(result.exitCode, 0);
       assert.ok(
         !result.stderr.includes("Neither $CLAUDE_CODE_SESSION_ID"),
         `Expected OPENCODE_SESSION_ID to be read; got: ${result.stderr.trim()}`,
       );
-      // The expected failure is downstream of the ID being read: either the
-      // env/tracker diagnostics, or (post-#402, untracked → `opencode export`)
-      // the missing-CLI error when opencode is absent from PATH.
+      // Downstream of the ID being read: tracker diagnostics or a missing CLI.
       assert.match(
         result.stderr,
         /OPENCODE_SESSION_ID|session-tracker|opencode CLI/,

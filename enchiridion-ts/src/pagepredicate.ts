@@ -1,66 +1,29 @@
 /**
- * The one definition of what counts as a page (#310).
+ * The one definition of what counts as a page.
  *
- * "What is a page" used to be computed three different ways — the disk walk
- * (formerly `vault.pageRefs`, now this module's `enumeratePageRefs`), the
- * committed-history walk (`vaultgit`), and the search index's on-disk status
- * count — and the answers diverged on edge
- * vaults: a committed `wiki/_index.md` counted for the git walk but not the
- * disk walk, and a nested `wiki/<folder>/nested/deep.md` counted for the disk
- * walk, was rejected by the schema reader (`pagerecord`), and was missed by
- * the status count. The generated-index bug (#299) was that friction
- * surfacing.
+ * A page is markdown at exactly `wiki/<kind-folder>/<file>.md` — three path
+ * segments directly under a kind-folder — and never the generated
+ * `wiki/_index.md` nor a `KIND.md` kind-metadata file. The single predicate and
+ * disk enumerator the disk walk, git walk, and index status count all delegate
+ * to, so they cannot disagree.
  *
- * This module is the single predicate and the single disk enumerator that
- * both walks and the status count delegate to, so the three can never
- * disagree again. It is deliberately a leaf module — it imports nothing from
- * the rest of the codebase — which is exactly why `searchindex` can use it
- * without the import cycle that proxying back through `vault` would create
- * (the Vault has no search-index facade; ADR-0015).
- *
- * **The page rule:** a page is a markdown file at exactly
- * `wiki/<kind-folder>/<file>.md` — directly under a kind-folder, the same
- * shape `pagerecord.newPageRecord` requires — and never the generated
- * `wiki/_index.md`. Anything else under `wiki/` (a file at the wiki root, a
- * nested page, the generated index) is a structural error, not a page, so it
- * is neither enumerated, indexed, nor counted. The kind-folder axis itself is
- * ADR-0008's (folders pluralize, values stay singular); this predicate is
- * purely structural about it — the folder is one path segment — and says
- * nothing about which folder names are canonical, so custom kind-folders
- * (`wiki/decisions/`) are pages too, exactly as `pagerecord` accepts them.
+ * Deliberately a leaf module: it imports nothing from the rest of the codebase,
+ * which is why `searchindex` can use it without the import cycle proxying back
+ * through `vault` would create (ADR-0015).
  */
 
 import fs from "node:fs";
 import path from "node:path";
 
-/** The generated `wiki/_index.md` the old build_index wrote — a derived
- * artifact, not a page, so it is excluded from page enumeration (the same
- * rule the pre-#117 Python layer enforced). Handled in exactly this one place;
- * see the module doc. */
+/** The generated `wiki/_index.md`; never a page. */
 const GeneratedIndexRef = "wiki/_index.md";
 
-/** `KIND.md` placed inside a kind-folder (`wiki/<kind>/KIND.md`) is metadata
- * about that kind, not a page (#441). It matches the three-segment shape so it
- * must be excluded explicitly, parallel to `GeneratedIndexRef`. */
+/** `wiki/<kind>/KIND.md` is kind metadata, not a page; it matches the
+ * three-segment shape, so exclude it explicitly. */
 const KindMetaFilename = "KIND.md";
 
-/**
- * The page predicate: whether a vault-relative path (ADR-0009) names a page.
- *
- * A page is `wiki/<kind-folder>/<file>.md` — exactly three path segments, a
- * `.md` suffix, and never the generated index or a `KIND.md` kind-metadata
- * file. Every consumer of the page concept — the disk walk
- * (`enumeratePageRefs`), the git walk (`vaultgit.committedPages`), and the
- * index's status count — filters through this one predicate, so no two of them
- * can disagree about an edge vault.
- *
- * Excluded by the shape: `wiki/a.md` (no kind-folder), `wiki/_index.md` (not
- * directly under a kind-folder — and never a page on principle),
- * `wiki/concepts/nested/deep.md` (not *directly* under a kind-folder), and
- * anything outside `wiki/`. Nested pages are a structural error under the
- * kind-folder model (ADR-0008), the same stance the schema reader takes, so
- * they are not pages.
- */
+/** Whether a vault-relative path (ADR-0009) names a page — the rule in the
+ * module doc. */
 export function isPageRef(ref: string): boolean {
   if (ref === GeneratedIndexRef) return false;
   if (!ref.startsWith("wiki/")) return false;
@@ -69,17 +32,9 @@ export function isPageRef(ref: string): boolean {
   return ref.split("/")[2] !== KindMetaFilename;
 }
 
-/**
- * Enumerate every page under the vault's `wiki/` tree at root, as
- * vault-relative page refs (ADR-0009), sorted. `raw/` is never walked, and
- * every candidate is filtered through [isPageRef], so the generated
- * `wiki/_index.md`, files at the wiki root, and nested pages are all
- * excluded. A vault with no `wiki/` yields no pages, not an error.
- *
- * This is the disk-walk half of the shared enumeration rule; the git walk
- * enumerates its own tree and filters it through the same [isPageRef]
- * predicate, so both walks count exactly the same pages.
- */
+/** Every page under the vault's `wiki/` tree at root as sorted vault-relative
+ * refs (ADR-0009), each filtered through [isPageRef]. `raw/` is never walked,
+ * and a vault with no `wiki/` yields none, not an error. */
 export function enumeratePageRefs(root: string): string[] {
   const wikiDir = path.join(root, "wiki");
   let entries: fs.Dirent[];

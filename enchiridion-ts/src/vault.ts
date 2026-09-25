@@ -1,14 +1,8 @@
 /**
  * The I/O half of the vault: where the vault is and what's inside it.
  *
- * [resolveRoot] answers "where is the vault" per
- * docs/adr/0004-deployment-modes-and-vault-root-resolution.md; page
- * enumeration is [pagepredicate.enumeratePageRefs] (this module never owns a
- * copy of the rule); [Vault] owns every read and write inside
- * the vault, plus the cross-page operations ([Vault.movePage],
- * [Vault.rewriteInboundLinks]) that need every other page's text to fix the
- * links pointing at a moved one. Its counterpart [Page] is pure-functional
- * and does no I/O at all.
+ * [resolveRoot] answers "where is the vault" (ADR-0004); [Vault] owns every
+ * read and write plus the cross-page link fixups; [Page] is pure, no I/O.
  */
 
 import fs from "node:fs";
@@ -26,8 +20,7 @@ import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";
 import { FolderKinds, KindFolders, folderToKind } from "./place.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
 
-/** The filenames that make a directory a vault root: a `wiki/` directory or a
- * `.wiki-root` sentinel file. */
+/** The filenames that make a directory a vault root. */
 export const Markers = ["wiki", ".wiki-root"] as const;
 
 /** A lookupEnv matching `process.env`'s semantics: (value, wasPresent). */
@@ -38,33 +31,24 @@ function processLookupEnv(key: string): [string | undefined, boolean] {
   return [value, value !== undefined];
 }
 
-/** Report whether dir itself carries a vault marker — the single check both
- * root resolution and [initwiki.IsVault] build on. */
+/** Whether dir itself carries a vault marker. */
 export function hasMarker(dir: string): boolean {
   for (const marker of Markers) {
     try {
       fs.statSync(path.join(dir, marker));
       return true;
     } catch {
-      // not present — keep walking up
+      // keep walking up
     }
   }
   return false;
 }
 
 /**
- * Resolve the vault root. See
- * docs/adr/0004-deployment-modes-and-vault-root-resolution.md for why.
- * Order, highest priority first:
+ * Resolve the vault root (ADR-0004): `$WIKI_ROOT` if set and non-empty, else
+ * the nearest ancestor of `start` carrying a marker, else `start` itself.
  *
- *  1. $WIKI_ROOT if set and non-empty — wins always (query-from-anywhere mode).
- *  2. else the nearest ancestor of start containing a vault marker: a `wiki/`
- *     directory or a `.wiki-root` sentinel file.
- *  3. else start (the dedicated-mode default, cwd).
- *
- * start defaults to cwd when empty, and lookupEnv defaults to the process
- * environment when omitted; both are injectable so the resolution logic is
- * testable without touching the real process environment.
+ * `start` defaults to cwd; both parameters are injectable for tests.
  */
 export function resolveRoot(
   start = "",
@@ -86,9 +70,8 @@ export function resolveRoot(
   return { root: startPath };
 }
 
-/** Return path as an absolute path with symlinks followed. A path that doesn't
- * exist yet still resolves (init scaffolds one that doesn't), so a failure to
- * walk symlinks falls back to the absolute path. */
+/** Absolute path with symlinks followed; a path that doesn't exist yet still
+ * resolves (init scaffolds one that doesn't). */
 function resolve(p: string): string {
   const abs = path.resolve(p);
   try {
@@ -105,10 +88,9 @@ function isENOENT(err: unknown): boolean {
 /**
  * Reads the `KIND.md` declaration in an absolute folder path.
  *
- * Returns `{kind, summary}` when the file exists and contains a YAML
- * frontmatter block with a non-empty `kind:` key. Degrades gracefully to
- * `null` on a missing file, missing or empty frontmatter, malformed YAML, or
- * a missing `kind` key — the caller falls back to [folderToKind].
+ * Returns `{kind, summary}` on a non-empty `kind:` frontmatter key, else `null`
+ * — a missing file, missing frontmatter, malformed YAML, or missing key all
+ * fall back to [folderToKind] at the caller.
  */
 export function readKindMeta(
   folderAbsPath: string,
@@ -134,31 +116,28 @@ export function readKindMeta(
   }
 }
 
-/** Pairs a decoded record with the page text it was decoded from, so a caller
- * needing both doesn't re-read the file. */
+/** A decoded record paired with the page text it was decoded from. */
 export interface PageWithText {
   record: PageRecord;
   text: string;
 }
 
 /**
- * Vault owns all vault I/O and cross-page operations over the pages at root.
+ * Vault I/O and cross-page operations over the pages at root.
  *
- * Root is an absolute filesystem path; every page reference this type takes
- * or returns is vault-relative with `/` separators (ADR-0009), so a ref can
- * be handed straight from one method to another, or to an ingest plan.
+ * Root is an absolute path; every page ref taken or returned is vault-relative
+ * with `/` separators (ADR-0009), so a ref passes straight to another method or
+ * into an ingest plan.
  */
 export class Vault {
   constructor(readonly root: string) {}
 
-  /** Return any singular kind-folders left over from before ADR-0008, sorted
-   * — `wiki/concept/` where the vault should now hold `wiki/concepts/`.
+  /** Singular kind-folders left over from before ADR-0008, sorted —
+   * `wiki/concept/` where the vault should hold `wiki/concepts/`.
    *
-   * The migration script that used to fix these is gone, but the check stays,
-   * because staying quiet is the one thing that would be genuinely bad:
+   * The migration script that used to fix these is gone, but the check stays:
    * [place.path] resolves canonical kinds from [KindFolders], so an unmigrated
-   * vault would split one kind across two spellings of the same folder. A
-   * writer asks this and refuses instead. */
+   * vault would split one kind across two spellings. A writer refuses instead. */
   legacyKindFolders(): string[] {
     let entries: fs.Dirent[];
     try {
@@ -172,9 +151,8 @@ export class Vault {
     const legacy: string[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      // A folder is legacy when it is the singular of a canonical kind but
-      // not itself canonical: `concept` (→ `concepts`), never `synthesis`,
-      // whose folder and kind are the same word.
+      // Legacy means the singular of a canonical kind but not itself canonical
+      // — `concept` yes, `synthesis` no (folder and kind are the same word).
       if (FolderKinds[entry.name] !== undefined) continue;
       const folder = KindFolders[entry.name];
       if (folder !== undefined && folder !== entry.name)
@@ -193,9 +171,8 @@ export class Vault {
     return new Page(fs.readFileSync(this.path(pageRef), "utf8"));
   }
 
-  /** Report whether pageRef names an existing *file* in the vault — a page
-   * that could be loaded. A directory sitting at that path is not a page, so
-   * this is false. */
+  /** Whether pageRef names an existing *file*; a directory at that path is not
+   * a page, so this is false. */
   exists(pageRef: string): boolean {
     try {
       return !fs.statSync(this.path(pageRef)).isDirectory();
@@ -222,11 +199,9 @@ export class Vault {
     fs.writeFileSync(abs, page.text, { mode: 0o644 });
   }
 
-  /** Return {kind: folder} for every subdirectory of `wiki/` that is not
-   * already a canonical kind-folder.
-   *
-   * The folder must pre-exist; the plugin never auto-creates custom
-   * kind-folders on its own. */
+  /** Return `{kind: folder}` for every `wiki/` subdirectory that is not already
+   * a canonical kind-folder. The folder must pre-exist — the plugin never
+   * auto-creates custom kind-folders. */
   discoveredKinds(): Record<string, string> {
     let entries: fs.Dirent[];
     try {
@@ -248,8 +223,7 @@ export class Vault {
     return out;
   }
 
-  /** Return every `wiki/**` page as a {pageRef: text} map. Never walks
-   * `raw/`. */
+  /** Every `wiki/**` page as a {pageRef: text} map. Never walks `raw/`. */
   loadWikiPages(): Record<string, string> {
     const refs = enumeratePageRefs(this.root);
     const pages: Record<string, string> = {};
@@ -258,14 +232,10 @@ export class Vault {
     return pages;
   }
 
-  /** Return every `wiki/**` page as a {pageRef: record + text} map.
-   *
-   * `opts.skipMalformedEdges` selects the tolerant read a check run needs
-   * (#549); see [LoadRecordsOptions]. */
+  /** Every `wiki/**` page as a {pageRef: record + text} map. `opts` per
+   * [LoadRecordsOptions] — a tolerant check run sets `skipMalformedEdges`. */
   pagesWithText(opts: LoadRecordsOptions = {}): Record<string, PageWithText> {
     const pages = this.loadWikiPages();
-    // Build a folder→kind override map from discoveredKinds() so that custom
-    // folders with a KIND.md declaration read back with their declared value.
     const discovered = this.discoveredKinds(); // {kind: folder}
     const kindByFolder: Record<string, string> = {};
     for (const [kind, folder] of Object.entries(discovered)) {
@@ -279,8 +249,8 @@ export class Vault {
     return out;
   }
 
-  /** Return every `wiki/**` page as a {pageRef: record} map. `raw/` is never
-   * walked. Options pass through to [pagesWithText]. */
+  /** Every `wiki/**` page as a {pageRef: record} map; `raw/` is never walked.
+   * Options pass through to [pagesWithText]. */
   pages(opts: LoadRecordsOptions = {}): Record<string, PageRecord> {
     const withText = this.pagesWithText(opts);
     const out: Record<string, PageRecord> = {};
@@ -312,9 +282,8 @@ export class Vault {
   ): string[] {
     const changed: string[] = [];
     for (const [pageRef, text] of Object.entries(planned)) {
-      // A page absent from before is always written, even when the planned
-      // text is empty — "unchanged" means the file already held this text,
-      // not that the text is falsy.
+      // Absent from before always means written, even when the text is empty:
+      // "unchanged" is the file already holding this text, not falsy text.
       const prev = before[pageRef];
       if (prev !== undefined && text === prev) continue;
       this.write(pageRef, new Page(text));
@@ -323,21 +292,19 @@ export class Vault {
     return changed.sort();
   }
 
-  /** Rewrite links across the vault's wiki pages and move the page on disk.
+  /** Move a page and fix every inbound and outbound link.
    *
-   * Reads every `wiki/**` page (never `raw/` — its files aren't rewritten by
-   * a page move), plans the move, writes back only the pages whose text
-   * changed, then removes the original. Returns the changed vault-relative
-   * paths, sorted; empty for oldRef == newRef. */
+   * Reads every `wiki/**` page (never `raw/`), writes back only the pages whose
+   * text changed, then removes the original. Returns the changed refs, sorted;
+   * empty for oldRef == newRef. */
   movePage(oldRef: string, newRef: string): string[] {
     const files = this.loadWikiPages();
     if (!(oldRef in files)) {
       throw new Error(`${oldRef} not found under ${this.root}`);
     }
 
-    // planned keys the moved page under newRef, so writing every changed page
-    // also lays down the moved file (with its outbound links fixed) — all
-    // that's left is to drop the original.
+    // planMove keys the moved page under newRef, so writing every changed page
+    // also lays the moved file down; only the original is left to drop.
     const changed = this.writeChanged(planMove(files, oldRef, newRef), files);
     if (this.path(oldRef) !== this.path(newRef)) {
       fs.unlinkSync(this.path(oldRef));
@@ -345,27 +312,21 @@ export class Vault {
     return changed;
   }
 
-  /** Rewrite `wiki/**` pages' links pointing at oldRel to newRel.
+  /** Repoint `wiki/**` pages' inbound links from oldRel to newRel.
    *
-   * For a target that is not itself a wiki page — e.g. a `raw/` artifact
-   * renamed externally — oldRel/newRel are never read, parsed, or written;
-   * only *other* pages' inbound links are fixed. Returns the changed
-   * vault-relative paths, sorted. */
+   * The target itself is never read, parsed, or written — for a non-page target
+   * such as an externally renamed `raw/` artifact, only other pages change.
+   * Returns the changed refs, sorted. */
   rewriteInboundLinks(oldRel: string, newRel: string): string[] {
     const pages = this.loadWikiPages();
     return this.writeChanged(planMove(pages, oldRel, newRel), pages);
   }
 
-  /** Absorb losers into the survivor (CONTEXT.md, **Consolidation**; ADR-0021).
+  /** Absorb losers into the survivor (ADR-0021), repointing inbound links.
    *
-   * Writes survivor at survivorRef — the authored merged body — repoints every
-   * link across `wiki/**` that pointed at a consolidated page, then removes the
-   * consolidated pages. Returns the changed vault-relative paths, sorted.
-   *
-   * Writes before it deletes, deliberately: an interrupted Consolidation has
-   * always laid the absorbed content down first, so the deletes are the only
-   * step that can be half-done. Survivor need not already exist — a Consolidation
-   * may author a fresh one. */
+   * Writes before it deletes, deliberately: an interrupted run has already laid
+   * the absorbed content down, so only the deletes can be half-done. The
+   * survivor need not already exist. Returns the changed refs, sorted. */
   consolidate(survivorRef: string, survivor: Page, losers: string[]): string[] {
     const files = this.loadWikiPages();
     const planned = planConsolidate(
@@ -378,11 +339,9 @@ export class Vault {
     return changed;
   }
 
-  /** Delete the page at pageRef (vault-relative).
-   *
-   * Idempotent: a page that is already gone is not an error, so re-running a
-   * Consolidation whose deletes were interrupted is safe. Every other failure
-   * still throws. */
+  /** Delete the page at pageRef. Idempotent — an already-gone page is not an
+   * error, so an interrupted Consolidation can be re-run. Every other failure
+   * throws. */
   remove(pageRef: string): void {
     try {
       fs.unlinkSync(this.path(pageRef));
@@ -393,21 +352,16 @@ export class Vault {
 }
 
 /**
- * The vault a **file** lives in and that file's vault-relative directory —
- * the two facts a `page` edge edit needs (#548).
+ * The vault a **file** lives in and that file's vault-relative directory.
  *
- * This is not [resolveRoot]'s question. ADR-0004 answers "which vault" for an
- * invocation that names no path, from `$WIKI_ROOT` then cwd; a command handed
- * a file path needs the vault that *file* belongs to, which the env var
- * cannot answer — `$WIKI_ROOT` pointing at another vault must not redirect
- * the edit. So the file's own location wins: the same nearest-ancestor marker
- * walk ADR-0004 uses, started from the file. Cwd never enters it, so a `page`
- * edge edit works from anywhere.
+ * Not [resolveRoot]'s question: `$WIKI_ROOT` pointing at another vault must not
+ * redirect an edit handed an explicit path, so the file's own nearest-ancestor
+ * marker wins and cwd never enters it.
  */
 export function vaultForFile(file: string): { vault: Vault; pageDir: string } {
-  // [resolveRoot] realpaths the root it finds, so the file's path must be
-  // realpathed too or `path.relative` mismatches across a symlink (/tmp on
-  // macOS is the everyday case). The fallback covers a path realpath refuses.
+  // [resolveRoot] realpaths the root it finds, so realpath the file too or
+  // `path.relative` mismatches across a symlink (/tmp on macOS being the
+  // everyday case). The fallback covers a path realpath refuses.
   let abs: string;
   try {
     abs = fs.realpathSync(path.resolve(file));

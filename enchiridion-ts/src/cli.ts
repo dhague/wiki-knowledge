@@ -1,16 +1,10 @@
 #!/usr/bin/env node
 /**
- * enchiridion CLI entry point.
- *
- * One subcommand per capability (ADR-0017, #252/#254). This ticket
- * wires the commander scaffold only: every subcommand below is a stub that
- * exits non-zero with "not yet implemented" until its own module ticket
- * lands.
+ * enchiridion CLI entry point: one subcommand per capability (ADR-0017).
  *
  * `vault`, `page`, and `hook` are deliberately spelled with the nested
  * sub-subcommands CLAUDE.md documents (`vault root|move`, `page
- * get|set|merge`, `hook session-start|post-tool-use`) so later tickets wire
- * logic into an already-correct surface instead of reshaping the CLI.
+ * get|set|merge`, `hook session-start|post-tool-use`).
  */
 
 import { Command, InvalidArgumentError } from "commander";
@@ -79,7 +73,6 @@ import {
 } from "./exportconfig.js";
 import type { StarterEntry } from "./exportmeta.js";
 
-/** Prints the standard stub message and marks the process failed. */
 function stub(command: Command, label: string): void {
   command.action(() => fail(`enchiridion ${label}: not yet implemented`));
 }
@@ -94,11 +87,8 @@ function writePageFile(file: string, page: Page): void {
 
 /**
  * A normalizer over one page's vault, so a list of values resolves the root
- * and reads each target's title once rather than per item.
- *
- * The vault comes from the **file's own location** (see [vaultForFile]), not
- * `$WIKI_ROOT` or cwd — a file path is authoritative about which vault it
- * belongs to (#548).
+ * and reads each target's title once. The vault is the file's own location
+ * ([vaultForFile]) — never `$WIKI_ROOT` or cwd.
  */
 function edgeNormalizer(file: string): (key: string, value: string) => string {
   const { vault, pageDir } = vaultForFile(file);
@@ -109,15 +99,9 @@ function edgeNormalizer(file: string): (key: string, value: string) => string {
   return (key, value) => edgeLink(key, value, pageDir, lookup);
 }
 
-/**
- * The value `page set` writes for an edge key: a single link for
- * `raw_source`, a list of links for every other edge key (#548).
- *
- * Coercing a single value to a one-element list is what makes
- * `page set <file> related "<link>"` an actual edge — a bare scalar is a
- * shape the record reader skips. `--json` may pass a longer list, or an empty
- * one to clear the key.
- */
+/** The value `page set` writes for an edge key: a single link for
+ * `raw_source`, a list of links otherwise. A bare scalar would be read as no
+ * edge at all, so `--json` may pass a longer list, or an empty one to clear. */
 function edgeSetValue(
   file: string,
   key: string,
@@ -137,23 +121,10 @@ function edgeSetValue(
   });
 }
 
-/**
- * The value `page set` writes for a string-list key — a one-element list for
- * one bare value, the list itself for a list (#575).
- *
- * `--json` is the list's door, but a bare value that is *shaped* like a JSON
- * array is read as one too: that is the argument shape the sibling `page merge`
- * takes with no flag at all, so a caller that reached for `page set` from
- * `page merge` means the list it wrote. Reading it as the one literal string
- * `["a","b"]` would be the same silent wrong-tags write this rule exists to
- * close, one step later. A value that is neither a JSON array nor a plain
- * string — the scalar a caller passes by mistake — is refused rather than
- * written as the scalar the record reader reads as no value at all.
- *
- * The *write* rule is [canonicalForWrite]'s, which wraps a scalar whatever
- * caller hands it over; this function's half is the argument, mirroring how
- * `source_date`'s date is validated here and canonicalised there.
- */
+/** The value `page set` writes for a string-list key: a one-element list for
+ * one bare value, the list itself for a list. A bare value shaped like a JSON
+ * array is read as one (the shape `page merge` takes); anything else
+ * non-string is refused. The write rule itself is [canonicalForWrite]'s. */
 function stringListSetValue(key: string, value: unknown): string[] {
   if (typeof value === "string") {
     const text = value.trim();
@@ -173,10 +144,8 @@ function stringListSetValue(key: string, value: unknown): string[] {
   });
 }
 
-/**
- * Render a frontmatter value as plain text — notably a list as `['a', 'b']`,
- * the form callers of `page get` have always parsed.
- */
+/** Render a value as plain text — notably a list as `['a', 'b']`, the form
+ * callers of `page get` parse. */
 function formatFrontmatterValue(value: unknown): string {
   if (!Array.isArray(value)) return formatScalar(value);
   return "[" + value.map((v) => `'${formatScalar(v)}'`).join(", ") + "]";
@@ -189,16 +158,15 @@ function formatScalar(value: unknown): string {
 
 const FLAT_SUBCOMMANDS = [] as const;
 
-/** Normalise a CLI folder argument: "" and "raw/" both mean all of raw/; a
- * "raw/" prefix is stripped, so "notes" and "raw/notes" are interchangeable.
- */
+/** "" and "raw/" both mean all of raw/; a "raw/" prefix is stripped, so
+ * "notes" and "raw/notes" are interchangeable. */
 function normalizeFolderArg(arg: string): string {
   if (arg === "" || arg === "raw/") return "";
   return arg.startsWith("raw/") ? arg.slice("raw/".length) : arg;
 }
 
-/** Render the scan result's tabular form:
- * right-aligned raw/ paths followed by their reason, then the ignored block. */
+/** Render the scan result's tabular form: right-aligned raw/ paths followed by
+ * their reason, then the ignored block. */
 function renderScanTable(result: {
   eligible: { rawRel: string; reason: string }[];
   ignored: string[];
@@ -223,8 +191,8 @@ function renderScanTable(result: {
   }
 }
 
-/** Execute an IngestPlan from a plan file (or stdin when planPath is '-'),
- * printing the commit SHA first, then the tool-call summary if a log exists. */
+/** Execute an IngestPlan from a plan file ('-' reads stdin): print the commit
+ * SHA first, then the tool-call summary, and delete the plan file. */
 async function runPlan(
   planPath: string,
   root: string,
@@ -252,12 +220,9 @@ async function runPlan(
   }
 }
 
-/** Reports what this run cost, after the SHA, when the PostToolUse hook has
- * been logging calls for the session.
- *
- * Best-effort and silent on failure: a missing or unreadable log just means
- * the run happened outside a hooked session, which is not an ingest error.
- * The SHA stays the first line either way, so callers can still capture it. */
+/** Report this run's tool-call cost from the PostToolUse hook log; silent when
+ * no log exists, which is not an ingest error. The SHA stays the first line
+ * either way, so callers can still capture it. */
 function printToolCallSummary(): void {
   const sessionID = process.env.CLAUDE_CODE_SESSION_ID;
   if (!sessionID) return;
@@ -266,25 +231,19 @@ function printToolCallSummary(): void {
   console.log(formatSummary(summarize(events)));
 }
 
-/** The tag vocabulary, in the two shapes discover reports it: the full dump,
- * or — when the draft already named its candidate tags — only the matches
- * (`--tags-containing`) and per-tag counts (`--tag-count`) it asked for. The
- * selected form rides in the one JSON document, so a caller parses discover
- * once whatever flags it passed. */
+/** The tag-vocabulary fields discover may report; the selected form rides in
+ * the one JSON document. */
 interface VocabularyFields {
   vocabulary?: { tag: string; count: number }[];
   tag_matches?: string[];
   tag_counts?: { tag: string; count: number }[];
 }
 
-/** The JSON shape discover --plan emits: one entry per planned page with its
- * classified candidates, plus whichever vocabulary form was asked for. */
 type PlanPayload = {
   pages: { title: string; candidates: unknown[] }[];
 } & VocabularyFields;
 
-/** Split a comma-separated flag value into its parts, trimming whitespace and
- * dropping empties. */
+/** Split on commas, trimming whitespace and dropping empties. */
 function splitCommaList(value: string): string[] {
   return value
     .split(",")
@@ -292,25 +251,23 @@ function splitCommaList(value: string): string[] {
     .filter((s) => s !== "");
 }
 
-/** Accumulate a repeatable flag (--tag/--tag-any) into an array, in order.
- * Commander's processor signature is (value, previous). */
+/** Commander repeatable-flag processor: (value, previous), appended in order. */
 function collectFlag(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
-/** Render a possibly-empty string as "-". */
+/** Render "" as "-". */
 function orDash(s: string): string {
   if (s === "") return "-";
   return s;
 }
 
-/** Render a nullable string as "-" when null, else orDash. */
+/** Render null or "" as "-". */
 function orDashPtr(s: string | null): string {
   if (s === null) return "-";
   return orDash(s);
 }
 
-/** One Hit as its output row. */
 function hitRow(hit: Hit): Record<string, unknown> {
   return {
     page_ref: hit.pageRef,
@@ -327,7 +284,6 @@ function hitRow(hit: Hit): Record<string, unknown> {
   };
 }
 
-/** Render hits: JSON Lines when asJSON, else the compact one-per-hit table. */
 function renderHits(hits: Hit[], asJSON: boolean): void {
   if (asJSON) {
     emitRows(hits.map(hitRow));
@@ -344,7 +300,6 @@ function renderHits(hits: Hit[], asJSON: boolean): void {
   }
 }
 
-/** Render index status. */
 function renderStatus(
   st: {
     pages: number;
@@ -381,7 +336,6 @@ function renderStatus(
   }
 }
 
-/** Render a reindex's stats. */
 function renderReindex(
   stats: {
     pages: number;
@@ -409,15 +363,10 @@ function renderReindex(
   );
 }
 
-/** Execute the --plan mode of discover: classify every planned page and emit
- * the pages payload, with the tag vocabulary in whichever form was asked for —
- * the full dump, or the candidate tags the draft named.
- *
- * The filtered forms ride in the same JSON document as named fields rather
- * than trailing it as plain text. They used to be plain text after the blob,
- * which meant a caller reading stdout as JSON saw only the first line and
- * silently lost the tag vocabulary it needs to mint tags — and a caller
- * reading it as text could not parse the candidates at all. */
+/** Execute `discover --plan`: classify every planned page, emitting the pages
+ * payload plus the tag vocabulary in whichever form was asked for. The
+ * filtered forms ride in the same JSON document as named fields, so a caller
+ * reading stdout as JSON sees them. */
 async function runDiscoverPlan(
   index: Index,
   planPath: string,
@@ -460,10 +409,8 @@ async function runDiscoverPlan(
   emitDocument(payload);
 }
 
-/** Appends rawRel to its own folder's `.ingestignore`.
- *
- * rawRel is vault-relative, exactly as the sweep prints it
- * (`raw/emails/foo.eml`). */
+/** Append rawRel to its own folder's `.ingestignore`. rawRel is
+ * vault-relative, exactly as the sweep prints it (`raw/emails/foo.eml`). */
 function ignoreRawFile(root: string, rawRel: string, comment: string): void {
   const rel = path.posix.normalize(rawRel);
   if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
@@ -497,9 +444,7 @@ export function buildProgram(): Command {
   }
 
   // search [text] — query the lexical index, or manage it with --reindex /
-  // --status. Default
-  // mode is a query: positional text plus any metadata filter; --json emits
-  // one Hit per line, else the compact one-line-per-hit table.
+  // --status. --json emits one Hit per line, else the compact table.
   program
     .command("search [text]")
     .description("Search the wiki vault via the lexical index")
@@ -608,9 +553,8 @@ export function buildProgram(): Command {
       },
     );
 
-  // init <path> — scaffold a brand-new wiki vault. Takes an explicit path argument, not
-  // a resolved root; prints the resolved vault root on success — the only
-  // thing on stdout, so a caller can capture it.
+  // init <path> — scaffold a brand-new vault from an explicit path, not a
+  // resolved root; the resolved vault root is the only thing on stdout.
   program
     .command("init <path>")
     .description(
@@ -638,10 +582,9 @@ export function buildProgram(): Command {
       },
     );
 
-  // place <kind> <title> — compute a new page's vault-relative path from its
-  // kind and title. Resolves no vault root and reads nothing from disk: only
-  // the four canonical kinds are accepted, never a vault's discovered custom
-  // kind-folders. placePath rejects anything else.
+  // place <kind> <title> — compute a page's vault-relative path. Resolves no
+  // vault root and accepts only the four canonical kinds, never a discovered
+  // custom kind-folder.
   program
     .command("place <kind> <title>")
     .description(
@@ -652,8 +595,8 @@ export function buildProgram(): Command {
       console.log(rel);
     });
 
-  // save-session — find, render, and write this session's transcript,
-  // printing the vault-relative path of the raw file written.
+  // save-session — write this session's transcript as a raw file, printing its
+  // vault-relative path.
   program
     .command("save-session")
     .description("Save this session's transcript as a raw file in the vault")
@@ -673,7 +616,7 @@ export function buildProgram(): Command {
       console.log(rel);
     });
 
-  // tool-call-stats — summarise the tool-call log for one session.
+  // tool-call-stats — summarise one session's tool-call log.
   program
     .command("tool-call-stats")
     .description("Summarise a session's tool-call log")
@@ -696,13 +639,10 @@ export function buildProgram(): Command {
       console.log(formatSummary(summarize(events)));
     });
 
-  // vault — bare or `vault root` prints the resolved root; `vault move
-  // <old_ref> <new_ref>` moves a page and fixes every link; `vault kinds`
-  // lists all placement kinds as a JSON array. The one subcommand that
-  // resolves a vault root (CLAUDE.md). The parent's action runs for bare
-  // `vault`, and is inherited by `vault root`, `vault move`, and `vault kinds`
-  // (commander runs a parent's action when a subcommand has no handler of its
-  // own; the subcommand's own args are parsed before it).
+  // vault — bare or `vault root` prints the resolved root, `vault move`
+  // moves a page and fixes every link, `vault kinds` lists placement kinds as
+  // JSON. The parent's action runs for bare `vault` and is inherited by a
+  // subcommand with no handler of its own.
   const vault = program
     .command("vault")
     .description(
@@ -760,8 +700,7 @@ export function buildProgram(): Command {
       emitDocument(result);
     });
 
-  // check <name> [--json] — run one vault health check by name; print
-  // findings as plain text or JSON Lines, one finding per line either way.
+  // check <name> [--json] — run one vault health check by name.
   const checkNames = Object.keys(CHECKS).join(", ");
   const check = program
     .command("check")
@@ -821,9 +760,8 @@ export function buildProgram(): Command {
   void fix; // referenced only for side effect of registering the command
 
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no
-  // vault root for a plain value (CLAUDE.md); an edge key's value may be a
-  // vault-relative ref, which is composed against the vault the file sits in
-  // (#548).
+  // vault root for a plain value, but an edge key's value may be a
+  // vault-relative ref composed against the vault the file sits in.
   const page = program
     .command("page")
     .description(
@@ -869,10 +807,8 @@ export function buildProgram(): Command {
         }
         if (key === "source_date") value = canonicalSourceDate(value);
         if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
-        // The write rule itself is the writer's ([canonicalForWrite] wraps a
-        // scalar); the CLI's job is the *argument*, so a value that is not a
-        // string — the scalar a caller passes under `--json` — is refused here
-        // rather than written as the scalar the record reader reads as nothing.
+        // The writer wraps a scalar; the CLI's job is the argument, so a
+        // non-string is refused here.
         if (isStringListKey(key)) value = stringListSetValue(key, value);
         const updated = p.set(key, value);
         writePageFile(file, updated);
@@ -915,11 +851,8 @@ export function buildProgram(): Command {
       writePageFile(file, updated);
     });
 
-  // read-page <ref> — print a page's full content by vault-relative ref.
-  // The read-only companion to search; a host with no Read tool (the Joule
-  // Work Desktop model — see #320/#225) uses this in place of one. Resolves
-  // the vault root (ADR-0004); default output is the page's raw markdown
-  // (frontmatter + body), --json the structured split.
+  // read-page <ref> — print a page's full content by vault-relative ref; the
+  // read-only companion to search, for a host with no Read tool.
   program
     .command("read-page <ref>")
     .description("Print a page's full content by vault-relative ref")
@@ -942,8 +875,8 @@ export function buildProgram(): Command {
       process.stdout.write(page.text);
     });
 
-  // superseded-by <page_ref>... — resolve a candidate set's supersession
-  // chains to current heads.
+  // superseded-by <page_ref>... — resolve refs to their current supersession
+  // heads.
   program
     .command("superseded-by <page_ref...>")
     .description("Resolve page refs to their current supersession heads")
@@ -983,7 +916,7 @@ export function buildProgram(): Command {
       const folder =
         folderArg === undefined ? "" : normalizeFolderArg(folderArg);
       // null → scan builds the batched git facts (one tree walk + one history
-      // walk) rather than the per-file VaultGit surface (#415).
+      // walk) rather than the per-file VaultGit surface.
       const result = await scanIngest(root, folder, null);
       if (opts.json) {
         const rows: Record<string, unknown>[] = [];
@@ -1005,8 +938,8 @@ export function buildProgram(): Command {
     });
 
   // watch — a long-running filesystem watcher over raw/ with per-file
-  // debounce, an exclusive lock, and a queue file. `--dequeue <raw_rel>` removes one
-  // queue entry and exits.
+  // debounce, an exclusive lock, and a queue file. `--dequeue <raw_rel>`
+  // removes one queue entry and exits.
   program
     .command("watch")
     .description("Watch raw/ for new files and enqueue eligible ones")
@@ -1067,9 +1000,8 @@ export function buildProgram(): Command {
       },
     );
 
-  // ingest — execute an IngestPlan against the resolved vault. Validates the whole plan up front
-  // (shape, then the vault-dependent checks) then writes every page and
-  // commits in one pass, printing the commit SHA as the first stdout line.
+  // ingest — execute an IngestPlan against the resolved vault, printing the
+  // commit SHA as the first stdout line.
   program
     .command("ingest")
     .description("Execute an IngestPlan against the resolved vault")
@@ -1118,9 +1050,8 @@ export function buildProgram(): Command {
       },
     );
 
-  // commit — write one structured git commit per manifest: a hand-built manifest in, one
-  // structured commit out. `enchiridion ingest` commits its own plan; this is
-  // for a manifest an agent assembles directly.
+  // commit — write one structured commit from a hand-built manifest; `ingest`
+  // commits its own plan.
   program
     .command("commit")
     .description("Write one structured git commit per manifest")
@@ -1144,10 +1075,9 @@ export function buildProgram(): Command {
       console.log(sha);
     });
 
-  // discover — single-call discovery for ingestion. Two modes: --plan <draft.json>
-  // discovers candidates for every page in the draft plus the vault's tag
-  // vocabulary; --title/--summary/--body-file is single-page mode, emitting
-  // one candidate per line.
+  // discover — two modes: --plan discovers candidates for every page in a
+  // draft plan plus the vault's tag vocabulary; --title/--summary/--body-file
+  // is single-page mode, emitting one candidate per line.
   program
     .command("discover")
     .description(
@@ -1219,8 +1149,7 @@ export function buildProgram(): Command {
           maxCandidates: opts.maxCandidates,
         };
         // The one index handle for this run — one per vault at a time
-        // (ADR-0010), owned here because this command is the only thing that
-        // needs one.
+        // (ADR-0010).
         const index = await Index.open(root);
         try {
           if (opts.plan) {
@@ -1251,18 +1180,14 @@ export function buildProgram(): Command {
       },
     );
 
-  // hook session-start|post-tool-use — read their payload on stdin, fail
-  // open (CLAUDE.md). Hooks fire automatically rather than being
-  // agent-invoked, so every handler error is swallowed and the command exits
-  // 0, and the session continues with that hook's side effect missing for
-  // this run.
+  // hook session-start|post-tool-use — read their payload on stdin and fail
+  // open (CLAUDE.md): a hook error must never interrupt the session.
   const hook = program
     .command("hook")
     .description("Handle a Claude Code hook payload read from stdin")
     .action(() => {
-      // A bare `hook`, or an unrecognised event name, is an error rather than
-      // commander's default "print help, exit 0" — a hooks.json typo must not
-      // look like it worked.
+      // A bare or unrecognised event is an error, not commander's
+      // help-and-exit-0 — a hooks.json typo must not look like it worked.
       fail(
         `hook: name the event, one of ${["session-start", "post-tool-use"].join(", ")}`,
       );
@@ -1273,17 +1198,14 @@ export function buildProgram(): Command {
       .description("Handle the " + action + " hook event")
       .action(() => {
         // Fail open: read the payload, run the handler, and swallow every
-        // error so a hook failure can never interrupt the session it
-        // triggered. Malformed JSON on stdin is one such failure, not a
-        // reason to exit non-zero.
+        // error, malformed JSON on stdin included.
         try {
           const payload = JSON.parse(fs.readFileSync(0, "utf8"));
           if (action === "session-start") sessionStart(payload);
           else postToolUse(payload);
         } catch {
-          // The error is deliberately dropped, not reported: stderr from a
-          // hook is surfaced to the user mid-session, and there is nothing
-          // they can act on.
+          // Deliberately dropped, not reported: hook stderr surfaces to the
+          // user mid-session with nothing they can act on.
         }
       });
   }
@@ -1339,9 +1261,8 @@ export function buildProgram(): Command {
       }) => {
         const { root } = resolveRoot();
 
-        // Persist-and-exit, like --candidates: the skill shells out to save a
-        // title after an export has already been written, and a second full
-        // export (over a non-empty target, no less) is not what "save" means.
+        // Persist-and-exit, like --candidates: a second full export over a
+        // non-empty target is not what "save" means.
         if (opts.saveTitle !== undefined) {
           try {
             saveExportTitle(root, opts.saveTitle);
@@ -1354,10 +1275,8 @@ export function buildProgram(): Command {
           return;
         }
 
-        // Same shape for the start page. The one thing this path validates is
-        // that the ref names a page *of the vault* — the export's own set is a
-        // run-time question (--raw), so it is checked when the export runs. A
-        // blank ref is not an error here: it is how "no start page" is spelled.
+        // The one thing this path validates is that the ref names a page of
+        // the vault; a blank ref means "no start page", not an error.
         if (opts.saveStartPage !== undefined) {
           const ref = normalizeStartPageRef(opts.saveStartPage);
           if (ref !== "" && !vaultPageRefs(root).has(ref)) {
@@ -1393,7 +1312,7 @@ export function buildProgram(): Command {
         }
 
         // `--out` names a directory in the default mode and the output file
-        // under --single-file, so the default it falls back to differs too.
+        // under --single-file, so the fallback default differs too.
         const outPath = opts.out
           ? path.resolve(opts.out)
           : path.join(root, opts.singleFile ? SINGLE_FILE_DEFAULT_NAME : "web");
@@ -1408,7 +1327,7 @@ export function buildProgram(): Command {
             // The per-run flag, not the resolved title: runExport owns the
             // resolution order (flag → saved title → directory name).
             title: opts.title,
-            // Likewise the raw flag: runExport owns flag → saved ref → none.
+            // Likewise the start page: flag → saved ref → none.
             startPage: opts.startPage,
             starters,
           });
@@ -1433,8 +1352,7 @@ export function buildProgram(): Command {
 
 /** Detect a direct CLI invocation across both execution shapes: the esbuild
  * CJS bundle (require.main === module) and the tsx/ESM source path
- * (import.meta.url vs argv[1]). The bundle builds with format "cjs", so
- * import.meta is empty there — the require.main branch short-circuits first. */
+ * (import.meta.url vs argv[1]). */
 function isMainModule(): boolean {
   if (typeof require !== "undefined" && require.main === module) return true;
   const arg = process.argv[1];
@@ -1442,11 +1360,9 @@ function isMainModule(): boolean {
   return import.meta.url === pathToFileURL(path.resolve(arg)).href;
 }
 
-/** The in-process (plugin) entry. Captures stdout/stderr instead of writing
- * to the process streams, overrides commander's exit so neither help() nor an
- * error exit can terminate the host (OpenCode) process, and returns the result
- * as data. Guards: commander's exitOverride makes exit a thrown
- * CommanderError, not process.exit; help() is routed to the captured streams. */
+/** The in-process (plugin) entry. Captures stdout/stderr as data instead of
+ * writing to the process streams, and overrides commander's exit so neither
+ * help() nor an error can terminate the host process. */
 export interface RunResult {
   stdout: string;
   stderr: string;
@@ -1462,16 +1378,9 @@ export async function run(argv: string[]): Promise<RunResult> {
     writeErr: (s: string) => stderr.push(s),
   });
 
-  // The command actions write via console.log/console.error → process
-  // stdout/stderr, which bypass commander's configured output. Swap the real
-  // stream writes AND console.log/console.error for the duration of the run so
-  // ALL output is captured (console.log bypasses process.stdout.write on Bun),
-  // then restore in a finally so the host process (OpenCode) keeps its own
-  // streams untouched even when an error path is taken. console.log is
-  // replaced wholesale rather than relying on it delegating to the swapped
-  // write, so each line is captured exactly once on either runtime. The
-  // originals are saved and restored unbound, so the properties keep their
-  // real identity afterwards.
+  // Swap both the process streams and console for the run (console.log
+  // bypasses process.stdout.write on Bun) and restore them in a finally, so
+  // the host process keeps its own streams.
   const outWrite = process.stdout.write;
   const errWrite = process.stderr.write;
   const consoleLog = console.log;
@@ -1492,9 +1401,9 @@ export async function run(argv: string[]): Promise<RunResult> {
   };
 
   try {
-    // Replicate the bare-invocation behaviour (usage to stdout, exit 0) by
-    // calling help() — which under exitOverride writes to the captured streams
-    // and throws a CommanderError with exitCode 0 instead of process.exit(0).
+    // Bare invocation: usage to stdout, exit 0. Under exitOverride help()
+    // writes to the captured streams and throws a CommanderError with
+    // exitCode 0 instead of process.exit(0).
     if (argv.length === 0) {
       try {
         program.help();
@@ -1515,18 +1424,14 @@ export async function run(argv: string[]): Promise<RunResult> {
           exitCode: (err as { exitCode: number }).exitCode,
         };
       }
-      // An action handler failed — `fail`, or an error it didn't own
-      // (commander rejects parseAsync with it rather than wrapping it in a
-      // CommanderError — e.g. place with an unknown kind). Report it the way
-      // main() does, through the one renderer: message on stderr, exit 1, as
-      // data rather than an exit.
+      // An action handler failed — `fail`, or an error commander rejected
+      // parseAsync with rather than wrapping in a CommanderError. Render it as
+      // main() does: message on stderr, exit 1, as data rather than an exit.
       stderr.push(failureMessage(err));
       return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 1 };
     }
-    // Nothing should have set process.exitCode — commands signal failure by
-    // throwing, not by setting it. Read it anyway so a leaked value is
-    // reported rather than swallowed, but never leave it set on the host
-    // process.
+    // Read a leaked process.exitCode so it is reported rather than swallowed,
+    // but never leave it set on the host process.
     const exitCode = Number(process.exitCode ?? 0);
     process.exitCode = 0;
     return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode };
@@ -1541,27 +1446,22 @@ export async function run(argv: string[]): Promise<RunResult> {
 function main(): void {
   const program = buildProgram();
   if (process.argv.slice(2).length === 0) {
-    // Commander's own default for "subcommands registered, none given, no
-    // root action handler" treats bare invocation as probably-missing-
-    // subcommand: help to stderr, exit 1. Match the established
-    // bare-invocation behaviour instead — usage to stdout, exit 0 — by
-    // calling help() directly rather than going through parse().
+    // Commander would treat bare invocation as a missing subcommand (help to
+    // stderr, exit 1); match the established usage-to-stdout, exit-0 behaviour
+    // instead.
     program.help();
     return;
   }
-  // A failed command rejects (`fail` from a sync handler too — parseAsync
-  // makes the throw a rejection). Render it exactly as run() does, so a
-  // failure reads the same however the CLI was entered: the message on
-  // stderr, exit 1, and no stack trace standing in for a diagnostic.
+  // Render a failed command exactly as run() does: message on stderr, exit 1,
+  // no stack trace standing in for a diagnostic.
   void program.parseAsync(process.argv).catch((err: unknown) => {
     process.stderr.write(failureMessage(err));
     process.exitCode = 1;
   });
 }
 
-// Only run as a direct CLI invocation; importing the module must be inert so
-// a host (an OpenCode plugin) can import it and call run() without hijacking
-// the process.
+// Importing the module must be inert, so a host can import it and call run()
+// without hijacking the process.
 if (isMainModule()) {
   main();
 }

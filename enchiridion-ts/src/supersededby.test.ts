@@ -1,6 +1,4 @@
-/**
- * supersededby tests — resolving supersession chains to their current heads.
- */
+/** supersededby tests — resolving supersession chains to their current heads. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

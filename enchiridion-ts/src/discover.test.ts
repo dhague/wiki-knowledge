@@ -1,11 +1,7 @@
 /**
- * Tests for the discover module.
- *
- * The integration tests open a real [Index] over a committed fixture vault
- * (search is a view of committed history — ADR-0015), exactly as the command
- * owns the one index handle (ADR-0010). The OR-vs-AND behaviour is exercised
- * against a fake [Searcher] so the query the index actually receives can be
- * asserted directly.
+ * discover tests. Integration cases need a committed fixture vault because the
+ * index is a view of committed history (ADR-0015); OR-vs-AND is asserted
+ * against a fake [Searcher] instead.
  */
 
 import { test } from "node:test";
@@ -136,9 +132,7 @@ test("orQuery builds an OR expression of unique lowercased words", () => {
 // Searcher fake
 // ---------------------------------------------------------------------------
 
-/** A fake Searcher that records the last query it saw and returns scripted
- * hits. Lets a test assert the exact query (raw, OR-joined) the index
- * receives. */
+/** A fake Searcher that records the last query and returns scripted hits. */
 class FakeSearcher implements Searcher {
   lastQuery: Query | null = null;
   hits: Hit[] = [];

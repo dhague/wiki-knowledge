@@ -16,10 +16,7 @@ export default tseslint.config(
   },
   {
     rules: {
-      // Stub subcommand handlers intentionally keep
-      // unused parameters — warn,
-      // don't fail the build, and allow a leading underscore to silence it
-      // explicitly.
+      // Stub handlers keep unused params: warn, and let a `_` prefix silence it.
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },

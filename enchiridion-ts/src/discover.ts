@@ -2,21 +2,9 @@
  * discover — single-call discovery for ingestion: overlap candidates plus the
  * tag vocabulary, driven off a draft IngestPlan.
  *
- * It fronts [Index] with hint classification, so wiki-ingest's
- * duplicate-detection step — the one where a miss creates a duplicate page —
- * is deterministic mechanics rather than an agent re-deriving "too similar"
- * from prose each run. Each candidate carries back everything the agent would
- * otherwise open the page to read (summary, tags, volatility, supersession),
- * so the cite / edge-type / tag-reuse steps collapse into one call instead of
- * N page reads.
- *
- * **The query is OR of the candidate's own words** (raw=true), never the
- * default AND-across-terms. An AND query built from a whole
- * title+summary+body demands every one of those words be present in the
- * candidate page — so the planned page's necessarily-novel summary and body
- * text silently zero out real duplicates that title alone would have found.
- * Precision comes instead from BM25's IDF weighting, where common words
- * contribute almost nothing to the score.
+ * The query is OR of the candidate's own words (`raw=true`): an AND query over
+ * a whole title+summary+body silently misses real duplicates, because the
+ * planned page's novel text zeroes it out.
  */
 
 import type { Hit, Query, TagCount } from "./searchindex.js";
@@ -30,28 +18,23 @@ export const HintRefines: Hint = "refines";
 export const HintRelated: Hint = "related";
 export const HintDistinct: Hint = "distinct";
 
-// Thresholds calibrated against the dogfooding vault (#63). They are
-// parameters on [check] rather than hard-coded, so the eval harness can tune
-// them without editing this module.
+// Calibrated against the dogfooding vault; options rather than constants so
+// the eval harness can tune them.
 
 /** The score at or above which a hit sharing a title token is a duplicate. */
 export const DuplicateThreshold = 15.0;
 /** The score at or above which a hit is related. */
 export const RelatedThreshold = 5.0;
-/** Default limit: 200 hits scanned per page. Pass 0 as an explicit escape
- * hatch for unbounded scanning (--limit 0 on the CLI). */
+/** Hits scanned per page; 0 means unbounded (`--limit 0`). */
 export const DefaultLimit = 200;
-/** Default cap on candidates returned per page, keeping the highest-scoring
- * overlaps. */
+/** Candidates returned per page, highest-scoring first. */
 export const DefaultMaxCandidates = 15;
 
-/** Sentinel passed to the searcher when limit is 0 (unbounded). SQLite FTS5
- * has no native score-gate, so we materialise the full result set here and
- * filter in the loop. */
+/** Passed to the searcher when `limit` is 0: FTS5 has no score gate, so the
+ * full result set is materialised and filtered in the loop. */
 export const UnboundedSearchLimit = 10_000_000;
 
-/** Matches the tokens that build a query and are compared for shared title
- * tokens — `[a-z0-9]+` over lowercased text, exactly as discover.py. */
+/** Lowercased `[a-z0-9]+` tokens. */
 const wordRE = /[a-z0-9]+/g;
 
 /** The search surface [check] and [discover] need. [Index] implements it. */
@@ -79,9 +62,7 @@ export interface Options {
   maxCandidates: number;
 }
 
-/** Fill the calibrated defaults for zero-valued options. `limit: 0` is a
- * special escape hatch that maps to UnboundedSearchLimit (no cap); all other
- * zero values restore their named defaults. */
+/** Zero values take their named defaults; `limit: 0` means unbounded. */
 function withDefaults(o: Options): Required<Options> {
   return {
     limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
@@ -103,7 +84,7 @@ function titleTokens(title: string): Set<string> {
 }
 
 /** The unique words across texts, phrase-quoted and OR-joined — an FTS5 Raw
- * expression. OR, not AND; see the module comment. */
+ * expression. */
 export function orQuery(...texts: string[]): string {
   const seen = new Set<string>();
   const words: string[] = [];
@@ -137,14 +118,8 @@ export function classify(
  * relationship to it. title/summary/body must be the planned page's own
  * drafted text.
  *
- * The query is built from exactly what the candidate page says — never a
- * paraphrase — which is why retrieval's vocabulary-mismatch problem doesn't
- * bite here.
- *
  * The searcher is passed in, never opened here: [Index] is
- * one-per-vault-at-a-time (ADR-0010), and that is enforced by the command
- * owning the only handle rather than by this module guessing whether one is
- * already live. */
+ * one-per-vault-at-a-time (ADR-0010). */
 export async function check(
   searcher: Searcher,
   title: string,
@@ -178,10 +153,8 @@ export async function check(
       o.duplicateThreshold,
       o.relatedThreshold,
     );
-    // distinct carries no action (no cite, no edge, no dedup decision). The
-    // absence of duplicate/refines/related already signals "safe to mint".
-    // Risk: a page scoring just under relatedThreshold is silently dropped
-    // here. Threshold calibration is a dependency on #47 (eval fixture).
+    // "distinct" carries no action — its absence from the result is the
+    // signal. A hit just under relatedThreshold is silently dropped.
     if (hint === HintDistinct) continue;
     candidates.push({
       page_ref: hit.pageRef,
@@ -203,8 +176,7 @@ export interface PageResult {
   candidates: Candidate[];
 }
 
-/** A plan page's frontmatter summary as a string, "" when absent — the same
- * `frontmatter.get("summary", "")` discover.py reads. */
+/** A plan page's frontmatter summary as a string, "" when absent. */
 function pageSummary(page: PagePlan): string {
   const got = page.frontmatter.get("summary");
   if (!got.ok) return "";
@@ -212,15 +184,13 @@ function pageSummary(page: PagePlan): string {
   return got.value;
 }
 
-/** A plan page's body, "" when nil — the same `page.body or ""` discover.py
- * reads. */
+/** A plan page's body, "" when nil. */
 function pageBody(page: PagePlan): string {
   return page.body ?? "";
 }
 
-/** Run [check] for every page a draft plan proposes — one call however many
- * chunks the plan carries, against the one searcher the caller owns, per
- * ADR-0010. */
+/** Run [check] for every page a draft plan proposes, against the one searcher
+ * the caller owns (ADR-0010). */
 export async function discover(
   searcher: Searcher,
   pages: PagePlan[],
@@ -257,8 +227,8 @@ export function tagsContaining(
   return out;
 }
 
-/** The exact-match page count per requested tag, 0 if absent (safe to mint).
- * Order follows the requested tags. */
+/** The exact-match page count per requested tag, 0 if absent. Order follows the
+ * requested tags. */
 export function tagCounts(vocabulary: TagCount[], tags: string[]): TagCount[] {
   const counts = new Map<string, number>();
   for (const tc of vocabulary) counts.set(tc.tag, tc.count);

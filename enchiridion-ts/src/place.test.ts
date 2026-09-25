@@ -14,7 +14,7 @@ test("slugify lowercases and kebab-cases a title", () => {
   const cases: Array<[string, string]> = [
     ["Connection Pooling", "connection-pooling"],
     ["What's in a name?", "whats-in-a-name"],
-    ["What’s in a name?", "whats-in-a-name"], // curly apostrophe too
+    ["What’s in a name?", "whats-in-a-name"], // curly apostrophe
     ["  Leading & trailing  ", "leading-trailing"],
     ["CamelCase/slash_underscore", "camelcase-slash-underscore"],
     ["Ünïcödé título", "n-c-d-t-tulo"],
@@ -41,7 +41,7 @@ test("slugify hard-cuts when there's no usable hyphen boundary", () => {
 test("folderToKind singularizes per ADR-0008", () => {
   const cases: Array<[string, string]> = [
     ["decisions", "decision"],
-    ["people", "people"], // no trailing s: used verbatim
+    ["people", "people"], // no trailing s → verbatim
     ["synthesis", "synthesi"],
   ];
   for (const [folder, want] of cases) {
@@ -53,8 +53,7 @@ test("folderKinds inverts kindFolders", () => {
   for (const [kind, folder] of Object.entries(KindFolders)) {
     assert.equal(FolderKinds[folder], kind);
   }
-  // `synthesis` is the ADR-0008 exception: no distinct plural, so the
-  // canonical lookup must win over the singularization rule.
+  // `synthesis`: the ADR-0008 exception — canonical lookup beats singularization.
   assert.equal(FolderKinds["synthesis"], "synthesis");
 });
 

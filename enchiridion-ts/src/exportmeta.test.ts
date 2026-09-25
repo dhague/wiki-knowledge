@@ -63,7 +63,6 @@ See [Alpha Concept](../wiki/concepts/alpha-concept.md).
 function makePages(
   entries: Array<[string, string]>,
 ): Map<string, { record?: PageRecord; text: string }> {
-  // Split into wiki/ (need full PageRecord) and raw/ (text only).
   const wikiEntries = entries.filter(([ref]) => ref.startsWith("wiki/"));
   const rawEntries = entries.filter(([ref]) => !ref.startsWith("wiki/"));
 
@@ -110,7 +109,6 @@ test("buildExportMeta: tag map groups pages by tag", () => {
 });
 
 test("buildExportMeta: pages with no tags do not appear in tagMap", () => {
-  // sourceA has tag 'source-tag'
   assert.ok(wikiPages.has("wiki/sources/source-one.md"));
   const meta = buildExportMeta(wikiPages);
   assert.ok(!meta.tagMap.has("nonexistent"));
@@ -223,28 +221,24 @@ test("buildExportMeta: a raw start page is promoted under --raw", () => {
 test("buildExportMeta: inbound-link counts reflect links from exported pages", () => {
   const meta = buildExportMeta(wikiPages);
 
-  // alpha-concept is linked by: beta-concept (body) + alpha-entity (body)
   assert.equal(
     meta.inboundCounts.get("wiki/concepts/alpha-concept.md"),
     2,
     "alpha-concept should have 2 inbound links",
   );
 
-  // beta-concept is linked by: alpha-concept (body)
   assert.equal(
     meta.inboundCounts.get("wiki/concepts/beta-concept.md"),
     1,
     "beta-concept should have 1 inbound link",
   );
 
-  // alpha-entity is linked by: alpha-concept (body)
   assert.equal(
     meta.inboundCounts.get("wiki/entities/alpha-entity.md"),
     1,
     "alpha-entity should have 1 inbound link",
   );
 
-  // source-one has no inbound links in these fixtures
   assert.equal(
     meta.inboundCounts.get("wiki/sources/source-one.md"),
     0,
@@ -261,7 +255,6 @@ test("buildExportMeta: raw/ links to wiki/ not counted when raw excluded", () =>
     ["raw/raw-doc.md", rawDoc],
   ]);
 
-  // Without raw — raw link to alpha-concept not counted
   const metaNoRaw = buildExportMeta(pagesWithRaw, { includeRaw: false });
   assert.equal(
     metaNoRaw.inboundCounts.get("wiki/concepts/alpha-concept.md"),
@@ -269,7 +262,6 @@ test("buildExportMeta: raw/ links to wiki/ not counted when raw excluded", () =>
     "raw not included: alpha-concept should still have 2 inbound links",
   );
 
-  // With raw — raw link adds one more inbound to alpha-concept
   const metaWithRaw = buildExportMeta(pagesWithRaw, { includeRaw: true });
   assert.equal(
     metaWithRaw.inboundCounts.get("wiki/concepts/alpha-concept.md"),
@@ -284,12 +276,10 @@ test("buildExportMeta: raw/ pages not in tagMap or kindMap", () => {
     ["raw/raw-doc.md", rawDoc],
   ]);
   const meta = buildExportMeta(pagesWithRaw, { includeRaw: true });
-  // raw/ pages have no kind, so kindMap should only contain wiki/ kinds
   assert.ok(
     !meta.kindMap.has("concept") ||
       !meta.kindMap.get("concept")!.some((r) => r.startsWith("raw/")),
   );
-  // raw-doc has no tags key, so tagMap should not include raw refs
   for (const pages of meta.tagMap.values()) {
     for (const ref of pages) {
       assert.ok(
@@ -340,18 +330,13 @@ test("buildExportMeta: getStarted ranked by inbound count desc, title asc tie-br
   const meta = buildExportMeta(wikiPages);
   const refs = meta.getStarted.map((e) => e.pageRef);
 
-  // alpha-concept (2 inbound) should come first
   assert.equal(refs[0], "wiki/concepts/alpha-concept.md");
-  // beta-concept and alpha-entity both have 1 inbound — tie-break by title
-  // "Alpha Entity" < "Beta Concept" alphabetically
   assert.equal(refs[1], "wiki/entities/alpha-entity.md");
   assert.equal(refs[2], "wiki/concepts/beta-concept.md");
-  // source-one has 0 inbound — comes last
   assert.equal(refs[3], "wiki/sources/source-one.md");
 });
 
 test("buildExportMeta: getStarted capped at 12", () => {
-  // Build 20 pages, each with no links
   const entries: Array<[string, string]> = [];
   for (let i = 0; i < 20; i++) {
     entries.push([

@@ -1,6 +1,5 @@
 /**
- * ingest tests — the IngestPlan resolve/validate/execute pipeline, including
- * the fake-git seam that isolates the executor from real git.
+ * ingest tests — the IngestPlan resolve/validate/execute pipeline.
  */
 
 import { test } from "node:test";
@@ -34,7 +33,6 @@ class Fake implements Git {
 
 // -- Helpers ---------------------------------------------------------------
 
-/** Lays down a {pageRef: text} map under a fresh temp root. */
 function newVault(files: Record<string, string>): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ingest-"));
   for (const [ref, text] of Object.entries(files)) {
@@ -49,7 +47,6 @@ function decodePlanOK(src: string): Plan {
   return decodePlan(src);
 }
 
-/** Resolves against root and throws if resolution errors. */
 function resolveOK(plan: Plan, root: string): Resolved {
   return resolve(plan, root);
 }
@@ -78,10 +75,7 @@ test("decodePlan keeps an explicit action", () => {
   );
 });
 
-// Frontmatter keys are applied in plan order, so a plain object (JS key
-// iteration is deterministic but not the plan's order) would make the written
-// page vary run to run. ADR-0012 relaxes byte-identical round-tripping; it
-// does not license nondeterminism.
+// Plan order, not JS object order (ADR-0012 relaxes bytes, not determinism).
 test("frontmatter key order is preserved", () => {
   const src = `{"title":"T","pages":[{"op":"create","title":"A","kind":"concept","body":"b",
     "frontmatter":{"summary":"s","volatility":"stable","tags":["x"],"source_date":"2026-01-01"}}]}`;
@@ -89,9 +83,7 @@ test("frontmatter key order is preserved", () => {
   for (let i = 0; i < 8; i++) {
     const resolved = resolveOK(decodePlanOK(src), root);
     const text = resolved.pages[0].page!.text;
-    // Key order is preserved and deterministic (ADR-0012 relaxes byte-identical
-    // round-tripping, not nondeterministic output); scalar quote style is not
-    // part of the contract.
+    // Scalar quote style is not part of the contract.
     const want = [
       "title: A\n",
       "summary: s\n",
@@ -109,11 +101,7 @@ test("frontmatter key order is preserved", () => {
   }
 });
 
-// The write half of #192: a plan's timestamped `source_date` is truncated to
-// its canonical date on the way to disk. Since #499 that truncation is not
-// resolve's own doing — [Page.set] applies the rule to every value it is
-// handed — so this test now pins that the writer's invariant reaches ingest,
-// not that resolve remembers to canonicalise.
+// A timestamped `source_date` is truncated to its canonical date on write.
 test("resolve writes a canonical source_date", () => {
   const src = `{"title":"T","pages":[{"op":"create","title":"A","kind":"concept","body":"b",
     "frontmatter":{"summary":"s","volatility":"stable","source_date":"2026-07-20T14:30:00Z"}}]}`;
@@ -124,9 +112,8 @@ test("resolve writes a canonical source_date", () => {
   assert.ok(!text.includes("14:30"));
 });
 
-// #561: a page that omits `source_date` inherits the plan's top-level value —
-// "the document's own date" — rather than being written without the field, so
-// a fresh vault passes the `missing-volatility-source-date` check.
+// An omitted `source_date` inherits the plan's top-level value, so the vault
+// passes the missing-volatility-source-date check.
 test("create inherits the plan's source_date when the page omits it", () => {
   const plan = decodePlanOK(`{"title":"T","source_date":"2026-03-01","pages":[
     {"op":"create","title":"A","kind":"concept","body":"b",
@@ -224,8 +211,7 @@ test("resolve composes edge links from vault titles", () => {
   );
 });
 
-// A sibling page this same plan creates supplies the link title, so two new
-// pages can link to each other before either exists on disk.
+// A sibling this plan creates supplies the link title, before either page exists.
 test("resolve composes edge links from sibling plan pages", () => {
   const plan = decodePlanOK(`{"title":"T","pages":[
     {"op":"create","title":"First Page","kind":"concept","body":"b"},
@@ -263,8 +249,8 @@ test("resolve normalizes body links", () => {
   );
 });
 
-// An update starts from the on-disk page, so a re-ingest's existing edges and
-// the fresh plan's edges are both present afterwards.
+// An update starts from the on-disk page, so its old edges and the plan's new
+// ones both survive.
 test("update merges list-valued keys onto disk state", () => {
   const root = newVault({
     "wiki/concepts/a.md":
@@ -469,9 +455,8 @@ test("shape validation treats null raw_source as absent", () => {
   assert.equal(got, "");
 });
 
-// #561: `volatility` is a required schema field the checker reports on, so a
-// plan must not write a page without one. A create always rewrites its
-// frontmatter; an update does so whenever it supplies a `frontmatter` map.
+// `volatility` is required whenever frontmatter is rewritten: always for a
+// create, for an update only when it supplies a map.
 test("shape validation requires volatility on a create", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
@@ -532,9 +517,8 @@ test("shape validation accepts each canonical volatility", () => {
   }
 });
 
-// The schema's domain, not just its presence: a value outside
-// `stable | evolving | volatile` writes a page `search --volatility` can never
-// match, so the plan is refused rather than written.
+// A value outside the schema's domain writes a page `search --volatility` can
+// never match.
 test("shape validation rejects a volatility outside the schema domain", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
@@ -736,8 +720,7 @@ test("execute is idempotent", async () => {
   await first.execute(new Fake());
   const before = readAll(root);
 
-  // The second run's creates now collide, so re-executing the resolved plan
-  // directly is the rerun-after-fix path: same bytes out.
+  // Re-executing the resolved plan is the rerun-after-fix path: same bytes out.
   await first.execute(new Fake());
   const after = readAll(root);
   for (const [ref, text] of Object.entries(before)) {
@@ -887,8 +870,7 @@ test("describe", () => {
 
 // --- Consolidation — `action: consolidate` (ADR-0021) -----------------------
 
-/** A survivor plus two fragmented pages that say the same thing, and a page
- * whose links to both must follow the survivor. */
+/** A survivor, two fragmented pages that say the same thing, and a page linking both. */
 const fragmentedVault: Record<string, string> = {
   "wiki/concepts/caching.md":
     "---\ntitle: Caching\n---\nCaching is remembering a value.\n",
@@ -904,7 +886,7 @@ const consolidatePlan = `{"title":"Caching","action":"consolidate","consolidates
   {"op":"update","page_ref":"wiki/concepts/caching.md","frontmatter":{"volatility":"stable","tags":["caching"]},
    "body":"Caching is remembering a value.\\n\\n## TTL\\n\\nA cache entry expires after its TTL.\\n\\n## Eviction\\n\\nEntries also expire when evicted.\\n"}]}`;
 
-/** The consolidate plan with one its pieces swapped out for a broken one. */
+/** The consolidate plan with one piece swapped for a broken one. */
 function consolidateWith(overrides: {
   consolidates?: string[];
   page?: string;
@@ -1057,8 +1039,8 @@ test("losslessness reads a re-based link by where it points, not its spelling", 
     validationErrors(based("See [C](../concepts/c.md).\n"), root),
     "",
   );
-  // Not faithful: copied verbatim, the link now points at a page that is not
-  // there — the check catches what a byte comparison would have called a match.
+  // Copied verbatim, the link now points at a page that is not there — the
+  // check catches what a byte comparison would have called a match.
   assert.match(
     validationErrors(based("See [C](c.md).\n"), root),
     /does not contain wiki\/concepts\/a\.md's content/,
@@ -1081,12 +1063,10 @@ test("execute consolidates: survivor sections, deleted losers, repointed links, 
   assert.equal(v.exists("wiki/concepts/caching-ttl.md"), false);
   assert.equal(v.exists("wiki/concepts/cache-expiry.md"), false);
 
-  // Both inbound links now land on the survivor.
   const client = v.load("wiki/concepts/client.md").text;
   assert.equal((client.match(/\(caching\.md\)/g) ?? []).length, 2);
 
-  // One commit under its own verb, recording deletes rather than a
-  // supersession (ADR-0021).
+  // One commit under its own verb, recording deletes rather than a supersession (ADR-0021).
   assert.equal(fake.messages.length, 1);
   const message = fake.messages[0];
   assert.ok(message.startsWith("consolidate: Caching"), message);
@@ -1107,8 +1087,7 @@ test("execute consolidation is idempotent", async () => {
   await resolved.execute(new Fake());
   const before = readAll(root);
 
-  // Re-execute the resolved plan: the losers are already gone, and the second
-  // run must leave the same bytes rather than fail on their absence.
+  // The losers are already gone; a second run must leave the same bytes, not fail.
   await resolved.execute(new Fake());
   const after = readAll(root);
   assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort());
@@ -1173,7 +1152,7 @@ const FIXED_SIGNATURE = {
   timezoneOffset: 0,
 };
 
-/** Init a real empty git repo at root so HEAD exists. */
+/** Init a real repo at root so HEAD exists. */
 async function initRepo(root: string): Promise<void> {
   await git.init({ fs, dir: root });
   await git.commit({
@@ -1185,8 +1164,7 @@ async function initRepo(root: string): Promise<void> {
   });
 }
 
-/** The acceptance-criteria multi-page plan: create/update ops, a typed edge, a
- * raw_source link, and a separate synthesize action plan. */
+/** A multi-page plan: create and update ops, a typed edge, a raw_source link. */
 const multiPagePlan = `{
   "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","raw":"raw/doc.md",
   "pages":[
@@ -1223,15 +1201,12 @@ test("integration: a multi-page plan commits pages to a real git vault", async (
   assert.ok(v.exists("wiki/sources/doc.md"));
   assert.ok(v.exists("wiki/concepts/prepared-statements.md"));
 
-  // The source stub points at the raw artifact via a composed raw_source link.
   const stub = v.load("wiki/sources/doc.md").text;
   assert.ok(stub.includes('raw_source: "[doc.md](../../raw/doc.md)"'), stub);
 
-  // The concept page's source edge resolves to the stub.
   const concept = v.load("wiki/concepts/prepared-statements.md").text;
   assert.ok(concept.includes('"[Doc](../sources/doc.md)"'), concept);
 
-  // The update kept the on-disk title but replaced the body and gained an edge.
   const updated = v.load("wiki/concepts/old.md").text;
   assert.ok(updated.includes("title: Old"), updated);
   assert.ok(updated.includes("updated body"), updated);
@@ -1297,8 +1272,8 @@ test("integration: a Consolidation deletes its losers in one real commit", async
       `---\ntitle: ${name}\n---\n${body}`,
     );
   }
-  // A real commit has to be made first: the deletion path stages a *tracked*
-  // file missing from disk, and an untracked one is still an error.
+  // The deletion path stages a tracked file missing from disk; an untracked one
+  // is an error.
   const seed = new VaultGit(root);
   await seed.add(["wiki"]);
   await seed.commit("seed");
@@ -1322,15 +1297,13 @@ test("integration: a Consolidation deletes its losers in one real commit", async
     v.load("wiki/concepts/caching.md").text.includes("expires after its TTL"),
   );
   assert.equal(v.exists("wiki/concepts/caching-ttl.md"), false);
-  // The loser is gone from HEAD's tree, not just from the working tree.
+  // Gone from HEAD's tree, not just the working tree.
   const head = await git.listFiles({ fs, dir: root, ref: "HEAD" });
   assert.ok(!head.includes("wiki/concepts/caching-ttl.md"), String(head));
 });
 
-// #561 regression: the writer and check 5 must agree. Ingest a minimal plan
-// shaped like the documented `wiki-ingest` one — a source stub and a content
-// page, neither carrying a `source_date` of its own — and assert the vault it
-// leaves behind is clean under `check missing-volatility-source-date`.
+// The writer and the check must agree: an ingested plan leaves no
+// missing-volatility-source-date findings.
 test("an ingested plan leaves no missing-volatility-source-date findings", async () => {
   const root = newVault({ "raw/doc.md": "raw\n" });
   const resolved = resolveOK(

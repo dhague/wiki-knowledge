@@ -1,8 +1,5 @@
-/**
- * Unit tests for the transcriptcapture module (#257). Uses mock env lookups,
- * fixture transcripts, and an injectable export seam — no real transcript
- * fetch and no real `opencode` invocation.
- */
+/** Unit tests for transcriptcapture: mock env lookups, fixture transcripts, and an
+ * injectable export seam — no real fetch and no real `opencode` invocation. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -60,7 +57,7 @@ function transcriptFixture(): string[] {
   ];
 }
 
-/** A hand-built domain turn fixture — what both host adapters reduce to. */
+/** The domain turn shape both host adapters reduce to. */
 function turnFixture(): Turn[] {
   return [
     { role: "user", text: "Hello there" },
@@ -367,7 +364,6 @@ test("writeCapture reuses an existing capture by short id instead of the new fil
     "old",
     "sess",
   );
-  // A second save with a different slug/timestamp must rewrite the first file.
   const second = writeCapture(
     wikiRoot,
     "2026-01-03-0506-second-sess.md",
@@ -421,8 +417,7 @@ test("writeCapture surfaces a listing failure that is not ENOENT (#498)", () => 
       err.cause === boom,
   );
 
-  // The point of refusing: silently reading the failure as "no prior capture"
-  // would have written a second raw file and orphaned the first.
+  // A silent second file would have orphaned the first.
   assert.deepEqual(
     fs.readdirSync(conversationsDir),
     [path.basename(first)],
@@ -456,8 +451,7 @@ test("re-saving a session rewrites its one raw file rather than adding a second"
     lookupEnv,
     NOW,
   );
-  // A re-save under a different slug and timestamp: the name was bound at the
-  // first save, so the second must reuse it rather than bind a new one (#33).
+  // The name was bound at the first save, so the second must reuse it.
   const second = await captureSession(
     wikiRoot,
     "Something Else Entirely",
@@ -615,9 +609,8 @@ test("captureOpenCodeSession fails when the export seam errors", async () => {
 });
 
 test("captureOpenCodeSession captures a session that predates the tracker", async () => {
-  // No `.opencode/` state dir at all: the session was started before the
-  // session-tracker plugin was installed, so it was never recorded. `opencode
-  // export` still has the transcript, so the capture must succeed anyway (#402).
+  // No tracker state at all: `opencode export` still has the transcript, so the
+  // capture must succeed anyway.
   const sessionID = "oc-pre-plugin-777";
   const lookupEnv = env({ OPENCODE_SESSION_ID: sessionID });
   const doc = JSON.stringify({
@@ -664,7 +657,6 @@ test("isOpenCodeSessionTracked is true when the tracker recorded the session", (
 
 test("isOpenCodeSessionTracked is false when the session is untracked", () => {
   const { project } = openCodeEnvAndState();
-  // A different id than the tracked one.
   const other = env({ OPENCODE_SESSION_ID: "oc-other" });
   assert.equal(isOpenCodeSessionTracked(project, other), false);
 });
@@ -682,15 +674,11 @@ test("isOpenCodeSessionTracked is false when there is no state directory", () =>
 });
 
 // ---------------------------------------------------------------------------
-// The session root: one rule, per-host layout (#493)
+// The session root: one rule, per-host layout
 // ---------------------------------------------------------------------------
 
-/**
- * A directory that is not a project for either host: no `.claude/` and no
- * `.opencode/` anywhere between cwd and the sandboxed $HOME. The sandbox is
- * injected as $HOME so each walk hits the home boundary and stops, rather than
- * escaping into the real filesystem — where a stray marker would answer for it.
- */
+/** A directory that is no project for either host; `home` is injected as $HOME so
+ * each walk stops at the boundary instead of escaping into the real filesystem. */
 function notAProject(): { home: string; cwd: string } {
   const home = tmp();
   const cwd = path.join(home, "no", "project", "here");
@@ -717,17 +705,14 @@ test("findOpenCodeSessionsDir walks up to the nearest .opencode ancestor", () =>
 });
 
 test("findOpenCodeSessionsDir returns no project rather than falling back to cwd (#493)", () => {
-  // The writer-facing posture: with no `.opencode/` above it the answer is
-  // "not inside a project", never a cwd-relative guess (#485). Reading the
-  // tracker state from a bare cwd is what this replaced.
+  // With no `.opencode/` above it the answer is "not inside a project", never a
+  // cwd-relative guess.
   const { home, cwd } = notAProject();
   assert.equal(findOpenCodeSessionsDir(cwd, env({ HOME: home })), undefined);
 });
 
 test("the OpenCode walk stops at the home directory (#493)", () => {
-  // `~/.opencode` is no more a project marker than `~/.claude` is: a directory
-  // the user did not make a project must not answer for one, or a session run
-  // from $HOME writes a state tree into what is global configuration (#485).
+  // `~/.opencode` is global configuration, not a project marker.
   const home = tmp();
   fs.mkdirSync(path.join(home, ".opencode"), { recursive: true });
   const cwd = path.join(home, "scratch");
@@ -736,8 +721,7 @@ test("the OpenCode walk stops at the home directory (#493)", () => {
 });
 
 test("a project under the home directory still resolves for OpenCode (#485)", () => {
-  // The boundary is the home directory itself, not everything below it: a
-  // project's own `.opencode/` is reached before the walk gets there.
+  // A project under $HOME still resolves: its own marker is reached first.
   const home = tmp();
   fs.mkdirSync(path.join(home, ".opencode"), { recursive: true });
   const project = path.join(home, "code", "app");
@@ -749,10 +733,8 @@ test("a project under the home directory still resolves for OpenCode (#485)", ()
 });
 
 test("the OpenCode adapter has no env override (#493)", () => {
-  // `$CLAUDE_PROJECT_DIR` is Claude Code's statement about Claude Code's
-  // project. OpenCode exports no equivalent, so it cannot move this root —
-  // and a variable leaked from a Claude session must not name an OpenCode
-  // project that does not exist.
+  // OpenCode exports no project-root variable, so a leaked `$CLAUDE_PROJECT_DIR`
+  // cannot move this root.
   const { home, cwd } = notAProject();
   const project = tmp();
   fs.mkdirSync(path.join(project, ".opencode"), { recursive: true });
@@ -857,14 +839,11 @@ test("captureSession prefers OpenCode when both ids are set but the tracker reco
   const rel = await captureSession(wikiRoot, "", project, both, NOW, async () =>
     new TextEncoder().encode(doc),
   );
-  // OpenCode short id ("oc") should appear in the filename.
   assert.match(rel, /-oc\.md$/);
 });
 
 test("captureSession falls back to Claude Code when OpenCode id is untracked", async () => {
-  // Both ids set, but the OpenCode one has no tracker state in this project —
-  // a variable leaked from an unrelated project or an outer session — so the
-  // Claude Code path wins (an untracked OpenCode id never overrides it).
+  // An untracked OpenCode id never overrides the Claude Code path.
   const { wikiRoot, lookupEnv: ccEnv } = claudeEnvAndState();
   const ocEnv = env({ OPENCODE_SESSION_ID: "oc-untracked" });
   const both = (key: string): [string | undefined, boolean] => {
@@ -877,8 +856,7 @@ test("captureSession falls back to Claude Code when OpenCode id is untracked", a
 });
 
 test("captureSession dispatches to OpenCode when only OPENCODE_SESSION_ID is set, even untracked", async () => {
-  // Only OPENCODE_SESSION_ID set and no tracker state at all: the host is
-  // OpenCode regardless, and the export path must still run and succeed (#402).
+  // OpenCode despite no tracker state: the export path must still run.
   const lookupEnv = env({ OPENCODE_SESSION_ID: "oc-nope-123" });
   const doc = JSON.stringify({
     messages: [

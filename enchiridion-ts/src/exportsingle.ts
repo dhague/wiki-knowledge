@@ -1,19 +1,10 @@
 /**
- * The single-file export: the whole site as one self-contained document.
+ * The single-file export: the whole site as one self-contained document, every
+ * page a `<section>` and every internal link a `#fragment`.
  *
- * The third consumer of the parts generators, alongside the two shell
- * wrappers in exportrender/exportaggregate. Multi-page output wraps each
- * page's parts in its own document and links the next one by file path; this
- * one nests every page's parts in a `<section>` of a single document and
- * links the next one by fragment. That is the whole difference — the parts
- * themselves are the same, rendered once, by the same code.
- *
- * A recipient opens the file straight from an email attachment on a phone:
- * no unzip, no server, no network. The CSS is inlined and the only script is
- * the one below, so the document fetches nothing at all.
- *
- * Navigation is hash-based rather than the History API: `pushState` is
- * unreliable on `file://` (it throws a SecurityError in some browsers), and
+ * It fetches nothing — the CSS is inlined and the file's only script is the one
+ * below. Navigation is hash-based rather than the History API because
+ * `pushState` throws a SecurityError on `file://` in some browsers, and
  * `file://` is the entire point of this mode.
  */
 
@@ -29,23 +20,13 @@ import {
 import { renderAggregateParts } from "./exportaggregate.js";
 import { EXPORT_STYLESHEET } from "./exportstyle.js";
 
-/**
- * The filename a single-file export defaults to, at the vault root. `--out`
- * names the file in this mode; this is what it names when nothing was given.
- */
+/** The filename a single-file export defaults to, when `--out` is not given. */
 export const SINGLE_FILE_DEFAULT_NAME = "wiki.html";
 
-/**
- * What is too large to be worth emailing. Not a cap — an oversized export is
- * written all the same, with a pointer to the mode that suits it better.
- */
+/** Not a cap: an oversized export is still written, with a pointer to the mode
+ *  that suits it better. */
 export const SINGLE_FILE_WARN_BYTES = 5 * 1024 * 1024;
 
-/**
- * The warning for a single-file export too large to send, or null when the
- * file is a comfortable size. The caller writes the file either way; this
- * only decides what to say about it.
- */
 export function singleFileSizeWarning(
   bytes: number,
   file: string,
@@ -60,10 +41,9 @@ export function singleFileSizeWarning(
 // ---------------------------------------------------------------------------
 
 /**
- * Rules that belong to this document shape and to no other. Hiding the
- * sections in CSS rather than in the script is deliberate: the file is up to
- * several megabytes of markup, and hiding it in the script would flash the
- * whole wiki on screen between the first paint and the script running.
+ * Hiding the sections in CSS rather than in the script is deliberate: the file
+ * is megabytes of markup, and script-side hiding would flash the whole wiki
+ * between first paint and the script running.
  */
 const SINGLE_FILE_CSS = `/* enchiridion single-file supplement
  * ===================================
@@ -81,13 +61,10 @@ section.wiki-page.active {
 `;
 
 /**
- * The whole of this mode's behaviour, and the only script in the file.
- *
- * Written as ES5 in a plain IIFE: it runs on whatever browser opens an email
- * attachment, with no build step and no polyfill to fetch. It reads the hash
- * on load and on every hash change, which is what gives the back button its
- * history (each hash change is its own entry) and what makes a `#slug` deep
- * link land on its section.
+ * The whole of this mode's behaviour, and the file's only script. ES5 in a
+ * plain IIFE: it runs on whatever browser opens an email attachment. Reading
+ * the hash on load and on every change is what gives Back its history and makes
+ * a `#slug` deep link land.
  */
 const SINGLE_FILE_SCRIPT = `(function () {
   var FRONT = "__front";
@@ -138,11 +115,8 @@ const SINGLE_FILE_SCRIPT = `(function () {
 // Assembly
 // ---------------------------------------------------------------------------
 
-/**
- * One page's parts as a section of the document. The id comes from
- * [sectionIdFor] — the same function every link to this page was rewritten
- * through, which is why a rewritten link cannot miss.
- */
+/** One page's parts as a section; the id comes from [sectionIdFor], the same
+ *  function every link to the page was rewritten through. */
 function buildSection(htmlPath: string, parts: PageParts): string {
   return `<section id="${escHtml(sectionIdFor(htmlPath))}" class="wiki-page">
 ${parts.nav}
@@ -150,11 +124,8 @@ ${parts.main}
 </section>`;
 }
 
-/**
- * The one document: the shared skeleton, with this mode's styling inlined
- * (there is no second file to link) and the navigation script at the end of
- * the body, where the sections it switches between are already parsed.
- */
+/** The one document: shared skeleton, this mode's styling inlined (there is no
+ *  second file to link), script after the sections it switches between. */
 function buildSingleFileDocument(title: string, sections: string[]): string {
   const style = `<style>
 ${EXPORT_STYLESHEET}
@@ -167,14 +138,9 @@ ${SINGLE_FILE_SCRIPT}
   return buildDocument(title, style, body);
 }
 
-/**
- * Render the whole export as one HTML document: every page and aggregate of
- * the exported set as a `<section>`, the stylesheet inlined, and a link
- * strategy of `#section` fragments so no link leaves the file.
- *
- * Same inputs and same options as the multi-page generators, and the same
- * parts underneath — this is a shape, not a second renderer.
- */
+/** Render the whole exported set as one HTML document: every page and aggregate
+ *  a `<section>`, the stylesheet inlined, links rewritten to `#fragment`s.
+ *  Same inputs, options and parts as the multi-page generators. */
 export function renderSingleFile(
   pages: Map<string, { record?: PageRecord; text: string }>,
   meta: ExportMeta,

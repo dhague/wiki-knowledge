@@ -1,6 +1,6 @@
 /**
- * Tests for the wikipage module, with the two property-tested contracts
- * (page-move and frontmatter round-trip, ADR-0012) guarded by fast-check.
+ * Tests for the wikipage module. The page-move and frontmatter round-trip
+ * contracts (ADR-0012) are property-tested with fast-check.
  */
 
 import { describe, it } from "node:test";
@@ -27,7 +27,7 @@ import {
 } from "./wikipage.js";
 import type { LinkMatch } from "./wikipage.js";
 // The reader that finds frontmatter links through the YAML parser rather than
-// by scanning raw text — the oracle for what a move did to them (#489).
+// by scanning raw text — the second oracle.
 import { newPageRecord } from "./pagerecord.js";
 
 // ---------------------------------------------------------------------------
@@ -135,8 +135,8 @@ describe("percentDecode", () => {
 
 describe("splitDest", () => {
   it("splits before decoding", () => {
-    // The whole point of the single decode boundary: an encoded `#` in a
-    // filename must not be mistaken for an anchor separator.
+    // The single decode boundary: an encoded `#` in a filename must not be
+    // mistaken for an anchor separator.
     assert.deepEqual(splitDest("raw/notes%20%231.md"), {
       path: "raw/notes #1.md",
       anchor: "",
@@ -150,9 +150,8 @@ describe("splitDest", () => {
 
 describe("encodeDest", () => {
   it("keeps the anchor separator literal and a filename's hash encoded", () => {
-    // The other half of the decode boundary, and the one rule both the
-    // frontmatter check and its fix now go through (#492): a heading fragment
-    // stays `#ttl`, never `%23ttl`, and a filename's own `#` can only be `%23`.
+    // The other half of the decode boundary: a heading fragment stays `#ttl`,
+    // never `%23ttl`, and a filename's own `#` can only be `%23`.
     assert.equal(
       encodeDest("wiki/concepts/a.md", "ttl"),
       "wiki/concepts/a.md#ttl",
@@ -177,9 +176,6 @@ describe("encodeDest", () => {
   });
 
   it("round-trips any decoded path and anchor", () => {
-    // The two are the module's single encode/decode boundary, so an encoded
-    // destination split back apart must give exactly what was encoded —
-    // whatever the path holds, a `#` or `%` of its own included.
     fc.assert(
       fc.property(fc.string(), fc.string(), (p, anchor) => {
         const { path: decodedPath, anchor: decodedAnchor } = splitDest(
@@ -256,8 +252,7 @@ describe("iterLinks", () => {
       "../entities/a-rather-long-target-page-title-that-will-definitely-wrap.md",
     );
     // The span is the *raw* folded destination, backslash and line break
-    // included, so a splice replaces the fold wholesale rather than leaving a
-    // stray continuation behind.
+    // included, so a splice replaces the fold wholesale.
     assert.equal(
       text.slice(links[0].start, links[0].end),
       "../entities/a-rather-long-tar\\\n    get-page-title-that-will-definitely-wrap.md",
@@ -265,10 +260,9 @@ describe("iterLinks", () => {
   });
 
   it("recognises a link whose label and destination are split by a fold", () => {
-    // The third fold shape (#550): the break falls between `]` and `(`. A YAML
-    // reader resolves `"]\⏎  ("` to `"]("`, so this is one link — but a matcher
-    // demanding `](` adjacency yielded nothing, which blinded every raw-text
-    // scan: `frontmatter-link-format` missed its encoding and `split-links` could not join it.
+    // The third fold shape: the break falls between `]` and `(`. A YAML reader
+    // resolves `"]\⏎  ("` to `"]("`, so this is one link — but a matcher
+    // demanding `](` adjacency saw nothing, blinding every raw-text scan.
     const fm = 'related:\n  - "[A missing both]\\\n    (a-missing-both.md)"\n';
     const links = iterLinks(fm);
     assert.equal(links.length, 1);
@@ -288,8 +282,7 @@ describe("iterLinks", () => {
 
   it("does not stretch a finished link over a following hard line break", () => {
     // A `\` at the end of a body line is a CommonMark hard break, not part of
-    // the link before it: the boundary tolerance sits between `]` and `(` and
-    // must not pull a break that follows a closed `)` into the match.
+    // the link before it: the boundary tolerance sits between `]` and `(`.
     const text = "Old [A](a.md)\\\nand more text.\n";
     const links = iterLinks(text);
     assert.equal(links.length, 1);
@@ -309,9 +302,9 @@ describe("iterLinks", () => {
   });
 
   it("keeps the space that YAML keeps before a fold", () => {
-    // The parser is the oracle for what a fold means: whitespace *before* the
-    // `\` is content, only the break and the next line's indent are dropped.
-    // A regex that swallowed it would resolve to a silently wrong path.
+    // The parser is the oracle: whitespace *before* the `\` is content, only
+    // the break and next indent drop. A regex that swallowed it would resolve
+    // to a silently wrong path.
     const text = '---\nrelated:\n  - "[T](<a b \\\n    c.md>)"\n---\n';
     assert.deepEqual(parseYaml(splitFrontmatter(text).frontmatter), {
       related: ["[T](<a b c.md>)"],
@@ -323,10 +316,8 @@ describe("iterLinks", () => {
   });
 
   it("emits a long destination unfolded, and reads it back", () => {
-    // The writer folds nothing (ADR-0024), so this is the shape every page
-    // written from here on carries: the destination on one line, however long
-    // it is. The folds this reader still resolves are the ones already on
-    // disk, which the fixtures above spell out by hand.
+    // The writer folds nothing (ADR-0024): the destination stays on one line
+    // however long it is. The folds this reader resolves are already on disk.
     const dest = `a-very-long-slug-${"and-longer-".repeat(8)}wraps.md`;
     const text = new Page("---\ntitle: x\n---\n\n").set("related", [
       `[t](<${dest}>)`,
@@ -409,11 +400,10 @@ describe("Page.set", () => {
   });
 
   it("coerces a scalar for a list-valued key into a one-element list", () => {
-    // #575: `tags` is list-valued, and the record reader reads a scalar as no
-    // tags at all — `stringList` returns [] for anything that is not an array,
-    // so the page silently drops out of every tag-filtered retrieval. The
-    // writer wraps the one value in the one-element list the conventions
-    // document, so the tags survive to the index whatever shape they arrive in.
+    // `tags` is list-valued, and the record reader reads a scalar as no tags at
+    // all — so the writer wraps the one value in the one-element list the
+    // conventions document, and the tags survive to the index whatever shape
+    // they arrive in.
     const page = new Page("---\ntitle: A\n---\nbody\n").set("tags", "alpha");
     assert.equal(page.text, "---\ntitle: A\ntags:\n  - alpha\n---\nbody\n");
     assert.deepEqual(page.getStringList("tags"), ["alpha"]);
@@ -421,15 +411,13 @@ describe("Page.set", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The writer applies the source-date rule (#499)
+// The writer applies the source-date rule
 // ---------------------------------------------------------------------------
 
 // Every frontmatter shape the round-trip contract cares about, around one
-// non-canonical `source_date`: a comment, a blank line, a single-quoted
-// scalar, a double-quoted one, a block sequence, a plain scalar and a nested
-// mapping, with `source_date` in the middle so a writer that rebuilt the block
-// rather than changing one value would show it. A *flow* sequence is the one
-// shape the emitter re-spaces, so the fixture holds block ones.
+// non-canonical `source_date` placed in the middle so a writer that rebuilt the
+// block rather than changing one value would show it. Block sequences only: the
+// emitter re-spaces a flow one.
 const uncanonicalSourceDatePage = [
   "---",
   "# a comment, which a writer has no business dropping",
@@ -452,9 +440,6 @@ const uncanonicalSourceDatePage = [
 ].join("\n");
 
 describe("Page.set applies the source-date rule on the way to disk", () => {
-  // The ticket's assertion: whichever caller asked, what reaches disk carries
-  // the canonical spelling. `set` is the one place frontmatter bytes are
-  // produced, so the rule lives there now rather than in each caller.
   for (const [value, want] of [
     ["2026-01-02", "2026-01-02"],
     ["2026-01-02T10:00:00Z", "2026-01-02"],
@@ -472,11 +457,9 @@ describe("Page.set applies the source-date rule on the way to disk", () => {
     });
   }
 
-  // The hard part: canonicalising changes that one value and not one other
-  // byte. Frontmatter is re-serialised (ADR-0012), so this is a real
-  // assertion: it holds only because every untouched key keeps its source
-  // style, order and position, the comment and blank line survive, and the
-  // body is spliced back verbatim.
+  // Frontmatter is re-serialised (ADR-0012), so this holds only because every
+  // untouched key keeps its style, order and position and the body is spliced
+  // back verbatim.
   it("changes the value and not one other byte", () => {
     const written = new Page(uncanonicalSourceDatePage).set(
       "source_date",
@@ -491,11 +474,9 @@ describe("Page.set applies the source-date rule on the way to disk", () => {
     );
   });
 
-  // The tolerant posture, and the assertion that fails if someone later
-  // "simplifies" the writer to the refusing one. A writer must not throw on
-  // content it was handed: a hand-written "summer 2026", an impossible
-  // calendar date and a non-string are all "not a date", and refusing one is
-  // validation's business — already had by the time a page reaches here.
+  // The tolerant posture: a writer must not throw on content it was handed. A
+  // hand-written "summer 2026" and an impossible calendar date are both "not a
+  // date", and refusing one is validation's business.
   it("leaves a non-date alone rather than refusing it", () => {
     for (const value of ["summer 2026", "2026-02-30", "nope", 20260720]) {
       const written = new Page(uncanonicalSourceDatePage).set(
@@ -593,8 +574,8 @@ describe("normalizeBodyLinks", () => {
 
   it("leaves a scheme-qualified destination alone, parens and all", () => {
     // A scheme is what makes this absolute. Parens are not: they are ordinary
-    // destination characters, and this is where treating a scheme-qualified
-    // destination as relative showed up as damage rather than as a no-op.
+    // destination characters, and treating a scheme-qualified destination as
+    // relative showed up as damage rather than as a no-op.
     for (const dest of [
       "mailto:x@y.z?subject=(hi)",
       "tel:+441234567",
@@ -697,8 +678,8 @@ describe("PlanConsolidate", () => {
     assert.ok(!("wiki/concepts/a.md" in after));
     assert.ok(!("wiki/concepts/c.md" in after));
     assert.equal(after["wiki/concepts/b.md"], "B body.\n");
-    // Body links and frontmatter edges both follow; the labels are the author's
-    // and stay exactly as they were.
+    // Body links and frontmatter edges both follow; the labels stay as they
+    // were.
     assert.equal(
       after["wiki/entities/e.md"],
       '---\nrelated:\n  - "[A](../concepts/b.md)"\n---\n' +
@@ -746,13 +727,12 @@ describe("canonicalizeLinkTargets", () => {
 });
 
 // ---------------------------------------------------------------------------
-// A scheme-qualified destination is absolute, not relative (#500)
+// A scheme-qualified destination is absolute, not relative
 // ---------------------------------------------------------------------------
 
-// Destinations naming something outside the vault. Every one is a URI with a
-// scheme: what makes it absolute is the scheme, and none of these carries a
-// `//` — the one shape a classifier that only knows `://` reads as a
-// vault-relative path, and then re-spells against the moved page's folder.
+// Destinations naming something outside the vault, every one a URI with a
+// scheme and none carrying a `//` — the shape a classifier that only knows
+// `://` reads as vault-relative and re-spells against the moved page's folder.
 const schemeDests = [
   "mailto:x@y.z",
   "mailto:x@y.z?subject=(hi)",
@@ -773,8 +753,7 @@ describe("a scheme-qualified destination is absolute, not relative", () => {
         "wiki/entities/a.md",
       );
       // Whole-document byte equality, so a link the move damaged cannot hide
-      // behind a substring that happens to survive. The sibling link is here
-      // to prove the move ran: it is re-spelled, the scheme is not.
+      // behind a surviving substring. The sibling link proves the move ran.
       assert.equal(
         moved["wiki/entities/a.md"],
         `# A\n\nContact [me](${dest}), see [B](b.md).\n`,
@@ -799,8 +778,8 @@ describe("a scheme-qualified destination is absolute, not relative", () => {
         "wiki/concepts/a.md",
         "wiki/entities/a.md",
       );
-      // The edge key that holds it is immaterial — the same whole-document
-      // scan and the same splice carry every frontmatter link.
+      // The edge key holding it is immaterial — the same scan and splice carry
+      // every frontmatter link.
       assert.equal(
         moved["wiki/entities/a.md"],
         text.replace("../entities/b.md", "b.md"),
@@ -811,7 +790,7 @@ describe("a scheme-qualified destination is absolute, not relative", () => {
 
   it("still rewrites a page link whose own filename carries a colon", () => {
     // The counterexample the `.md`-first ordering exists for: `C:notes.md`
-    // looks like a scheme, and is a page of the vault all the same.
+    // looks like a scheme, and is a page all the same.
     const moved = planMove(
       {
         "wiki/concepts/a.md":
@@ -834,8 +813,7 @@ describe("a scheme-qualified destination is absolute, not relative", () => {
 
 // vaultDirs are the directories a generated page may live in — enough shape
 // variation (sibling, cousin, vault root) to exercise every `../` case. The
-// kind-folders are named separately: the YAML oracle can only read a page that
-// lives in one, so the generator has to guarantee one.
+// kind-folders are separate because the YAML oracle can only read those.
 const kindDirs = [
   "wiki/concepts",
   "wiki/entities",
@@ -845,10 +823,9 @@ const kindDirs = [
 const vaultDirs = [...kindDirs, ""];
 
 // The names the generator draws pages from. The long ones are load-bearing: a
-// destination that outgrows the writer's line width folds across two lines, and
-// a fold is the one shape where the raw-text link scan and the YAML parser can
-// disagree — the disagreement #486 was. Each is long enough that its own
-// basename, the shortest destination any page can carry, still folds.
+// destination that outgrows the writer's line width folds across two lines, the
+// one shape where the raw-text link scan and the YAML parser can disagree, and
+// each is long enough that its own basename still folds.
 const shortNames = ["a", "b", "c", "d"];
 const longNames = [
   "a-rather-long-target-page-title-that-will-definitely-wrap-across-two-lines",
@@ -874,8 +851,7 @@ const genVaultArb = fc
       )
       .map(([short, long]) => [...short, long]),
     // The first page always lands in a kind-folder and is never the one moved,
-    // so the YAML oracle has a page it can read both before and after the move
-    // — and one whose every link to the long-named page folds.
+    // so the YAML oracle has a page it can read before and after the move.
     dirs: fc
       .tuple(
         fc.constantFrom(...kindDirs),
@@ -902,16 +878,10 @@ const genVaultArb = fc
 /** Build a small vault of pages that link to each other, plus a frozen link
  * inside a code block.
  *
- * The frontmatter is rendered by [Page.set] — the emitter's own shape — and
- * then the items are folded **by hand**, because the emitter folds nothing any
- * more (ADR-0024): every item at the label/destination boundary (#550), and
- * the longest also inside its destination (#486). The folds matter more than
- * the fidelity that used to be the reason to let the writer produce them: they
- * are the shapes every raw-text reader has to cope with, and the thing the
- * YAML oracle below exists to compare, so the fixture has to carry them
- * whatever the writer does. What keeps the hand-written form honest is that
- * each value still has to survive the YAML parser, which is what the oracle
- * reads it back through. */
+ * [Page.set] renders the frontmatter, then the items are folded by hand — the
+ * emitter folds nothing since ADR-0024 — because a fold is what every raw-text
+ * reader must cope with and what the YAML oracle compares. Each value still has
+ * to survive the YAML parser, which keeps the hand-written form honest. */
 function buildVault(refs: string[]): Record<string, string> {
   const pages: Record<string, string> = {};
   for (const ref of refs) {
@@ -934,21 +904,14 @@ function buildVault(refs: string[]): Record<string, string> {
 /** A quoted list item in a frontmatter block: `  - "[t](dest)"`. */
 const LINK_ITEM_RE = /^(\s*- ")(.*)(")$/;
 
-/** The continuation indent the emitter used for a folded item under a
- * top-level key — `  - ` plus two, which is where the old writer put the
- * second half of a destination. */
+/** The continuation indent the old writer used for a folded item under a
+ * top-level key — `  - ` plus two. */
 const FOLD_CONTINUATION = "    ";
 
 /** Fold every quoted link item the way the pre-ADR-0024 writer could: a
- * trailing `\`, a break, then the continuation indent, all three dropped by a
- * conforming reader.
- *
- * Each item folds at the label/destination boundary (#550), which is the shape
- * a raw-text link scan went blind to; the longest item additionally folds
- * inside its destination (#486). Any cut point preserves the value, which is
- * why the destination cut can be a blunt midpoint rather than a search for a
- * space: the fold drops the break and the indentation after it, and nothing
- * else. */
+ * trailing `\`, a break, then the continuation indent, all dropped by a reader.
+ * Each item folds at the label/destination boundary, the longest also inside its
+ * destination; any cut preserves the value. */
 function foldLinkItems(text: string): string {
   const lines = text.split("\n");
   const items = lines
@@ -1005,8 +968,8 @@ function posixPathParts(p: string): string[] {
   return cleaned.split("/");
 }
 
-/** Every link in text resolved from pageDir — the "where does this page point"
- * fact a move must leave unchanged. */
+/** Every link in text resolved from pageDir — the fact a move must leave
+ * unchanged. */
 function resolvedTargets(text: string, pageDir: string): string[] {
   const out: string[] = [];
   for (const link of iterLinks(text)) {
@@ -1030,13 +993,12 @@ function movedRef(ref: string, oldRel: string, newRel: string): string {
   return ref === oldRel ? newRel : ref;
 }
 
-/** Whether a link destination in text's frontmatter is folded across two
- * lines — written by hand by [foldLinkItems], since the emitter no longer
- * produces one, or inherited from a page written before ADR-0024.
+/** Whether a link destination in text's frontmatter is folded across two lines
+ * — written by hand by [foldLinkItems], or inherited from a page written before
+ * ADR-0024.
  *
  * Read from raw bytes and the YAML parser, never through [iterLinks]: a guard
- * built on that scan would go blind exactly when the fold it guards went blind,
- * and report "the fixture stopped folding" for "the scan stopped seeing". */
+ * on that scan would go blind exactly when the fold it guards did. */
 function hasFoldedDestination(text: string): boolean {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
   if (!hasFrontmatter) return false;
@@ -1050,24 +1012,21 @@ function hasFoldedDestination(text: string): boolean {
   );
 }
 
-/** Whether ref sits directly under a `wiki/` kind-folder — the depth
- * [newPageRecord] requires before it will describe a page at all. */
+/** Whether ref sits directly under a `wiki/` kind-folder, the depth
+ * [newPageRecord] requires. */
 function underKindFolder(ref: string): boolean {
   return path.posix.dirname(path.posix.dirname(ref)) === "wiki";
 }
 
-/** A page's frontmatter edges, keyed by edge key, each target resolved
- * vault-relative — read by [newPageRecord] through the YAML parser.
+/** A page's frontmatter edges, keyed by edge key, each target resolved — read
+ * by [newPageRecord] through the YAML parser.
  *
- * What that buys is the *link set*: it comes from the parser, so a fold cannot
- * hide a link from this oracle the way it hid one from the raw-text scan
- * (#486). Below that the two do meet — [newPageRecord] resolves each scalar
- * with [linkDest], which is [iterLinks] again — so this is an oracle for a
- * fold, not for a blind spot in the link grammar itself.
+ * The link set comes from the parser, so a fold cannot hide a link from this
+ * oracle the way it hid one from the raw-text scan. Below that the two meet:
+ * [newPageRecord] resolves each scalar with [linkDest], which is [iterLinks]
+ * again, so this guards folds, not a blind spot in the link grammar.
  *
- * Null for a page outside a kind-folder, the depth [newPageRecord] requires:
- * the frontmatter schema has nothing to say about such a page, so this oracle
- * says nothing about it either. */
+ * Null outside a kind-folder, the depth [newPageRecord] requires. */
 function frontmatterEdges(
   ref: string,
   text: string,
@@ -1080,17 +1039,12 @@ function frontmatterEdges(
   return edges;
 }
 
-/** The runs of text between links, in order: every byte a move is not allowed
- * to touch, cut at each link's whole `[label](dest)` span.
+/** The runs of text between links, in order: every byte a move may not touch,
+ * cut at each link's whole `[label](dest)` span.
  *
- * A folded destination's span covers the fold, so flattening one takes the
- * line break and indentation out of the link's own span rather than out of a
- * gap — which is what lets a correct move flatten a fold and still leave every
- * gap alone.
- *
- * A list rather than one concatenated remainder, because concatenation is blind
- * to where the cuts fell: a line break migrating across a link boundary leaves
- * the joined remainder identical while reflowing the document. */
+ * A folded destination's span covers the fold, so flattening one costs the
+ * link's own span rather than a gap. A list rather than one joined remainder,
+ * because joining is blind to where the cuts fell. */
 function textBetweenLinks(text: string): string[] {
   const gaps: string[] = [];
   let at = 0;
@@ -1109,9 +1063,9 @@ describe("move preserves every link target", () => {
     fc.assert(
       fc.property(genVaultArb, ({ pages, oldRel, newRel }) => {
         const moved = planMove(pages, oldRel, newRel);
-        // Guards the oracle below rather than the move: an edit that stopped
-        // the fixture folding would leave it comparing edges it reads
-        // perfectly well against each other, silently and forever.
+        // Guards the oracle below rather than the move: a fixture that stopped
+        // folding would leave it comparing edges it reads perfectly well,
+        // silently and forever.
         let oracleReadAFold = false;
 
         for (const [ref, before] of Object.entries(pages)) {
@@ -1122,8 +1076,8 @@ describe("move preserves every link target", () => {
             `page ${afterRef} missing after the move`,
           );
 
-          // Oracle 1 — the raw-text link scan: every link, body links
-          // included, still resolves where it did before.
+          // Oracle 1 — the raw-text link scan: every link, body links included,
+          // still resolves where it did before.
           const wantTargets = resolvedTargets(before, posixDirname(ref));
           const gotTargets = resolvedTargets(after, posixDirname(afterRef));
           assert.equal(
@@ -1141,8 +1095,7 @@ describe("move preserves every link target", () => {
 
           // Oracle 2 — the YAML parser. Its link set comes from the parser, so
           // a link the raw-text scan went blind to cannot make both sides of
-          // this comparison agree: the scan alone is failing while the parser
-          // still reads where the edge really points (#489, the #486 fold).
+          // this comparison agree.
           const wantEdges = frontmatterEdges(ref, before);
           if (wantEdges === null) continue;
           const gotEdges = frontmatterEdges(afterRef, after);
@@ -1209,9 +1162,7 @@ describe("move changes nothing outside a link", () => {
           );
 
           // A splice replaces a span with a flat destination, so a move can
-          // cost a line (flattening a fold) but never add one. Re-folding a
-          // destination would, and in a body link it would break the link
-          // outright, the fold being YAML's and not markdown's.
+          // flatten a fold and lose a line, but never add one.
           assert.ok(
             after.split("\n").length <= before.split("\n").length,
             `${ref}: the move added a line`,
@@ -1239,9 +1190,8 @@ describe("move changes nothing outside a link", () => {
   });
 });
 
-/** Where a ref — a page's or a link's target — points after a Consolidation:
- * every consolidated page's links land on the survivor. The [movedRef] of the
- * property below. */
+/** Where a ref points after a consolidation: every consolidated page's links
+ * land on the survivor. */
 function consolidatedRef(
   ref: string,
   losers: string[],
@@ -1251,13 +1201,12 @@ function consolidatedRef(
 }
 
 // A Consolidation is a move with many sources and one destination, so the same
-// vault generator carries over. The difference the mapping has to survive is
-// that several refs collapse onto one, and that a page can be *both* a link
-// target and absorbed.
+// vault generator carries over; the mapping must survive several refs collapsing
+// onto one, and a page being *both* a link target and absorbed.
 //
-// The first generated page — always in a kind-folder, per genVaultArb — is
-// never consolidated away, so the YAML oracle has a page it can read both
-// before and after, the same guarantee the move property relies on.
+// The first generated page — always in a kind-folder — is never consolidated
+// away, so the YAML oracle has a page it can read before and after, the same
+// guarantee the move property relies on.
 const genConsolidationArb = fc
   .tuple(
     genVaultArb.map(({ pages }) => pages),
@@ -1315,9 +1264,9 @@ describe("consolidation preserves every link target", () => {
             `page ${ref} missing after consolidating`,
           );
 
-          // Oracle 1 — the raw-text link scan: every link, body links included,
-          // now points at the survivor if it pointed at a consolidated page, and
-          // exactly where it did before otherwise.
+          // Oracle 1 — the raw-text link scan: every link now points at the
+          // survivor if it pointed at a consolidated page, and exactly where it
+          // did before otherwise.
           const wantTargets = resolvedTargets(before, posixDirname(ref)).map(
             (target) => consolidatedRef(target, losers, survivor),
           );
@@ -1337,8 +1286,8 @@ describe("consolidation preserves every link target", () => {
           );
 
           // Oracle 2 — the YAML parser, independent of the raw-text scan: a
-          // frontmatter edge the scan went blind to (a folded destination,
-          // #489) cannot make both sides of this comparison agree.
+          // folded frontmatter edge the scan went blind to cannot make both
+          // sides of this comparison agree.
           const wantEdges = frontmatterEdges(ref, before);
           if (wantEdges === null) continue;
           const gotEdges = frontmatterEdges(ref, got);
@@ -1368,15 +1317,12 @@ describe("consolidation preserves every link target", () => {
 // Property test — no-op Set and the ADR-0012 frontmatter round-trip
 // ---------------------------------------------------------------------------
 
-// Value pool for generated frontmatter: safe plain tokens plus markdown-link
-// scalars, authored with single quotes (non-canonical) so a no-op Set provably
-// normalises the quote style and is never byte-identical.
-//
-// `tags` is deliberately absent: it is list-valued, so a scalar Set on it is
-// not the no-op shape this property is about — the writer wraps the value in a
-// one-element list (#575). `source` is a list *edge* key, but the writer
-// normalises no edge key, so a scalar Set on it stays the scalar it was and the
-// round trip below still holds.
+// Value pool for generated frontmatter: plain tokens plus markdown-link
+// scalars, written single-quoted (non-canonical) so a no-op Set provably
+// normalises the quote style and is never byte-identical. `tags` is deliberately
+// absent — list-valued, so a scalar Set on it is not the no-op shape this
+// property is about — and the writer normalises no edge key, so a scalar Set on
+// `source` stays scalar.
 const FM_KEYS = ["title", "summary", "volatility", "source"];
 const FM_VALUES = [
   "deploy",
@@ -1385,8 +1331,7 @@ const FM_VALUES = [
   "hello",
   "[B](b.md)",
   "[x](../c.md)",
-  // Long enough that the emitter folded it before ADR-0024 — which is what
-  // makes the round-trip property below a fold guard too: a fold is not a
+  // Long enough that the emitter folded it before ADR-0024: a fold is not a
   // quote character, so it survives `strip` and fails the comparison.
   "[A rather long target page title](../entities/a-rather-long-target-page-title-that-will-definitely-wrap.md)",
 ];
@@ -1421,23 +1366,18 @@ describe("no-op Set preserves key order and changes only quote style", () => {
         const page = new Page(text);
         const updated = page.set(key, value).text;
 
-        // Not byte-identical: the single-quoted input normalises.
         assert.notEqual(updated, text);
 
-        // Body after the frontmatter block is untouched.
         assert.equal(
           splitFrontmatter(updated).body,
           splitFrontmatter(text).body,
         );
 
-        // Key order and values are preserved semantically.
         const before = new Page(text).frontmatter()!;
         const after = new Page(updated).frontmatter()!;
         assert.deepEqual(Object.keys(after), Object.keys(before));
         assert.deepEqual(after, before);
 
-        // The only textual divergence is scalar quote style: strip quote
-        // characters from both and they are identical.
         const strip = (s: string) => s.replace(/['"]/g, "");
         assert.equal(strip(updated), strip(text));
       }),
@@ -1450,9 +1390,9 @@ describe("no-op Set preserves key order and changes only quote style", () => {
 // Property test — the emitter folds nothing (ADR-0024)
 // ---------------------------------------------------------------------------
 
-// Both shapes the emitter used to produce are generated here: a link whose
-// label has no space (the destination folded mid-token, escaped) and one whose
-// label has spaces (folded at a space, leaving the label split across lines).
+// Both fold shapes the emitter used to produce: a link whose label has no space
+// (destination folded mid-token, escaped) and one whose label has spaces (folded
+// at a space).
 const genLinkValueArb = fc
   .record({
     label: fc.constantFrom(
@@ -1460,9 +1400,9 @@ const genLinkValueArb = fc
       "Some long page title here",
       "RBWM Council Political Composition",
     ),
-    // Space-free and past any sensible width: the shape that folded
-    // mid-token with a trailing backslash, since a percent-encoded
-    // destination offers no space to break at.
+    // Space-free and past any sensible width: the shape that folded mid-token
+    // with a trailing backslash. A percent-encoded destination has no space to
+    // break at.
     slug: fc
       .array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz0123456789-"), {
         minLength: 90,
@@ -1481,15 +1421,15 @@ describe("the writer never folds a line", () => {
         ]).text;
 
         // Neither shape of fold: no escaped line break, and no item continued
-        // onto a follow-on line. One line each for `title`, the key, the item.
+        // onto a follow-on line.
         assert.doesNotMatch(text, /\\\r?\n/);
         const fmLines = splitFrontmatter(text)
           .frontmatter.split("\n")
           .filter((line) => line.trim() !== "");
         assert.equal(fmLines.length, 3, fmLines.join(" / "));
 
-        // And no fold is hiding a corruption: the value survives the round
-        // trip byte for byte.
+        // And no fold is hiding a corruption: the value survives the round trip
+        // byte for byte.
         assert.deepEqual(parseYaml(splitFrontmatter(text).frontmatter), {
           title: "x",
           related: [value],

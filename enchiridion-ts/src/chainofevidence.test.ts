@@ -1,6 +1,4 @@
-/**
- * chainofevidence tests — the page -> stub -> raw file chain rule.
- */
+/** chainofevidence tests — the page -> stub -> raw chain rule. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

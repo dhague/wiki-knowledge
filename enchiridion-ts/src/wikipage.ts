@@ -1,30 +1,13 @@
 /**
- * The pure half of the vault library — frontmatter splitting, the
- * markdown-link machinery, and the mutating page model. No I/O lives here.
+ * The pure half of the vault library — frontmatter splitting, markdown-link
+ * machinery, and the mutating page model. No I/O.
  *
- * Encoding lives at a single decode boundary: [splitDest] splits on the
- * literal `#` first and decodes each half after, so an encoded `#` in a raw
- * filename can never be mistaken for an anchor separator.
+ * Byte-preservation: link rewriting splices raw text by source offset and never
+ * stringifies, so every untouched byte survives. A no-op [Page.set] is not
+ * byte-identical (ADR-0012), but key order is preserved.
  *
- * **Byte-preservation contract.**
- *
- *   - Link rewriting never round-trips the document through a stringifier.
- *     Destinations are spliced into the raw text back-to-front by exact
- *     source offset, so every untouched byte survives — including
- *     frontmatter links, which the same whole-document scan finds.
- *   - A no-op frontmatter [Page.set] is *not* guaranteed to round-trip
- *     byte-identical; see docs/adr/0012-frontmatter-round-trip-relaxed.md.
- *     Key *order* is still preserved (frontmatter is edited as a
- *     [yaml.YAMLMap] mapping, so existing keys keep their position and new
- *     ones append), because a reordering edit would make every ingest diff
- *     unreadable — only incidental formatting may change.
- *   - What [Page.set] writes is *canonical*: a `source_date` reaches disk in
- *     its one spelling whatever spelling the caller handed over, because the
- *     rule is applied here rather than by each caller (#499). A value that
- *     isn't a date at all passes through untouched — see
- *     [canonicalForWrite] and `sourcedate.ts`. The same posture wraps a scalar
- *     for a list-valued key in a one-element list (#575) — see
- *     [isStringListKey].
+ * Encoding decodes at a single boundary: [splitDest] splits on the literal `#`
+ * before decoding, so an encoded `#` in a filename is never read as an anchor.
  */
 
 import {
@@ -47,55 +30,27 @@ import { truncateSourceDate } from "./sourcedate.js";
 /** The minimal charset that makes a raw/ filename linkable. */
 const ENCODE_CHARS = " #%()<>";
 
-/** Match a `---` fence on the VERY first line, closed by the next `---` line.
- * `\r?` makes the opening and closing fences match both LF and CRLF line
- * endings. The inner `.*?` already matches `\r` (via the `s` flag), so
- * multi-line frontmatter with CRLF terminators is handled by backtracking. */
+/** A `---` fence on the very first line, closed by the next `---` line; `\r?`
+ * accepts both LF and CRLF. */
 const FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
 
-/**
- * A YAML escaped line break: a trailing `\` that joins the next line to this
- * one, the break and the following indentation both dropped.
- *
- * Frontmatter is YAML, so a markdown-link scalar there is a doubly-encoded
- * value — the link's own percent-encoding, then YAML's quoting. The writer
- * *used* to fold any scalar that outgrew the emitter's line width, breaking
- * mid-token with an escaped line break when it found no space to break at —
- * and a percent-encoded destination has no space, so a long slug folded this
- * way as a matter of course, not as an edge case. Since
- * `docs/adr/0024-emitted-lines-are-not-folded.md` it emits no fold at all;
- * this reader still resolves one, because every page written before that
- * carries them.
- *
- * The matched span covers the raw fold, so a destination splice replaces the
- * continuation wholesale instead of leaving a stray `\` behind. Whitespace
- * *before* the `\` is content rather than part of the fold — a conforming
- * reader keeps it (`"[T](<a b \` + break + ` c.md>)"` is `<a b c.md>`).
- *
- * A *plain* line break is deliberately not a fold, nor is a `\` at the end of
- * a literal block scalar (`related: |`). Both are shapes the conventions spec
- * allows no link to take, and the raw text cannot tell the block scalar from a
- * fold; reading a plain break as part of a destination would be worse, since
- * it would call prose that is not a link a link.
- */
+/** A YAML escaped line break: a trailing `\` joining the next line, with the
+ * break and next line's indent dropped. The match spans the raw fold, so a
+ * destination splice replaces it wholesale; whitespace *before* the `\` is
+ * content, not fold. Readers still resolve one because pages written before
+ * ADR-0024 carry them. A plain line break is deliberately not a fold. */
 const ESCAPED_LINE_BREAK_RE = /\\\r?\n[ \t]*/g;
 
-/** Strip the folds [ESCAPED_LINE_BREAK_RE] matched — what a conforming YAML
- * reader sees as the destination. */
+/** The destination a conforming YAML reader sees. */
 function joinEscapedLineBreaks(dest: string): string {
   return dest.replace(ESCAPED_LINE_BREAK_RE, "");
 }
 
-/** One destination character, or an escaped line break standing in for the
- * break a YAML reader would fold away. */
+/** One destination character, or an escaped line break standing in for it. */
 const DEST_ATOM = `(?:[^()\\s]|${ESCAPED_LINE_BREAK_RE.source})`;
 
-/**
- * Build a regex fragment for an unbracketed link destination. Per CommonMark,
- * a destination without `<>` ends at the first *unbalanced* `)` — `(draft)`
- * inside one doesn't terminate it. JS regexes have no recursion, so nesting
- * is bounded at depth levels: plenty for a real filename or URL.
- */
+/** An unbracketed destination: per CommonMark it ends at the first *unbalanced*
+ * `)`. JS regexes have no recursion, so nesting is bounded at `depth`. */
 function nestedParenDest(depth: number): string {
   let frag = `${DEST_ATOM}*`;
   for (let i = 0; i < depth; i++) {
@@ -108,24 +63,14 @@ function nestedParenDest(depth: number): string {
 const ANGLE_DEST = `<[^<>\\n]*(?:${ESCAPED_LINE_BREAK_RE.source}[^<>\\n]*)*>`;
 
 /**
- * Match a markdown inline link or image: `[label](dest ...)` /
- * `![label](dest ...)`. `label` tolerates one level of nested brackets.
- * `dest` is either `<...>` or a whitespace-free run that may contain balanced
- * parens; an optional title after the dest is matched but excluded.
+ * A markdown inline link or image: `[label](dest …)` / `![label](dest …)`.
+ * Label tolerates one bracket level; dest is `<…>` or a whitespace-free run
+ * with balanced parens; an optional title is matched but excluded.
  *
- * A YAML escaped line break may fall inside the destination *or* at the
- * label/destination boundary — see [ESCAPED_LINE_BREAK_RE]. Either is part of
- * the match, so the span brackets the raw fold while the destination's value
- * is the joined one. The boundary fold is captured on its own (group 3) for
- * the split check to splice; the destination is group 4.
- *
- * The scan is context-free — frontmatter and body by one rule, per
- * [iterLinks] — so a boundary fold in a *body* is matched too, though
- * CommonMark reads a hard line break and literal parens there, not a link.
- * That is deliberate: the fold is the same bytes a reader resolves, and one
- * scanner is what keeps a typed edge and a body link from drifting apart.
- *
- * The `d` (hasIndices) flag exposes each group's source offsets.
+ * One scanner covers frontmatter and body. An escaped line break may fall
+ * inside the destination or at the label/destination boundary, the latter
+ * captured separately (group 3) so the split check can splice it. The `d` flag
+ * exposes source offsets.
  */
 const LINK_RE = new RegExp(
   `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]` +
@@ -171,9 +116,8 @@ export function percentDecode(p: string): string {
 /**
  * Split an encoded link destination into its decoded path and decoded anchor.
  *
- * **Order matters:** split on the literal `#` first, decode each half after.
- * Decoding up front would turn an encoded `#` in a filename (`%23`) into a
- * false anchor separator.
+ * Split on the literal `#` first, decode each half after: decoding up front
+ * would turn an encoded `#` in a filename (`%23`) into a false anchor separator.
  */
 export function splitDest(dest: string): { path: string; anchor: string } {
   const hash = dest.indexOf("#");
@@ -188,9 +132,8 @@ export function splitDest(dest: string): { path: string; anchor: string } {
 /**
  * Split a leading YAML frontmatter block off text.
  *
- * `hasFrontmatter` is false when there is none, in which case body is text
- * unchanged and bodyOffset is 0. `text.slice(bodyOffset) == body` always
- * holds.
+ * `text.slice(bodyOffset) == body` always holds; with no block, body is text
+ * unchanged and bodyOffset is 0.
  */
 export function splitFrontmatter(src: string): {
   frontmatter: string;
@@ -214,22 +157,18 @@ export function splitFrontmatter(src: string): {
 
 /** One link/image occurrence, positioned in the source text. */
 export interface LinkMatch {
-  /** Raw source offsets bracketing the destination. For a destination folded
-   * across lines by a YAML escaped line break these span the whole fold, so
-   * `src.slice(start, end)` is that raw region rather than [dest]. */
+  /** Raw source offsets bracketing the destination; for a folded destination
+   * these span the whole raw fold, not [dest]. */
   start: number;
   end: number;
-  /** the encoded destination (angle brackets, any title and any fold
-   * excluded) */
+  /** the encoded destination (angle brackets, any title and any fold excluded) */
   dest: string;
   /** splitDest(dest).path — decoded, anchor-free */
   decodedPath: string;
   /** splitDest(dest).anchor — decoded, "" if no anchor */
   decodedAnchor: string;
   isImage: boolean;
-  /** 0-based line the link's opening `[` (or `!`) falls on — the line a
-   * reader sees the link begin on, even when a boundary fold puts the
-   * destination on a later one */
+  /** 0-based line the link's opening `[` (or `!`) falls on */
   line: number;
   /** start of the full `[label](dest)` / `![label](dest)` expression */
   fullStart: number;
@@ -237,11 +176,9 @@ export interface LinkMatch {
   fullEnd: number;
   /** the link label text (the content between `[` and `]`) */
   label: string;
-  /** Raw source offsets of the YAML escaped line break run between the
-   * label's `]` and the destination's `(`, or null when they are adjacent. A
-   * reader joins the run with nothing (`"]\⏎  ("` reads as `"]("`), so a
-   * splice replaces `src.slice(start, end)` with "" — the shape #550's
-   * split check could not see. */
+  /** Raw source offsets of the YAML escaped line break run between the label's
+   * `]` and the destination's `(`, or null when they are adjacent. A reader
+   * joins the run with nothing, so a splice replaces the span with "". */
   labelDestFold: { start: number; end: number } | null;
 }
 
@@ -250,13 +187,8 @@ const md = new MarkdownIt();
 /**
  * Return the set of 0-based line indices that fall inside code blocks.
  *
- * markdown-it's `map` includes a fence's delimiter lines, not just its content
- * lines — immaterial here, since a fence delimiter line is a fence marker plus
- * an info string, which cannot contain a markdown link.
- *
  * Exported for the readers' sake rather than this module's: `check split-links`
- * scans body text for a link-shaped construct no reader resolves, and it has to
- * skip exactly what [iterLinks] skips.
+ * has to skip exactly what [iterLinks] skips.
  */
 export function codeLineRanges(src: string): Set<number> {
   const lines = new Set<number>();
@@ -280,15 +212,11 @@ function lineOf(src: string, offset: number): number {
 }
 
 /**
- * Return a [LinkMatch] for every link/image in src, in order.
+ * Return a [LinkMatch] for every link/image in src, in order, with absolute
+ * offsets. Occurrences inside fenced/indented code blocks are skipped.
  *
- * Occurrences inside fenced/indented code blocks are skipped. Offsets are
- * absolute into src. Scans the *whole* document, frontmatter included, so
- * typed edges, `supersedes` and `raw_source` are found by the same rule as
- * body links — including a destination the frontmatter writer folded across
- * lines, whose escaped line breaks are joined out of [LinkMatch.dest] while
- * [LinkMatch.start]/[LinkMatch.end] still bracket the raw fold, and a fold at
- * the label/destination boundary, bracketed by [LinkMatch.labelDestFold].
+ * Scans the *whole* document, frontmatter included, so typed edges,
+ * `supersedes` and `raw_source` are found by the same rule as body links.
  */
 export function iterLinks(src: string): LinkMatch[] {
   const codeLines = codeLineRanges(src);
@@ -305,9 +233,8 @@ export function iterLinks(src: string): LinkMatch[] {
       dest = dest.slice(1, -1);
     }
     // Anchored on the opening bracket, not the destination: a boundary fold
-    // puts the destination a line later, and every line-keyed reader — the
-    // code-block skip, `frontmatter-link-format`'s unquoted-line suppression — means the line
-    // the link begins on.
+    // puts the destination a line later, and the line-keyed readers mean the
+    // line the link begins on.
     const fullStart = m.index!;
     const line = lineOf(src, fullStart);
     if (codeLines.has(line)) continue;
@@ -333,25 +260,15 @@ export function iterLinks(src: string): LinkMatch[] {
   return out;
 }
 
-/**
- * Resolve an already-decoded link destination to a normalized path.
- *
- * pageDir is the vault-relative directory the link lives in (e.g.
- * `wiki/concepts`), so the result is vault-relative by construction —
- * ADR-0009.
- */
+/** Resolve an already-decoded destination against pageDir, the vault-relative
+ * directory the link lives in, so the result is vault-relative (ADR-0009). */
 export function resolveLinkDest(dest: string, pageDir: string): string {
   const base = pageDir === "" ? "." : pageDir;
   return path.posix.normalize(path.posix.join(base, dest));
 }
 
-/**
- * Extract a whole markdown-link scalar's destination, decoded.
- *
- * link is a full `[label](dest)` (or image) scalar, as stored in frontmatter
- * or found in body text — not a bare destination. ok is false when link isn't
- * a markdown link at all.
- */
+/** The decoded destination of a whole markdown-link scalar (not a bare
+ * destination); ok is false when link isn't a markdown link at all. */
 export function linkDest(link: string): { dest: string; ok: boolean } {
   const matches = iterLinks(link);
   if (matches.length === 0) return { dest: "", ok: false };
@@ -364,25 +281,13 @@ export function linkDest(link: string): { dest: string; ok: boolean } {
 
 const YAML_INDENT = 2;
 
-/** The frontmatter keys whose value is a **list of strings**, as the writer
- * understands the shape (#575). `tags` is the schema's one such non-edge key;
- * `pagerecord.ts` owns the schema's *reading* half and spells the key itself,
- * because this module cannot import from a module that imports it. See that
- * module's header for the split. [isStringListKey] is how a caller reads the
- * shape rather than respelling the key.
- *
- * A key is on the list because a **scalar** value for it is not a shape the
- * record reader can use — `stringList` reads anything that isn't an array as no
- * tags at all, so the page silently drops out of every tag-filtered retrieval
- * while the file still shows a value. [canonicalForWrite] is where that cannot
- * happen: it wraps the one value in a one-element list, which is what the
- * conventions document `page set` as doing anyway. */
+/** Frontmatter keys whose value is a list of strings — `tags` is the schema's
+ * one such non-edge key. A *scalar* for one is a shape the record reader reads
+ * as no value at all, so [canonicalForWrite] wraps it in a one-element list. */
 const StringListKeys: readonly string[] = ["tags"];
 
 /** Report whether key's frontmatter value is a list of strings rather than a
- * scalar. Exported so a caller that must refuse a scalar (the `page set`
- * argument parser) reads the fact from the writer's one list rather than
- * respelling `tags`. */
+ * scalar, so a caller need not respell `tags`. */
 export function isStringListKey(key: string): boolean {
   return StringListKeys.includes(key);
 }
@@ -396,9 +301,8 @@ export class Page {
 
   /**
    * Return p's frontmatter as a YAML mapping node, minting an empty one when
-   * the page has no frontmatter block (or an empty one).
-   *
-   * A node rather than a map because a mapping node preserves key order.
+   * the page has no frontmatter block. A node rather than a map because a
+   * mapping node preserves key order.
    */
   private frontmatterNode(): YAMLMap {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(this.text);
@@ -422,7 +326,7 @@ export class Page {
     return this.frontmatterNode().toJSON() as Record<string, unknown>;
   }
 
-  /** Return the value of key in this page's frontmatter. ok is false when the
+  /** Return the value of key in this page's frontmatter; ok is false when the
    * page has no frontmatter or the key is absent. */
   get(key: string): { value: unknown; ok: boolean } {
     const data = this.frontmatter();
@@ -438,9 +342,8 @@ export class Page {
     return typeof value === "string" ? value : "";
   }
 
-  /** Return a list-valued frontmatter key's string entries. A key that is
-   * absent, null, or not a list yields []; non-string entries within a list
-   * are skipped. */
+  /** Return a list-valued frontmatter key's string entries; absent, null, or
+   * not a list yields [], and non-string entries are skipped. */
   getStringList(key: string): string[] {
     const { value } = this.get(key);
     if (!Array.isArray(value)) return [];
@@ -448,29 +351,24 @@ export class Page {
   }
 
   /**
-   * Return a new page with frontmatter key set to value.
-   *
-   * Mints a frontmatter block when the page has none. Only the block is
-   * re-serialised; the body is spliced back verbatim.
-   *
-   * The value is canonicalised first — see [canonicalForWrite].
+   * Return a new page with frontmatter key set to value, canonicalised first
+   * — see [canonicalForWrite]. Mints a frontmatter block when the page has
+   * none; only the block is re-serialised, and the body is spliced back
+   * verbatim.
    */
   set(key: string, value: unknown): Page {
     const node = this.frontmatterNode();
     const valueNode = newValueNode(canonicalForWrite(key, value));
     setKey(node, key, valueNode);
     const rendered = renderFrontmatter(node);
-    // With no frontmatter yet, body is the whole text — so the same
-    // expression prepends a fresh block to the untouched document.
     const { body } = splitFrontmatter(this.text);
     return new Page("---\n" + rendered + "---\n" + body);
   }
 
   /**
-   * Return a new page with values unioned into key's existing list.
-   *
-   * Order-preserving: existing entries hold their position, new ones append,
-   * duplicates drop. Equivalent to [Page.set] when key is absent.
+   * Return a new page with values unioned into key's existing list. Existing
+   * entries hold their position, new ones append, duplicates drop; equivalent
+   * to [Page.set] when key is absent.
    */
   merge(key: string, values: unknown[]): Page {
     const existing = this.get(key).value;
@@ -482,8 +380,7 @@ export class Page {
     return this.set(key, merged);
   }
 
-  /** [Page.merge] over a string list — the shape every caller with typed-edge
-   * links or tags already has. */
+  /** [Page.merge] over a string list. */
   mergeStrings(key: string, values: string[]): Page {
     return this.merge(key, values);
   }
@@ -500,11 +397,9 @@ export class Page {
 
   /**
    * Return a new page with links fixed for the vault-wide move oldRel ->
-   * newRel.
-   *
-   * fileRel is where *this* page sits before the move; pass fileRel == oldRel
-   * when this page is the one being moved, so its own outbound links are
-   * rebased onto newRel's folder too.
+   * newRel. fileRel is where *this* page sits before the move; pass
+   * fileRel == oldRel for the page being moved, so its own outbound links
+   * rebase too.
    */
   retarget(fileRel: string, oldRel: string, newRel: string): Page {
     return new Page(rewriteText(this.text, fileRel, oldRel, newRel));
@@ -512,14 +407,13 @@ export class Page {
 }
 
 /**
- * Compute the post-move vault from pages (a {pageRef: text} map).
- *
- * Pure. The moved page appears under newRel; every other page keeps its key.
- * Inbound and outbound links are both fixed.
+ * Compute the post-move vault from pages (a {pageRef: text} map). Pure: the
+ * moved page appears under newRel, every other page keeps its key, and inbound
+ * and outbound links are both fixed.
  *
  * oldRel need not be a key of pages: a caller retargeting links at a non-page
- * file (a `raw/` artifact, say) passes only the markdown pages whose *inbound*
- * links should follow the rename.
+ * file (a `raw/` artifact) passes only the pages whose *inbound* links should
+ * follow the rename.
  */
 export function planMove(
   pages: Record<string, string>,
@@ -535,16 +429,11 @@ export function planMove(
 }
 
 /**
- * Compute the post-consolidation vault from pages (a {pageRef: text} map).
- *
- * Pure, and [planMove]'s sibling: every link pointing at a consolidated page is
- * repointed at the survivor, and the consolidated pages are dropped. The
- * survivor's own text is whatever the caller placed at `survivor` in `pages` —
- * the authored merged body. A *fresh* survivor (a Consolidation may author one
- * rather than promote a member) is supplied the same way: put it in the map at
- * `survivor`. This function moves links and nothing else, exactly as [planMove]
- * only moves links, which is the link half of a Consolidation being lossless
- * (ADR-0021).
+ * [planMove]'s sibling for consolidation: every link to a consolidated page is
+ * repointed at `survivor`, and the consolidated pages are dropped. The
+ * survivor's text is whatever the caller placed at `survivor` in `pages` —
+ * including a freshly authored one. Moves links and nothing else, the link half
+ * of a Consolidation being lossless (ADR-0021).
  */
 export function planConsolidate(
   pages: Record<string, string>,
@@ -555,8 +444,8 @@ export function planConsolidate(
   const out: Record<string, string> = {};
   for (const [rel, text] of Object.entries(pages)) {
     if (dropped.has(rel)) continue;
-    // One pass per consolidated page, so the mapping composes exactly as
-    // repeated [rewriteText] calls do.
+    // One pass per consolidated page, so the mapping composes as repeated
+    // [rewriteText] calls do.
     let next = text;
     for (const loser of losers) {
       next = new Page(next).retarget(rel, loser, survivor).text;
@@ -572,15 +461,13 @@ export function planConsolidate(
  * read as *where it points* rather than how each destination is spelled.
  *
  * A comparison helper, not a writer: nothing here percent-encodes and the
- * result never reaches disk. Two spellings of the same link — one copied
- * verbatim between kind-folders, one re-based with `../` — come out identical,
+ * result never reaches disk. Two spellings of the same link come out identical,
  * which is what lets a Consolidation's losslessness check (ADR-0021) compare an
- * absorbed body against that same body as it now reads inside the survivor.
+ * absorbed body against that same body inside the survivor.
  *
  * `target` maps a resolved vault-relative ref to the ref a reader should treat
- * it as (a consolidated page → the survivor). Destinations that aren't
- * vault-relative — URLs, absolute paths, bare anchors — are left byte-identical:
- * they name nothing this vault owns.
+ * it as. Destinations that aren't vault-relative — URLs, absolute paths, bare
+ * anchors — are left byte-identical.
  */
 export function canonicalizeLinkTargets(
   text: string,
@@ -602,11 +489,9 @@ export function canonicalizeLinkTargets(
 }
 
 /**
- * Compose a markdown link to targetRel from a page in pageDir.
- *
- * Both are vault-relative (`wiki/concepts/foo.md` / `wiki/synthesis`);
- * pageDir may be "" for a page at the vault root. Relativises the target and
- * percent-encodes the destination — never the label. YAML quoting is not done
+ * Compose a markdown link to targetRel from a page in pageDir; both are
+ * vault-relative and pageDir may be "". Relativises the target and
+ * percent-encodes the destination, never the label. YAML quoting is not done
  * here: [Page.set]/[Page.merge] already double-quote a fresh `[…]` scalar.
  */
 export function composeLink(
@@ -619,13 +504,10 @@ export function composeLink(
 }
 
 /**
- * Re-encode every relative link/image destination in src.
- *
- * An author (human or agent) may write a destination unencoded — a raw
- * filename with a space or paren, taken verbatim. This normalises each one,
- * via the same offset-based splice [Page.retarget] uses, so untouched bytes
- * survive. Idempotent. Absolute paths, scheme-qualified URLs, and bare
- * anchors are left alone.
+ * Re-encode every relative link/image destination in src, via the same
+ * offset-based splice [Page.retarget] uses so untouched bytes survive.
+ * Idempotent. Absolute paths, scheme-qualified URLs, and bare anchors are left
+ * alone.
  */
 export function normalizeBodyLinks(src: string): string {
   const edits: Edit[] = [];
@@ -646,7 +528,7 @@ interface Edit {
 }
 
 /** Splice edits into src back-to-front by source offset, so every untouched
- * byte survives and earlier offsets stay valid as later ones are replaced. */
+ * byte survives and earlier offsets stay valid. */
 function applyEdits(src: string, edits: Edit[]): string {
   edits.sort((a, b) => b.start - a.start);
   for (const e of edits) {
@@ -657,13 +539,10 @@ function applyEdits(src: string, edits: Edit[]): string {
 
 /**
  * Re-encode a decoded path and anchor back into a link destination — the
- * inverse of [splitDest], and the one description of an encoded destination.
- * The `#` introducing an anchor is written literally; only a `#` in the
- * *path* — a filename's own hash, decoded from `%23` — becomes `%23`.
- *
- * A caller that compares or splices a destination does it through here.
- * Recombining path and anchor into one string and encoding that instead turns
- * `#ttl` into `%23ttl`, a heading link into a dangling filename (#492).
+ * inverse of [splitDest]. The `#` introducing an anchor stays literal; only a
+ * `#` in the *path* — a filename's own hash, decoded from `%23` — becomes
+ * `%23`. Encoding the recombined string instead would turn `#ttl` into
+ * `%23ttl`, a heading link into a dangling filename.
  */
 export function encodeDest(p: string, anchor: string): string {
   let dest = percentEncode(p);
@@ -674,10 +553,9 @@ export function encodeDest(p: string, anchor: string): string {
 /**
  * A URI scheme at the start of a destination (`https:`, `mailto:`, `data:`).
  *
- * What makes such a destination absolute is the scheme, not the `//` — the two
- * are independent, and a scheme with no authority to name carries none:
- * `mailto:x@y.z` is as absolute as `https://example.com`, and reads as a
- * vault-relative path to a test that only knows `://`.
+ * What makes such a destination absolute is the scheme, not the `//` — a scheme
+ * with no authority to name carries none: `mailto:x@y.z` is as absolute as
+ * `https://example.com`.
  */
 const SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
@@ -691,20 +569,16 @@ function hasScheme(dest: string): boolean {
  * vault-relative reference — the only destinations [Page.retarget] rewrites
  * and [normalizeBodyLinks] re-encodes.
  *
- * Not one: the empty destination, an absolute path (`/…`), any destination
- * carrying `://` — no vault-relative path does, and this test has to come
- * *before* the `.md` one below, or an `https://…/x.md` destination would read
- * as a page link — and a URI with a scheme.
+ * Not one: the empty destination, an absolute path (`/…`), anything carrying
+ * `://` (this test must come *before* the `.md` one, or `https://…/x.md` would
+ * read as a page link), and a URI with a scheme. The `.md` test comes before
+ * the scheme test, so a page whose filename carries a colon (`C:notes.md`) is
+ * still a page link.
  *
- * A bare anchor needs no test of its own: splitting the anchor off is what
- * makes path pre-anchor, so `#a-section` arrives here as the empty string.
- * A path can still *begin* with `#` — `%23notes.md`, a file whose own name
- * starts with one — and that is a page link like any other, which is why a
- * `#` test here would be wrong rather than merely redundant.
- *
- * The `.md` test comes before the scheme test, so a page whose filename
- * carries a colon (`C:notes.md`) is still a page link: ending in the vault's
- * extension is what being one means, whatever precedes it.
+ * A bare anchor needs no test: [splitDest] already stripped it, so
+ * `#a-section` arrives here as "". A path can still *begin* with `#` — a file
+ * whose own name starts with one — and that is a page link, so a `#` test here
+ * would be wrong rather than redundant.
  */
 export function isVaultRelativeDest(p: string): boolean {
   if (p === "" || p.startsWith("/") || p.includes("://")) return false;
@@ -731,7 +605,7 @@ function rewriteText(
     const target = resolveLinkDest(link.decodedPath, oldDir);
     // For pages other than the moved one, only links at the moved page change.
     if (!isMovedFile && target !== oldRel) continue;
-    // The moved page itself relocates the target of a self-link.
+    // The moved page relocates the target of a self-link.
     const movedTarget = target === oldRel ? newRel : target;
     const dest = encodeDest(relPath(movedTarget, newDir), link.decodedAnchor);
     if (dest !== link.dest)
@@ -742,8 +616,7 @@ function rewriteText(
 
 /**
  * relPath is posixpath.relpath over two vault-relative slash paths: the route
- * from base to target, spelled with `../` segments. Both arguments are
- * vault-relative by construction.
+ * from base to target, spelled with `../` segments.
  */
 function relPath(target: string, base: string): string {
   const targetParts = pathParts(target);
@@ -794,22 +667,18 @@ function setKey(mapping: YAMLMap, key: string, value: Scalar | YAMLSeq): void {
 
 /**
  * Canonicalise a frontmatter value on its way to disk — the writer's half of
- * the source-date rule (#499) and of the list-valued-key rule (#575).
+ * the source-date and of the list-valued-key rules.
  *
  * [Page.set] is the one place frontmatter bytes are produced, so applying the
- * rules here is what makes them unreachable for a caller — or for a writer
- * added later — to skip: whatever spelling a `source_date` arrives in, the page
- * that reaches disk carries the canonical one, and a scalar handed to a
- * list-valued key ([isStringListKey]) reaches disk as the one-element list the
- * conventions document.
+ * rules here is what makes them unskippable: whatever spelling a `source_date`
+ * arrives in, the page that reaches disk carries the canonical one, and a
+ * scalar handed to a list-valued key ([isStringListKey]) reaches disk as the
+ * one-element list the conventions document.
  *
- * The posture is [sourcedate.truncateSourceDate]'s: tolerate, never refuse. A
- * recognised non-canonical spelling truncates to its date
- * (`2026-01-02T10:00:00Z` becomes `2026-01-02`); a value that isn't a date at
- * all, such as a hand-written "summer 2026", passes through byte-unchanged. A
- * writer must not throw on content it was handed, and refusing a non-date is
- * validation's business — done by the callers that validate before they
- * write, through [sourcedate.canonicalSourceDate].
+ * Tolerant, never refusing: a recognised non-canonical spelling truncates to
+ * its date; anything that isn't a date at all, such as a hand-written "summer
+ * 2026", passes through byte-unchanged. Refusing content is validation's
+ * business — already had by the time a page reaches here.
  */
 function canonicalForWrite(key: string, value: unknown): unknown {
   if (key === "source_date") return truncateSourceDate(value);
@@ -819,11 +688,8 @@ function canonicalForWrite(key: string, value: unknown): unknown {
 
 /**
  * Encode a plain value to a YAML node, double-quoting any fresh markdown-link
- * scalar.
- *
- * A first-time value has no prior style to round-trip from. Only strings
- * starting `[` are touched; image embeds (`![…]`) never appear in frontmatter,
- * so that form isn't handled.
+ * scalar — only strings starting `[`. Image embeds (`![…]`) never appear in
+ * frontmatter.
  */
 function newValueNode(value: unknown): Scalar | YAMLSeq {
   const node = toYamlNode(value);
@@ -856,18 +722,12 @@ function quoteLinks(node: Scalar | YAMLSeq): void {
  * Render the frontmatter mapping back to YAML, folding nothing.
  *
  * `lineWidth: 0` disables the emitter's folding outright, so a link scalar
- * stays on one line however long its destination is. This is a restoration
- * rather than a decision: the Python writer that preceded this layer set
- * `y.width = 4096  # never line-wrap long scalars`, the Go rewrite could not
- * carry the setting across (`gopkg.in/yaml.v3` exposes no width knob), and
- * this port took the emitter's default of 80 without anyone choosing it —
- * see `docs/adr/0024-emitted-lines-are-not-folded.md`.
+ * stays on one line however long its destination is
+ * (`docs/adr/0024-emitted-lines-are-not-folded.md`).
  *
- * What folding costs is not bytes but readers: a destination broken
- * mid-token, or a label broken at a space, is a link no longer on one line,
- * and every raw-text reader has to be taught the shape (#486). Readers keep
- * that tolerance — pages written before this change still carry folds — but
- * nothing new writes one.
+ * A destination broken mid-token is a link no longer on one line, and every
+ * raw-text reader has to be taught the shape. Readers keep that tolerance —
+ * pages written before this change carry folds — but nothing new writes one.
  */
 function renderFrontmatter(node: YAMLMap): string {
   return stringify(node, { indent: YAML_INDENT, lineWidth: 0 });

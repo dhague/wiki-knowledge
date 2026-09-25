@@ -1,8 +1,4 @@
-/**
- * Integration tests for exportwriter.ts.
- *
- * Uses real temporary git repositories following the vaultgit test pattern.
- */
+/** Integration tests for exportwriter.ts, against real temporary git repos. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -78,7 +74,6 @@ kind: concept
 See [Alpha Concept](alpha-concept.md).
 `;
 
-/** Set up a minimal vault with two wiki pages and commit them. */
 async function setupVault(root: string): Promise<void> {
   await initRepo(root);
   writeFile(root, "wiki/concepts/alpha-concept.md", CONCEPT_A);
@@ -169,12 +164,10 @@ test("runExport: raw/ dirty check only when --raw is set", async () => {
   const root = tmpDir();
   await setupVault(root);
   writeFile(root, "raw/doc.md", "untracked raw");
-  // Without --raw: no dirty check for raw/
   await assert.doesNotReject(
     () => runExport(root, { out: path.join(root, "web1") }),
     "raw/ dirty file should not block export without --raw",
   );
-  // With --raw: raw/ is in scope
   await assert.rejects(
     () => runExport(root, { out: path.join(root, "web2"), raw: true }),
     (err: unknown) => err instanceof ExportDirtyError,
@@ -190,7 +183,6 @@ test("runExport: throws ExportTargetNotEmptyError when target is non-empty", asy
   const root = tmpDir();
   await setupVault(root);
   const outDir = path.join(root, "web");
-  // Pre-create a non-empty outDir
   fs.mkdirSync(outDir);
   writeFile(root, "web/existing.html", "old content");
   await assert.rejects(
@@ -198,7 +190,6 @@ test("runExport: throws ExportTargetNotEmptyError when target is non-empty", asy
     (err: unknown) => err instanceof ExportTargetNotEmptyError,
     "should refuse non-empty target without --force",
   );
-  // Old content still intact
   assert.ok(
     fs.existsSync(path.join(outDir, "existing.html")),
     "old content preserved on failure",
@@ -236,10 +227,7 @@ test("runExport: existing site untouched when vault has no wiki/ directory", asy
   const outDir = path.join(root, "web");
   fs.mkdirSync(outDir);
   writeFile(root, "web/existing.html", "old content");
-  // Export will succeed (empty vault = empty site) but won't throw
-  // (no wiki pages, no dirty files)
   await runExport(root, { out: outDir, allowDirty: true, force: true });
-  // The site is replaced with the empty export (index.html is still generated)
   assert.ok(fs.existsSync(path.join(outDir, "index.html")));
 });
 
@@ -314,7 +302,6 @@ test("runExport: writes the shared stylesheet once, at the output root", async (
     "stylesheet should carry the sticky-nav supplement",
   );
 
-  // Once, at the root — nowhere else.
   const cssFiles: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -531,7 +518,6 @@ test("runExport: --single-file writes one file and no directory tree", async () 
     fs.statSync(outFile).isFile(),
     "the output should be a file, not a directory",
   );
-  // Nothing else appeared beside it: no web/, no assets/.
   assert.deepEqual(
     fs.readdirSync(root).filter((n) => n.endsWith(".html")),
     ["wiki.html"],
@@ -571,8 +557,7 @@ test("runExport: re-running single-file replaces the previous file", async () =>
   await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
   const first = fs.readFileSync(outFile, "utf8");
 
-  // A page added between runs must show up in the second file — which is only
-  // observable if the previous output was replaced rather than kept.
+  // The new page shows up only if the previous output was replaced, not kept.
   writeFile(
     root,
     "wiki/concepts/gamma-concept.md",
@@ -701,7 +686,6 @@ test("runExport: --single-file pointed at a directory fails clearly", async () =
     },
     "a directory target should be refused with a message that says why",
   );
-  // The directory is left alone.
   assert.ok(fs.existsSync(outDir) && fs.statSync(outDir).isDirectory());
 });
 
@@ -722,8 +706,7 @@ Start at [Alpha Concept](../concepts/alpha-concept.md).
 
 const START_PAGE_REF = "wiki/home/home.md";
 
-/** A vault whose front door is a real page — a custom `wiki/home/` folder,
- *  since `home` is not a kind. */
+/** `home` is not a kind, so the front door needs a custom `wiki/home/` folder. */
 async function setupVaultWithHome(root: string): Promise<void> {
   await initRepo(root);
   writeFile(root, "wiki/home/home.md", HOME_PAGE);
@@ -913,8 +896,8 @@ test("runExport: a malformed config still degrades to the generated front page",
 test("runExport: --starters beside a start page warns and still writes the export", async () => {
   const root = tmpDir();
   await setupVaultWithHome(root);
-  // Swapped by hand rather than via `t.mock`: Bun's node:test shim does not
-  // implement `mock` yet, and this test must pass on both runtimes.
+  // Swapped by hand: Bun's node:test shim has no `mock`, and this must pass on
+  // both runtimes.
   const warnings: string[] = [];
   const originalError = console.error;
   console.error = (...args: unknown[]) => {

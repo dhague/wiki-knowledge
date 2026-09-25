@@ -1,24 +1,14 @@
 /**
- * The stylesheet every exported site ships.
+ * The stylesheet every exported site ships: Sakura v1.5.1 vendored verbatim
+ * (MIT — https://github.com/oxalorg/sakura/), then a supplement for what a
+ * classless framework cannot know.
  *
- * Two parts, concatenated in order: Sakura v1.5.1 vendored verbatim
- * (classless, ~4 KB, MIT — https://github.com/oxalorg/sakura/), then a small
- * supplement for what a classless framework cannot know.
- *
- * Why a string constant rather than a fetched asset or a build-time file
- * read: the export must stay fully offline (a recipient opens it from an
- * email attachment), and the script layer ships as one bundled .cjs run on
- * an already-installed interpreter ([ADR-0017]). A string in the bundle is
- * the only form that survives both.
- *
- * Nothing here is inlined into a page — the writer emits it once as
- * `assets/style.css` and every page links it at its own depth. The one
- * exception is single-file mode, where there is no assets directory to link.
+ * A string constant because the export must stay offline and the script layer
+ * ships as one bundle (ADR-0017).
  */
 
-/** Sakura v1.5.1, verbatim from https://github.com/oxalorg/sakura/ (MIT).
- *  The upstream licence header is part of the vendored text — do not strip
- *  it when updating the vendor drop; replace the whole constant. */
+/** Sakura v1.5.1, verbatim (MIT). Updating the vendor drop replaces the whole
+ *  constant; the upstream licence header is part of the text — do not strip it. */
 export const SAKURA_CSS = `/* Sakura.css v1.5.1
  * ================
  * Minimal css theme.
@@ -263,16 +253,10 @@ label, legend, fieldset {
   font-weight: 600;
 }`;
 
-/** The stylesheet's name and directory in the exported site. The writer
- *  writes `<dir>/<file>` at the output root; every page links the same two
- *  names at its own depth. One fact, one place — the two cannot drift. */
+/** The stylesheet's directory and file name in the exported site. */
 export const STYLESHEET_DIR = "assets";
 export const STYLESHEET_FILE = "style.css";
 
-/** Rules Sakura does not carry: the sticky nav bar, the page header's
- *  subtitle treatment, and the frontmatter table's leading column (which is a
- *  key, not prose). The nav's background matches Sakura's body colour, so
- *  scrolled content cannot show through. */
 const EXPORT_SUPPLEMENT_CSS = `/* enchiridion export supplement
  * =============================
  * What a classless framework cannot know: the sticky navigation bar every

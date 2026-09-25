@@ -1,25 +1,21 @@
 /**
- * Read and append to `.ingestignore` — the human-authored policy file that
+ * Read and append to `.ingestignore`, the human-authored policy file that
  * permanently withdraws a raw/ file from the ingestion sweep.
  *
- * A `.ingestignore` is read from a raw file's own folder only, with **no
- * ancestor walk** — what keeps a hand-written policy file from drifting into
- * a machine-written done-list.
+ * It is read from a raw file's own folder only, with no ancestor walk: that
+ * keeps a hand-written policy file from drifting into a machine-written
+ * done-list.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 
-/** The policy file's fixed name, in the folder whose files it governs. */
 export const Filename = ".ingestignore";
 
-/** Read `.ingestignore` text into its patterns, in order.
- *
- * Strips `#` comments (full-line and trailing) and blank lines; the rest is a
- * filename glob. `/`, `!` and `**` are rejected outright, so a bare filename
- * (`literal.md`) and a simple glob (`*.tmp`) are the only supported shapes —
- * deliberately, since anything richer would raise precedence questions a
- * per-folder policy file has no way to answer. */
+/** Read `.ingestignore` text into patterns: `#` comments and blank lines
+ * stripped, the rest a filename glob. `/`, `!` and `**` are rejected — a
+ * per-folder file has no way to answer the precedence questions richer patterns
+ * raise. */
 export function parse(text: string): string[] {
   const patterns: string[] = [];
   for (let line of text.split("\n")) {
@@ -37,13 +33,12 @@ export function parse(text: string): string[] {
   return patterns;
 }
 
-/** A precompiled matcher built from a set of `.ingestignore` patterns. */
 export interface Matcher {
   matches(name: string): boolean;
 }
 
-/** Build a `Matcher` from a parsed pattern list. Literal patterns (no `*`/`?`)
- * go into a `Set`; globs are compiled to `RegExp` once, not per file. */
+/** Literal patterns (no `*`/`?`) go into a `Set`; globs compile to `RegExp`
+ * once, not per file. */
 export function compile(patterns: string[]): Matcher {
   const literals = new Set<string>();
   const globs: RegExp[] = [];
@@ -67,11 +62,9 @@ export function compile(patterns: string[]): Matcher {
   };
 }
 
-/** Add pattern to folder's `.ingestignore`, creating the file if absent.
- *
- * Idempotent — a pattern already present isn't re-added, so a sweep run twice
- * doesn't double-list. comment, when non-empty, goes on the same line after
- * the `#`. Backs the sweep's `never` answer. */
+/** Adds pattern to folder's `.ingestignore`, creating it if absent; one already
+ * present is not re-added. `comment`, when non-empty, follows the `#` on the
+ * same line. */
 export function append(folder: string, pattern: string, comment: string): void {
   const filePath = path.join(folder, Filename);
 
@@ -88,9 +81,8 @@ export function append(folder: string, pattern: string, comment: string): void {
 
   let line = pattern;
   if (comment !== "") line += "  # " + comment;
-  // The folder is deliberately not created: a raw file being withdrawn from
-  // the sweep lives in it already, so a missing folder means a mistyped path,
-  // and silently minting `raw/emials/.ingestignore` would bury that.
+  // The folder is deliberately not created: a withdrawn raw file lives in it
+  // already, so a missing folder means a mistyped path.
   const fd = fs.openSync(filePath, "a", 0o644);
   try {
     fs.writeSync(fd, line + "\n");

@@ -1,5 +1,4 @@
 // Vault health checks for `enchiridion check <name>` and auto-fixes for `enchiridion fix <name>`.
-// All async so staleSynthesis (git-backed) fits the same interface as the sync ones.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -18,20 +17,16 @@ import {
 import { isPageRef } from "./pagepredicate.js";
 import { malformedEdges } from "./pagerecord.js";
 
-/** Options the CLI threads into a check. Only `concept-fragmentation` reads
- * `minSimilarity`; every other check ignores the bag. */
 export interface CheckOptions {
   /** The Consolidation-vs-link cutoff, in [0, 1]. */
   minSimilarity?: number;
 }
 
-/** One problem found by a check. */
 export interface Finding {
   pageRef: string;
   detail: string;
-  /** Structured payload, set only by checks that report a proposal spanning
-   * several pages rather than one page's problem. `concept-fragmentation`
-   * sets it; the JSONL consumer reads it, the text renderer ignores it. */
+  /** Set only by `concept-fragmentation`; the JSONL consumer reads it, the text
+   * renderer ignores it. */
   cluster?: FragmentationCluster;
 }
 
@@ -39,7 +34,7 @@ export interface Finding {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Walk wiki/ for ALL .md files including those that fail isPageRef — surfaces structural errors enumeratePageRefs silently skips. */
+/** All .md refs under wiki/, including ones that fail isPageRef and that enumeratePageRefs skips. */
 function walkAllMd(root: string): string[] {
   const wikiDir = path.join(root, "wiki");
   const refs: string[] = [];
@@ -61,28 +56,15 @@ function walkAllMd(root: string): string[] {
   return refs.sort();
 }
 
-/**
- * A YAML list item whose value begins with a bare `[` — an unquoted markdown
- * link, which YAML reads as a flow sequence rather than as the link string the
- * schema wants. The one test decides both what frontmatterLinkFormat reports and what its
- * fix quotes, so the two cannot drift apart.
- */
+/** A YAML list item whose value begins with a bare `[`: YAML reads it as a flow
+ * sequence, not the link string the schema wants. */
 const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
 
-/**
- * The sources kind-folder, and the route from one of its pages down into the
- * `raw/` inbox.
- *
- * Both are fixed by the plugin (ADR-0008), and the fix below is scoped to
- * `wiki/sources/` pages — which is the *only* reason `../../raw/` is the right
- * prefix for a body link found there. Deriving the prefix from the folder
- * keeps that coupling in one expression instead of leaving a hard-coded
- * `../../raw/` in a regex that reads as general when it is not.
- */
+/** The sources kind-folder and the relative route from it into `raw/` (both
+ * fixed by the plugin, ADR-0008). */
 const SOURCES_DIR = "wiki/sources";
 const RAW_HREF_PREFIX = path.posix.relative(SOURCES_DIR, "raw");
 
-/** Escape a literal string for use inside a RegExp source. */
 function regexEscape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -91,7 +73,7 @@ function regexEscape(s: string): string {
 // The mechanical checks
 // ---------------------------------------------------------------------------
 
-// kindFolderConformance — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
+// kindFolderConformance — any folder under wiki/ is a valid kind-folder (ADR-0020); only a page at the wiki root or nested below a kind-folder is flagged.
 export async function kindFolderConformance(root: string): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const ref of walkAllMd(root)) {
@@ -99,8 +81,8 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
     if (filename === "KIND.md") continue;
     if (ref === "wiki/_index.md") continue;
     if (!isPageRef(ref)) {
-      const segmentCount = ref.split("/").length; // "wiki/foo.md"=2, "wiki/k/sub/p.md"=4
-      const nestingDepth = segmentCount - 3; // levels below kind-folder (0 = direct child, >0 = nested)
+      const segmentCount = ref.split("/").length;
+      const nestingDepth = segmentCount - 3; // levels below the kind-folder (0 = direct child)
       const detail =
         segmentCount === 2
           ? "at wiki/ root — not under any kind-folder"
@@ -111,7 +93,7 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** ingestionSourceIntegrity — every wiki/sources/ page must carry raw_source pointing into raw/. */
+/** ingestionSourceIntegrity — every source page must carry raw_source pointing into raw/. */
 export async function ingestionSourceIntegrity(
   root: string,
 ): Promise<Finding[]> {
@@ -131,7 +113,7 @@ export async function ingestionSourceIntegrity(
   return findings;
 }
 
-// frontmatterLinkFormat — operates on raw text, not parsed records: frontmatter the record parser refuses — an unquoted link, an edge value that is not a markdown link — is what this check surfaces.
+// frontmatterLinkFormat — works on raw text, not parsed records, so it can surface frontmatter the record parser refuses.
 export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   const pages = new Vault(root).loadWikiPages();
   const findings: Finding[] = [];
@@ -139,8 +121,6 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
     if (!hasFrontmatter || frontmatter === "") continue;
 
-    // Unquoted YAML list items: lines like "  - [Title](dest)" where the
-    // value begins with `[` rather than `"[`.
     const unquotedLines = new Set<number>();
     const fmLines = frontmatter.split("\n");
     for (let i = 0; i < fmLines.length; i++) {
@@ -153,12 +133,10 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
       }
     }
 
-    // Unencoded link destinations (skip lines already flagged as unquoted).
-    // A frontmatter relationship link is the same link form as a body link,
-    // anchors included (wiki-conventions, "Links"): `#` introducing an anchor
-    // is literal, and only a filename's own `#` — decoded from `%23` — needs
-    // encoding. So path and anchor are re-encoded through the one seam that
-    // knows that, never by recombining them first (#492 §1).
+    // Unencoded destinations (skipping lines already flagged as unquoted).
+    // Frontmatter links are body-link form, anchors included (`wiki-conventions`,
+    // "Links"), so path and anchor are re-encoded separately through `encodeDest`:
+    // a literal `#` separates an anchor, and only a filename's own `#` is `%23`.
     for (const link of iterLinks(frontmatter)) {
       if (unquotedLines.has(link.line)) continue;
       const reencoded = encodeDest(link.decodedPath, link.decodedAnchor);
@@ -169,10 +147,8 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
         });
     }
 
-    // Edge values the schema refuses — a bare path, a non-string entry
-    // (#549). Valid YAML, so the raw-text scans above go blind to it, yet the
-    // record parser raises on it: without this scan the abort was the only
-    // signal the tool gave anywhere.
+    // Edge values the schema refuses (a bare path, a non-string entry): valid
+    // YAML, so the scans above go blind to it, but the record parser raises.
     for (const detail of malformedEdges(text))
       findings.push({ pageRef: ref, detail });
   }
@@ -201,7 +177,7 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** missingVolatilitySourceDate — pages missing volatility or source_date degrade search ranking and temporal filtering. */
+/** missingVolatilitySourceDate — pages missing volatility or source_date, both of which degrade ranking and temporal filtering. */
 export async function missingVolatilitySourceDate(
   root: string,
 ): Promise<Finding[]> {
@@ -216,8 +192,8 @@ export async function missingVolatilitySourceDate(
   return findings;
 }
 
-// unresolvedSupersession — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
-// Pages with contradicts + active callout are live contradictions (contradiction-callouts' domain), not a violation here.
+// unresolvedSupersession — contradicts with no supersedes and no active callout: a resolved contradiction missing its supersedes record.
+// A page with an active callout is a live contradiction and belongs to contradiction-callouts.
 export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText({
     skipMalformedEdges: true,
@@ -288,32 +264,22 @@ export async function orphans(root: string): Promise<Finding[]> {
 // splitLinks
 // ---------------------------------------------------------------------------
 
-/**
- * One raw region of a frontmatter link that a line break splits, and what a
- * conforming YAML reader makes of the same bytes.
- */
+/** One raw region a line break splits, and what a YAML reader makes of it. */
 interface FrontmatterSplit {
   /** source offsets into the frontmatter block */
   start: number;
   end: number;
-  /** the value a YAML reader reads for that region — what a fix splices in */
+  /** the value a YAML reader reads for that region */
   joined: string;
   kind: "destination" | "label" | "boundary";
   /** the link's first line, 1-based in the file */
   line: number;
 }
 
-/**
- * The source spans of every double-quoted scalar in a frontmatter block.
- *
- * This is what keeps the check inside the one shape it may act on. Raw text
- * cannot tell a fold in a quoted scalar from a `\` that is *content* in a
- * block scalar (`related: |`), nor from a single-quoted scalar, where a
- * backslash is literal and a line break folds to a space rather than joining
- * with nothing — so the parser answers which scalar a link sits in, and
- * nothing is guessed from the bytes. A block that does not parse yields no
- * spans: nothing in it is reported, and nothing in it is joined.
- */
+/** The source spans of every double-quoted scalar in a frontmatter block. Raw
+ * text cannot tell a fold from a `\` that is content (block scalar) or from a
+ * single-quoted scalar, so the parser decides; a block that does not parse
+ * yields no spans. */
 function doubleQuotedSpans(frontmatter: string): Array<[number, number]> {
   let doc;
   try {
@@ -338,7 +304,6 @@ function doubleQuotedSpans(frontmatter: string): Array<[number, number]> {
   return spans;
 }
 
-/** Report whether the raw span [start, end) sits inside one of spans. */
 function insideAny(
   spans: Array<[number, number]>,
   start: number,
@@ -347,34 +312,22 @@ function insideAny(
   return spans.some(([s, e]) => s <= start && end <= e);
 }
 
-/** Join a label the way YAML folds one: a space per line break, with the
- * indentation and any space before the break dropped. */
+/** YAML's fold of a label: a space per line break, with indentation and any
+ * space before the break dropped. */
 function joinLabel(raw: string): string {
   return raw.replace(/[ \t]*\r?\n[ \t]*/g, " ");
 }
 
-/**
- * Every line-break split in one frontmatter block's double-quoted link
- * scalars, in source order.
- *
- * The three shapes are told apart by *where* the break falls in the link, not
- * by where the link lives: a break inside the destination joins with nothing
- * (the backslash and the continuation's indentation are not content), a break
- * inside the label joins with a single space (YAML folds one there), and a
- * break at the label/destination boundary joins with nothing (YAML's escaped
- * line continuation). One enumeration decides both what [splitLinks] reports
- * and what [fixSplitLinks] splices, so the two cannot drift apart.
- */
+/** Every line-break split in a frontmatter block's double-quoted link scalars,
+ * in source order. One enumeration decides both what [splitLinks] reports and
+ * what [fixSplitLinks] splices. */
 function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
   const spans = doubleQuotedSpans(frontmatter);
   const splits: FrontmatterSplit[] = [];
   for (const link of iterLinks(frontmatter)) {
-    // The link's own first line. The block's own line 0 is the file's line 2,
-    // since `---` opens it on line 1.
+    // The block's line 0 is the file's line 2, since `---` opens on line 1.
     const line = link.line + 2;
 
-    // Source order is label, boundary, destination — each region opens after
-    // the one before it.
     const labelStart = link.fullStart + (link.isImage ? 2 : 1);
     const labelEnd = labelStart + link.label.length;
     const rawLabel = frontmatter.slice(labelStart, labelEnd);
@@ -395,8 +348,6 @@ function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
       splits.push({
         start: link.labelDestFold.start,
         end: link.labelDestFold.end,
-        // An escaped continuation drops the backslash, the break and the next
-        // line's indent, so `"]\⏎  ("` reads as `"]("`.
         joined: "",
         kind: "boundary",
         line,
@@ -408,8 +359,7 @@ function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
       splits.push({
         start: link.start,
         end: link.end,
-        // iterLinks joins escaped line breaks out of the destination, so its
-        // `dest` *is* the joined value — a fold is spliced as it is read.
+        // iterLinks already joins escaped breaks, so `dest` is the joined value.
         joined: link.dest,
         kind: "destination",
         line,
@@ -419,37 +369,20 @@ function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
   return splits;
 }
 
-/**
- * A destination run left open at the end of a line: `](` followed by the start
- * of a destination — no whitespace, no closing paren — and then the line ends.
- * The same characters a CommonMark destination is made of, so the run is
- * exactly the part of one that fits on this line.
- */
+/** A `](` plus a destination run with no whitespace and no closing paren, at end
+ * of line. */
 const OPEN_DEST_RE = /\]\(([^\s)]+)$/;
 
-/**
- * The line that finishes a split destination: the run picks up at column zero
- * and closes with the `)`.
- *
- * A continuation opening with a quote, `(` or `)` is not one: a title may
- * follow a line ending, and so may the destination's own close, so
- * `[T](path.md` / `"title")` is a legal link and must not read as a split.
- */
+/** The line that finishes a split destination: the run picks up at column zero
+ * and closes with `)`. A line opening with `"`, `(` or `)` is not one —
+ * `[T](path.md` / `"title")` is a legal link and must not read as a split. */
 const DEST_CONTINUATION_RE = /^[^\s"'()][^\s)]*\)/;
 
-/**
- * Body destinations split across a line break — the fourth shape, and the one
- * no fix may touch.
- *
- * This split is the crux of the check: the same bytes mean different things in
- * the two halves of a page. A `\`-continuation in frontmatter is a YAML fold,
- * one value spelled on two lines; in a body it is a CommonMark hard line
- * break, which leaves `[T](path` and `.md)` as literal text — not a link at
- * all, so [iterLinks] never sees it and `vault move` never rewrites it.
- *
- * Lines inside code blocks are skipped, as [iterLinks] skips them: a split
- * there is not a link either, and no reader resolves it.
- */
+/** Body destinations split across a line break — the fourth shape, and the one
+ * no fix may touch. The same bytes mean different things per half: in a body a
+ * `\`-continuation is a CommonMark hard break, leaving literal text that is no
+ * link, so [iterLinks] never sees it and `vault move` never rewrites it. Lines
+ * inside code blocks are skipped, as [iterLinks] skips them. */
 function bodySplits(
   pageRef: string,
   text: string,
@@ -478,25 +411,21 @@ function bodySplits(
 }
 
 /**
- * splitLinks — no link is split across lines.
+ * splitLinks — no link is split across lines. Four shapes (`wiki-conventions`,
+ * "Links"; ADR-0024):
  *
- * Four shapes, one vocabulary (`wiki-conventions`, "Links";
- * docs/adr/0024-emitted-lines-are-not-folded.md):
- *
- *   1. a destination fold — a YAML escaped line break inside a frontmatter
- *      link scalar, the writer's mid-token break before #502;
- *   2. a label fold — a plain newline inside a quoted frontmatter link scalar,
- *      which YAML folds to a space;
- *   3. a boundary fold — a YAML escaped line break between the label's `]` and
- *      the destination's `(`, which YAML resolves with nothing (#550);
+ *   1. a destination fold — an escaped break inside a frontmatter link scalar;
+ *   2. a label fold — a plain newline in a quoted frontmatter scalar, folded
+ *      by YAML to a space;
+ *   3. a boundary fold — an escaped break between the label's `]` and the
+ *      destination's `(`, resolved by YAML with nothing;
  *   4. a body almost-link — a destination broken across a line break in a
  *      body, which CommonMark does not read as a link at all.
  *
- * Shapes 1, 2 and 3 are auto-fixed by [fixSplitLinks], each join
- * semantics-preserving; shape 4 is reported only, because a break after a
- * destination is legal markdown and joining on sight can silently repoint the
- * link. Nothing is reported outside a double-quoted scalar, where raw text
- * cannot tell a fold from content.
+ * [fixSplitLinks] joins 1–3, each semantics-preserving; 4 is reported only,
+ * because a break after a destination is legal markdown and joining on sight
+ * can silently repoint the link. Nothing is reported outside a double-quoted
+ * scalar, where raw text cannot tell a fold from content.
  */
 export async function splitLinks(root: string): Promise<Finding[]> {
   const pages = new Vault(root).loadWikiPages();
@@ -523,22 +452,18 @@ export async function splitLinks(root: string): Promise<Finding[]> {
 // conceptFragmentation
 // ---------------------------------------------------------------------------
 
-/**
- * Default `--min-similarity`: the bar at or above which two pages are one
- * concept (a Consolidation) rather than two merely-related ones (a link, owned
- * by the Missing cross-references check). One number, so the two checks partition.
- */
+/** Default `--min-similarity`: at or above, two pages are one concept (a
+ * Consolidation); below, merely related (a link, for Missing cross-references). */
 export const DefaultMinSimilarity = 0.5;
 
-/** Kinds fragmentation detection never considers: their one-per-thing or
- * one-per-artifact identity forbids consolidation (#454, ADR-0021). */
+/** Kinds fragmentation never considers: one-per-thing or one-per-artifact
+ * identity forbids consolidation (ADR-0021). */
 const NonConsolidatableKinds = ["entity", "source", "synthesis"];
 
-/** Cap on the FTS5 title hits one page may contribute as candidates. A title
- * word common enough to blow past this is not an identity signal anyway. */
+/** Cap on the FTS5 title hits one page may contribute as candidates. */
 const TitleMatchLimit = 200;
 
-/** One member of a candidate cluster, as the proposal reports it. */
+/** One member of a candidate cluster. */
 export interface ClusterMember {
   pageRef: string;
   /** UTF-8 byte length of the page's committed text at HEAD. */
@@ -547,24 +472,20 @@ export interface ClusterMember {
   inbound: number;
 }
 
-/** The structured payload a `concept-fragmentation` finding carries — the whole
- * proposal, not just a per-page problem. */
+/** A `concept-fragmentation` finding's whole proposal. */
 export interface FragmentationCluster {
   members: ClusterMember[];
   /** The signals the members share — why they were clustered. */
   basis: { tags: string[]; titleTokens: string[] };
-  /** Weakest pairwise similarity holding the cluster together, in [0, 1] —
-   * the transitive closure can join pairs that are individually below the
-   * bar, and this is how far below the cluster dips. */
+  /** Weakest pairwise similarity holding the cluster together, in [0, 1] — the
+   * transitive closure can join pairs individually below the bar. */
   similarity: number;
   /** The member with the most inbound links, largest body on a tie, then
    * pageRef. A hint only: the Consolidation step may override it. */
   suggestedSurvivor: string;
 }
 
-/** Title words that carry no identity signal on their own. One-character
- * words are dropped by length, but stay listed so the set reads as the whole
- * rule. */
+/** Title words that carry no identity signal on their own. */
 const TitleStopwords = new Set([
   "a",
   "an",
@@ -613,11 +534,8 @@ const TitleStopwords = new Set([
   "your",
 ]);
 
-/**
- * The significant words of a title: lowercased `[a-z0-9]+`, stopwords and
- * one-character tokens dropped. A set, because similarity is over *which*
- * signals two pages share, not how often each appears.
- */
+/** Significant title words: lowercased `[a-z0-9]+`, stopwords and
+ * one-character tokens dropped. */
 export function titleTokens(title: string): Set<string> {
   const tokens = new Set<string>();
   for (const word of title.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
@@ -626,29 +544,20 @@ export function titleTokens(title: string): Set<string> {
   return tokens;
 }
 
-/** The two signal sets a page contributes to fragmentation similarity. */
 interface Signals {
   tags: Set<string>;
   titleTokens: Set<string>;
 }
 
-/** The values both sets hold, sorted — the basis a cluster reports. */
 function intersection(a: Set<string>, b: Set<string>): string[] {
   const shared: string[] = [];
   for (const value of a) if (b.has(value)) shared.push(value);
   return shared.sort();
 }
 
-/**
- * Combined Jaccard over both signals: shared tags plus shared title words,
- * over the union of the two pages' tags and title words.
- *
- * One ratio rather than a rule per signal, because a shared tag and a shared
- * title word are each one piece of evidence that two pages are the same
- * concept — counting them in the same numerator lets a strongly-tagged stub
- * pair with a larger page whose title only partly overlaps (user story 3)
- * without a second threshold. 0 when the two share no vocabulary at all.
- */
+/** Combined Jaccard over both signals: shared tags plus shared title words,
+ * over the union of the two pages' tags and title words. 0 when the two share
+ * no vocabulary at all. */
 export function similarity(a: Signals, b: Signals): number {
   const sharedTags = intersection(a.tags, b.tags).length;
   const sharedTitle = intersection(a.titleTokens, b.titleTokens).length;
@@ -658,9 +567,9 @@ export function similarity(a: Signals, b: Signals): number {
   return union === 0 ? 0 : (sharedTags + sharedTitle) / union;
 }
 
-/** An FTS5 MATCH expression scoped to the indexed `title` column, OR-joined
- * from the page's own significant title words. Raw, like `discover.orQuery`:
- * an AND of a whole title demands every word be present and finds nothing. */
+/** An FTS5 MATCH scoped to the indexed `title` column, OR-joined from the
+ * page's own title words: an AND of a whole title demands every word and finds
+ * nothing. */
 function titleMatch(title: string): string {
   const words = [...titleTokens(title)];
   if (words.length === 0) return "";
@@ -668,7 +577,7 @@ function titleMatch(title: string): string {
 }
 
 /** Inbound link count per page ref across one HEAD snapshot, counting only
- * links from *other* pages to pages the snapshot holds — orphans' rule. */
+ * links from other pages to pages the snapshot holds (orphans' rule). */
 function inboundCounts(text: Map<string, string>): Map<string, number> {
   const counts = new Map<string, number>();
   for (const [ref, content] of text) {
@@ -682,8 +591,8 @@ function inboundCounts(text: Map<string, string>): Map<string, number> {
   return counts;
 }
 
-/** The one-line, human-readable form of a cluster — what the text renderer
- * prints and the report relays. The structured detail rides in `cluster`. */
+/** The one-line human-readable form of a cluster; structured detail rides in
+ * `cluster`. */
 function fragmentationDetail(cluster: FragmentationCluster): string {
   const basis: string[] = [];
   if (cluster.basis.tags.length > 0)
@@ -698,24 +607,19 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
 }
 
 /**
- * conceptFragmentation — #452/#454, ADR-0021.
+ * conceptFragmentation — ADR-0021.
  *
- * Finds clusters of small, closely-related concept (and custom-kind) pages
- * that would read better as one page with sections, and proposes a
- * Consolidation per cluster: a confirm-first, lossless merge. This check only
- * *surfaces* candidates — the judgment that a cluster truly consolidates, and
- * the merged body, belong to the Sonnet `/wiki-ingest` flow it routes to.
+ * Finds clusters of small, closely-related concept (and custom-kind) pages and
+ * proposes a Consolidation per cluster: a confirm-first, lossless merge. It
+ * only surfaces candidates — the judgment that a cluster truly consolidates,
+ * and the merged body, belong to the `/wiki-ingest` flow.
  *
- * Candidate generation is ADR-0021's pair: a SQL self-join over `page_tag`
- * (strongest shared-tag count first) unioned with an FTS5 `MATCH` on the
- * indexed titles. Both halves read the index — a view of HEAD (ADR-0015) — so
- * an uncommitted fragmented draft is invisible until committed, which the
- * ticket's user story 15 asks for. Each surviving pair is scored by
- * [similarity] against `minSimilarity`; pairs below the bar are left to
- * Missing cross-references, which renders them as a typed edge.
- *
- * `entity`, `source` and `synthesis` pages are excluded: their one-per-thing
- * or one-per-artifact identity forbids consolidation.
+ * Candidates are ADR-0021's pair: a shared-tag self-join unioned with an FTS5
+ * title match. Both read the index, a view of HEAD (ADR-0015), so an
+ * uncommitted fragmented draft is invisible. Each surviving pair is scored by
+ * [similarity] against `minSimilarity`; pairs below the bar are left to Missing
+ * cross-references. `entity`, `source` and `synthesis` pages are excluded
+ * ([NonConsolidatableKinds]).
  */
 export async function conceptFragmentation(
   root: string,
@@ -733,8 +637,8 @@ export async function conceptFragmentation(
       });
     }
 
-    // Candidate pairs: the union of the two generators, deduplicated by an
-    // ordered key so a pair found by both is scored once.
+    // Union of the two generators, keyed unordered so a pair found twice is
+    // scored once.
     const candidates = new Set<string>();
     const addPair = (a: string, b: string): void => {
       if (a === b || !signals.has(a) || !signals.has(b)) return;
@@ -754,9 +658,8 @@ export async function conceptFragmentation(
           text: match,
           raw: true,
           kinds: scopeKinds,
-          // Supersession is not a reason to skip a page here: a superseded
-          // page is still a page, and the tag self-join does not skip it
-          // either — the two generators must see the same scope.
+          // The tag self-join does not skip superseded pages either, so the
+          // two generators see the same scope.
           includeSuperseded: true,
           limit: TitleMatchLimit,
         });
@@ -764,8 +667,6 @@ export async function conceptFragmentation(
       }
     }
 
-    // Score every candidate, keep the pairs at or above the bar, and union
-    // them into clusters.
     const scored: Array<{ a: string; b: string; sim: number }> = [];
     for (const key of [...candidates].sort()) {
       const [a, b] = key.split("\u0000");
@@ -782,8 +683,6 @@ export async function conceptFragmentation(
         path.push(cur);
         cur = parent.get(cur)!;
       }
-      // Path compression — the clusters are small, but a long transitive
-      // chain would otherwise re-walk the same spine per lookup.
       for (const node of path) parent.set(node, cur);
       return cur;
     };
@@ -792,8 +691,7 @@ export async function conceptFragmentation(
       const rootA = find(a);
       const rootB = find(b);
       if (rootA === rootB) return;
-      // Smaller ref wins, so the root — and therefore cluster order — does
-      // not depend on the order pairs happened to be visited.
+      // Smaller ref wins, so cluster order does not depend on pair visit order.
       if (rootA < rootB) parent.set(rootB, rootA);
       else parent.set(rootA, rootB);
     };
@@ -832,8 +730,8 @@ export async function conceptFragmentation(
       if (previous === undefined || sim < previous) minSimByRoot.set(root, sim);
     }
 
-    // Sizes and inbound counts come from HEAD too, so the proposal describes
-    // the same committed pages the index scored (ADR-0015).
+    // From HEAD too, so the proposal describes the same committed pages the
+    // index scored (ADR-0015).
     const head = await new VaultGit(root).committedPages("");
     const text = new Map<string, string>();
     for (const change of head.pages) {
@@ -881,8 +779,6 @@ export async function conceptFragmentation(
 // Check registry
 // ---------------------------------------------------------------------------
 
-/** A check: its vault root, plus the optional options bag the CLI threads
- * through. Only `concept-fragmentation` reads anything from it today. */
 export type CheckFn = (root: string, opts?: CheckOptions) => Promise<Finding[]>;
 
 export const CHECKS: Record<string, CheckFn> = {
@@ -903,7 +799,7 @@ export const CHECKS: Record<string, CheckFn> = {
 // All return the list of page refs that were modified.
 // ---------------------------------------------------------------------------
 
-// fixFrontmatterLinkFormat — apply quoting and encoding corrections to frontmatter links in place.
+// fixFrontmatterLinkFormat — quote unquoted list links and re-encode destinations in place.
 export async function fixFrontmatterLinkFormat(
   root: string,
 ): Promise<string[]> {
@@ -913,7 +809,7 @@ export async function fixFrontmatterLinkFormat(
     const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
     if (!hasFrontmatter || frontmatter === "") continue;
 
-    // Pass 1: quote unquoted markdown links in YAML list items ("  - [Title](dest)")
+    // Pass 1: quote unquoted markdown links in YAML list items.
     let fm = frontmatter
       .split("\n")
       .map((line) => {
@@ -930,13 +826,9 @@ export async function fixFrontmatterLinkFormat(
       })
       .join("\n");
 
-    // Pass 2: re-encode link destinations in the (now-quoted) frontmatter text.
-    // Frontmatter relationships use the same link form as body links, anchors
-    // included, so a destination carrying a heading fragment keeps it: the
-    // path and the anchor are re-encoded separately by the one seam that owns
-    // the rule (#492 §1). Recombining them first — the shape this replaced —
-    // encoded the anchor's own `#` and rewrote a working
-    // `../concepts/caching.md#ttl` into a dangling `…caching.md%23ttl`.
+    // Pass 2: re-encode destinations in the now-quoted frontmatter. Path and
+    // anchor are re-encoded separately: recombining them first turns a working
+    // `#ttl` anchor into a dangling `%23ttl`.
     const edits: Array<{ start: number; end: number; dest: string }> = [];
     for (const link of iterLinks(fm)) {
       const reencoded = encodeDest(link.decodedPath, link.decodedAnchor);
@@ -965,8 +857,8 @@ export async function fixIngestionSourceIntegrity(
     if (!hasFrontmatter) continue;
     if (/^raw_source\s*:/m.test(frontmatter)) continue;
 
-    // Auto-fix only when exactly one raw/ link exists in the body. The prefix
-    // is the route from *this* folder into `raw/` — see [RAW_HREF_PREFIX].
+    // Only when exactly one raw/ link exists in the body ([RAW_HREF_PREFIX] is
+    // the route from this folder into `raw/`).
     const rawLinkRe = new RegExp(
       `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
       "g",
@@ -988,8 +880,8 @@ export async function fixIngestionSourceIntegrity(
   return changed;
 }
 
-// fixMissingCrossReferences (unambiguous case) — insert relative markdown links for exact title
-// matches that appear in body text without an existing link to that page.
+// fixMissingCrossReferences — insert relative markdown links for exact title
+// matches in body text that have no existing link to that page.
 export async function fixMissingCrossReferences(
   root: string,
 ): Promise<string[]> {
@@ -997,7 +889,6 @@ export async function fixMissingCrossReferences(
     skipMalformedEdges: true,
   });
 
-  // Build title → ref map; drop titles shared by multiple pages (ambiguous)
   const titleToRef = new Map<string, string>();
   const ambiguous = new Set<string>();
   for (const [ref, { record }] of Object.entries(pagesWithText)) {
@@ -1016,16 +907,15 @@ export async function fixMissingCrossReferences(
     const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
     const pageDir = ref.split("/").slice(0, -1).join("/");
 
-    // Collect refs already linked from this body
     const linkedRefs = new Set<string>();
-    // Collect body link spans to detect "already inside a link"
+    // Body link spans, to detect "already inside a link".
     const linkSpans: Array<[number, number]> = [];
     for (const link of iterLinks(body)) {
       linkedRefs.add(resolveLinkDest(link.decodedPath, pageDir));
-      // Estimate full link span: scan back from dest start to find opening [
-      let spanStart = link.start - 1; // at least the ( character
+      // Scan back from the destination to the opening `[`.
+      let spanStart = link.start - 1;
       while (spanStart > 0 && body[spanStart] !== "[") spanStart--;
-      linkSpans.push([spanStart, link.end + 1]); // +1 to include closing )
+      linkSpans.push([spanStart, link.end + 1]);
     }
 
     let newBody = body;
@@ -1055,7 +945,6 @@ export async function fixMissingCrossReferences(
       newBody =
         newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
 
-      // Shift spans after the insertion point and add the new span
       for (let i = 0; i < linkSpans.length; i++) {
         if (linkSpans[i][0] > idx) {
           linkSpans[i] = [linkSpans[i][0] + diff, linkSpans[i][1] + diff];
@@ -1077,9 +966,8 @@ export async function fixMissingCrossReferences(
   return changed;
 }
 
-// fixSplitLinks — join the three frontmatter shapes in place. Body splits
-// are never joined (a break after a destination is legal markdown, so a join
-// on sight can silently repoint the link); they stay a report-only finding.
+// fixSplitLinks — join the three frontmatter shapes in place; body splits stay
+// a report-only finding (joining one on sight can silently repoint the link).
 export async function fixSplitLinks(root: string): Promise<string[]> {
   const pages = new Vault(root).loadWikiPages();
   const changed: string[] = [];
@@ -1090,11 +978,10 @@ export async function fixSplitLinks(root: string): Promise<string[]> {
     const splits = frontmatterSplits(frontmatter);
     if (splits.length === 0) continue;
 
-    // Splice the raw frontmatter text, back-to-front by source offset, so
-    // every untouched byte survives — key order, quote styles and spacing
-    // alike (ADR-0012's relaxed round-trip allows only the join itself to
-    // differ). Joining with the reader's own value is what makes each edit
-    // semantics-preserving: nothing but the fold's bytes move.
+    // Splice back-to-front by source offset so every untouched byte survives —
+    // key order, quote styles and spacing alike; only the join may differ
+    // (ADR-0012). Joining the reader's own value keeps the edit
+    // semantics-preserving.
     let fm = frontmatter;
     for (const s of splits.sort((a, b) => b.start - a.start)) {
       fm = fm.slice(0, s.start) + s.joined + fm.slice(s.end);

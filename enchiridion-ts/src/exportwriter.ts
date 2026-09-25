@@ -28,37 +28,26 @@ import type { PageRecord } from "./pagerecord.js";
 
 export interface ExportWriterOptions {
   /**
-   * Absolute path of what to write. In multi-page mode an output directory
-   * (default `<vaultRoot>/web/`); under `singleFile` the output *file* itself
-   * (default `<vaultRoot>/wiki.html`). The caller resolves the default —
-   * it is the layer that knows which mode was asked for.
+   * Absolute path of what to write: an output directory, or under `singleFile`
+   * the output file itself. The caller resolves the default — it knows the mode.
    */
   out: string;
   /** Include raw/ pages. Default false. */
   raw?: boolean;
-  /**
-   * Write the whole site as one self-contained HTML file at `out` instead of
-   * a directory tree. Default false.
-   */
+  /** Write the whole site as one self-contained HTML file at `out`. Default false. */
   singleFile?: boolean;
-  /** Overwrite a non-empty output directory without error. Default false.
-   *  Multi-page only: a single file is replaced in place either way. */
+  /** Overwrite a non-empty output directory without error. Default false; a
+   *  single file is replaced in place either way. */
   force?: boolean;
   /** Skip the dirty-tree check. Default false. */
   allowDirty?: boolean;
   /** Supplied starters override fallback ranking on the front page. */
   starters?: StarterEntry[];
-  /**
-   * Wiki title for this run only — the per-run flag, not a resolved title.
-   * Leave it unset to take the vault's saved title, or failing that the vault
-   * root directory name (see resolveExportTitle).
-   */
+  /** Wiki title for this run only; unset takes the vault's saved title, then
+   *  the vault root directory name (see resolveExportTitle). */
   title?: string;
-  /**
-   * Start page for this run only — the per-run flag, not a resolved ref.
-   * Leave it unset to take the vault's saved start page, or failing that none
-   * (the export keeps its generated front page). See resolveExportStartPage.
-   */
+  /** Start page for this run only; unset takes the vault's saved start page,
+   *  or failing that none (see resolveExportStartPage). */
   startPage?: string;
 }
 
@@ -80,8 +69,7 @@ export class ExportTargetNotEmptyError extends Error {
 }
 
 /** `--single-file` was pointed at an existing directory. Its own error rather
- *  than a rename failing with EISDIR, which names the syscall and not the
- *  mistake. */
+ *  than a rename failing with EISDIR, which names the syscall, not the mistake. */
 export class ExportTargetIsDirectoryError extends Error {
   constructor(message: string) {
     super(message);
@@ -89,12 +77,9 @@ export class ExportTargetIsDirectoryError extends Error {
   }
 }
 
-/** The resolved start page is not a page this export carries — an unknown
- *  ref, a raw/ page without `--raw`, or a saved ref the export no longer
- *  includes. Deliberately fatal rather than falling back to the generated
- *  front page: that fallback is the silent behaviour the setting exists to
- *  replace, and it is exactly where a `--save-start-page` that stopped
- *  matching would otherwise hide. See ADR-0023. */
+/** The resolved start page is not a page this export carries. Deliberately
+ *  fatal rather than falling back to the generated front page: that fallback is
+ *  the silent behaviour the setting exists to replace. See ADR-0023. */
 export class ExportStartPageError extends Error {
   constructor(message: string) {
     super(message);
@@ -106,10 +91,7 @@ export class ExportStartPageError extends Error {
 // Raw page enumeration
 // ---------------------------------------------------------------------------
 
-/**
- * Walk `raw/` and return all vault-relative paths of files found there.
- * Returns empty when `raw/` doesn't exist.
- */
+/** All vault-relative paths under `raw/`; empty when `raw/` is absent. */
 function enumerateRawRefs(root: string): string[] {
   const rawDir = path.join(root, "raw");
   const refs: string[] = [];
@@ -136,11 +118,8 @@ function enumerateRawRefs(root: string): string[] {
 
 /**
  * Every page ref the vault holds — every `wiki/` page plus every file under
- * `raw/`. This is the vault's page enumeration without the export's `--raw`
- * filter: `--save-start-page` validates a ref against *the vault*, because
- * whether the export carries a `raw/` page is a question only a run can
- * answer. A ref that names no page here is rejected at save time; a ref that
- * names a `raw/` page is saved, and validated again at export time.
+ * `raw/`. Save-time validation uses this, not the export's `--raw`-filtered
+ * set: whether a run carries a `raw/` page is a question only the run answers.
  */
 export function vaultPageRefs(root: string): Set<string> {
   const refs = new Set<string>(Object.keys(new Vault(root).pagesWithText()));
@@ -148,13 +127,9 @@ export function vaultPageRefs(root: string): Set<string> {
   return refs;
 }
 
-/**
- * The refusal for a start page the export cannot fill the front page with.
- * Names the source — the flag, or the config file the operator has to re-save
- * or clear — and, for a `raw/` page without `--raw`, names the one flag that
- * would make it legal. The two sources get different advice because only the
- * flag can be fixed by re-running the same command.
- */
+/** Names the source of the refused ref, and for a `raw/` page without `--raw`
+ *  the flag that would make it legal. The two sources get different advice
+ *  because only the flag can be fixed by re-running the same command. */
 function startPageErrorMessage(
   root: string,
   ref: string,
@@ -200,11 +175,9 @@ function writeTempSite(
 }
 
 /**
- * Write the single-file document, through a temp file on the same filesystem
- * and an atomic rename — the same reasoning as the multi-page write, with one
- * file instead of a tree. The existing output is replaced outright: in this
- * mode the target *is* the export, so re-running to refresh it is the normal
- * case and needs no `--force`.
+ * Write through a temp file on the same filesystem and an atomic rename. The
+ * existing output is replaced outright: the target *is* the export, so
+ * re-running to refresh it is the normal case and needs no `--force`.
  */
 function writeSingleFile(outFile: string, html: string): void {
   const tempFile = path.join(
@@ -232,14 +205,10 @@ function writeSingleFile(outFile: string, html: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Run the full export: dirty check → page load → render → write.
- * All writes go to a temp path on the same filesystem as `opts.out`; it is
- * atomically renamed into place only after all writes succeed. The existing
- * `opts.out` is removed only after the temp build completes.
- *
- * The two output modes share everything up to the write: same dirty check,
- * same page load, same metadata, same page parts. `singleFile` chooses only
- * what shape those parts are assembled into and where they land.
+ * Run the full export: dirty check → page load → render → write. All writes
+ * land in a temp path on the same filesystem as `opts.out` and are atomically
+ * renamed into place only after they all succeed; `opts.out` is removed only
+ * after the temp build completes.
  */
 export async function runExport(
   root: string,
@@ -251,22 +220,15 @@ export async function runExport(
   const allowDirty = opts.allowDirty ?? false;
   const force = opts.force ?? false;
   const starters = opts.starters ?? [];
-  // The one place a vault-derived wiki title is resolved: flag → vault config
-  // → directory name. Everything downstream — the nav bar and front page
-  // heading — reads the result, never the inputs. (Renderers reached without a
-  // vault fall back to a neutral label rather than an empty nav; see
-  // exportTitle.)
+  // The one place a vault-derived wiki title is resolved: flag → config →
+  // directory name. Everything downstream reads the result, never the inputs.
   const title = resolveExportTitle(root, opts.title);
-  // And the one place the start page is resolved: flag → saved ref → none.
-  // Resolved here even though validation needs the exported set below, so no
-  // caller can invent a different order (the same reason the title resolves
-  // here).
+  // The one place the start page is resolved: flag → saved ref → none.
   const startPageRef = resolveExportStartPage(root, opts.startPage);
   const startPageFromFlag = isSupplied(opts.startPage);
 
-  // 1. Dirty-tree check. The fact comes from vaultgit, the module that owns
-  // every git question about a vault — this module has no git opinion of its
-  // own, only this refusal.
+  // 1. Dirty-tree check. The git fact comes from vaultgit, which owns every git
+  // question about a vault.
   if (!allowDirty) {
     const subtrees = ["wiki"];
     if (includeRaw) subtrees.push("raw");
@@ -282,8 +244,8 @@ export async function runExport(
     }
   }
 
-  // 2. Check the target. A single file is replaced without ceremony (re-running
-  // is how it is refreshed); a directory tree is only replaced under --force.
+  // 2. Check the target: a single file is replaced without ceremony, a
+  // directory tree only under --force.
   if (singleFile) {
     if (fs.existsSync(outDir) && fs.statSync(outDir).isDirectory()) {
       throw new ExportTargetIsDirectoryError(
@@ -306,7 +268,6 @@ export async function runExport(
     }
   }
 
-  // 3. Load pages
   const vault = new Vault(root);
   const pagesMap = new Map<string, { record?: PageRecord; text: string }>();
 
@@ -325,12 +286,11 @@ export async function runExport(
         );
         pagesMap.set(ref, { text });
       } catch {
-        // Skip unreadable raw files
+        // Unreadable: skip.
       }
     }
   }
 
-  // 4. Build metadata
   const exportOpts: ExportOptions = {
     includeRaw,
     starters,
@@ -339,32 +299,27 @@ export async function runExport(
   };
   const meta = buildExportMeta(pagesMap, exportOpts);
 
-  // 4a. The start page must be a page this export carries. Checked before any
-  // write, and fatal rather than falling back: silently reverting to the
-  // generated front page is the behaviour the setting exists to replace.
+  // The start page must be a page this export carries, checked before any write.
   if (startPageRef !== undefined && !meta.exported.has(startPageRef)) {
     throw new ExportStartPageError(
       startPageErrorMessage(root, startPageRef, startPageFromFlag, includeRaw),
     );
   }
 
-  // 4b. A supplied get-started set is meaningless beside a start page — the
-  // page supplies its own entrance. Deletion is what --starters means, so this
-  // is a note on stderr, not a failure: the documented skill flow
-  // (--candidates → pick → --starters) must keep working.
+  // A supplied get-started set is meaningless beside a start page, but a
+  // warning not a failure: the documented --candidates → pick → --starters
+  // flow must keep working.
   if (startPageRef !== undefined && starters.length > 0) {
     console.error(
       `Warning: --starters is ignored because "${startPageRef}" is the start page. Exporting the start page without a get-started block.`,
     );
   }
 
-  // 5. Render all pages
   function* allPages(): Generator<{ path: string; content: string }> {
     yield* renderPages(pagesMap, meta, exportOpts);
     yield* renderAggregatePages(pagesMap, meta, exportOpts);
   }
 
-  // 6. Write
   const outParent = path.dirname(outDir);
   fs.mkdirSync(outParent, { recursive: true });
 
@@ -376,16 +331,14 @@ export async function runExport(
   const tempDir = fs.mkdtempSync(path.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());
-    // The shared stylesheet, written once at the output root. Every page
-    // links it at its own depth; no page carries a copy. Site-relative paths
-    // here are always "/"-separated, whichever platform we are on.
+    // Site-relative paths here are always "/"-separated, whichever platform we
+    // are on.
     writeFileIn(
       tempDir,
       `${STYLESHEET_DIR}/${STYLESHEET_FILE}`,
       EXPORT_STYLESHEET,
     );
 
-    // 7. Atomic swap: remove existing outDir, rename temp into place
     if (fs.existsSync(outDir)) {
       fs.rmSync(outDir, { recursive: true, force: true });
     }
@@ -405,10 +358,7 @@ export async function runExport(
 // Candidates (for --candidates flag)
 // ---------------------------------------------------------------------------
 
-/**
- * Return the ranked get-started candidate list as a JSON-serialisable array.
- * Used by `enchiridion export --candidates`.
- */
+/** The ranked get-started candidates for `enchiridion export --candidates`. */
 export function buildCandidates(root: string) {
   const vault = new Vault(root);
   const wikiWithText = vault.pagesWithText();

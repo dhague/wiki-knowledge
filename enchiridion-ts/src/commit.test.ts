@@ -1,6 +1,5 @@
 /**
- * commit tests — the manifest-to-commit pipeline, including the fake-git
- * seam that isolates commit construction from real git.
+ * commit tests — the manifest-to-commit pipeline, including the fake-git seam.
  */
 
 import { test } from "node:test";

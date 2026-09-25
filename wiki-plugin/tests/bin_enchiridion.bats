@@ -1,16 +1,14 @@
 #!/usr/bin/env bats
-# Covers wiki-plugin/bin/enchiridion's shim behaviour (issue #254) plus its
-# artifact resolution order after packaging (D3 #288):
-# ENCHIRIDION_BIN → in-plugin $plugin_root/scripts/cli.cjs → sibling
-# enchiridion-ts/dist/cli.cjs. ENCHIRIDION_BIN overrides everything, for
-# local dev against unbundled source or an alternate runtime.
+# Covers wiki-plugin/bin/enchiridion's shim behaviour and artifact resolution
+# order: ENCHIRIDION_BIN -> in-plugin $plugin_root/scripts/cli.cjs -> sibling
+# enchiridion-ts/dist/cli.cjs. ENCHIRIDION_BIN overrides everything, for local
+# dev against unbundled source or an alternate runtime.
 
 setup() {
     SCRIPT="$BATS_TEST_DIRNAME/../bin/enchiridion"
 
-    # Recreate the monorepo layout the shim assumes: wiki-plugin/ and
-    # enchiridion-ts/ as siblings, with stub cli.cjs files standing in for
-    # the real esbuild bundle.
+    # The shim assumes wiki-plugin/ and enchiridion-ts/ are siblings; stub
+    # cli.cjs files stand in for the real esbuild bundle.
     REPO_ROOT="$BATS_TEST_TMPDIR/repo"
     PLUGIN_ROOT="$REPO_ROOT/wiki-plugin"
     mkdir -p "$PLUGIN_ROOT/bin"
