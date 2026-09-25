@@ -149,6 +149,12 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 
 **Ingestion guidance:** assign the most specific type that is true; the mandatory `source` back-edge is the one exception to judging per page. Under-assigning edges is silent quality loss — the graph is only as navigable as the edges recorded. **Retrieval guidance:** follow the edges the question implies (a "how does X work in practice" follows `example-of`; "is this still true" follows `contradicts`/`supersedes`), within the stated hop budget.
 
+## Pages state facts
+
+**A page records what is true — not what was previously believed, and not how the page came to be written.** Correction narration ("this corrects", "the brief's premise", "previously said") and vault-process meta ("this page records a `contradicts` edge", "the page ingested on <date>", "earlier passes recorded") do not belong in a page. Both read as diligence while adding nothing a reader needs, and both turn a reference work into a changelog.
+
+Where an earlier statement or an outside source conflicts with the current one, record the [`contradicts`/`supersedes`](#typed-edges) edge and — if the disagreement is live — say so in a `> [!warning] Contradiction` callout, **in facts, naming both statements**. The disagreement is knowledge; the page's own history is not.
+
 ## Scripts
 
 Full subcommand catalogue — every subcommand, what to call it for, and its usage: [`reference/scripts.md`](reference/scripts.md) — read it for a row's exact spelling or rationale.
