@@ -1607,6 +1607,35 @@ test("check --json: a clean check is silence, not []", () => {
   assert.equal(stdout, "");
 });
 
+test("check tags-shape --json: names each page and its offending value", () => {
+  const root = buildLintableVault();
+  fs.writeFileSync(
+    path.join(root, "wiki/concepts/a.md"),
+    '---\ntitle: A\nsummary: s\ntags:\n  - windsor", "campaign-tactics\n---\n\n',
+  );
+  fs.writeFileSync(
+    path.join(root, "wiki/concepts/b.md"),
+    "---\ntitle: B\nsummary: s\ntags: alpha\n---\n\n",
+  );
+  const { status, stdout, stderr } = runEnv(["check", "tags-shape", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.deepEqual(rows, [
+    {
+      pageRef: "wiki/concepts/a.md",
+      detail:
+        'tags entry is not a plain tag: "windsor\\", \\"campaign-tactics"',
+    },
+    { pageRef: "wiki/concepts/b.md", detail: 'tags is not a list: "alpha"' },
+  ]);
+});
+
 test("check: an unknown name errors non-zero, naming the known ones", () => {
   const root = buildLintableVault();
   const { status, stderr } = runEnv(["check", "nope"], {

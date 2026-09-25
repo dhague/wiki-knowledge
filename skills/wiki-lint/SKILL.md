@@ -40,6 +40,7 @@ Run every check below, in parallel where the vault is large. Each emits JSON Lin
 "$RUNTIME" "$ENCHIRIDION" check kind-folder-conformance --json
 "$RUNTIME" "$ENCHIRIDION" check ingestion-source-integrity --json
 "$RUNTIME" "$ENCHIRIDION" check frontmatter-link-format --json
+"$RUNTIME" "$ENCHIRIDION" check tags-shape --json
 "$RUNTIME" "$ENCHIRIDION" check stale-synthesis --json
 "$RUNTIME" "$ENCHIRIDION" check missing-volatility-source-date --json
 "$RUNTIME" "$ENCHIRIDION" check unresolved-supersession --json
@@ -52,6 +53,7 @@ Run every check below, in parallel where the vault is large. Each emits JSON Lin
 - **Kind-folder conformance** (`kind-folder-conformance`) — every `.md` under `wiki/` (bar `KIND.md` and `_index.md`) sits directly under a valid kind-folder — canonical four or a custom folder the vault already carries. Pages at the `wiki/` root or nested below a kind-folder are violations. Fix level: **confirm first** (the repair is `enchiridion vault move`).
 - **Ingestion source integrity** (`ingestion-source-integrity`) — every `wiki/sources/*.md` carries `raw_source:`. Fix level: **auto-fix** when the body holds one unambiguous `raw/` link, else **report only**.
 - **Frontmatter link format** (`frontmatter-link-format`) — every frontmatter edge value is a quoted markdown link with an encoded destination. Fix level: **auto-fix** the quoting and encoding; **report only** a value that is no markdown link at all, which a fix cannot repair — re-set the edge with `page set`, or `page merge` with a JSON list.
+- **Tags shape** (`tags-shape`) — every page's `tags` is a YAML list of plain tags: non-empty strings with no whitespace, comma or quote. A scalar, or an entry holding a delimited list collapsed into one string, indexes as a single junk tag every tag filter misses while the file still shows a value. Fix level: **report only** (the repair re-types the tag list, an author judgment).
 - **Stale synthesis** (`stale-synthesis`) — synthesis pages whose last commit is > 30 days old. Fix level: **report only**.
 - **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field. Fix level: **report only** (the values need author judgment).
 - **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead. Fix level: **report only**.
@@ -141,7 +143,7 @@ After auto-fixes and confirms, emit the final report:
 ```
 
 Priority ordering in the report:
-1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, split links.
+1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links.
 2. **MEDIUM** — orphans, concept fragmentation, under-typed edges, stale synthesis, missing `volatility`/`source_date`.
 3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession.
 
@@ -156,6 +158,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `kind-folder-conformance` | confirm first |
 | `ingestion-source-integrity` | auto-fix (unambiguous) / report only |
 | `frontmatter-link-format` | auto-fix |
+| `tags-shape` | report only |
 | `stale-synthesis` | report only |
 | `missing-volatility-source-date` | report only |
 | `unresolved-supersession` | report only |

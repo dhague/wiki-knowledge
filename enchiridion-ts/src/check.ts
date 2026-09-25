@@ -15,7 +15,7 @@ import {
   codeLineRanges,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
-import { malformedEdges } from "./pagerecord.js";
+import { malformedEdges, malformedTags } from "./pagerecord.js";
 
 export interface CheckOptions {
   /** The Consolidation-vs-link cutoff, in [0, 1]. */
@@ -150,6 +150,18 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
     // Edge values the schema refuses (a bare path, a non-string entry): valid
     // YAML, so the scans above go blind to it, but the record parser raises.
     for (const detail of malformedEdges(text))
+      findings.push({ pageRef: ref, detail });
+  }
+  return findings;
+}
+
+/** tagsShape — `tags` must be a YAML list of plain tags, or the page drops out
+ * of every tag filter without a symptom (`pagerecord.malformedTags`). */
+export async function tagsShape(root: string): Promise<Finding[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const findings: Finding[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    for (const detail of malformedTags(text))
       findings.push({ pageRef: ref, detail });
   }
   return findings;
@@ -785,6 +797,7 @@ export const CHECKS: Record<string, CheckFn> = {
   "kind-folder-conformance": kindFolderConformance,
   "ingestion-source-integrity": ingestionSourceIntegrity,
   "frontmatter-link-format": frontmatterLinkFormat,
+  "tags-shape": tagsShape,
   "stale-synthesis": staleSynthesis,
   "missing-volatility-source-date": missingVolatilitySourceDate,
   "unresolved-supersession": unresolvedSupersession,

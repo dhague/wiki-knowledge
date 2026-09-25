@@ -110,6 +110,8 @@ Field notes:
 
 Tags are **emergent** — generated at ingestion, not conformed to a fixed list. **Reuse an existing tag** where one fits; **mint a new one** only where nothing does — `enchiridion discover --plan` returns the vault's tag vocabulary beside every candidate, and `--tags-containing`/`--tag-count`, derived from the draft's own candidate tags, beats the full dump ([catalogue](reference/scripts.md)). Consistency comes from reuse-first discipline, not a closed set.
 
+`tags` is a YAML list of **single bare tokens** — each non-empty, with no whitespace, comma or quote. A delimited list collapsed into one string (`windsor", "campaign-tactics`) still reads as a value but indexes as one junk tag no filter matches, so `wiki-lint`'s `tags-shape` check reports it.
+
 ## Links
 
 Links between pages are **relative markdown links — not wikilinks.**

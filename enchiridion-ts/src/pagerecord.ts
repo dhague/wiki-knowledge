@@ -168,16 +168,53 @@ export function newPageRecord(
 }
 
 /** Every edge value the parser refuses, as its own refusal messages; never
- * raises — this is what `check frontmatter-link-format` reports. A block the
- * YAML parser refuses yields nothing. */
+ * raises — this is what `check frontmatter-link-format` reports. */
 export function malformedEdges(text: string): string[] {
-  let data: Record<string, unknown>;
-  try {
-    data = frontmatterMap(text);
-  } catch {
-    return [];
+  const data = frontmatterMapOrUndefined(text);
+  return data === undefined ? [] : decodeEdges(data, "").malformed;
+}
+
+/** A plain tag: a non-empty string with no whitespace, comma or quote. The
+ * shape a delimited list collapses into when a writer forgets the sequence —
+ * `windsor", "campaign-tactics`, which indexes as one junk tag no filter
+ * matches. */
+const PLAIN_TAG_RE = /^[^\s,"']+$/;
+
+/** Every `tags` value the parser refuses, as its own refusal messages; never
+ * raises — this is what `check tags-shape` reports. A missing or null `tags` is
+ * no tags, not a malformed one. Entries are read exactly as the index reads
+ * them, so a numeric or boolean scalar (indexed as `42`/`true`) is no finding
+ * while null (indexed as an empty tag) is. */
+export function malformedTags(text: string): string[] {
+  const data = frontmatterMapOrUndefined(text);
+  if (data === undefined) return [];
+  const raw = data["tags"];
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) return [`tags is not a list: ${renderValue(raw)}`];
+  const errors: string[] = [];
+  for (const tag of stringList(raw)) {
+    if (!PLAIN_TAG_RE.test(tag))
+      errors.push(`tags entry is not a plain tag: ${renderValue(tag)}`);
   }
-  return decodeEdges(data, "").malformed;
+  return errors;
+}
+
+/** A frontmatter value as it reads in a refusal message — quoted when it is a
+ * string, so a comma or quote inside it cannot blur where the value ends. */
+function renderValue(v: unknown): string {
+  return JSON.stringify(v) ?? String(v);
+}
+
+/** [frontmatterMap] for the `malformed*` readers: a block the YAML parser
+ * refuses yields undefined, which they report as nothing rather than raise. */
+function frontmatterMapOrUndefined(
+  text: string,
+): Record<string, unknown> | undefined {
+  try {
+    return frontmatterMap(text);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Parse a page's YAML frontmatter into a plain map. No frontmatter, or an
