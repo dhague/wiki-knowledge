@@ -20,6 +20,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
+import { CHECKS, FIXES } from "./check.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -121,6 +122,133 @@ test("the portable skill text names no host, tool, model or install path", () =>
       );
     }
   }
+});
+
+/**
+ * Every markdown file the plugin ships as directions to an agent — each
+ * skill's `SKILL.md` and its `reference/` files, plus the subagent briefs.
+ * All of them name checks, so the vocabulary guard reads all of them.
+ */
+function pluginProse(): Array<{ label: string; text: string }> {
+  const docs: Array<{ label: string; text: string }> = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(abs);
+      else if (entry.name.endsWith(".md")) {
+        docs.push({
+          label: path.relative(repoRoot, abs),
+          text: readFileSync(abs, "utf8"),
+        });
+      }
+    }
+  };
+  walk(skillsDir);
+  walk(path.join(repoRoot, "wiki-plugin", "agents"));
+  return docs.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+test("plugin prose references every check by slug, never by number", () => {
+  // Two numbering systems — the registry's registration order and wiki-lint's
+  // catalogue 1–16 — coincided only up to 10 and diverged after, so a bare
+  // number stopped saying which check it meant (#571). A number is always a
+  // bug now; the slug is the only spelling.
+  const numbered = /\bchecks?\s+\d+/i;
+  for (const { label, text } of pluginProse()) {
+    const match = numbered.exec(text);
+    assert.equal(
+      match,
+      null,
+      `${label}: "${match?.[0]}" references a check by number — name its slug instead`,
+    );
+  }
+});
+
+/** A check invoked as a command — `check <slug> --json`. The one shape that
+ * tracks the CLI spelling, shared by the guard and the run-block test. */
+const CHECK_COMMAND = /\bcheck\s+([a-z][a-z0-9-]*)\s+--json/g;
+
+/**
+ * Every shape plugin prose names a check by slug: the command above, the slug
+ * beside the word ("the `split-links` check", "check `split-links`"), and a
+ * heading's parenthetical ("**Split links (`split-links`):**"). A bare slug in
+ * running prose is deliberately not one — it cannot be told apart from the
+ * plugin's other kebab-case vocabulary.
+ */
+const CHECK_SPELLINGS = [
+  CHECK_COMMAND,
+  /\bchecks?\s+`([a-z][a-z0-9-]*)`/gi,
+  /`([a-z][a-z0-9-]*)`\s+checks?\b/gi,
+  /\*\*[^*\n]+\s\(`([a-z][a-z0-9-]+)`\):\*\*/g,
+];
+
+/** Every shape prose names a fix by slug: the run-block command and the
+ * backticked form in running prose. Fixes are a registry of their own — a fix
+ * slug need not be a check slug (`missing-cross-references` is not). */
+const FIX_SPELLINGS = [
+  /"\$ENCHIRIDION"\s+fix\s+([a-z][a-z0-9-]*)/g,
+  /`fix\s+([a-z][a-z0-9-]*)`/g,
+  /\bfix\s+`([a-z][a-z0-9-]*)`/g,
+];
+
+test("every check slug named in plugin prose resolves to a registry key", () => {
+  // A judgment check has no CHECKS entry — its durable spelling is the fix
+  // registry's (`missing-cross-references`), so both count as a check name.
+  const keys = new Set([...Object.keys(CHECKS), ...Object.keys(FIXES)]);
+  for (const { label, text } of pluginProse()) {
+    for (const pattern of CHECK_SPELLINGS) {
+      for (const match of text.matchAll(pattern)) {
+        assert.ok(
+          keys.has(match[1]),
+          `${label}: "${match[1]}" is named as a check but is not a CHECKS or FIXES key`,
+        );
+      }
+    }
+  }
+});
+
+test("every fix slug named in plugin prose is a FIXES key", () => {
+  const keys = new Set(Object.keys(FIXES));
+  for (const { label, text } of pluginProse()) {
+    for (const pattern of FIX_SPELLINGS) {
+      for (const match of text.matchAll(pattern)) {
+        assert.ok(
+          keys.has(match[1]),
+          `${label}: "${match[1]}" is named as a fix but is not a FIXES key`,
+        );
+      }
+    }
+  }
+});
+
+test("wiki-lint's run block runs every CHECKS key, exactly once", () => {
+  const text = readFileSync(
+    path.join(skillsDir, "wiki-lint", "SKILL.md"),
+    "utf8",
+  );
+  const listed = [...text.matchAll(CHECK_COMMAND)]
+    .map((match) => match[1])
+    .sort();
+  assert.deepEqual(
+    listed,
+    Object.keys(CHECKS).sort(),
+    "wiki-lint/SKILL.md must run every CHECKS key, by slug, exactly once",
+  );
+});
+
+test("wiki-lint's catalogue keys every CHECKS check by slug", () => {
+  const text = readFileSync(
+    path.join(skillsDir, "wiki-lint", "SKILL.md"),
+    "utf8",
+  );
+  const listed = [...text.matchAll(/^\|\s*`([a-z][a-z0-9-]+)`\s*\|/gm)]
+    .map((match) => match[1])
+    .sort();
+  assert.deepEqual(
+    listed,
+    Object.keys(CHECKS).sort(),
+    "wiki-lint/SKILL.md's catalogue must key every CHECKS check by slug",
+  );
 });
 
 test("wiki-watch still drives the watch subcommand it orchestrates", () => {

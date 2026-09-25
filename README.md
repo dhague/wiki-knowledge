@@ -88,7 +88,7 @@ needs author judgment), or **confirm-first** (a proposed change you approve or
 skip — a page move, an edge retype, an orphan delete, or a concept
 consolidation).
 
-A concept consolidation (check 10) is proposed one cluster at a time and never
+A concept consolidation (`concept-fragmentation` check) is proposed one cluster at a time and never
 batched, because it deletes committed pages: on yes it hands off to the
 `wiki-ingest` procedure, which reads every member and authors the merged
 survivor.

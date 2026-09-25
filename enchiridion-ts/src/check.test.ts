@@ -2,9 +2,9 @@
  * Tests for the ten mechanical vault health checks.
  *
  * Strategy: build minimal on-disk vault fixtures with writeVault(); for
- * staleSynthesis (check 4) also initialise a real git repo so that
+ * staleSynthesis also initialise a real git repo so that
  * VaultGit.lastCommitDate can return a controlled past/recent date, and for
- * conceptFragmentation (check 10) commit the fixture so the search index —
+ * conceptFragmentation commit the fixture so the search index —
  * a view of HEAD (ADR-0015) — has pages to score.
  */
 
@@ -88,10 +88,10 @@ async function gitCommit(root: string, timestamp: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Check 1 — kindFolderConformance
+// kindFolderConformance
 // ---------------------------------------------------------------------------
 
-test("check 1: clean vault returns no findings", async () => {
+test("kind-folder-conformance: clean vault returns no findings", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo"),
     "wiki/entities/bar.md": page("Bar"),
@@ -100,7 +100,7 @@ test("check 1: clean vault returns no findings", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 1: page at wiki root is a violation", async () => {
+test("kind-folder-conformance: page at wiki root is a violation", async () => {
   const root = writeVault({
     "wiki/stray.md": page("Stray"),
     "wiki/concepts/ok.md": page("OK"),
@@ -111,7 +111,7 @@ test("check 1: page at wiki root is a violation", async () => {
   assert.match(findings[0].detail, /wiki\/ root/);
 });
 
-test("check 1: page nested below kind-folder is a violation", async () => {
+test("kind-folder-conformance: page nested below kind-folder is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/sub/deep.md": page("Deep"),
   });
@@ -121,7 +121,7 @@ test("check 1: page nested below kind-folder is a violation", async () => {
   assert.match(findings[0].detail, /nested/);
 });
 
-test("check 1: KIND.md is excluded from findings", async () => {
+test("kind-folder-conformance: KIND.md is excluded from findings", async () => {
   const root = writeVault({
     "wiki/decisions/KIND.md": "---\nkind: decision\nsummary: s\n---\n",
     "wiki/decisions/my-decision.md": page("My Decision"),
@@ -130,7 +130,7 @@ test("check 1: KIND.md is excluded from findings", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 1: wiki/_index.md is excluded from findings", async () => {
+test("kind-folder-conformance: wiki/_index.md is excluded from findings", async () => {
   const root = writeVault({
     "wiki/_index.md": "generated\n",
     "wiki/concepts/foo.md": page("Foo"),
@@ -139,7 +139,7 @@ test("check 1: wiki/_index.md is excluded from findings", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 1: page in custom kind-folder is NOT a violation", async () => {
+test("kind-folder-conformance: page in custom kind-folder is NOT a violation", async () => {
   const root = writeVault({
     "wiki/decisions/my-decision.md": page("My Decision"),
   });
@@ -148,10 +148,10 @@ test("check 1: page in custom kind-folder is NOT a violation", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Check 2 — ingestionSourceIntegrity
+// ingestionSourceIntegrity
 // ---------------------------------------------------------------------------
 
-test("check 2: source page with raw_source is clean", async () => {
+test("ingestion-source-integrity: source page with raw_source is clean", async () => {
   const root = writeVault({
     "wiki/sources/doc.md": page(
       "Doc",
@@ -162,7 +162,7 @@ test("check 2: source page with raw_source is clean", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 2: source page missing raw_source is a violation", async () => {
+test("ingestion-source-integrity: source page missing raw_source is a violation", async () => {
   const root = writeVault({
     "wiki/sources/doc.md": page("Doc"),
   });
@@ -172,7 +172,7 @@ test("check 2: source page missing raw_source is a violation", async () => {
   assert.match(findings[0].detail, /raw_source/);
 });
 
-test("check 2: concept page without raw_source is NOT a violation", async () => {
+test("ingestion-source-integrity: concept page without raw_source is NOT a violation", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo"),
   });
@@ -181,10 +181,10 @@ test("check 2: concept page without raw_source is NOT a violation", async () => 
 });
 
 // ---------------------------------------------------------------------------
-// Check 3 — frontmatterLinkFormat
+// frontmatterLinkFormat
 // ---------------------------------------------------------------------------
 
-test("check 3: properly quoted and encoded links are clean", async () => {
+test("frontmatter-link-format: properly quoted and encoded links are clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -196,7 +196,7 @@ test("check 3: properly quoted and encoded links are clean", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 3: unquoted list item link is a violation", async () => {
+test("frontmatter-link-format: unquoted list item link is a violation", async () => {
   const root = writeVault({
     // YAML parses "- [Bar](...)" as a sequence, not a link string
     "wiki/concepts/foo.md":
@@ -215,7 +215,7 @@ test("check 3: unquoted list item link is a violation", async () => {
 // check reported it, it was the one malformation no check named: every
 // record-reading check threw and printed nothing, and a JSON-Lines consumer
 // read the silence as "clean".
-test("check 3: an edge value that is not a markdown link is a finding", async () => {
+test("frontmatter-link-format: an edge value that is not a markdown link is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/a.md": page("A"),
     "wiki/concepts/b.md": page("B", "related:\n  - wiki/concepts/a.md\n"),
@@ -229,7 +229,7 @@ test("check 3: an edge value that is not a markdown link is a finding", async ()
   ]);
 });
 
-test("check 3: a non-string edge entry is a finding", async () => {
+test("frontmatter-link-format: a non-string edge entry is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/b.md": page("B", "related:\n  - 42\n"),
   });
@@ -246,7 +246,7 @@ test("check 3: a non-string edge entry is a finding", async () => {
 // frontmatter relationship link is the same link form as a body link, anchors
 // included. The `#` introducing an anchor is written literally; a literal `#`
 // *inside a filename* is spelled `%23`.
-test("check 3: frontmatter destination carrying a genuine anchor is clean", async () => {
+test("frontmatter-link-format: frontmatter destination carrying a genuine anchor is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -258,7 +258,7 @@ test("check 3: frontmatter destination carrying a genuine anchor is clean", asyn
   assert.deepEqual(findings, []);
 });
 
-test("check 3: an unencoded # is the anchor separator, not a filename character", async () => {
+test("frontmatter-link-format: an unencoded # is the anchor separator, not a filename character", async () => {
   // Asking for `%23` here was the inversion: it read a legal heading link as a
   // filename and reported it, and the fix then wrote a dangling `%23ttl`.
   const root = writeVault({
@@ -271,7 +271,7 @@ test("check 3: an unencoded # is the anchor separator, not a filename character"
   assert.deepEqual(findings, []);
 });
 
-test("check 3: %23 in a filename destination is the encoded spelling, and clean", async () => {
+test("frontmatter-link-format: %23 in a filename destination is the encoded spelling, and clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -282,7 +282,7 @@ test("check 3: %23 in a filename destination is the encoded spelling, and clean"
   assert.deepEqual(findings, []);
 });
 
-test("check 3: an anchor is no hiding place for an unencoded path", async () => {
+test("frontmatter-link-format: an anchor is no hiding place for an unencoded path", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -303,7 +303,7 @@ test("check 3: an anchor is no hiding place for an unencoded path", async () => 
   );
 });
 
-test("check 3: a folded destination is checked, not skipped", async () => {
+test("frontmatter-link-format: a folded destination is checked, not skipped", async () => {
   // Before the fold was joined, this link was invisible to the raw-text scan
   // and its unencoded parens went unreported.
   const root = writeVault({
@@ -320,7 +320,7 @@ test("check 3: a folded destination is checked, not skipped", async () => {
   );
 });
 
-test("check 3: a boundary fold does not hide an unencoded destination", async () => {
+test("frontmatter-link-format: a boundary fold does not hide an unencoded destination", async () => {
   // #550: the link was invisible to the raw-text scan, so its unencoded parens
   // went unreported — the same blindness that hid the destination fold.
   const root = writeVault({
@@ -339,7 +339,7 @@ test("check 3: a boundary fold does not hide an unencoded destination", async ()
   );
 });
 
-test("check 3: an unquoted boundary-shaped line is reported once, not twice", async () => {
+test("frontmatter-link-format: an unquoted boundary-shaped line is reported once, not twice", async () => {
   // A plain scalar is not a link: YAML folds the break to a space and keeps
   // the backslash, so `[A]\ (…)` is literal. The scan is quote-blind and does
   // match the boundary shape, so the unquoted-line suppression has to key on
@@ -361,10 +361,10 @@ test("check 3: an unquoted boundary-shaped line is reported once, not twice", as
 });
 
 // ---------------------------------------------------------------------------
-// Check 4 — staleSynthesis (requires real git)
+// staleSynthesis — requires real git
 // ---------------------------------------------------------------------------
 
-test("check 4: synthesis page committed recently is clean", async () => {
+test("stale-synthesis: synthesis page committed recently is clean", async () => {
   const root = writeVault({
     "wiki/synthesis/recent.md": page(
       "Recent",
@@ -377,7 +377,7 @@ test("check 4: synthesis page committed recently is clean", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 4: synthesis page committed >30 days ago is a violation", async () => {
+test("stale-synthesis: synthesis page committed >30 days ago is a violation", async () => {
   const root = writeVault({
     "wiki/synthesis/old.md": page("Old"),
   });
@@ -389,7 +389,7 @@ test("check 4: synthesis page committed >30 days ago is a violation", async () =
   assert.match(findings[0].detail, /days ago/);
 });
 
-test("check 4: concept page >30 days old is NOT a violation", async () => {
+test("stale-synthesis: concept page >30 days old is NOT a violation", async () => {
   const root = writeVault({
     "wiki/concepts/old-concept.md": page("Old Concept"),
   });
@@ -400,10 +400,10 @@ test("check 4: concept page >30 days old is NOT a violation", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Check 5 — missingVolatilitySourceDate
+// missingVolatilitySourceDate
 // ---------------------------------------------------------------------------
 
-test("check 5: page with both fields is clean", async () => {
+test("missing-volatility-source-date: page with both fields is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -414,7 +414,7 @@ test("check 5: page with both fields is clean", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 5: page missing volatility is a violation", async () => {
+test("missing-volatility-source-date: page missing volatility is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "source_date: 2026-01-01\n"),
   });
@@ -423,7 +423,7 @@ test("check 5: page missing volatility is a violation", async () => {
   assert.match(findings[0].detail, /volatility/);
 });
 
-test("check 5: page missing source_date is a violation", async () => {
+test("missing-volatility-source-date: page missing source_date is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "volatility: stable\n"),
   });
@@ -435,7 +435,7 @@ test("check 5: page missing source_date is a violation", async () => {
 // #549: a malformed edge on one page must not suppress every other page's
 // findings. The malformed page still reports its own — the rest of its
 // frontmatter decoded fine — so the run carries on instead of aborting empty.
-test("check 5: a malformed edge does not abort the run", async () => {
+test("missing-volatility-source-date: a malformed edge does not abort the run", async () => {
   const root = writeVault({
     "wiki/concepts/a-missing-both.md": page("A"),
     "wiki/concepts/b-malformed.md": page(
@@ -465,14 +465,14 @@ test("check 5: a malformed edge does not abort the run", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Check 6 — unresolvedSupersession
+// unresolvedSupersession
 // ---------------------------------------------------------------------------
 
 const contradictsFm = 'contradicts:\n  - "[Bar](../entities/bar.md)"\n';
 const supersedesFm = 'supersedes:\n  - "[Old Bar](../entities/old-bar.md)"\n';
 const calloutBody = "> [!warning] Contradiction\nSome conflict noted.\n";
 
-test("check 6: contradicts + supersedes is clean", async () => {
+test("unresolved-supersession: contradicts + supersedes is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", contradictsFm + supersedesFm),
   });
@@ -480,7 +480,7 @@ test("check 6: contradicts + supersedes is clean", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 6: contradicts + no supersedes + active callout is clean (live contradiction, check 7's domain)", async () => {
+test("unresolved-supersession: contradicts + no supersedes + active callout is clean (live contradiction, `contradiction-callouts`' domain)", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", contradictsFm, calloutBody),
   });
@@ -488,7 +488,7 @@ test("check 6: contradicts + no supersedes + active callout is clean (live contr
   assert.deepEqual(findings, []);
 });
 
-test("check 6: contradicts + no supersedes + no callout is a violation", async () => {
+test("unresolved-supersession: contradicts + no supersedes + no callout is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", contradictsFm),
   });
@@ -499,10 +499,10 @@ test("check 6: contradicts + no supersedes + no callout is a violation", async (
 });
 
 // ---------------------------------------------------------------------------
-// Check 7 — contradictionCallouts
+// contradictionCallouts
 // ---------------------------------------------------------------------------
 
-test("check 7: page without callout is clean", async () => {
+test("contradiction-callouts: page without callout is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo"),
   });
@@ -510,7 +510,7 @@ test("check 7: page without callout is clean", async () => {
   assert.deepEqual(findings, []);
 });
 
-test("check 7: page with active Contradiction callout is a violation", async () => {
+test("contradiction-callouts: page with active Contradiction callout is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "", calloutBody),
   });
@@ -520,10 +520,10 @@ test("check 7: page with active Contradiction callout is a violation", async () 
 });
 
 // ---------------------------------------------------------------------------
-// Check 8 — orphans
+// orphans
 // ---------------------------------------------------------------------------
 
-test("check 8: page with inbound link is clean", async () => {
+test("orphans: page with inbound link is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "", "[Bar](../entities/bar.md)\n"),
     "wiki/entities/bar.md": page("Bar"),
@@ -533,7 +533,7 @@ test("check 8: page with inbound link is clean", async () => {
   assert.ok(!findings.some((f) => f.pageRef === "wiki/entities/bar.md"));
 });
 
-test("check 8: page with zero inbound links is a violation", async () => {
+test("orphans: page with zero inbound links is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/lonely.md": page("Lonely"),
   });
@@ -542,7 +542,7 @@ test("check 8: page with zero inbound links is a violation", async () => {
   assert.equal(findings[0].pageRef, "wiki/concepts/lonely.md");
 });
 
-test("check 8: frontmatter edge counts as inbound link", async () => {
+test("orphans: frontmatter edge counts as inbound link", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -554,7 +554,7 @@ test("check 8: frontmatter edge counts as inbound link", async () => {
   assert.ok(!findings.some((f) => f.pageRef === "wiki/entities/bar.md"));
 });
 
-test("check 8: folded frontmatter edge counts as inbound link", async () => {
+test("orphans: folded frontmatter edge counts as inbound link", async () => {
   // The writer folds a destination that outgrows the line width with a
   // trailing backslash (YAML escaped line break), which is exactly what
   // `enchiridion ingest` and `enchiridion page merge` emit for a long slug.
@@ -577,7 +577,7 @@ test("check 8: folded frontmatter edge counts as inbound link", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Check 9 — splitLinks
+// splitLinks
 // ---------------------------------------------------------------------------
 //
 // Every fixture here is hand-written: the writer emits no fold at all since
@@ -585,7 +585,7 @@ test("check 8: folded frontmatter edge counts as inbound link", async () => {
 // folded page is to write the bytes by hand — which is also the shape every
 // page written before that ADR carries.
 
-test("check 9: folded destination is a finding", async () => {
+test("split-links: folded destination is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -605,7 +605,7 @@ test("check 9: folded destination is a finding", async () => {
   );
 });
 
-test("check 9: folded label is a finding", async () => {
+test("split-links: folded label is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -619,7 +619,7 @@ test("check 9: folded label is a finding", async () => {
   assert.match(findings[0].detail, /RBWM Council Political Composition/);
 });
 
-test("check 9: a fold between label and destination is a finding", async () => {
+test("split-links: a fold between label and destination is a finding", async () => {
   // #550's third shape: the break falls at the label/destination boundary,
   // which the parser resolves with nothing (`"]\⏎  ("` reads as `"]("`).
   const root = writeVault({
@@ -636,7 +636,7 @@ test("check 9: a fold between label and destination is a finding", async () => {
   assert.match(findings[0].detail, /line 4/);
 });
 
-test("check 9: a boundary fold does not mask a fold in the destination", async () => {
+test("split-links: a boundary fold does not mask a fold in the destination", async () => {
   // The field shape (#550): one link carrying both, which the missing link
   // match hid entirely — `check split-links` certified a three-line link clean.
   const root = writeVault({
@@ -651,7 +651,7 @@ test("check 9: a boundary fold does not mask a fold in the destination", async (
   assert.ok(findings.some((f) => /destination/.test(f.detail)));
 });
 
-test("check 9: a well-formed link on one line is not a finding", async () => {
+test("split-links: a well-formed link on one line is not a finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -662,7 +662,7 @@ test("check 9: a well-formed link on one line is not a finding", async () => {
   assert.deepEqual(await splitLinks(root), []);
 });
 
-test("check 9: a fold inside a block scalar is not a finding", async () => {
+test("split-links: a fold inside a block scalar is not a finding", async () => {
   // The documented blind spot (wikipage.ts, `ESCAPED_LINE_BREAK_RE`): a `\` at
   // the end of a literal block scalar is content, not a fold, and raw text
   // cannot tell the two apart. It must not be reported — and, above all, not
@@ -680,7 +680,7 @@ test("check 9: a fold inside a block scalar is not a finding", async () => {
   assert.deepEqual(await splitLinks(root), []);
 });
 
-test("check 9: a fold inside a single-quoted scalar is not a finding", async () => {
+test("split-links: a fold inside a single-quoted scalar is not a finding", async () => {
   // A single-quoted scalar folds a line break to a space but keeps a `\`
   // literal, so joining there is not semantics-preserving either. Only
   // double-quoted scalars are in scope.
@@ -693,7 +693,7 @@ test("check 9: a fold inside a single-quoted scalar is not a finding", async () 
   assert.deepEqual(await splitLinks(root), []);
 });
 
-test("check 9: body destination split across a line break is a finding", async () => {
+test("split-links: body destination split across a line break is a finding", async () => {
   // Not a link at all under CommonMark — a destination cannot span lines — so
   // `iterLinks` never sees it and `vault move` would leave it dangling.
   const root = writeVault({
@@ -711,7 +711,7 @@ test("check 9: body destination split across a line break is a finding", async (
   assert.match(findings[0].detail, /line 4/);
 });
 
-test("check 9: a break after a destination is legal markdown, not a finding", async () => {
+test("split-links: a break after a destination is legal markdown, not a finding", async () => {
   // `[T](path.md` / `"title")` is a legal link, and the one shape a fixer
   // joining on sight would silently repoint.
   const root = writeVault({
@@ -724,7 +724,7 @@ test("check 9: a break after a destination is legal markdown, not a finding", as
   assert.deepEqual(await splitLinks(root), []);
 });
 
-test("check 9: a split inside a fenced code block is not a finding", async () => {
+test("split-links: a split inside a fenced code block is not a finding", async () => {
   // `iterLinks` skips code blocks; a split destination there is not a link
   // either, so reporting it would be noise no reader shares.
   const root = writeVault({
@@ -1167,7 +1167,7 @@ test("FIXES registry contains all four fix names", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Check 10 — conceptFragmentation
+// conceptFragmentation
 // ---------------------------------------------------------------------------
 
 /** Minimal page with tags, for the fragmentation fixtures. */
@@ -1245,7 +1245,7 @@ function memberRefs(findings: Findings): string[] {
   );
 }
 
-test("check 10: clusters closely-related concept pages at the default bar", async () => {
+test("concept-fragmentation: clusters closely-related concept pages at the default bar", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   const findings = await conceptFragmentation(root);
 
@@ -1262,7 +1262,7 @@ test("check 10: clusters closely-related concept pages at the default bar", asyn
   );
 });
 
-test("check 10: a finding carries member sizes, inbound counts, basis and a survivor", async () => {
+test("concept-fragmentation: a finding carries member sizes, inbound counts, basis and a survivor", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   const cluster = clusterWith(
     await conceptFragmentation(root),
@@ -1293,7 +1293,7 @@ test("check 10: a finding carries member sizes, inbound counts, basis and a surv
   assert.ok(Math.abs(cluster.similarity - 0.6) < 1e-9);
 });
 
-test("check 10: custom-kind pages are in scope", async () => {
+test("concept-fragmentation: custom-kind pages are in scope", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   const cluster = clusterWith(
     await conceptFragmentation(root),
@@ -1305,7 +1305,7 @@ test("check 10: custom-kind pages are in scope", async () => {
   );
 });
 
-test("check 10: entity, source and synthesis pages are never members", async () => {
+test("concept-fragmentation: entity, source and synthesis pages are never members", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   // At 0.3 every in-scope near-duplicate is clustered, so an excluded kind
   // leaking in would show up here.
@@ -1319,7 +1319,7 @@ test("check 10: entity, source and synthesis pages are never members", async () 
   assert.ok(memberRefs(findings).includes("wiki/concepts/cache-eviction.md"));
 });
 
-test("check 10: --min-similarity moves the Consolidation/link boundary", async () => {
+test("concept-fragmentation: --min-similarity moves the Consolidation/link boundary", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
 
   const byDefault = memberRefs(await conceptFragmentation(root));
@@ -1343,7 +1343,7 @@ test("check 10: --min-similarity moves the Consolidation/link boundary", async (
   assert.ok(relaxed.includes("wiki/concepts/latency.md"));
 });
 
-test("check 10: detection is a view of HEAD — an uncommitted draft is invisible", async () => {
+test("concept-fragmentation: detection is a view of HEAD — an uncommitted draft is invisible", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   fs.writeFileSync(
     path.join(root, "wiki/concepts/cache-eviction-draft.md"),
@@ -1354,7 +1354,7 @@ test("check 10: detection is a view of HEAD — an uncommitted draft is invisibl
   assert.ok(refs.includes("wiki/concepts/cache-eviction.md"));
 });
 
-test("check 10: a vault with no clusters is silent", async () => {
+test("concept-fragmentation: a vault with no clusters is silent", async () => {
   const root = await writeCommittedVault({
     "wiki/concepts/alpha.md": taggedPage("Alpha", ["one"]),
     "wiki/concepts/beta.md": taggedPage("Beta", ["two"]),

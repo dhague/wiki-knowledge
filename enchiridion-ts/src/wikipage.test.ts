@@ -268,7 +268,7 @@ describe("iterLinks", () => {
     // The third fold shape (#550): the break falls between `]` and `(`. A YAML
     // reader resolves `"]\⏎  ("` to `"]("`, so this is one link — but a matcher
     // demanding `](` adjacency yielded nothing, which blinded every raw-text
-    // scan: check 3 missed its encoding and check 9 could not join it.
+    // scan: `frontmatter-link-format` missed its encoding and `split-links` could not join it.
     const fm = 'related:\n  - "[A missing both]\\\n    (a-missing-both.md)"\n';
     const links = iterLinks(fm);
     assert.equal(links.length, 1);

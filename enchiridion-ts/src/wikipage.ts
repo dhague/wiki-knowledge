@@ -304,7 +304,7 @@ export function iterLinks(src: string): LinkMatch[] {
     }
     // Anchored on the opening bracket, not the destination: a boundary fold
     // puts the destination a line later, and every line-keyed reader — the
-    // code-block skip, `check 3`'s unquoted-line suppression — means the line
+    // code-block skip, `frontmatter-link-format`'s unquoted-line suppression — means the line
     // the link begins on.
     const fullStart = m.index!;
     const line = lineOf(src, fullStart);
