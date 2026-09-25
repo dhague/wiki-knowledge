@@ -835,14 +835,18 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
           title: "Doc",
           kind: "source",
           body: "stub body\n",
-          frontmatter: { summary: "the doc", raw_source: true },
+          frontmatter: {
+            summary: "the doc",
+            raw_source: true,
+            volatility: "stable",
+          },
         },
         {
           op: "create",
           title: "Prepared Statements",
           kind: "concept",
           body: "page body\n",
-          frontmatter: { summary: "s" },
+          frontmatter: { summary: "s", volatility: "stable" },
           edges: { source: ["wiki/sources/doc.md"] },
         },
         {
@@ -885,6 +889,78 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
     },
   );
   assert.equal(logStatus, 0);
+});
+
+// #561: the documented flow must leave a vault the documented check passes.
+// Ingest a minimal plan whose pages carry no `source_date` of their own, then
+// run `check missing-volatility-source-date` over what it committed — the
+// writer and the checker must not disagree about a fresh vault.
+test("ingest: a freshly ingested vault is clean under missing-volatility-source-date", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-clean-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  const signature = {
+    name: "test",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.init({ fs, dir: root });
+  fs.mkdirSync(path.join(root, "raw"), { recursive: true });
+  fs.writeFileSync(path.join(root, "raw", "doc.md"), "raw\n");
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "seed",
+    author: signature,
+    committer: signature,
+  });
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "Deploy notes",
+      source_date: "2026-03-01",
+      raw: "raw/doc.md",
+      pages: [
+        {
+          op: "create",
+          title: "Doc",
+          kind: "source",
+          body: "stub body\n",
+          frontmatter: {
+            summary: "the doc",
+            raw_source: true,
+            volatility: "stable",
+          },
+        },
+        {
+          op: "create",
+          title: "Prepared Statements",
+          kind: "concept",
+          body: "page body\n",
+          frontmatter: { summary: "s", volatility: "stable" },
+          edges: { source: ["wiki/sources/doc.md"] },
+        },
+      ],
+    }),
+  );
+
+  const ingested = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.equal(ingested.status, 0, ingested.stderr);
+
+  const { status, stdout, stderr } = runEnv(
+    ["check", "missing-volatility-source-date", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout.trim(), "");
 });
 
 test("ingest: a consolidate plan absorbs, deletes and commits once", async () => {
@@ -1035,7 +1111,15 @@ test("ingest: --dry-run prints the describe, writes nothing", async () => {
     planPath,
     JSON.stringify({
       title: "T",
-      pages: [{ op: "create", title: "A", kind: "concept", body: "b\n" }],
+      pages: [
+        {
+          op: "create",
+          title: "A",
+          kind: "concept",
+          body: "b\n",
+          frontmatter: { volatility: "stable" },
+        },
+      ],
     }),
   );
 

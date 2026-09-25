@@ -33,6 +33,17 @@
  * courtesy to the agent — [commit.commit] re-runs it as the hard gate, so a
  * hand-built manifest can't route around validation into history.
  *
+ * **Two frontmatter fields are this module's to guarantee, not the agent's to
+ * forget** (#561). A page that omits `source_date` inherits the plan's
+ * top-level [Plan.source_date] — "the document's own date, not today's" — so a
+ * plan that carries a date cannot write a page the `missing-volatility-
+ * source-date` check reports for one; a page's own value (or, on an update,
+ * the one already on disk) wins, and a plan without a date inherits nothing.
+ * `volatility` is authored judgment that cannot be derived, so validation
+ * requires it — within [Volatilities], the schema's domain — on every `create`
+ * and on any `update` that supplies a `frontmatter` map — a body-only update
+ * leaves the existing block, and the value already on disk, alone.
+ *
  * Ingestion isn't the only caller: wiki-ask's confirmed synthesis-page
  * save is the same shape (one `create` of kind `synthesis`, `source` edges,
  * no raw artifact) and passes `action: "synthesize"` so the history
@@ -74,6 +85,7 @@ import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
+import { Volatilities } from "./pagerecord.js";
 
 /** Caps a full path (vault root plus vault-relative path), for Windows'
  * 255-char limit (#70). */
@@ -375,6 +387,36 @@ export class Resolved {
         if (parseSourceDate(sourceDate.value) === null) {
           problems.push(
             `${prefix}.frontmatter.source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(sourceDate.value)}`,
+          );
+        }
+      }
+
+      // `volatility` is a required schema field and the `missing-volatility-
+      // source-date` check reports a page without one, so a plan must not
+      // write one (#561). A create always projects fresh frontmatter; an
+      // update does so whenever it supplies a `frontmatter` map — a
+      // body-only update leaves the existing block alone, and the value on
+      // disk (if any) stands. Null and "" read as absent, like source_date.
+      const rewritesFrontmatter =
+        page.op === OpCreate || page.frontmatter.length() > 0;
+      if (rewritesFrontmatter) {
+        const volatility = page.frontmatter.get("volatility");
+        const missing =
+          !volatility.ok ||
+          volatility.value === null ||
+          String(volatility.value).trim() === "";
+        if (missing) {
+          problems.push(`${prefix}.frontmatter.volatility is required`);
+        } else if (
+          !(Volatilities as readonly string[]).includes(
+            String(volatility.value),
+          )
+        ) {
+          // Presence alone is not the field: a value outside the schema's
+          // domain writes a page `search --volatility` can never match. The
+          // domain itself lives in [Volatilities], the schema's one owner.
+          problems.push(
+            `${prefix}.frontmatter.volatility must be one of ${Volatilities.join("|")}, got ${String(volatility.value)}`,
           );
         }
       }
@@ -899,6 +941,15 @@ function applyFrontmatter(
     } else {
       page = page.set(key, v_);
     }
+  }
+
+  // A page that still omits `source_date` inherits the plan's top-level value
+  // — "the document's own date, not today's" — so the writer never emits a
+  // page the `missing-volatility-source-date` check reports (#561). A value
+  // already on the page wins: the plan's own for either op, or the one an
+  // update loaded from disk.
+  if (page.getString("source_date") === "" && plan.source_date !== "") {
+    page = page.set("source_date", plan.source_date);
   }
 
   for (const [key, refs] of planPage.edges.all()) {

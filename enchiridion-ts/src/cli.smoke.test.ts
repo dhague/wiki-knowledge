@@ -283,14 +283,18 @@ test(
             title: "Doc",
             kind: "source",
             body: "stub body\n",
-            frontmatter: { summary: "the doc", raw_source: true },
+            frontmatter: {
+              summary: "the doc",
+              raw_source: true,
+              volatility: "stable",
+            },
           },
           {
             op: "create",
             title: "Prepared Statements",
             kind: "concept",
             body: "page body\n",
-            frontmatter: { summary: "s" },
+            frontmatter: { summary: "s", volatility: "stable" },
             edges: { source: ["wiki/sources/doc.md"] },
           },
           {
