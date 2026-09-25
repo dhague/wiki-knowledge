@@ -1373,10 +1373,10 @@ describe("consolidation preserves every link target", () => {
 // normalises the quote style and is never byte-identical.
 //
 // `tags` is deliberately absent: it is list-valued, so a scalar Set on it is
-// not a no-op shape — the writer wraps the value in a one-element list (#575),
-// which a round-trip comparison would read as the writer's bug rather than the
-// rule. `source` is a *list* edge key and stays only as a non-first key, where
-// the property below compares it as a value rather than re-setting it.
+// not the no-op shape this property is about — the writer wraps the value in a
+// one-element list (#575). `source` is a list *edge* key, but the writer
+// normalises no edge key, so a scalar Set on it stays the scalar it was and the
+// round trip below still holds.
 const FM_KEYS = ["title", "summary", "volatility", "source"];
 const FM_VALUES = [
   "deploy",

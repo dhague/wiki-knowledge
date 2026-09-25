@@ -311,13 +311,16 @@ test("page merge: unions values into a list-valued key", () => {
 // #575: `page set <file> tags <value>` without `--json` wrote the value as a
 // YAML scalar, which `stringList` reads as no tags at all — the page silently
 // vanished from every tag-filtered search, discover and check. These pin the
-// list-valued-key contract: one bare value becomes a one-element list, `--json`
-// carries a list, and a non-list `--json` value is refused rather than written.
+// list-valued-key contract: one bare value becomes a one-element list, a list
+// arrives as `--json` — or as the JSON-array text `page merge` already takes
+// with no flag — and a value that is neither is refused rather than written.
 
 test("page set: writes a bare tags value as a one-element list", () => {
   const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
   const { status, stderr } = run(["page", "set", file, "tags", "alpha"]);
   assert.equal(status, 0, stderr);
+  const { stdout } = run(["page", "get", file, "tags"]);
+  assert.equal(stdout.trim(), "['alpha']");
   assert.equal(
     fs.readFileSync(file, "utf8"),
     "---\ntitle: A\ntags:\n  - alpha\n---\nbody\n",
@@ -335,10 +338,36 @@ test("page set: writes a --json tags array as a list", () => {
     "--json",
   ]);
   assert.equal(status, 0, stderr);
+  const { stdout } = run(["page", "get", file, "tags"]);
+  assert.equal(stdout.trim(), "['a', 'b']");
   assert.equal(
     fs.readFileSync(file, "utf8"),
     "---\ntitle: A\ntags:\n  - a\n  - b\n---\nbody\n",
   );
+});
+
+test("page set: reads a bare JSON-array value as the list, no flag needed", () => {
+  // The trap the issue names: `page merge` takes a JSON list with no flag, so
+  // a caller reusing that shape on `page set` used to write one scalar — and
+  // now would write one literal `["a","b"]` tag if the shape went unread.
+  const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
+  const { status, stderr } = run(["page", "set", file, "tags", '["a", "b"]']);
+  assert.equal(status, 0, stderr);
+  const { stdout } = run(["page", "get", file, "tags"]);
+  assert.equal(stdout.trim(), "['a', 'b']");
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    "---\ntitle: A\ntags:\n  - a\n  - b\n---\nbody\n",
+  );
+});
+
+test("page set: refuses JSON-array text that does not parse", () => {
+  const before = "---\ntitle: A\ntags: []\n---\nbody\n";
+  const file = writeTempPage(before, "");
+  const { status, stderr } = run(["page", "set", file, "tags", '["a",]']);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /does not parse/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
 });
 
 test("page set: a --json string for tags is still the one-element list", () => {

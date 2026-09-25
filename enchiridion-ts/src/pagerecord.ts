@@ -5,6 +5,15 @@
  * frontmatter goes through here rather than re-parsing keys, so the schema
  * changes in exactly one place.
  *
+ * **The reading half.** The *shape* a key's value must take is canonicalised on
+ * the way to disk, in `wikipage.ts` — one rule per shape, applied by
+ * [Page.set] because that is where frontmatter bytes are produced, so no
+ * caller can skip them: `source_date`'s one spelling (#499), a markdown link
+ * for an edge key (#548), and the one-element list a scalar becomes for a
+ * list-valued key (#575). This module owns the other direction, and reads
+ * leniently what a page already carries — which is why the writer's list is a
+ * writer fact (`wikipage.isStringListKey`), not a second schema here.
+ *
  * Every path this module touches is vault-relative — a page reference
  * (`wiki/concepts/a.md`), ADR-0009. Kind is derived from the page's folder via
  * [folderToKind] (ADR-0008 singularization rule): canonical folders resolve

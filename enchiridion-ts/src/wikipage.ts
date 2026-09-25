@@ -365,8 +365,11 @@ export function linkDest(link: string): { dest: string; ok: boolean } {
 const YAML_INDENT = 2;
 
 /** The frontmatter keys whose value is a **list of strings**, as the writer
- * understands the shape (#575). `tags` is the schema's one such non-edge key,
- * and [isStringListKey] is how a caller reads it rather than respelling it.
+ * understands the shape (#575). `tags` is the schema's one such non-edge key;
+ * `pagerecord.ts` owns the schema's *reading* half and spells the key itself,
+ * because this module cannot import from a module that imports it. See that
+ * module's header for the split. [isStringListKey] is how a caller reads the
+ * shape rather than respelling the key.
  *
  * A key is on the list because a **scalar** value for it is not a shape the
  * record reader can use — `stringList` reads anything that isn't an array as no
