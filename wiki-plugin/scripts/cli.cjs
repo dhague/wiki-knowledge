@@ -26515,11 +26515,11 @@ var init_vaultgit = __esm({
        * Stage vault-relative paths (a directory is staged recursively). Strict:
        * throws on failure.
        *
-       * A path that names no file on disk is a **removal** when git already tracks
-       * it (or something under it) — a Consolidation's deleted loser (ADR-0021), and
-       * the reason [stageRemovals] exists. `git.add` would answer NotFoundError for
-       * one before that ran, so it is skipped here and left to the removal pass.
-       * A path git has never tracked is a typo, not a removal, and still throws.
+       * A path missing from disk but tracked at HEAD is a **removal** — a
+       * Consolidation's deleted loser (ADR-0021), which is why `Manifest.deleted`
+       * joins created and updated refs in one `add(paths)` call. It is skipped here
+       * and left to [stageRemovals]: `git.add` would throw NotFoundError for it. A
+       * path git has never tracked is a typo, not a removal, and still throws.
        */
       async add(paths) {
         const tracked = await this.trackedFiles();
@@ -26558,13 +26558,13 @@ var init_vaultgit = __esm({
         }
       }
       /**
-       * Stage `paths` and commit with `message`, holding a file lock for the
-       * entire add+commit sequence so concurrent ingests can't cross-contaminate
-       * each other's commits (#405). Returns the new commit SHA.
+       * Stage `paths` and commit with `message`, holding a file lock across the
+       * whole add+commit sequence so concurrent ingests can't cross-contaminate each
+       * other's commits. Returns the new commit SHA.
        *
-       * The lock lives at `.wiki-knowledge/ingest.lock` under the vault root.
-       * It times out after 30 s — long enough for any realistic commit, short
-       * enough to surface a stuck process rather than block forever.
+       * The lock lives at `.wiki-knowledge/ingest.lock` and times out after 30 s —
+       * long enough for any realistic commit, short enough to surface a stuck
+       * process.
        */
       async stageAndCommit(paths, message) {
         const lockPath = import_node_path9.default.join(this.root, ".wiki-knowledge", "ingest.lock");
@@ -26626,17 +26626,15 @@ var init_vaultgit = __esm({
       }
       /**
        * The vault's `wiki/**.md` pages changed since commit `since`, read from
-       * HEAD's tree. `since == ""` means "all of HEAD's tree", so a first build
-       * and a full rebuild are the same call.
+       * HEAD's tree. `since == ""` means "all of HEAD's tree", so a first build and
+       * a full rebuild are the same call.
        *
-       * Lenient: a missing repository or a repository with no commits yields an
-       * empty Snapshot (`head == ""`), never an error.
+       * Lenient: a missing repository or one with no commits yields an empty
+       * Snapshot (`head == ""`), never an error.
        *
-       * Reachability is not a separate query: the range walk stops the moment it
-       * finds `since`, and reaching a history that doesn't contain it — an
-       * unreachable or unrecognised watermark, from an amend, rebase, `reset
-       * --hard`, or a re-clone over an existing index — falls back to a full tree
-       * read (`fullRebuild == true`).
+       * Reachability is not a separate query: reaching a history that doesn't
+       * contain `since` — an amend, rebase, `reset --hard`, or re-clone over an
+       * existing index — falls back to a full tree read (`fullRebuild == true`).
        */
       async committedPages(since) {
         let headOid;
@@ -26656,16 +26654,14 @@ var init_vaultgit = __esm({
       }
       /**
        * The last commit date of `rel` (YYYY-MM-DD), or "" when root isn't a work
-       * tree, rel was never committed, or the history can't be walked.
-       * Lenient: "" is the default, never an error.
+       * tree, rel was never committed, or the history can't be walked. Lenient.
        *
        * Deliberately not `git.log({ filepath: rel })`: isomorphic-git's per-file
        * log stops at the first commit whose tree lacks the path, and a merge looks
        * exactly like that from the side whose branch never had it — so the per-file
-       * log can neither skip a merge nor see the non-merge commit behind one
-       * (#491). This is the single-path form of [latestCommitDates], the one
-       * implementation of the rule; a caller dating many paths at once wants
-       * [scanFacts], which batches the same walk.
+       * log can neither skip a merge nor see the non-merge commit behind one.
+       * [latestCommitDates] is the one implementation of the rule; [scanFacts]
+       * batches the same walk.
        */
       async lastCommitDate(rel) {
         let headOid;
@@ -26677,9 +26673,8 @@ var init_vaultgit = __esm({
         return this.lastCommitDateAt(headOid, rel);
       }
       /**
-       * [lastCommitDate] against a caller-supplied head — the form the range
-       * walk's fallback needs, dating a page against the head that walk already
-       * resolved rather than whatever HEAD points at by then.
+       * [lastCommitDate] against a caller-supplied head — the range walk's fallback
+       * needs to date a page against the head that walk already resolved.
        */
       async lastCommitDateAt(headOid, rel) {
         const dates = await this.latestCommitDates(headOid, (p) => p === rel);
@@ -26687,18 +26682,15 @@ var init_vaultgit = __esm({
       }
       /**
        * Whether `rel` is modified or untracked in the working tree — the
-       * `git status --porcelain -- rel` signal. Untracked counts: a brand-new
-       * file isn't in git's index at all, and finding it is the point.
+       * `git status --porcelain -- rel` signal. Untracked counts: a brand-new file
+       * isn't in git's index at all, and finding it is the point.
        * Lenient: false when root isn't a work tree or the status can't be read.
        *
-       * The working-tree-vs-blob content comparison is done here, not via
-       * isomorphic-git's `status`: it doesn't apply `core.autocrlf` reliably (its
-       * normalisation only reads the *local* config and compares the value to the
-       * literal string `"true"`), so a clean CRLF checkout of an LF blob — the
-       * norm under `core.autocrlf=true` on Windows — reports `*modified`. We read
-       * the blob and the working-tree file ourselves and compare them
-       * line-ending-insensitively, so a CRLF/LF-only difference is not a false
-       * "modified".
+       * The working-tree-vs-blob comparison is done here, not via isomorphic-git's
+       * `status`: that doesn't apply `core.autocrlf` reliably (it reads only the
+       * *local* config and compares to the literal string `"true"`), so a clean CRLF
+       * checkout of an LF blob — the norm under `core.autocrlf=true` on Windows —
+       * reports `*modified`. We compare line-ending-insensitively instead.
        */
       async porcelainMentions(rel) {
         try {
@@ -26721,10 +26713,9 @@ var init_vaultgit = __esm({
         }
       }
       /**
-       * Vault-relative paths of files under any of `subtrees` that are staged,
-       * modified-tracked, or untracked non-ignored — the dirty set the export
-       * subcommand checks before writing. Lenient: returns [] when root is not a
-       * work tree or the status can't be read.
+       * Vault-relative paths under any of `subtrees` that are staged,
+       * modified-tracked, or untracked — the dirty set the export subcommand checks
+       * before writing. Lenient: [] when root is not a work tree.
        */
       async dirtyFiles(subtrees) {
         try {
@@ -26745,18 +26736,15 @@ var init_vaultgit = __esm({
         }
       }
       /**
-       * A batched read of the two lenient facts the ingest sweep needs
-       * ([ScanFacts.lastCommitDate] and [ScanFacts.porcelainMentions]), computed in
-       * a single HEAD tree walk plus a single history walk rather than one walk per
-       * file (#415). The returned object answers per-file queries from in-memory
-       * maps, so a folder sweep over N files costs O(tree + history) instead of
-       * O(N × (tree + history)) — the difference between "returns" and "hangs" on a
-       * vault of thousands of raw files.
+       * The two lenient facts the ingest sweep needs ([ScanFacts.lastCommitDate] and
+       * [ScanFacts.porcelainMentions]), computed in a single HEAD tree walk plus a
+       * single history walk rather than one walk per file. Answers per-file queries
+       * from in-memory maps, so a sweep over N files costs O(tree + history) instead
+       * of O(N × (tree + history)).
        *
-       * Lenient like the per-file surface: a missing or unreadable repository yields
-       * empty maps, so `lastCommitDate` returns "" and `porcelainMentions` reads a
-       * file as untracked — the same fail-toward-offering defaults the sweep relies
-       * on.
+       * Lenient like the per-file surface: empty maps when the repository is
+       * unreadable, so `lastCommitDate` returns "" and `porcelainMentions` reads a
+       * file as untracked.
        */
       async scanFacts() {
         let headOid;
@@ -26784,9 +26772,7 @@ var init_vaultgit = __esm({
       }
       /**
        * `{path: YYYY-MM-DD}` — the latest non-merge commit date per path over every
-       * commit reachable from head, for *all* paths (not just `wiki/**.md`). One
-       * history walk feeds the sweep's date comparison for every raw file and every
-       * back-pointer page at once.
+       * commit reachable from head, for *all* paths (not just `wiki/**.md`).
        */
       async allCommitDates(headOid, cache = {}) {
         return this.latestCommitDates(headOid, KEEP_ALL, cache);
@@ -26794,9 +26780,8 @@ var init_vaultgit = __esm({
       // -------------------------------------------------------------------------
       /**
        * Committer identity from git config, falling back to `OS-user@hostname`
-       * without error when unset (the same fallback the `git` CLI derives).
-       * ADR-0003: attribution comes from ingested content, not git identity, so
-       * the committer here is bookkeeping, not provenance.
+       * without error when unset. ADR-0003: attribution comes from ingested content,
+       * not git identity, so the committer here is bookkeeping, not provenance.
        */
       async signature() {
         let name = await this.tryConfig("user.name");
@@ -26821,9 +26806,8 @@ var init_vaultgit = __esm({
       }
       /**
        * Range walk: the `wiki/**.md` paths touched from head's history back to
-       * `since`, read from HEAD's tree. `found` is false when the history is
-       * walked without ever seeing `since` — the caller's cue to fall back to a
-       * full tree read.
+       * `since`, read from HEAD's tree. `found` is false when the history is walked
+       * without ever seeing `since` — the caller's cue to fall back to a full read.
        */
       async rangeSnapshot(headOid, since) {
         if (since === headOid) {
@@ -26888,9 +26872,7 @@ var init_vaultgit = __esm({
       }
       /**
        * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per
-       * `wiki/**.md` path over every commit reachable from head. Used by the full
-       * read; the range walk is the bounded counterpart, applying the same
-       * [attributeDate] step as it goes.
+       * `wiki/**.md` path over every commit reachable from head.
        */
       async commitDates(headOid) {
         return this.latestCommitDates(headOid, isPageRef);
@@ -26898,15 +26880,13 @@ var init_vaultgit = __esm({
       /**
        * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
        * accepted by `keep`, over every commit reachable from head. The one
-       * implementation of the rule: [VaultGit.lastCommitDate] is this walk
-       * narrowed to a single path, and the range walk applies the same
-       * [attributeDate] step to its own bounded walk. Newest timestamp wins, not
-       * log order.
+       * implementation of the rule: [lastCommitDate] is this walk narrowed to one
+       * path. Newest timestamp wins, never log order.
        *
        * Uses [changedBlobPaths] instead of `includeChanges` so unchanged subtrees
        * are pruned — per-commit cost is proportional to what actually changed, not
-       * to total vault size (#419) — and [attributeDate] takes the paths as a
-       * thunk, so a merge is rejected before that diff is even computed.
+       * to total vault size — and [attributeDate] takes the paths as a thunk, so a
+       * merge is rejected before that diff is computed.
        *
        * Lenient: empty dates when the history can't be walked.
        */
@@ -26944,9 +26924,9 @@ var init_vaultgit = __esm({
         }
       }
       /**
-       * Walk every blob in head's tree, invoking `visit` for each one. Directories
-       * keep being descended into (isomorphic-git's walk prunes a directory whose
-       * `map` returns null, so we must return a truthy value for them).
+       * Walk every blob in head's tree, invoking `visit` for each one.
+       * isomorphic-git prunes a directory whose `map` returns null, so directories
+       * must return a truthy value.
        */
       async walkTree(headOid, visit, cache = {}) {
         await git.walk({
@@ -36947,15 +36927,18 @@ function linkDest(link2) {
   return { dest: matches[0].decodedPath, ok: true };
 }
 var YAML_INDENT = 2;
+var StringListKeys = ["tags"];
+function isStringListKey(key) {
+  return StringListKeys.includes(key);
+}
 var Page = class _Page {
   constructor(text2) {
     this.text = text2;
   }
   /**
    * Return p's frontmatter as a YAML mapping node, minting an empty one when
-   * the page has no frontmatter block (or an empty one).
-   *
-   * A node rather than a map because a mapping node preserves key order.
+   * the page has no frontmatter block. A node rather than a map because a
+   * mapping node preserves key order.
    */
   frontmatterNode() {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(this.text);
@@ -36977,7 +36960,7 @@ var Page = class _Page {
     if (!hasFrontmatter) return null;
     return this.frontmatterNode().toJSON();
   }
-  /** Return the value of key in this page's frontmatter. ok is false when the
+  /** Return the value of key in this page's frontmatter; ok is false when the
    * page has no frontmatter or the key is absent. */
   get(key) {
     const data = this.frontmatter();
@@ -36991,21 +36974,18 @@ var Page = class _Page {
     const { value } = this.get(key);
     return typeof value === "string" ? value : "";
   }
-  /** Return a list-valued frontmatter key's string entries. A key that is
-   * absent, null, or not a list yields []; non-string entries within a list
-   * are skipped. */
+  /** Return a list-valued frontmatter key's string entries; absent, null, or
+   * not a list yields [], and non-string entries are skipped. */
   getStringList(key) {
     const { value } = this.get(key);
     if (!Array.isArray(value)) return [];
     return value.filter((v) => typeof v === "string");
   }
   /**
-   * Return a new page with frontmatter key set to value.
-   *
-   * Mints a frontmatter block when the page has none. Only the block is
-   * re-serialised; the body is spliced back verbatim.
-   *
-   * The value is canonicalised first — see [canonicalForWrite].
+   * Return a new page with frontmatter key set to value, canonicalised first
+   * — see [canonicalForWrite]. Mints a frontmatter block when the page has
+   * none; only the block is re-serialised, and the body is spliced back
+   * verbatim.
    */
   set(key, value) {
     const node = this.frontmatterNode();
@@ -37016,10 +36996,9 @@ var Page = class _Page {
     return new _Page("---\n" + rendered + "---\n" + body);
   }
   /**
-   * Return a new page with values unioned into key's existing list.
-   *
-   * Order-preserving: existing entries hold their position, new ones append,
-   * duplicates drop. Equivalent to [Page.set] when key is absent.
+   * Return a new page with values unioned into key's existing list. Existing
+   * entries hold their position, new ones append, duplicates drop; equivalent
+   * to [Page.set] when key is absent.
    */
   merge(key, values) {
     const existing = this.get(key).value;
@@ -37030,8 +37009,7 @@ var Page = class _Page {
     }
     return this.set(key, merged);
   }
-  /** [Page.merge] over a string list — the shape every caller with typed-edge
-   * links or tags already has. */
+  /** [Page.merge] over a string list. */
   mergeStrings(key, values) {
     return this.merge(key, values);
   }
@@ -37045,11 +37023,9 @@ var Page = class _Page {
   }
   /**
    * Return a new page with links fixed for the vault-wide move oldRel ->
-   * newRel.
-   *
-   * fileRel is where *this* page sits before the move; pass fileRel == oldRel
-   * when this page is the one being moved, so its own outbound links are
-   * rebased onto newRel's folder too.
+   * newRel. fileRel is where *this* page sits before the move; pass
+   * fileRel == oldRel for the page being moved, so its own outbound links
+   * rebase too.
    */
   retarget(fileRel, oldRel, newRel) {
     return new _Page(rewriteText(this.text, fileRel, oldRel, newRel));
@@ -37170,8 +37146,9 @@ function setKey(mapping, key, value) {
   mapping.add({ key, value });
 }
 function canonicalForWrite(key, value) {
-  if (key !== "source_date") return value;
-  return truncateSourceDate(value);
+  if (key === "source_date") return truncateSourceDate(value);
+  if (isStringListKey(key) && !Array.isArray(value)) return [value];
+  return value;
 }
 function newValueNode(value) {
   const node = toYamlNode(value);
@@ -37869,6 +37846,7 @@ var EdgeKeys = [
   "related"
 ];
 var singleLinkKeys = { raw_source: true };
+var Volatilities = ["stable", "evolving", "volatile"];
 function isSingleLinkEdgeKey(key) {
   return singleLinkKeys[key] === true;
 }
@@ -37931,6 +37909,7 @@ function decodeRecord(pageRef2, text2, kindByFolder) {
       kind,
       title: scalar(data["title"]),
       summary: scalar(data["summary"]),
+      // A scalar here means a page written by something else; read it as no tags.
       tags: stringList(data["tags"]),
       sourceDate: sourceDate(data["source_date"]),
       volatility: scalar(data["volatility"]),
@@ -37946,13 +37925,32 @@ function newPageRecord(pageRef2, text2, kindByFolder) {
   return record;
 }
 function malformedEdges(text2) {
-  let data;
-  try {
-    data = frontmatterMap(text2);
-  } catch {
-    return [];
+  const data = frontmatterMapOrUndefined(text2);
+  return data === void 0 ? [] : decodeEdges(data, "").malformed;
+}
+var PLAIN_TAG_RE = /^[^\s,"']+$/;
+function malformedTags(text2) {
+  const data = frontmatterMapOrUndefined(text2);
+  if (data === void 0) return [];
+  const raw = data["tags"];
+  if (raw === void 0 || raw === null) return [];
+  if (!Array.isArray(raw)) return [`tags is not a list: ${renderValue(raw)}`];
+  const errors = [];
+  for (const tag of stringList(raw)) {
+    if (!PLAIN_TAG_RE.test(tag))
+      errors.push(`tags entry is not a plain tag: ${renderValue(tag)}`);
   }
-  return decodeEdges(data, "").malformed;
+  return errors;
+}
+function renderValue(v) {
+  return JSON.stringify(v) ?? String(v);
+}
+function frontmatterMapOrUndefined(text2) {
+  try {
+    return frontmatterMap(text2);
+  } catch {
+    return void 0;
+  }
 }
 function frontmatterMap(text2) {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
@@ -38072,14 +38070,12 @@ var Vault = class {
   constructor(root) {
     this.root = root;
   }
-  /** Return any singular kind-folders left over from before ADR-0008, sorted
-   * — `wiki/concept/` where the vault should now hold `wiki/concepts/`.
+  /** Singular kind-folders left over from before ADR-0008, sorted —
+   * `wiki/concept/` where the vault should hold `wiki/concepts/`.
    *
-   * The migration script that used to fix these is gone, but the check stays,
-   * because staying quiet is the one thing that would be genuinely bad:
+   * The migration script that used to fix these is gone, but the check stays:
    * [place.path] resolves canonical kinds from [KindFolders], so an unmigrated
-   * vault would split one kind across two spellings of the same folder. A
-   * writer asks this and refuses instead. */
+   * vault would split one kind across two spellings. A writer refuses instead. */
   legacyKindFolders() {
     let entries;
     try {
@@ -38108,9 +38104,8 @@ var Vault = class {
   load(pageRef2) {
     return new Page(import_node_fs7.default.readFileSync(this.path(pageRef2), "utf8"));
   }
-  /** Report whether pageRef names an existing *file* in the vault — a page
-   * that could be loaded. A directory sitting at that path is not a page, so
-   * this is false. */
+  /** Whether pageRef names an existing *file*; a directory at that path is not
+   * a page, so this is false. */
   exists(pageRef2) {
     try {
       return !import_node_fs7.default.statSync(this.path(pageRef2)).isDirectory();
@@ -38134,11 +38129,9 @@ var Vault = class {
     mkdirSafe(import_node_path8.default.dirname(abs), 493);
     import_node_fs7.default.writeFileSync(abs, page.text, { mode: 420 });
   }
-  /** Return {kind: folder} for every subdirectory of `wiki/` that is not
-   * already a canonical kind-folder.
-   *
-   * The folder must pre-exist; the plugin never auto-creates custom
-   * kind-folders on its own. */
+  /** Return `{kind: folder}` for every `wiki/` subdirectory that is not already
+   * a canonical kind-folder. The folder must pre-exist — the plugin never
+   * auto-creates custom kind-folders. */
   discoveredKinds() {
     let entries;
     try {
@@ -38159,8 +38152,7 @@ var Vault = class {
     }
     return out;
   }
-  /** Return every `wiki/**` page as a {pageRef: text} map. Never walks
-   * `raw/`. */
+  /** Every `wiki/**` page as a {pageRef: text} map. Never walks `raw/`. */
   loadWikiPages() {
     const refs = enumeratePageRefs(this.root);
     const pages = {};
@@ -38168,10 +38160,8 @@ var Vault = class {
       pages[ref] = import_node_fs7.default.readFileSync(this.path(ref), "utf8");
     return pages;
   }
-  /** Return every `wiki/**` page as a {pageRef: record + text} map.
-   *
-   * `opts.skipMalformedEdges` selects the tolerant read a check run needs
-   * (#549); see [LoadRecordsOptions]. */
+  /** Every `wiki/**` page as a {pageRef: record + text} map. `opts` per
+   * [LoadRecordsOptions] — a tolerant check run sets `skipMalformedEdges`. */
   pagesWithText(opts = {}) {
     const pages = this.loadWikiPages();
     const discovered = this.discoveredKinds();
@@ -38186,8 +38176,8 @@ var Vault = class {
     }
     return out;
   }
-  /** Return every `wiki/**` page as a {pageRef: record} map. `raw/` is never
-   * walked. Options pass through to [pagesWithText]. */
+  /** Every `wiki/**` page as a {pageRef: record} map; `raw/` is never walked.
+   * Options pass through to [pagesWithText]. */
   pages(opts = {}) {
     const withText = this.pagesWithText(opts);
     const out = {};
@@ -38220,12 +38210,11 @@ var Vault = class {
     }
     return changed.sort();
   }
-  /** Rewrite links across the vault's wiki pages and move the page on disk.
+  /** Move a page and fix every inbound and outbound link.
    *
-   * Reads every `wiki/**` page (never `raw/` — its files aren't rewritten by
-   * a page move), plans the move, writes back only the pages whose text
-   * changed, then removes the original. Returns the changed vault-relative
-   * paths, sorted; empty for oldRef == newRef. */
+   * Reads every `wiki/**` page (never `raw/`), writes back only the pages whose
+   * text changed, then removes the original. Returns the changed refs, sorted;
+   * empty for oldRef == newRef. */
   movePage(oldRef, newRef) {
     const files = this.loadWikiPages();
     if (!(oldRef in files)) {
@@ -38237,26 +38226,20 @@ var Vault = class {
     }
     return changed;
   }
-  /** Rewrite `wiki/**` pages' links pointing at oldRel to newRel.
+  /** Repoint `wiki/**` pages' inbound links from oldRel to newRel.
    *
-   * For a target that is not itself a wiki page — e.g. a `raw/` artifact
-   * renamed externally — oldRel/newRel are never read, parsed, or written;
-   * only *other* pages' inbound links are fixed. Returns the changed
-   * vault-relative paths, sorted. */
+   * The target itself is never read, parsed, or written — for a non-page target
+   * such as an externally renamed `raw/` artifact, only other pages change.
+   * Returns the changed refs, sorted. */
   rewriteInboundLinks(oldRel, newRel) {
     const pages = this.loadWikiPages();
     return this.writeChanged(planMove(pages, oldRel, newRel), pages);
   }
-  /** Absorb losers into the survivor (CONTEXT.md, **Consolidation**; ADR-0021).
+  /** Absorb losers into the survivor (ADR-0021), repointing inbound links.
    *
-   * Writes survivor at survivorRef — the authored merged body — repoints every
-   * link across `wiki/**` that pointed at a consolidated page, then removes the
-   * consolidated pages. Returns the changed vault-relative paths, sorted.
-   *
-   * Writes before it deletes, deliberately: an interrupted Consolidation has
-   * always laid the absorbed content down first, so the deletes are the only
-   * step that can be half-done. Survivor need not already exist — a Consolidation
-   * may author a fresh one. */
+   * Writes before it deletes, deliberately: an interrupted run has already laid
+   * the absorbed content down, so only the deletes can be half-done. The
+   * survivor need not already exist. Returns the changed refs, sorted. */
   consolidate(survivorRef, survivor, losers) {
     const files = this.loadWikiPages();
     const planned = planConsolidate(
@@ -38268,11 +38251,9 @@ var Vault = class {
     for (const ref of losers) this.remove(ref);
     return changed;
   }
-  /** Delete the page at pageRef (vault-relative).
-   *
-   * Idempotent: a page that is already gone is not an error, so re-running a
-   * Consolidation whose deletes were interrupted is safe. Every other failure
-   * still throws. */
+  /** Delete the page at pageRef. Idempotent — an already-gone page is not an
+   * error, so an interrupted Consolidation can be re-run. Every other failure
+   * throws. */
   remove(pageRef2) {
     try {
       import_node_fs7.default.unlinkSync(this.path(pageRef2));
@@ -38801,28 +38782,24 @@ var ErrPlan = class extends Error {
 var OrderedMap = class _OrderedMap {
   keys = [];
   values = /* @__PURE__ */ new Map();
-  /** The value for key, and whether it was present. */
   get(key) {
     if (!this.values.has(key)) return { value: void 0, ok: false };
     return { value: this.values.get(key), ok: true };
   }
-  /** The number of entries. */
   length() {
     return this.keys.length;
   }
-  /** Iterate the entries in plan order. */
   *all() {
     for (const key of this.keys) {
       yield [key, this.values.get(key)];
     }
   }
-  /** Record one entry, keeping its first position and taking the last value. */
   set(key, value) {
     if (!this.values.has(key)) this.keys.push(key);
     this.values.set(key, value);
   }
-  /** Decode a JSON object, recording key order as it goes. A duplicate key
-   * keeps its first position and takes the last value. */
+  /** Decode a JSON object recording key order; a duplicate keeps its first
+   * position and takes the last value. */
   static decode(data) {
     const m = new _OrderedMap();
     if (data === null || typeof data !== "object" || Array.isArray(data)) {
@@ -38877,26 +38854,21 @@ var Resolved = class {
     this.extraKindFolders = extraKindFolders;
     this.consolidation = consolidation;
   }
-  /** A handle on the vault this plan resolved against, or null when it
-   * resolved without one. */
   vault() {
     if (this.root === "") return null;
     return new Vault(this.root);
   }
-  /** One page's plan verb, `create` or `update`. */
   opOf(page) {
     return page.plan.op;
   }
-  /** Check this plan, shape then semantic, before any write. Throws [ErrPlan]
-   * naming every problem found. */
+  /** Check this plan, shape then semantic, before any write; throws [ErrPlan] naming every problem. */
   validate() {
     const problems = [...this.shapeErrors(), ...this.semanticErrors()];
     if (problems.length > 0) {
       throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
     }
   }
-  /** Shape errors cover required fields and valid ops — everything checkable
-   * without a vault. */
+  /** Required fields and valid ops — everything checkable without a vault. */
   shapeErrors() {
     const problems = [];
     if (this.plan.title === "") {
@@ -38959,6 +38931,20 @@ var Resolved = class {
           );
         }
       }
+      const rewritesFrontmatter = page.op === OpCreate || page.frontmatter.length() > 0;
+      if (rewritesFrontmatter) {
+        const volatility = page.frontmatter.get("volatility");
+        const missing = !volatility.ok || volatility.value === null || String(volatility.value).trim() === "";
+        if (missing) {
+          problems.push(`${prefix}.frontmatter.volatility is required`);
+        } else if (!Volatilities.includes(
+          String(volatility.value)
+        )) {
+          problems.push(
+            `${prefix}.frontmatter.volatility must be one of ${Volatilities.join("|")}, got ${String(volatility.value)}`
+          );
+        }
+      }
     }
     if (this.plan.action === ActionConsolidate) {
       if (this.plan.consolidates.length === 0) {
@@ -39000,8 +38986,7 @@ var Resolved = class {
     }
     return problems;
   }
-  /** Semantic errors cover the checks that need the vault: target existence,
-   * path length, evidence chain. */
+  /** The checks that need the vault: target existence, path length, evidence chain. */
   semanticErrors() {
     if (this.root === "") return [];
     const v = this.vault();
@@ -39057,8 +39042,7 @@ var Resolved = class {
     }
     return problems;
   }
-  /** Semantic half of the Consolidation checks: the absorbed pages are real
-   * pages that exist, and the survivor still reads their content. */
+  /** The absorbed pages are real and exist, and the survivor still reads their content. */
   consolidationErrors() {
     const c = this.consolidation;
     if (c === null) return [];
@@ -39090,16 +39074,11 @@ var Resolved = class {
     return problems;
   }
   /**
-   * The Consolidation's losslessness gate (ADR-0021): each absorbed page's body
-   * must still be readable in the survivor's body, so the delete drops nothing.
-   *
-   * Compared through [canonicalizeLinkTargets], so the two sides are read as
-   * *where their links point* rather than how each destination is spelled. An
-   * absorbed body therefore compares equal whether it was copied verbatim or
-   * re-based with `../` after landing in a survivor in another kind-folder, and
-   * a link the merge quietly broke does not. Frontmatter is deliberately
-   * outside the comparison: the survivor's summary, tags and edges are the
-   * author's judgment about the merged page, not absorbed content.
+   * The losslessness gate (ADR-0021): each absorbed body must still be readable
+   * in the survivor's body, so the delete drops nothing. Compared through
+   * [canonicalizeLinkTargets] — by where links point, not how they are spelled —
+   * so a body re-based into another kind-folder compares equal and a link the
+   * merge broke does not. Frontmatter is deliberately outside the comparison.
    */
   losslessnessErrors() {
     const c = this.consolidation;
@@ -39131,11 +39110,8 @@ var Resolved = class {
     }
     return problems;
   }
-  /** Write every resolved page and commit, returning the commit SHA.
-   *
-   * Assumes [Resolved.validate] has already passed. No rollback on failure.
-   * git is injectable for tests; pass a [VaultGit] over the vault root in
-   * production. */
+  /** Write every resolved page and commit, returning the SHA. Assumes
+   * [Resolved.validate] passed; no rollback on failure. */
   async execute(git2) {
     if (this.root === "") {
       throw new ErrPlan(
@@ -39186,12 +39162,10 @@ var Resolved = class {
     );
   }
   /**
-   * [execute] for `action: consolidate`: write the survivor, repoint every
-   * inbound link at it, delete the absorbed pages, commit once (ADR-0021).
-   *
-   * The losslessness check runs again here, on the same resolved facts, seconds
-   * before the delete: ADR-0021 makes the *executor* the safeguard, so a
-   * [Resolved] built by hand cannot route around [validate]. */
+   * [execute] for `consolidate`: write the survivor, repoint every inbound
+   * link, delete the absorbed pages, commit once (ADR-0021). The losslessness
+   * check runs again here so a hand-built [Resolved] cannot route around
+   * [validate]. */
   async executeConsolidation(v, git2) {
     const c = this.consolidation;
     const survivor = this.pages.length === 1 ? this.pages[0] : null;
@@ -39366,6 +39340,9 @@ function applyFrontmatter(page, planPage, pageDir, plan, titles, v) {
       page = page.set(key, v_);
     }
   }
+  if (page.getString("source_date") === "" && plan.source_date !== "") {
+    page = page.set("source_date", plan.source_date);
+  }
   for (const [key, refs] of planPage.edges.all()) {
     const links = refs.map(
       (ref) => composeEdgeLink(key, ref, pageDir, resolveTitle(ref, titles, v))
@@ -39447,14 +39424,8 @@ var Index = class _Index {
     this.git = git2;
   }
   /**
-   * Open (creating if needed) the index at root, using the real git repo
-   * there via isomorphic-git.
-   *
-   * Refuses a root that resolves as a vault but isn't a git work tree: a
-   * vault is a git repository (CONTEXT.md), and the index has no work-tree
-   * source to read from there, so "empty" would be a silent lie rather than
-   * an empty vault. A work tree with no commits stays lenient — an empty
-   * index is the correct empty-vault state.
+   * Open (creating if needed) the index at root. Throws when root is not a git
+   * work tree; a work tree with no commits is an empty index, not an error.
    */
   static async open(root) {
     const { VaultGit: VaultGit2 } = await Promise.resolve().then(() => (init_vaultgit(), vaultgit_exports));
@@ -39466,10 +39437,7 @@ var Index = class _Index {
     }
     return _Index.openWithGit(root, git2);
   }
-  /**
-   * Open with a substituted Git surface — the test seam. The real
-   * entrypoint is `open()`.
-   */
+  /** Open with a substituted Git surface — the test seam. */
   static async openWithGit(root, git2) {
     const indexDir = import_node_path18.default.join(root, ".wiki-knowledge");
     mkdirSafe(indexDir);
@@ -39622,16 +39590,9 @@ var Index = class _Index {
   // -------------------------------------------------------------------------
   // Per-page upsert / remove
   // -------------------------------------------------------------------------
-  /**
-   * Index one page, or skip it. Returns false when the page is skipped.
-   *
-   * **Malformed pages are skipped, never indexed featureless and never a
-   * crash.** A page whose pageRef isn't directly under a wiki kind-folder (or
-   * whose frontmatter edges aren't parseable) is a structural error the ingest
-   * layer would refuse; `pagerecord.newPageRecord` throws on it. The index
-   * treats that as "not indexable" — drop any stale row and move on — so a
-   * malformed page buried in git history can't take down a reindex.
-   */
+  /** Index one page, or skip it. Returns false when skipped, having removed any
+   * stale row. Malformed pages are skipped, never a crash, so one buried in git
+   * history cannot take down a reindex. */
   upsertPage(page) {
     let rec;
     try {
@@ -39747,12 +39708,8 @@ var Index = class _Index {
     );
     return rows.map((r) => ({ tag: r.tag, count: r.n }));
   }
-  /**
-   * Every indexed page whose kind is not in `excludeKinds`, with its tag set —
-   * one query over `page` and `page_tag`, never a frontmatter re-parse. A
-   * materialised view of HEAD (ADR-0015), so an uncommitted page is invisible,
-   * which is what ADR-0021's fragmentation consequence requires.
-   */
+  /** Every indexed page whose kind is not in `excludeKinds`, with its tag set.
+   * A view of HEAD (ADR-0015), so an uncommitted page is invisible (ADR-0021). */
   async indexedPages(excludeKinds = []) {
     await this.sync();
     const scope = excludeKinds.length > 0 ? `WHERE p.kind NOT IN (${placeholders(excludeKinds.length)})` : "";
@@ -39770,13 +39727,8 @@ var Index = class _Index {
       tags: r.tags ? r.tags.split(GROUP_SEPARATOR).sort() : []
     }));
   }
-  /**
-   * Pairs of in-scope pages sharing at least one tag, most-shared first — the
-   * tag self-join ADR-0021 names as the concept-fragmentation check's
-   * candidate generator. Scope is applied in SQL so an excluded kind never
-   * enters the pairing, and the join is over `page_tag` alone (not the FTS5
-   * content column), so the ranking is an exact-match shared-tag count.
-   */
+  /** Pairs of in-scope pages sharing at least one tag, most-shared first — an
+   * exact-match tag count over `page_tag` (ADR-0021). */
   async sharedTagPairs(excludeKinds = []) {
     await this.sync();
     const scope = excludeKinds.length > 0 ? `AND p1.kind NOT IN (${placeholders(excludeKinds.length)})
@@ -41846,12 +41798,10 @@ var Debouncer = class {
     this.clock = clock;
   }
   lastEvent = /* @__PURE__ */ new Map();
-  /** Notes an event for rel at the current clock time. */
   recordEvent(rel) {
     this.lastEvent.set(rel, this.clock());
   }
-  /** Returns, and stops tracking, every file whose debounce window has
-   * elapsed. */
+  /** Returns and forgets files whose debounce window has elapsed. */
   settledFiles() {
     const now = this.clock();
     const settled = [];
@@ -41861,8 +41811,6 @@ var Debouncer = class {
     for (const rel of settled) this.lastEvent.delete(rel);
     return settled;
   }
-  /** Returns the recorded event time for rel, for tests that want to assert
-   * what the handler recorded. */
   lastEventTime(rel) {
     return this.lastEvent.get(rel);
   }
@@ -42270,6 +42218,15 @@ async function frontmatterLinkFormat(root) {
   }
   return findings;
 }
+async function tagsShape(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const findings = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    for (const detail of malformedTags(text2))
+      findings.push({ pageRef: ref, detail });
+  }
+  return findings;
+}
 async function staleSynthesis(root) {
   const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const vaultGit = new VaultGit(root);
@@ -42405,8 +42362,6 @@ function frontmatterSplits(frontmatter) {
       splits.push({
         start: link2.labelDestFold.start,
         end: link2.labelDestFold.end,
-        // An escaped continuation drops the backslash, the break and the next
-        // line's indent, so `"]\⏎  ("` reads as `"]("`.
         joined: "",
         kind: "boundary",
         line
@@ -42417,8 +42372,7 @@ function frontmatterSplits(frontmatter) {
       splits.push({
         start: link2.start,
         end: link2.end,
-        // iterLinks joins escaped line breaks out of the destination, so its
-        // `dest` *is* the joined value — a fold is spliced as it is read.
+        // iterLinks already joins escaped breaks, so `dest` is the joined value.
         joined: link2.dest,
         kind: "destination",
         line
@@ -42589,9 +42543,8 @@ async function conceptFragmentation(root, opts = {}) {
           text: match,
           raw: true,
           kinds: scopeKinds,
-          // Supersession is not a reason to skip a page here: a superseded
-          // page is still a page, and the tag self-join does not skip it
-          // either — the two generators must see the same scope.
+          // The tag self-join does not skip superseded pages either, so the
+          // two generators see the same scope.
           includeSuperseded: true,
           limit: TitleMatchLimit
         });
@@ -42696,6 +42649,7 @@ var CHECKS = {
   "kind-folder-conformance": kindFolderConformance,
   "ingestion-source-integrity": ingestionSourceIntegrity,
   "frontmatter-link-format": frontmatterLinkFormat,
+  "tags-shape": tagsShape,
   "stale-synthesis": staleSynthesis,
   "missing-volatility-source-date": missingVolatilitySourceDate,
   "unresolved-supersession": unresolvedSupersession,
@@ -42874,6 +42828,11 @@ init_vaultgit();
 // src/exportmeta.ts
 var import_node_path22 = __toESM(require("node:path"), 1);
 var FRONT_PAGE_PATH = "index.html";
+var TAGS_INDEX_SLUG = "index";
+function tagPagePath(slug) {
+  return `tags/${slug}.html`;
+}
+var TAGS_INDEX_PATH = tagPagePath(TAGS_INDEX_SLUG);
 function mdToHtml(ref) {
   return ref.endsWith(".md") ? ref.slice(0, -3) + ".html" : ref;
 }
@@ -42901,6 +42860,17 @@ function buildTagSlugMap(tags) {
       slugMap.set(tag, candidate);
       assigned.add(candidate);
     }
+  }
+  for (const [tag, slug] of slugMap) {
+    if (slug !== TAGS_INDEX_SLUG) continue;
+    let n = 2;
+    let candidate = `${TAGS_INDEX_SLUG}-${n}`;
+    while (assigned.has(candidate)) {
+      n++;
+      candidate = `${TAGS_INDEX_SLUG}-${n}`;
+    }
+    slugMap.set(tag, candidate);
+    assigned.add(candidate);
   }
   return slugMap;
 }
@@ -43369,7 +43339,6 @@ function rootPrefix(htmlPath) {
 function assetsRootFor(htmlPath) {
   return `${rootPrefix(htmlPath)}${STYLESHEET_DIR}`;
 }
-var TAGS_INDEX_PATH = "tags/index.html";
 var FRONT_SECTION_ID = "__front";
 function sectionIdFor(htmlPath) {
   if (htmlPath === FRONT_PAGE_PATH) return FRONT_SECTION_ID;
@@ -43468,7 +43437,7 @@ function renderTagLink(tag, pageRef2, tagSlugMap, context) {
   const slug = tagSlugMap.get(tag) ?? slugify(tag, 0);
   const href = hrefFor(context.mode)(
     context.outputPathFor(pageRef2),
-    `tags/${slug}.html`
+    tagPagePath(slug)
   );
   return `<a href="${escHtml(href)}">${escHtml(tag)}</a>`;
 }
@@ -43719,7 +43688,7 @@ function pageLink(fromHtmlPath, toPageRef, title, context) {
   return `<a href="${escHtml(hrefFor(context.mode)(fromHtmlPath, context.outputPathFor(toPageRef)))}">${escHtml(title)}</a>`;
 }
 function renderTagPage(tag, slug, pageRefs, pages, wikiTitle, context) {
-  const htmlPath = `tags/${slug}.html`;
+  const htmlPath = tagPagePath(slug);
   const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const items = pageRefs.map((ref) => {
     const title = pages.get(ref)?.record?.title ?? ref;
@@ -43733,13 +43702,13 @@ ${items}
   return { path: htmlPath, parts: { title: tag, nav, main: main2 } };
 }
 function renderTagIndex(tagSlugMap, meta, wikiTitle, context) {
-  const htmlPath = "tags/index.html";
+  const htmlPath = TAGS_INDEX_PATH;
   const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const sortedTags = [...tagSlugMap.keys()].sort();
   const rows = sortedTags.map((tag) => {
     const slug = tagSlugMap.get(tag);
     const count = meta.tagMap.get(tag)?.length ?? 0;
-    const href = escHtml(hrefFor(context.mode)(htmlPath, `tags/${slug}.html`));
+    const href = escHtml(hrefFor(context.mode)(htmlPath, tagPagePath(slug)));
     return `<li><a href="${href}">${escHtml(tag)}</a> (${count})</li>`;
   });
   const main2 = `<h1>Tags</h1>
@@ -43798,7 +43767,7 @@ function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, context) {
       return `<li>${link2}${summaryHtml}</li>`;
     });
   }
-  const tagsHref = escHtml(hrefFor(context.mode)(htmlPath, "tags/index.html"));
+  const tagsHref = escHtml(hrefFor(context.mode)(htmlPath, TAGS_INDEX_PATH));
   const main2 = [
     `<h1>${escHtml(wikiTitle)}</h1>`,
     `<p>${totalPages} page${totalPages === 1 ? "" : "s"} \xB7 <a href="${tagsHref}">Tags</a></p>`,
@@ -44253,6 +44222,24 @@ function edgeSetValue(file, key, value) {
     return normalize3(key, item);
   });
 }
+function stringListSetValue(key, value) {
+  if (typeof value === "string") {
+    const text2 = value.trim();
+    if (!text2.startsWith("[") || !text2.endsWith("]")) return [value];
+    let parsed;
+    try {
+      parsed = JSON.parse(text2);
+    } catch {
+      fail(`${key} starts like a JSON list but does not parse: ${value}`);
+    }
+    return stringListSetValue(key, parsed);
+  }
+  if (!Array.isArray(value)) fail(`${key} expects a JSON list of values`);
+  return value.map((item) => {
+    if (typeof item !== "string") fail(`${key} expects a JSON list of strings`);
+    return item;
+  });
+}
 function formatFrontmatterValue(value) {
   if (!Array.isArray(value)) return formatScalar(value);
   return "[" + value.map((v) => `'${formatScalar(v)}'`).join(", ") + "]";
@@ -44477,7 +44464,7 @@ function buildProgram() {
     "source_date"
   ).option(
     "--volatility <vols>",
-    "filter by volatility (stable|evolving|volatile); comma-separated for multiple",
+    `filter by volatility (${Volatilities.join("|")}); comma-separated for multiple`,
     splitCommaList,
     []
   ).option("--limit <n>", "max hits", (v) => Number(v), 20).option(
@@ -44669,8 +44656,8 @@ function buildProgram() {
   });
   page.command("set").argument("<file>", "markdown file").argument("<key>", "frontmatter key").argument(
     "<value>",
-    "value; for an edge key, exactly one markdown link or a vault-relative page ref (a list-valued key is replaced)"
-  ).option("--json", "parse value as JSON").description(
+    "value; for an edge key, exactly one markdown link or a vault-relative page ref; for tags, one value or a JSON list (a list-valued key is replaced)"
+  ).option("--json", "parse value as JSON; a list for a list-valued key").description(
     "Set a frontmatter value in place \u2014 replaces the key, including a list-valued edge key"
   ).action(
     (file, key, raw, opts) => {
@@ -44685,6 +44672,7 @@ function buildProgram() {
       }
       if (key === "source_date") value = canonicalSourceDate(value);
       if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
+      if (isStringListKey(key)) value = stringListSetValue(key, value);
       const updated = p.set(key, value);
       writePageFile(file, updated);
     }
@@ -45042,7 +45030,7 @@ function buildProgram() {
           // The per-run flag, not the resolved title: runExport owns the
           // resolution order (flag → saved title → directory name).
           title: opts.title,
-          // Likewise the raw flag: runExport owns flag → saved ref → none.
+          // Likewise the start page: flag → saved ref → none.
           startPage: opts.startPage,
           starters
         });
