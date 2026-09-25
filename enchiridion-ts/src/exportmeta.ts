@@ -31,6 +31,24 @@ import { KindFolders, slugify } from "./place.js";
  *  is written here. */
 export const FRONT_PAGE_PATH = "index.html";
 
+/** The slug the tags index occupies in the tag namespace. Tag pages and the
+ *  index are siblings under `tags/` ([tagPagePath]), so this slug is not a
+ *  tag's to keep: a tag that would have taken it moves aside in
+ *  [buildTagSlugMap]. Without that, the tag page and the index collide on
+ *  output path — and, in single-file output, on the flattened `tags-index`
+ *  section id, which is what makes the nav's Tags link land on the tag page. */
+export const TAGS_INDEX_SLUG = "index";
+
+/** The output path of the page for a tag's slug. Every tag-page path is built
+ *  here, because tag pages and the tags index share one directory — that
+ *  shared namespace is the whole reason [TAGS_INDEX_SLUG] is reserved. */
+export function tagPagePath(slug: string): string {
+  return `tags/${slug}.html`;
+}
+
+/** The tags index's output path — the tag page for the reserved slug. */
+export const TAGS_INDEX_PATH = tagPagePath(TAGS_INDEX_SLUG);
+
 /** Convert a vault-relative `.md` path to its `.html` output path. A ref that
  *  is not markdown (a `raw/` artifact keeping its own extension) is left
  *  alone. The base rule behind [ExportMeta.outputPathFor]. */
@@ -154,6 +172,12 @@ const GET_STARTED_COUNT = 12;
  * Maps each tag string to a unique URL slug. Tags that produce the same base
  * slug get a numeric suffix: "foo", "foo-2", "foo-3", …
  * Input is sorted for determinism before assignment.
+ *
+ * The tags index's own slug ([TAGS_INDEX_SLUG]) is not a tag's to keep: tags
+ * and the index share one output directory, so whichever tag would have taken
+ * it moves to the next free suffix. That is done after the ordinary
+ * assignment, so every other tag — including one that naturally slugifies to
+ * `index-2` — keeps the slug it had before the reservation existed.
  */
 export function buildTagSlugMap(tags: string[]): Map<string, string> {
   const sorted = [...tags].sort();
@@ -175,6 +199,18 @@ export function buildTagSlugMap(tags: string[]): Map<string, string> {
       slugMap.set(tag, candidate);
       assigned.add(candidate);
     }
+  }
+
+  for (const [tag, slug] of slugMap) {
+    if (slug !== TAGS_INDEX_SLUG) continue;
+    let n = 2;
+    let candidate = `${TAGS_INDEX_SLUG}-${n}`;
+    while (assigned.has(candidate)) {
+      n++;
+      candidate = `${TAGS_INDEX_SLUG}-${n}`;
+    }
+    slugMap.set(tag, candidate);
+    assigned.add(candidate);
   }
 
   return slugMap;

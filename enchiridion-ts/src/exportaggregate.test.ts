@@ -130,6 +130,24 @@ test("buildTagSlugMap: three collisions get sequential suffixes", () => {
   assert.equal(new Set(slugs).size, 3, "three unique slugs");
 });
 
+test("buildTagSlugMap: the tag index's own slug is reserved", () => {
+  // Tag pages and the tag index share one directory, so a tag named "index"
+  // must not be handed the index's slug — it would take the index's path, and
+  // in single-file output its id.
+  assert.equal(buildTagSlugMap(["index"]).get("index"), "index-2");
+  // Any spelling that slugifies to "index" is the same collision.
+  assert.equal(buildTagSlugMap(["Index"]).get("Index"), "index-2");
+});
+
+test("buildTagSlugMap: reserving 'index' does not renumber other tags", () => {
+  // A vault that already carries both tags keeps `index-2` for the tag that
+  // earned it; only the colliding tag moves.
+  const m = buildTagSlugMap(["index", "index-2", "alpha"]);
+  assert.equal(m.get("index"), "index-3");
+  assert.equal(m.get("index-2"), "index-2");
+  assert.equal(m.get("alpha"), "alpha");
+});
+
 // ---------------------------------------------------------------------------
 // Tag pages
 // ---------------------------------------------------------------------------
@@ -153,6 +171,42 @@ test("renderAggregatePages: tag page paths are tags/<slug>.html", () => {
   for (const p of tagPages) {
     assert.match(p.path, /^tags\/[a-z0-9-]+\.html$/);
   }
+});
+
+test("renderAggregatePages: a tag named 'index' writes beside the tag index, not over it", () => {
+  const indexed = `---
+title: Vault Index
+summary: The way in.
+tags:
+  - index
+kind: concept
+---
+
+Body.
+`;
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["wiki/concepts/vault-index.md", indexed],
+  ]);
+  const meta = buildExportMeta(pages);
+  const out = [...renderAggregatePages(pages, meta)];
+  const paths = out.map((p) => p.path);
+  assert.equal(
+    new Set(paths).size,
+    paths.length,
+    "no two pages may be written to the same output path",
+  );
+  const tagIndex = out.find((p) => p.path === "tags/index.html")!;
+  assert.ok(
+    tagIndex.content.includes("<h1>Tags</h1>"),
+    "tags/index.html must be the tags index",
+  );
+  const tagPage = out.find((p) => p.path === "tags/index-2.html");
+  assert.ok(tagPage, "the tag page moves to a free path beside the index");
+  assert.ok(
+    tagPage.content.includes("<h1>index</h1>"),
+    "and it is the page for the tag named index",
+  );
 });
 
 test("renderAggregatePages: tag page lists pages with that tag", () => {

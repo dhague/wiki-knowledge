@@ -178,6 +178,52 @@ test("renderSingleFile: every exported page and aggregate becomes a section", ()
   );
 });
 
+test("renderSingleFile: a tag named 'index' does not shadow the tags index", () => {
+  const indexed = `---
+title: Vault Index
+summary: The way in.
+tags:
+  - index
+kind: concept
+---
+
+Body.
+`;
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["wiki/concepts/vault-index.md", indexed],
+  ]);
+  const html = render(pages, { title: "Test Vault" });
+  const ids = sectionIds(html);
+  assert.equal(
+    new Set(ids).size,
+    ids.length,
+    "no two sections may share an id",
+  );
+  assert.equal(
+    ids.filter((id) => id === "tags-index").length,
+    1,
+    "exactly one section carries the tags index's id",
+  );
+  assert.ok(
+    sectionHtml(html, "tags-index").includes("<h1>Tags</h1>"),
+    "tags-index must be the tags index, not the tag page",
+  );
+  assert.ok(
+    sectionHtml(html, "tags-index-2").includes("<h1>index</h1>"),
+    "the tag page moves to a free id beside the index",
+  );
+  assert.ok(
+    hrefs(html).includes("#tags-index"),
+    "the nav's Tags link names the tags index",
+  );
+  assert.deepEqual(
+    walkHasher(html, ["#tags-index"]),
+    ["__front", "tags-index"],
+    "following the Tags link shows the tags index",
+  );
+});
+
 test("renderSingleFile: names the sections the links and the front page rely on", () => {
   const ids = sectionIds(render(wikiPages, { title: "Test Vault" }));
   for (const id of [
