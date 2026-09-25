@@ -1,4 +1,4 @@
-/** Tests for the ten mechanical vault health checks. staleSynthesis and
+/** Tests for the eleven mechanical vault health checks. staleSynthesis and
  * conceptFragmentation need a real git commit: the index is a view of HEAD
  * (ADR-0015). */
 
@@ -14,6 +14,7 @@ import {
   frontmatterLinkFormat,
   staleSynthesis,
   missingVolatilitySourceDate,
+  tagsShape,
   unresolvedSupersession,
   contradictionCallouts,
   orphans,
@@ -442,6 +443,114 @@ test("missing-volatility-source-date: a malformed edge does not abort the run", 
 });
 
 // ---------------------------------------------------------------------------
+// tagsShape
+// ---------------------------------------------------------------------------
+
+test("tags-shape: a list of plain tags is clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "tags:\n  - caching\n  - performance\n",
+    ),
+  });
+  assert.deepEqual(await tagsShape(root), []);
+});
+
+test("tags-shape: no tags, an empty list and an explicit null are all clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/absent.md": page("Absent"),
+    "wiki/concepts/empty.md": page("Empty", "tags: []\n"),
+    "wiki/concepts/null.md": page("Null", "tags:\n"),
+  });
+  assert.deepEqual(await tagsShape(root), []);
+});
+
+// A delimited list collapsed into one string still reads as a value, but
+// indexes as one junk tag no filter matches.
+test("tags-shape: a comma-and-quote-bearing entry is a finding naming the value", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'tags:\n  - windsor", "campaign-tactics", "ground-game\n',
+    ),
+  });
+  assert.deepEqual(await tagsShape(root), [
+    {
+      pageRef: "wiki/concepts/foo.md",
+      detail:
+        'tags entry is not a plain tag: "windsor\\", \\"campaign-tactics\\", \\"ground-game"',
+    },
+  ]);
+});
+
+test("tags-shape: a delimited entry folded across two lines is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'tags:\n  - campaign-tactics", "canvassing",\n    "ground-game\n',
+    ),
+  });
+  assert.deepEqual(await tagsShape(root), [
+    {
+      pageRef: "wiki/concepts/foo.md",
+      detail:
+        'tags entry is not a plain tag: "campaign-tactics\\", \\"canvassing\\", \\"ground-game"',
+    },
+  ]);
+});
+
+test("tags-shape: a scalar value is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page("Foo", "tags: alpha\n"),
+  });
+  assert.deepEqual(await tagsShape(root), [
+    { pageRef: "wiki/concepts/foo.md", detail: 'tags is not a list: "alpha"' },
+  ]);
+});
+
+test("tags-shape: an entry with whitespace, a comma, a quote or no text is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      'tags:\n  - ground game\n  - caching,performance\n  - O\'Brien\n  - ""\n',
+    ),
+  });
+  assert.deepEqual(
+    (await tagsShape(root)).map((f) => f.detail),
+    [
+      'tags entry is not a plain tag: "ground game"',
+      'tags entry is not a plain tag: "caching,performance"',
+      'tags entry is not a plain tag: "O\'Brien"',
+      'tags entry is not a plain tag: ""',
+    ],
+  );
+});
+
+// `stringList` renders these to the strings the index stores, so a numeric or
+// boolean entry is a reachable tag — only null renders to nothing.
+test("tags-shape: a null entry is a finding, a numeric or boolean one is not", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": page("Foo", "tags:\n  - 42\n  - true\n  -\n"),
+  });
+  assert.deepEqual(await tagsShape(root), [
+    {
+      pageRef: "wiki/concepts/foo.md",
+      detail: 'tags entry is not a plain tag: ""',
+    },
+  ]);
+});
+
+test("tags-shape: a malformed block is not this check's finding, and does not abort it", async () => {
+  const root = writeVault({
+    "wiki/concepts/broken.md": "---\ntags: [\n---\nBody.\n",
+    "wiki/concepts/foo.md": page("Foo", "tags: alpha\n"),
+  });
+  assert.deepEqual(await tagsShape(root), [
+    { pageRef: "wiki/concepts/foo.md", detail: 'tags is not a list: "alpha"' },
+  ]);
+});
+
+// ---------------------------------------------------------------------------
 // unresolvedSupersession
 // ---------------------------------------------------------------------------
 
@@ -707,11 +816,12 @@ test("split-links: a split inside a fenced code block is not a finding", async (
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all ten check names", () => {
+test("CHECKS registry contains all eleven check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
     "frontmatter-link-format",
+    "tags-shape",
     "stale-synthesis",
     "missing-volatility-source-date",
     "unresolved-supersession",

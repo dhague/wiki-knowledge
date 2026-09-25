@@ -39,6 +39,22 @@ with a JSON list. Such a value is also why the other checks read on past it
 instead of aborting blank: the record parser refuses the key, so a later check
 would otherwise report an unrelated page as broken.
 
+## `tags-shape`
+
+Every page's `tags` must be a YAML sequence of plain tags — a non-empty token
+carrying no whitespace, comma or quote. A numeric or boolean entry is read as
+its string form, exactly as the index reads it, so it is a reachable tag.
+
+A scalar value reads as no tags at all, and an entry holding a delimited list
+collapsed into one string indexes as a single junk tag. Either way the page
+still shows a value while every tag filter misses it, so the failure is silent
+at both ends: nothing else in `check` or retrieval names it. A missing `tags`,
+or a bare `tags:`, is no tags rather than a malformed one, and stays clean.
+
+Report only. The repair re-types the tag list, and which tags the author meant
+is judgment a rewrite cannot recover — a comma-or-quote-bearing entry is exactly
+the case where guessing would invent tags.
+
 ## `stale-synthesis`
 
 Synthesis pages whose last commit is more than 30 days old. Any churn in their
