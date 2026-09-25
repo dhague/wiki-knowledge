@@ -19,7 +19,7 @@ Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If 
 
 2. **Judge the cluster before merging.** The check's similarity is lexical — whether these pages are one concept is your call.
    - One concept, no conflict → consolidate.
-   - Merely *related* → stop and report. That is a typed edge — Missing cross-references' proposal — not a Consolidation. Never merge just because the linter proposed it.
+   - Merely *related* → stop and report. That is a typed edge — the `missing-cross-references` check's proposal — not a Consolidation. Never merge just because the linter proposed it.
    - Members *contradict* → stop and report. A contradiction is supersession — a flow that keeps both pages — not a lossless merge.
 
 3. **Pick the survivor.** Default to the check's suggestion (most inbound links, largest body as tie-break). Override it when another member holds the cluster's subject more centrally, or when a fresh page reads better than bloating an existing one: a `create` survivor is a first-class choice, not a fallback.

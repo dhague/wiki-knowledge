@@ -2,9 +2,9 @@
  * Tests for the ten mechanical vault health checks.
  *
  * Strategy: build minimal on-disk vault fixtures with writeVault(); for
- * staleSynthesis (`stale-synthesis`) also initialise a real git repo so that
+ * staleSynthesis also initialise a real git repo so that
  * VaultGit.lastCommitDate can return a controlled past/recent date, and for
- * conceptFragmentation (`concept-fragmentation`) commit the fixture so the search index —
+ * conceptFragmentation commit the fixture so the search index —
  * a view of HEAD (ADR-0015) — has pages to score.
  */
 
@@ -88,7 +88,7 @@ async function gitCommit(root: string, timestamp: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// kindFolderConformance (kind-folder-conformance)
+// kindFolderConformance
 // ---------------------------------------------------------------------------
 
 test("kind-folder-conformance: clean vault returns no findings", async () => {
@@ -148,7 +148,7 @@ test("kind-folder-conformance: page in custom kind-folder is NOT a violation", a
 });
 
 // ---------------------------------------------------------------------------
-// ingestionSourceIntegrity (ingestion-source-integrity)
+// ingestionSourceIntegrity
 // ---------------------------------------------------------------------------
 
 test("ingestion-source-integrity: source page with raw_source is clean", async () => {
@@ -181,7 +181,7 @@ test("ingestion-source-integrity: concept page without raw_source is NOT a viola
 });
 
 // ---------------------------------------------------------------------------
-// frontmatterLinkFormat (frontmatter-link-format)
+// frontmatterLinkFormat
 // ---------------------------------------------------------------------------
 
 test("frontmatter-link-format: properly quoted and encoded links are clean", async () => {
@@ -361,7 +361,7 @@ test("frontmatter-link-format: an unquoted boundary-shaped line is reported once
 });
 
 // ---------------------------------------------------------------------------
-// staleSynthesis (stale-synthesis) — requires real git
+// staleSynthesis — requires real git
 // ---------------------------------------------------------------------------
 
 test("stale-synthesis: synthesis page committed recently is clean", async () => {
@@ -400,7 +400,7 @@ test("stale-synthesis: concept page >30 days old is NOT a violation", async () =
 });
 
 // ---------------------------------------------------------------------------
-// missingVolatilitySourceDate (missing-volatility-source-date)
+// missingVolatilitySourceDate
 // ---------------------------------------------------------------------------
 
 test("missing-volatility-source-date: page with both fields is clean", async () => {
@@ -465,7 +465,7 @@ test("missing-volatility-source-date: a malformed edge does not abort the run", 
 });
 
 // ---------------------------------------------------------------------------
-// unresolvedSupersession (unresolved-supersession)
+// unresolvedSupersession
 // ---------------------------------------------------------------------------
 
 const contradictsFm = 'contradicts:\n  - "[Bar](../entities/bar.md)"\n';
@@ -499,7 +499,7 @@ test("unresolved-supersession: contradicts + no supersedes + no callout is a vio
 });
 
 // ---------------------------------------------------------------------------
-// contradictionCallouts (contradiction-callouts)
+// contradictionCallouts
 // ---------------------------------------------------------------------------
 
 test("contradiction-callouts: page without callout is clean", async () => {
@@ -577,7 +577,7 @@ test("orphans: folded frontmatter edge counts as inbound link", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// splitLinks (split-links)
+// splitLinks
 // ---------------------------------------------------------------------------
 //
 // Every fixture here is hand-written: the writer emits no fold at all since
@@ -1167,7 +1167,7 @@ test("FIXES registry contains all four fix names", () => {
 });
 
 // ---------------------------------------------------------------------------
-// conceptFragmentation (concept-fragmentation)
+// conceptFragmentation
 // ---------------------------------------------------------------------------
 
 /** Minimal page with tags, for the fragmentation fixtures. */

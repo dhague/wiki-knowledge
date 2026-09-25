@@ -91,7 +91,7 @@ function regexEscape(s: string): string {
 // The mechanical checks
 // ---------------------------------------------------------------------------
 
-// kindFolderConformance (kind-folder-conformance) — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
+// kindFolderConformance — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
 export async function kindFolderConformance(root: string): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const ref of walkAllMd(root)) {
@@ -111,7 +111,7 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** ingestionSourceIntegrity (ingestion-source-integrity) — every wiki/sources/ page must carry raw_source pointing into raw/. */
+/** ingestionSourceIntegrity — every wiki/sources/ page must carry raw_source pointing into raw/. */
 export async function ingestionSourceIntegrity(
   root: string,
 ): Promise<Finding[]> {
@@ -131,7 +131,7 @@ export async function ingestionSourceIntegrity(
   return findings;
 }
 
-// frontmatterLinkFormat (frontmatter-link-format) — operates on raw text, not parsed records: frontmatter the record parser refuses — an unquoted link, an edge value that is not a markdown link — is what this check surfaces.
+// frontmatterLinkFormat — operates on raw text, not parsed records: frontmatter the record parser refuses — an unquoted link, an edge value that is not a markdown link — is what this check surfaces.
 export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   const pages = new Vault(root).loadWikiPages();
   const findings: Finding[] = [];
@@ -179,7 +179,7 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** staleSynthesis (stale-synthesis) — synthesis pages whose last git commit is more than 30 days ago. */
+/** staleSynthesis — synthesis pages whose last git commit is more than 30 days ago. */
 export async function staleSynthesis(root: string): Promise<Finding[]> {
   const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const vaultGit = new VaultGit(root);
@@ -201,7 +201,7 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** missingVolatilitySourceDate (missing-volatility-source-date) — pages missing volatility or source_date degrade search ranking and temporal filtering. */
+/** missingVolatilitySourceDate — pages missing volatility or source_date degrade search ranking and temporal filtering. */
 export async function missingVolatilitySourceDate(
   root: string,
 ): Promise<Finding[]> {
@@ -216,7 +216,7 @@ export async function missingVolatilitySourceDate(
   return findings;
 }
 
-// unresolvedSupersession (unresolved-supersession) — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
+// unresolvedSupersession — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
 // Pages with contradicts + active callout are live contradictions (contradiction-callouts' domain), not a violation here.
 export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText({
@@ -243,7 +243,7 @@ export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** contradictionCallouts (contradiction-callouts) — pages with an active `> [!warning] Contradiction` callout in the body. */
+/** contradictionCallouts — pages with an active `> [!warning] Contradiction` callout in the body. */
 export async function contradictionCallouts(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText({
     skipMalformedEdges: true,
@@ -285,7 +285,7 @@ export async function orphans(root: string): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
-// splitLinks (split-links)
+// splitLinks
 // ---------------------------------------------------------------------------
 
 /**
@@ -478,7 +478,7 @@ function bodySplits(
 }
 
 /**
- * splitLinks (split-links) — no link is split across lines.
+ * splitLinks — no link is split across lines.
  *
  * Four shapes, one vocabulary (`wiki-conventions`, "Links";
  * docs/adr/0024-emitted-lines-are-not-folded.md):
@@ -520,7 +520,7 @@ export async function splitLinks(root: string): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
-// conceptFragmentation (concept-fragmentation)
+// conceptFragmentation
 // ---------------------------------------------------------------------------
 
 /**
@@ -698,7 +698,7 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
 }
 
 /**
- * conceptFragmentation (concept-fragmentation) — #452/#454, ADR-0021.
+ * conceptFragmentation — #452/#454, ADR-0021.
  *
  * Finds clusters of small, closely-related concept (and custom-kind) pages
  * that would read better as one page with sections, and proposes a
@@ -903,7 +903,7 @@ export const CHECKS: Record<string, CheckFn> = {
 // All return the list of page refs that were modified.
 // ---------------------------------------------------------------------------
 
-// fixFrontmatterLinkFormat (frontmatter-link-format) — apply quoting and encoding corrections to frontmatter links in place.
+// fixFrontmatterLinkFormat — apply quoting and encoding corrections to frontmatter links in place.
 export async function fixFrontmatterLinkFormat(
   root: string,
 ): Promise<string[]> {
@@ -953,7 +953,7 @@ export async function fixFrontmatterLinkFormat(
   return changed;
 }
 
-// fixIngestionSourceIntegrity (ingestion-source-integrity) — move the one unambiguous raw/ body link to raw_source: frontmatter.
+// fixIngestionSourceIntegrity — move the one unambiguous raw/ body link to raw_source: frontmatter.
 export async function fixIngestionSourceIntegrity(
   root: string,
 ): Promise<string[]> {
@@ -988,7 +988,7 @@ export async function fixIngestionSourceIntegrity(
   return changed;
 }
 
-// fixMissingCrossReferences (missing-cross-references, unambiguous case) — insert relative markdown links for exact title
+// fixMissingCrossReferences (unambiguous case) — insert relative markdown links for exact title
 // matches that appear in body text without an existing link to that page.
 export async function fixMissingCrossReferences(
   root: string,
@@ -1077,7 +1077,7 @@ export async function fixMissingCrossReferences(
   return changed;
 }
 
-// fixSplitLinks (split-links) — join the three frontmatter shapes in place. Body splits
+// fixSplitLinks — join the three frontmatter shapes in place. Body splits
 // are never joined (a break after a destination is legal markdown, so a join
 // on sight can silently repoint the link); they stay a report-only finding.
 export async function fixSplitLinks(root: string): Promise<string[]> {

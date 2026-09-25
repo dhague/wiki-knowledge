@@ -191,14 +191,16 @@ const FIX_SPELLINGS = [
   /\bfix\s+`([a-z][a-z0-9-]*)`/g,
 ];
 
-test("every check slug named in plugin prose is a CHECKS key", () => {
-  const keys = new Set(Object.keys(CHECKS));
+test("every check slug named in plugin prose resolves to a registry key", () => {
+  // A judgment check has no CHECKS entry — its durable spelling is the fix
+  // registry's (`missing-cross-references`), so both count as a check name.
+  const keys = new Set([...Object.keys(CHECKS), ...Object.keys(FIXES)]);
   for (const { label, text } of pluginProse()) {
     for (const pattern of CHECK_SPELLINGS) {
       for (const match of text.matchAll(pattern)) {
         assert.ok(
           keys.has(match[1]),
-          `${label}: "${match[1]}" is named as a check but is not a CHECKS key`,
+          `${label}: "${match[1]}" is named as a check but is not a CHECKS or FIXES key`,
         );
       }
     }

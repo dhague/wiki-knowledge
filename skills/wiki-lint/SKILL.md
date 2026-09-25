@@ -24,7 +24,7 @@ Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If 
 - A vault-root argument — lint that vault root.
 - **If this session can spawn a subagent**: delegate the analysis and auto-fix work — hand the `wiki-lint` procedure the vault path (if given). Wait for the report. Then:
   - Relay the **auto-fixed** and **report-only findings** sections verbatim.
-  - For each **confirm-first proposal** in the returned report, present it to the user and apply the stated command on yes, skip on no. One at a time, or offer accept-all / decline-all / choose — **except a Consolidation proposal (`concept-fragmentation`)**: always one cluster at a time, never batched, never an accept-all, because each deletes committed pages.
+  - For each **confirm-first proposal** in the returned report, present it to the user and apply the stated command on yes, skip on no. One at a time, or offer accept-all / decline-all / choose — **except a Consolidation proposal (`concept-fragmentation` check)**: always one cluster at a time, never batched, never an accept-all, because each deletes committed pages.
   - After all confirms are resolved, print the final summary.
 - **If already running the procedure as a subagent**: run the full procedure below with own tools. Apply auto-fixes. Return confirm-first proposals as a structured list with exact commands — never ask the user (a subagent has no channel to the user; confirm-first interaction belongs to the invoking session that called you).
 
