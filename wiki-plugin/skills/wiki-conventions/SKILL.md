@@ -1,6 +1,6 @@
 ---
 name: wiki-conventions
-description: The single source of truth for the wiki vault — folder structure, frontmatter schema, relative-markdown link rules, and the typed-edge vocabulary. Loaded on demand by both the ingestion and retrieval procedures; it is the contract between them. Consult before creating, moving, linking, or reading any wiki page.
+description: The wiki vault's format contract — kind-axed folder structure, frontmatter schema, relative-markdown link rules, typed-edge vocabulary. It is what `wiki-ingest` writes and `wiki-ask` reads — load it before creating, moving, linking or reading a wiki page.
 ---
 
 # Wiki conventions
@@ -22,9 +22,9 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
     └── <user-extensible>/    ← emails/ meetings/ notes/ clippings/ documents/ … an OPEN set
 ```
 
-- Four **kind-folders** under `wiki/` are the canonical set; any user-added `wiki/<custom>/` folder that pre-exists is a peer placement target (see [Placement algorithm](#placement-algorithm)). **Kind** is the only axis both decidable from a page's content *and* domain-independent. Domain- or topic-axed trees fail decidability and are not used. (See [Naming](#naming) for folder-vs-value convention.)
+- Four **kind-folders** under `wiki/` are the canonical set; any user-added `wiki/<custom>/` folder that pre-exists is a peer placement target (see [Placement algorithm](#placement-algorithm)). **Kind** is the only axis both decidable from a page's content *and* domain-independent; a genuine toss-up between two folders means the axis is wrong — merge them and push the distinction to tags. (See [Naming](#naming) for folder-vs-value convention.)
 - **Multi-membership never spawns a second folder.** Page touching several subjects filed once, by primary function; every other facet rides on **tags + typed edges**. Folder tree is only a thin, decidable filing handle.
-- `raw/` is **sibling** of `wiki/`, not child — immutable-originals-vs-generated split. Search index walks `wiki/**` only; never lists `raw/`.
+- `raw/` is **sibling** of `wiki/`, not child — immutable-originals-vs-generated split. Search index walks `wiki/**` only.
 - `raw/` is **inbox** scanned by deterministic script; subfolders are **user-extensible** — no mandated catch-all.
 - **Search refuses a pre-conversion root.** A directory carrying the vault marker but not a git repository (a **candidate vault**) resolves for `vault root`, but `search`/`discover` throw rather than report an empty vault — there is no committed history to read. Convert it with `wiki-init` (which runs `enchiridion init <path> --mode …`). A real repo with no commits is an empty vault, not a candidate — search is simply empty.
 
@@ -47,16 +47,11 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
 - **Enforced, not merely conventional.** `enchiridion ingest` validates both halves before writing: plan naming a `raw` artifact must place a `sources/` page whose `raw_source` resolves to it, and every other page in that plan must carry a `source` edge to that stub. Plan that doesn't is rejected.
 - **Raw file ingestion declines outright** — spam, exact duplicate, junk — produces no pages; rule doesn't apply.
 
-**Decidability bar:** given only title + summary, correct folder is same every time, no tie-break needed. If two folders are ever a genuine toss-up, the axis is wrong — fix is to merge them and push distinction to tags.
-
-**Subject tie-break:** page plausibly *about* two subjects filed by primary function; other subject becomes tag or typed edge.
-
 ### Verify against the source
 
-**The edge makes a citation checkable; it does not make it checked.** Every claim — a figure, a date, a name, a superlative ("best", "first", "only") — is verified when it is written, against the artifact that owns it: the page's own `raw/` artifact, or the primary source behind it where the artifact is silent. A `synthesis/` page has no artifact of its own, so it follows the input page carrying the claim through to *that* page's artifact — the input page points at the evidence, it is not the evidence. **A sibling `wiki/` page is never evidence:** restating one copies whatever error it carries, which is how one wrong figure reaches six pages while every structural check stays green.
+**The edge makes a citation checkable; it does not make it checked.** Every claim — a figure, a date, a name, a superlative ("best", "first", "only") — is verified when written, against the artifact that owns it: the page's own `raw/` artifact, or the primary source behind it where the artifact is silent. A `synthesis/` page has no artifact of its own, so it follows the input page carrying the claim through to *that* page's artifact — the input page points at the evidence, it is not the evidence. **A sibling `wiki/` page is never evidence:** restating one copies its error, which is how one wrong figure reaches six pages while every structural check stays green.
 
-- **The artifact decides a disagreement.** Two pages at odds → check each against its own artifact; the loser does not win by being read last. Record the loser as a `contradicts` edge, plus `supersedes` on the page that replaces it ([directions](#typed-edges)).
-- **Recompute derived figures.** Percentages, sums, totals and surplus/deficit are checked arithmetically against components already on the page or in the artifact — components sum to the stated total, income minus expenditure reconciles with the stated surplus/deficit. Needs no source, and catches what reading alone does not.
+Settling a disagreement, and recomputing a derived figure: [`reference/verification.md`](reference/verification.md) — read before resolving a contradiction or signing off a figure.
 
 ### The `raw/` layer
 
@@ -75,16 +70,15 @@ Every page opens with YAML frontmatter block. **Only fields requiring judgment l
 ```yaml
 ---
 title: <human title>
-summary: <one line, ≤ ~20 words>        # THE field retrieval reads first; write it well at ingestion
-tags: [<emergent — reuse existing tags where sensible, mint new where needed; NOT a controlled vocabulary>]
-source_date: <YYYY-MM-DD>               # when the knowledge is FROM (valid time) — judgment, not recoverable from git
-raw_source: "[<filename>](<encoded relative/path into raw/>)"   # REQUIRED on sources/ pages; a single Markdown link to the ingested artifact. Omit on other kinds.
+summary: <one line, ≤ ~20 words>
+tags: [<tag>, <tag>]
+source_date: <YYYY-MM-DD>
+raw_source: "[<filename>](<encoded relative/path into raw/>)"
 volatility: stable | evolving | volatile
-# Relationships — each an optional list of relative-markdown links (quoted, so YAML doesn't read the [ as a flow sequence).
-# Include only the keys that have links; omit the rest.
-supersedes:                             # pages this page replaces (a recorded fact; see notes)
+# Relationships — each an optional list of relative-markdown links, quoted so YAML does not read the [ as a flow sequence. Include only the keys that have links; omit the rest.
+supersedes:
   - "[<title>](<relative/path.md>)"
-refines:                                # typed edges: one key per edge type (see Typed edges)
+refines:
   - "[<title>](<relative/path.md>)"
 contradicts:
   - "[<title>](<relative/path.md>)"
@@ -100,43 +94,35 @@ related:
 Field notes:
 
 - **`title`** — human-readable name; filename is its kebab-slug.
-- **`summary`** — single most important field. Retrieval judges a candidate page by its `summary` before reading body; search index matches it. One line, ≤ ~20 words, written well at ingestion.
+- **`summary`** — single most important field: retrieval judges a candidate by its `summary` before reading the body, and the search index matches it. One line, ≤ ~20 words, written well at ingestion.
 - **`tags`** — emergent, not controlled. See [Tags](#tags).
 - **`source_date`** — **valid time**: when the knowledge is *from* (document's own date, meeting's date). Judgment git cannot reconstruct; what temporal queries key off. Distinct from commit date. **One canonical spelling: `YYYY-MM-DD`** — valid time is a *date*, not an instant, so a time-of-day has no meaning and a `source_date` carrying a clock is truncated to its date on the way in (read and write alike). A value that isn't a valid date at all is rejected at ingest.
-- **`raw_source`** — **single markdown link into `raw/`** (title = artifact's literal filename, destination = percent-encoded path), **required on `sources/` pages, omitted on every other kind**. Points at the immutable artifact this page stands in for. Distinct from `source`-type *edge* (see [Typed edges](#typed-edges)): this field points into `raw/`; edge points at another `wiki/` page. Split onto different keys (`raw_source:` vs `source:`) so nothing has to guess which is meant. Example: `"[my file.txt](../../raw/notes/my%20file.txt)"`.
+- **`raw_source`** — **single markdown link into `raw/`** (title = artifact's literal filename, destination = percent-encoded path), **required on `sources/` pages, omitted on every other kind**. Points at the immutable artifact the page stands in for — distinct from the `source`-type *edge*, which points at another `wiki/` page; the two live on separate keys (`raw_source:` vs `source:`) so nothing has to guess which is meant. Example: `"[my file.txt](../../raw/notes/my%20file.txt)"`.
 - **`volatility`** — `stable` | `evolving` | `volatile`. Drives conditional decay at retrieval: `stable` facts don't age out, `volatile` ones flagged as possibly current-only. Authored, not inferred.
 - **`supersedes`** — optional list of markdown links to pages this page replaces. **Recorded fact**, stronger than any "newer wins" guess. On contradiction, ingestion **appends new page and records `supersedes`; does not overwrite** the old one. **Never author a `superseded_by` key** — the inverse is derived by inverting every page's `supersedes` edges, which is why `discover` output and `enchiridion superseded-by` can report it on a page whose own frontmatter says nothing.
 - **typed-edge keys** (`refines`, `contradicts`, `example-of`, `source`, `related`) — each optional list of markdown links to target pages; see [Typed edges](#typed-edges).
 
 ### Derived from git
 
-**Deliberately absent from schema:** `updated_at` and `ingested_at`. Git's commit history is authoritative record of when a page was first added and last touched — hand-maintained timestamp an agent forgets to bump is worse than none. Derive from `git log` on demand.
-
-Clean **bitemporal** model: `source_date` is **valid time** (authored), git commit date is **transaction time** (derived). Never add frontmatter field for anything git already knows.
+**Deliberately absent:** `updated_at`, `ingested_at` — git already knows them, and a hand-maintained timestamp an agent forgets to bump is worse than none; derive from `git log`. `source_date` is **valid time** (authored), git's commit date is **transaction time** (derived). **Never add a frontmatter field for anything git already knows.**
 
 ## Tags
 
-Tags are **emergent** — generated at ingestion, not conformed to a fixed list. **Reuse existing tag** where one fits; **mint new one** only where nothing fits. `enchiridion discover --plan` returns vault's tag vocabulary alongside every candidate — reuse-first is something the discovery call gives you. Prefer `--tags-containing`/`--tag-count`, derived from the draft's own candidate tags, over the full vocabulary dump — see the `discover` catalogue entry. No controlled vocabulary, no lint rule rejecting "off-vocabulary" tags; consistency comes from reuse-first discipline, not a closed set.
+Tags are **emergent** — generated at ingestion, not conformed to a fixed list. **Reuse an existing tag** where one fits; **mint a new one** only where nothing does — `enchiridion discover --plan` returns the vault's tag vocabulary beside every candidate, and `--tags-containing`/`--tag-count`, derived from the draft's own candidate tags, beats the full dump ([catalogue](reference/scripts.md)). Consistency comes from reuse-first discipline, not a closed set.
 
 ## Links
 
 Links between pages are **relative markdown links — not wikilinks.**
 
 - **Standard link:** `[prepared statements](../concepts/prepared-statements.md)`. Path relative to linking file's location; `entities/` to `concepts/` climbs one level (`../concepts/…`).
-- **Anchors:** append heading fragment — `[the budget rule](../wiki-ask/SKILL.md#termination-budget)` / `[…](../concepts/caching.md#ttl)`. Fragment is GitHub-style slug of target heading.
+- **Anchors:** append heading fragment — `[edge-following rules](../wiki-ask/SKILL.md#edge-following-rules)` / `[…](../concepts/caching.md#ttl)`. Fragment is GitHub-style slug of target heading.
 - **Image embeds:** leading-bang form — `![cache diagram](../raw/diagrams/2026-03-01-cache.png)`. Embeds may point into `raw/`; ordinary links between pages stay within `wiki/`.
 
 All links **position-spliced** on move/rename by `enchiridion vault move` (both inbound links across vault and outbound links inside moved page). Links into `raw/` are **percent-encoded**: encode space, `#`, `%`, `(`, `)`, `<`, `>`; everything else (unicode, `&`, `'`, `,`, `+`) stays literal. Obsidian cannot follow destination containing literal space, so encoding is essential for interoperability.
 
-- **`#` is the anchor separator, written literal.** First literal `#` in a destination always begins the heading fragment; a *filename's* own hash can therefore only be spelled `%23`. Unencoded `#` never means part of a path.
+**Frontmatter relationships use that same link form.** `raw_source`, `supersedes` and every typed-edge key hold `[title](relative/path.md)`, quoted (`"[…](…)"`) so YAML doesn't read a leading `[` as a flow sequence — `raw_source` a **single** link, the others a **list** — and may carry an anchor exactly as a body link does (`related:` → `- "[cache TTL](../concepts/caching.md#ttl)"`). `#` stays literal: the first `#` begins the fragment, so a *filename's* own hash can only be spelled `%23`, and the fragment is never part of the page an edge targets — the edge still points at the `page_ref`.
 
-**Frontmatter relationships use the same link form.** `raw_source` field, `supersedes` key, and every typed-edge key hold `[title](relative/path.md)` markdown, always **quoted** (`"[…](…)"`) so YAML doesn't parse leading `[` as flow sequence. `raw_source` holds **single** link; `supersedes` and typed-edge keys hold **list** (`- "[…](…)"`). Real markdown links keep every relationship clickable in plain markdown viewers and in Obsidian's Properties panel, and lets a move rewrite frontmatter and body links by same rule.
-
-**Same link form means same anchors.** A frontmatter destination may carry a heading fragment exactly as a body link does — `related:` → `- "[cache TTL](../concepts/caching.md#ttl)"`. The `#` stays literal there too; only a hash in the *filename* is `%23`. A frontmatter link is not a separate dialect with anchors forbidden.
-
-**The anchor is a fragment of the target page, never part of its name.** So the edge points at the page: `related:` → `- "[cache TTL](../concepts/caching.md#ttl)"` records an edge to `wiki/concepts/caching.md`, and `#ttl` is only where a reader lands once there. Edge targets are page refs and carry no fragment — the one `page_ref` spelling, unchanged by an anchor.
-
-**A link is never split across lines** — no column limit, no hard wrap, frontmatter or body. Every link the plugin writes sits on one line however long its destination is. A page written by an older version may still carry a destination split mid-slug with a trailing `\`, a label split at a space, or a break between the label's `]` and the destination's `(`: legal YAML all three, folded back to the same value by any conforming parser and by `enchiridion` itself. Read them, never hand-edit one — `enchiridion fix split-links` joins all three frontmatter shapes (destination with nothing, label with one space, label/destination boundary with nothing); the join looks obvious, and a wrong one silently repoints the link.
+**A link is never split across lines** — no column limit, no hard wrap, frontmatter or body; every link the plugin writes sits on one line however long its destination is. An older page may still carry one of the three folded frontmatter shapes — a destination split mid-slug with a trailing `\`, a label split at a space, or a break between a label's `]` and its destination's `(` — all legal YAML, folded back to the same value by any conforming parser. Read them, never hand-edit one: `enchiridion fix split-links` joins all three, and a wrong join silently repoints the link.
 
 ## Typed edges
 
@@ -156,31 +142,27 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 | **`refines`** | *this page refines the target* | Sharpens, extends, or adds precision to target's idea. Target is broader/earlier statement; this page is finer. |
 | **`contradicts`** | *this page contradicts the target* | Claim conflicts with target's. Record edge even before conflict is resolved; when resolved by replacement, also set `supersedes`. |
 | **`example-of`** | *this page is an example of the target* | Concrete instance / case study of general concept target describes. |
-| **`source`** | *this page is sourced from the target* | Page draws content from target **page**. Two uses: `synthesis/` page lists under `source:` each `wiki/` page it was synthesized from, and — **mandatorily**, see [The chain of evidence](#the-chain-of-evidence) — every page an ingestion produces points at that raw file's `sources/` stub. Distinct from `raw_source:` field — see [field notes](#frontmatter-schema). |
-| **`related`** | *this page is associatively related to the target* | Real connection that is none of the above. Catch-all — prefer sharper type whenever one fits; retrieval can follow specific type purposefully but can only wander a `related` one. |
+| **`source`** | *this page is sourced from the target* | Page draws content from target **page**. Two uses: `synthesis/` page lists under `source:` each `wiki/` page it was synthesized from, and — **mandatorily**, see [The chain of evidence](#the-chain-of-evidence) — every page an ingestion produces points at that raw file's `sources/` stub. |
+| **`related`** | *this page is associatively related to the target* | **Catch-all** — prefer sharper type whenever one fits; retrieval can follow specific type purposefully but can only wander a `related` one. |
 
-**Ingestion guidance:** assign most specific type that is true; reach for `related` only when no sharper type applies. Exception to "judge per page" is mandatory `source` back-edge. Under-assigning edges is silent quality loss — graph only as navigable as edges recorded. **Retrieval guidance:** follow edges the question implies (a "how does X work in practice" follows `example-of`; "is this still true" follows `contradicts`/`supersedes`), within stated hop budget.
+**Ingestion guidance:** assign the most specific type that is true; the mandatory `source` back-edge is the one exception to judging per page. Under-assigning edges is silent quality loss — the graph is only as navigable as the edges recorded. **Retrieval guidance:** follow the edges the question implies (a "how does X work in practice" follows `example-of`; "is this still true" follows `contradicts`/`supersedes`), within the stated hop budget.
 
 ## Scripts
 
-Subcommands touching the vault resolve its root themselves (`$WIKI_ROOT`, else nearest ancestor holding `wiki/` directory or `.wiki-root` marker, else cwd). Set `WIKI_ROOT` before invoking any. `place` is the exception — it resolves no root and takes only what you hand it. `page` also takes only the file path you hand it, but an edge value's vault-relative ref is resolved against the vault that file sits in, so the file's own location wins and `$WIKI_ROOT` is not consulted.
+Full subcommand catalogue — every subcommand, what to call it for, and its usage: [`reference/scripts.md`](reference/scripts.md) — read it for a row's exact spelling or rationale.
 
-**One `enchiridion` bundle, nothing to install** — the script layer is a single file, `scripts/enchiridion.cjs`, shipped beside its `node-sqlite3-wasm.wasm` sidecar inside every skill directory, this one included. Resolve it once from this skill's base directory (the host reports that path when it loads the skill):
+The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
 ```bash
 RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>` — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun). No binary to download and no lazy fetch, and it works identically in dedicated mode and query-from-anywhere mode. If neither runtime is present, say so plainly and stop.
+Every call is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop, though this file makes no calls of its own.
 
-**Batch independent invocations.** When a step needs more than one independent `enchiridion` call — e.g. several `search` queries for different terms or candidates — batch them into a single tool call rather than issuing each separately; each extra tool call costs a full turn. Chain them in one shell invocation, or issue them in parallel when your host batches tool calls in a single message:
+Two root-resolution exceptions, worth carrying here: `place` resolves no root and takes only what you hand it, and `page` resolves none for a plain value — an edge value's vault-relative ref is composed against the vault the file sits in, so the file's own location wins and `$WIKI_ROOT` is not consulted.
 
-```bash
-"$RUNTIME" "$ENCHIRIDION" search "prepared statements" --json; "$RUNTIME" "$ENCHIRIDION" search "connection pooling" --json
-```
-
-### Script catalogue
+**Batch independent invocations** — several `search` queries, say — into one shell call rather than issuing each separately; every extra tool call costs a full turn.
 
 **`--json` output contract — one dialect, one spelling (#495).** Two shapes, and the choice is *how many documents*, not the outer JSON type:
 
@@ -188,19 +170,3 @@ Every call is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>` — `node`
 - **One document** — a single compact JSON value on one line, the value itself an array where the run is a table (`read-page`, `discover --plan`, `vault kinds`, `export --candidates`, `search --status`/`--reindex`). Consume with one `JSON.parse(stdout)`.
 
 Never indented, never pretty-printed. **Failure is the other half of the contract**: message on stderr, non-zero exit, same whichever host ran it. **One exception — `page set --json` means *input*, not output**: it parses the value argument as JSON, and is the one subcommand whose stdout no consumer parses.
-
-| Subcommand | Call it for | Usage |
-|---|---|---|
-| `enchiridion discover` | Discovery before ingesting — BM25 overlap classification for every page a draft plan proposes, plus vault's tag vocabulary. Call during ingestion step 3, before writing real `IngestPlan`. Emits only actionable hints (`duplicate`/`refines`/`related`); `distinct` hits (score below `relatedThreshold`) are filtered before output — their absence means "safe to mint." Recall is unbounded by default; `--limit` is an optional safety cap (default 0 = unbounded). | `enchiridion discover --plan <draft-plan.json> [--limit N] [--duplicate-threshold F] [--related-threshold F]` → `{"pages": [{"title", "candidates": [{page_ref, title, score, hint, summary, tags, volatility, superseded_by}]}], "vocabulary": [{"tag", "count"}]}`. Single-page mode (`--title`/`--summary`/`--body-file`) for ad-hoc checks, JSON Lines. `--tags-containing "a,b,c"` (case-insensitive substring OR match) and/or `--tag-count "x,y"` (exact match, 0 if the tag doesn't exist yet) each swap the `vocabulary` array for a named field in the same document — `tag_matches` (`["tag1","tag2"]`) for the former, `tag_counts` (`[{"tag","count"}]`) for the latter — so `--plan` output is exactly one JSON document whatever flags you pass. Pass both, derived from the draft's own candidate tags, instead of the full vocabulary dump. |
-| `enchiridion search` | Any vault search. | `enchiridion search "<terms>" [--tag T] [--tag-any T] [--kind K] [--since DATE] [--until DATE] [--date-field FIELD] [--volatility V] [--limit N] [--include-superseded] [--raw] [--json]`. Also `--reindex [--full]` and `--status`. |
-| `enchiridion read-page` | Reading a page's full content by vault-relative ref — frontmatter + body. The read-only companion to `search`; a host that cannot read files directly uses this in place of one. | `enchiridion read-page <page_ref>` prints the page's raw markdown; `--json` emits `{page_ref, frontmatter, body}` as one compact line. |
-| `enchiridion superseded-by` | Filtering retrieval candidate set for currency — resolving each candidate to its current page. Call during retrieval step 4, once frontier is expanded. | `enchiridion superseded-by <page_ref> [<page_ref> ...] [--json]` → `--json` is JSON Lines, one `{seed, active, chain}` per candidate per line; `active == seed` means current. |
-| `enchiridion ingest` | Executing an `IngestPlan` — resolve, validate, write, commit — after agent assembles plan. | `enchiridion ingest --plan <path>`; add `--dry-run` to validate and print without writing. `enchiridion ingest --ignore <raw_rel> [--ignore <raw_rel> …] [--ignore-comment <text>]` appends to folder's `.ingestignore`; `--ignore` is repeatable so multiple paths can be bulk-added in one call. |
-| `enchiridion ingest-scan` | Sweeping `raw/` for files needing ingestion (never-ingested, changed-since-ingestion). | `enchiridion ingest-scan [folder] --json` → JSON Lines, one scan row per line. |
-| `enchiridion watch` | Long-running filesystem watcher over `raw/` with per-file debounce, exclusive lock, queue file — launched by the `wiki-watch` skill. | `enchiridion watch [--vault ROOT] [--debounce SECONDS] [--poll-interval SECONDS]`. `enchiridion watch [--vault ROOT] --dequeue <raw_rel>` removes one queue entry. |
-| `enchiridion vault` | Resolving vault root, listing all available kinds, or moving a page (rewrites all inbound links across vault and outbound links inside moved page). | Bare `enchiridion vault` (or `enchiridion vault root`) prints resolved root. `enchiridion vault kinds [--json]` lists every kind — the four canonical kinds (`canonical: true`) plus any custom kind-folder; each entry: `{kind, folder, canonical, definition}` (`definition` is `KIND.md` summary or `null`). `enchiridion vault move <old-page-ref> <new-page-ref>` prints each changed page ref, one per line. |
-| `enchiridion init` | Scaffolding new empty vault: folders, `.gitignore`, git init, optional `settings.json`. | `enchiridion init <path> --mode {query-from-anywhere|dedicated} [--plugin-root DIR]`. |
-| `enchiridion save-session` | Capturing current session's transcript as raw file in vault. Called by the `save-conversation` skill. | `enchiridion save-session [--slug "<phrase>"]`. |
-| `enchiridion page` | Frontmatter edits during ingestion. Takes a **file path**; a non-edge value is written verbatim, an edge value is composed against the vault the file sits in. | `enchiridion page get <file> <key>` (exits non-zero when key absent) · `page set <file> <key> <value> [--json]` · `page merge <file> <key> <json-list>`. For an edge key — `raw_source`, `supersedes`, `refines`, `contradicts`, `example-of`, `source`, `related` — every value is either exactly one markdown link, kept exactly as written (its destination is not inspected, so a URL or anchor link passes), or a **vault-relative page ref** like `wiki/concepts/foo.md`, which is composed to a `[Title](../dest.md)` link exactly as `ingest` composes plan `edges`; never hand-build the link. Anything that is neither — prose, a bare URL, an absolute path, a `..`-escaping path — fails, naming key and value, as does a ref that names no file. `page set` **replaces** a list-valued key — one value becomes a one-element list — while `page merge` **unions** into it. A non-edge key is untouched by any of this: `page merge` still unions `tags` verbatim. `raw_source` holds a single link, so set it with `page set`; `page merge raw_source` fails. |
-| `enchiridion place` | Computing new page's vault-relative path from kind and title. Takes only what you hand it, resolves no vault root. | `enchiridion place <kind> "<title>"`. |
-| `enchiridion commit` | Writing one structured git commit per ingestion/edit manifest: stages paths, gates on chain-of-evidence, returns SHA. Only for a hand-built manifest — `enchiridion ingest` commits its own plan. | `enchiridion commit --manifest <path>`. |

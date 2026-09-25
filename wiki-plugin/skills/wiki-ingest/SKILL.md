@@ -1,113 +1,113 @@
 ---
 name: wiki-ingest
-description: Turn a raw document into one or more schema-valid wiki pages — chunked, placed, tagged, linked, and committed per the wiki-conventions contract.
+description: Ingest raw documents into schema-valid wiki pages — one file, a folder sweep, or a wiki-lint Consolidation handoff — chunked, placed, tagged, linked, and committed per the wiki-conventions contract.
 ---
 
 # Wiki Ingest
 
-Reads `wiki-conventions` for anything this procedure doesn't spell out — folder placement, frontmatter schema, link format, typed-edge vocabulary. Folder/`raw/` sweeps belong to invoking session, not agent — [`reference/sweep.md`](reference/sweep.md), read on demand.
+Reads `wiki-conventions` for anything this procedure doesn't spell out. Folder/`raw/` sweeps belong to invoking session, not agent.
 
-Scripts resolve vault root themselves — see `## Scripts` in `wiki-conventions` for full reference (vault-root resolution, common tasks, script catalogue).
-
-The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
 ```bash
 RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop.
+
+[`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue
 
 ## Invocation
 
 - A folder argument, or no argument — **sweep**, not single ingestion. Read [`reference/sweep.md`](reference/sweep.md) and follow it instead.
 - A file argument — ingest one document. Procedure below.
-- **Consolidation** — a cluster handoff from the `wiki-lint` procedure's `concept-fragmentation` check (CONTEXT.md, **Consolidation**), naming a survivor and the refs it absorbs. Not an ingestion: it is sourced from pages, not an artifact, and it deletes committed pages. Read [`reference/consolidation.md`](reference/consolidation.md) and follow it instead of the single-file procedure.
-- **If this session can spawn a subagent** and the work is a single file: delegate only — hand the `wiki-ingest` procedure the document path, relay the returned manifest verbatim. Then scan output for any `kind-md-proposal` blocks; for each, ask: *"Create `<folder>/KIND.md` for kind `<kind>`? Proposed summary: `<summary>`"* — on explicit yes, write that file with frontmatter `kind: <kind>` and `summary: <summary>` (no other fields required; optional freeform body may follow the closing `---`). Declining is safe — ingestion already committed against the bare folder. A Consolidation delegates the same way, naming the cluster's member refs and the check's suggested survivor — never author the merged body in this session.
-- **If already running the procedure as a subagent**, continue with procedure using own tools. (Single-file work only — sweep delegates one file at a time, per [`reference/sweep.md`](reference/sweep.md). A Consolidation is the exception: the handoff names the member refs, so read [`reference/consolidation.md`](reference/consolidation.md) and follow that.)
+- **Consolidation** — a cluster handoff from the `wiki-lint` procedure's `concept-fragmentation` check (CONTEXT.md, **Consolidation**), naming a survivor and the refs it absorbs: sourced from pages, and it deletes committed pages. Follow step 4's Consolidation variant.
+- **If this session can spawn a subagent** and the work is a single file: delegate only — hand the `wiki-ingest` procedure the document path, relay the returned manifest verbatim. Then scan output for any `kind-md-proposal` blocks; for each, ask: *"Create `<folder>/KIND.md` for kind `<kind>`? Proposed summary: `<summary>`"* — on explicit yes, write that file with frontmatter `kind: <kind>` and `summary: <summary>` (no other fields required; optional freeform body may follow the closing `---`). Declining is safe — ingestion already committed against the bare folder. A Consolidation delegates the same way, naming the cluster's member refs and the check's suggested survivor — never author the merged body here.
+- **If already running the procedure as a subagent**, continue with procedure using own tools. (Single-file work only.)
 
 ## Procedure
 
 Given one document at `<path>`.
 
-1. **Read** document in full; also read `<path>`'s folder's `INGESTION.md` if it exists — issue both reads in one message (see [`reference/ingestion-hints.md`](reference/ingestion-hints.md)). Hints override defaults below.
+1. **Read** document in full; also read its folder's `INGESTION.md` if it exists — issue both reads in one message (see [`reference/ingestion-hints.md`](reference/ingestion-hints.md)). Hints override defaults below.
 2. **Semantic-chunk.** One page or several? Default one; split when document covers multiple independent ideas deserving own future citation.
-3. **Draft the plan, then discover, then classify.** Write `<plan.json>` now — same file step 4 finishes and step 5 runs; nothing written twice. Give every candidate chunk from step 2 a `pages` entry with `title`, `frontmatter.summary`, `body` filled in (full shape in step 4); leave `edges` and unjudged frontmatter for step 4. Run `"$RUNTIME" "$ENCHIRIDION" discover --plan <plan.json> --tags-containing "<candidate tags, comma list>" --tag-count "<candidate tags, comma list>"` once against whole draft — no per-chunk calls, no scratch files. Derive both comma lists from this draft's own candidate tags (the tags step 2's chunks are likely to want); always pass both. Returns candidates classified `duplicate`/`refines`/`related` per page (no `distinct` — score-filtered out), each carrying `summary`, `tags`, `volatility`, `superseded_by` — plus, in place of the full `vocabulary` dump, `tag_matches` (the vault tags matching `--tags-containing`) and `tag_counts` (per-tag page counts for `--tag-count`; 0 means safe to mint) — named fields in that same one JSON document, so no second parse and no trailing text to strip. Both feed step 4 tag-minting.
+3. **Draft the plan, then discover, then classify.** Write `<plan.json>` now — the file step 4 finishes and step 5 runs. Give every candidate chunk from step 2 a `pages` entry with `title`, `frontmatter.summary`, `body` (full shape in step 4); leave `edges` and unjudged frontmatter for step 4. Run `"$RUNTIME" "$ENCHIRIDION" discover --plan <plan.json> --tags-containing "<candidate tags, comma list>" --tag-count "<candidate tags, comma list>"` once against the whole draft — one call per draft, both flags derived from this draft's own candidate tags, always both. Candidates come back classified `duplicate`/`refines`/`related` (no `distinct` — score-filtered out); `tag_matches`/`tag_counts` feed step 4 tag-minting. Discovery reads only — step 4 owns every write.
 
-   Hint is starting point — confirm or override against candidate's own `summary`; record only which **op** each plan entry gets. Step 4 owns every write; nothing here edits a file or calls `enchiridion page`.
-   - **No candidates.** New subject. Keep as `op: "create"`; consider any pages in the vault as typed-edge targets in step 4.
-   - **`related`.** Worth typed edge (usually `related`, sometimes `example-of`) from new page in step 4, not same subject — keep as `op: "create"`.
-   - **`duplicate` or `refines`, no conflict.** Candidate adds to or restates existing page without contradicting — its claims still verify against the artifact, never against the page it restates ([rule](../wiki-conventions/SKILL.md#verify-against-the-source)). Set plan entry to `op: "update"` targeting `page_ref` — step 4 fills whichever of `summary`/`tags`/`source_date`/`volatility`/`body` changes. Record as `updated`, not `created`, in manifest and commit.
+   Hint is a starting point — confirm or override against the candidate's own `summary`; record only which **op** each entry gets ([verify rule](../wiki-conventions/SKILL.md#verify-against-the-source)).
+   - **No candidates.** New subject. Keep as `op: "create"`; consider any vault page as a typed-edge target in step 4.
+   - **`related`.** Worth a typed edge (usually `related`, sometimes `example-of`) from the new page in step 4, not same subject — keep as `op: "create"`.
+   - **`duplicate` or `refines`, no conflict.** Candidate adds to or restates an existing page without contradicting. Set the entry to `op: "update"` targeting `page_ref` — step 4 fills whichever of `summary`/`tags`/`source_date`/`volatility`/`body` changes. Record as `updated`, not `created`, in the manifest and commit.
      - List-valued keys (`tags`, edge-lists: `refines`/`contradicts`/`example-of`/`source`/`related`/`supersedes`) **unioned** with existing values when `enchiridion ingest` applies plan — never diff, always full intended membership.
-   - **Contradiction.** Candidate conflicts with existing page's claim — semantic judgment hint can't make (only measures lexical overlap), check regardless. **Never overwrite existing page.** Keep new page as `op: "create"`, set `contradicts` and `supersedes` on it pointing at superseded `page_ref`. Superseded page content untouched; only new page carries these edges. Decide which claim is right against the artifact the figure came from, never by which text was read last ([rule](../wiki-conventions/SKILL.md#verify-against-the-source)).
-   - Candidate touching multiple existing pages: judge each pairing independently — document can update one while contradicting another.
-4. **Finish the plan.** Fill `edges` and any frontmatter step 3 left open on `<plan.json>` — placement, frontmatter, body, commit one downstream call: `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` (step 5). Full shape:
+   - **Contradiction.** Candidate conflicts with an existing page's claim — the hint only measures lexical overlap, so judge it regardless. **Never overwrite existing page.** Keep the new page as `op: "create"`, set `contradicts` and `supersedes` on it pointing at the superseded `page_ref`. Superseded page content untouched; only the new page carries these edges. Decide which claim is right against the artifact the figure came from, never by which text was read last.
+   - Candidate touching multiple existing pages: judge each pairing independently — one document can update one while contradicting another.
+4. **Finish the plan.** Fill `edges` and any frontmatter step 3 left open on `<plan.json>`; step 5 executes it. Full shape:
 
    ```jsonc
    {
      "title": "<source document's title>",
-     "source_date": "<the document's own date, not today's; pages inherit it, so omit only when the artifact has no date of its own>",
+     "source_date": "<the document's own date, not today's>",  // pages inherit it
      "raw": "raw/<artifact's path, exactly as it sits on disk>",   // omit if nothing came from raw/
      "pages": [
        {
-         "op": "create",                 // the artifact's source/ stub — mandatory whenever "raw" is set
+         "op": "create",                 // source/ stub — mandatory when "raw" is set
          "kind": "source",
          "title": "<the artifact's own title>",
-         "body": "<what this artifact is; thin when its content was distilled into the pages below>",
+         "body": "<what this artifact is; thin when distilled below>",
          "frontmatter": {
            "summary": "<one line, ≤~20 words>",
-           "raw_source": true,  // required here, omitted on every other kind — marks this page as the "raw" field's stub; `enchiridion ingest` composes the actual link
+           "raw_source": true,           // the "raw" stub — this kind only
            "volatility": "stable"        // an artifact is frozen: its stub is stable
          },
          "edges": {}
        },
        {
          "op": "create",
-         "kind": "concept",            // any kind returned by `enchiridion vault kinds` — canonical (source | synthesis | entity | concept) or a custom kind whose folder pre-exists; placement algorithm in wiki-conventions, first match wins
+         "kind": "concept",              // any `vault kinds` kind; first match wins
          "title": "<page title>",
          "body": "<full markdown body>",
          "frontmatter": {
            "summary": "<one line, ≤~20 words>",
-           "tags": ["<reuse an existing tag where one fits, mint only when nothing does>"],
-           "source_date": "<omit to inherit the plan's date above; set this page's own only when it differs>",
+           "tags": ["<tag>"],
+           "source_date": "<omit to inherit the plan's date>",
            "volatility": "stable | evolving | volatile"
          },
          "edges": {
            "source": ["wiki/sources/<stub-slug>.md"],  // mandatory back-edge to the stub above
-           "related": ["<vault-relative path.md>"],
-           "supersedes": ["<vault-relative path.md>"]           // include on the new page when step 3 found a contradiction to resolve
+           "related": ["<page reference>"],
+           "supersedes": ["<page reference>"]           // when step 3 found a contradiction
          }
        },
-        {
-          "op": "update",
-          "page_ref": "wiki/concepts/existing-page.md",   // the page step 3 classified as substantive-overlap
+       {
+         "op": "update",
+         "page_ref": "wiki/concepts/existing-page.md",   // step 3's substantive-overlap page
          "title": "<unchanged or corrected title>",
-         "frontmatter": { "volatility": "evolving", "tags": ["new-tag"] },   // scalar keys overwrite; lists union
+         "frontmatter": { "volatility": "evolving", "tags": ["new-tag"] },   // keys this update rewrites
          "edges": {
            "source": ["wiki/sources/<stub-slug>.md"],  // an updated page needs it too
-           "related": ["<vault-relative path.md>"]
+           "related": ["<page reference>"]
          }
        }
      ]
    }
    ```
 
-   Every `edges` value and `raw_source: true` names target by **vault-relative path only** (`"wiki/concepts/foo.md"`, matching the kind-folders in [Vault structure](../wiki-conventions/SKILL.md)) — never a composed `[Title](../dest.md)` string. `enchiridion ingest` reads each target's title (on disk or from sibling in plan), works out `../` relativisation, percent-encodes destination; never build link string by hand. Exception: *body* links — write as ordinary markdown (`[label](destination)`), encoded or not; `enchiridion ingest` re-encodes on write.
+   Every `edges` value and `raw_source: true` names its target by **page reference** — vault-relative path only, `wiki/concepts/foo.md` — never a composed `[Title](../dest.md)` string; `enchiridion ingest` composes the link. Exception: *body* links are ordinary markdown (`[label](destination)`), encoded or not — `enchiridion ingest` re-encodes on write.
 
-   **Every written page needs `volatility`; `source_date` defaults to the plan's.** A page that omits `source_date` inherits the plan's top-level one, so a page sharing the document's date lists none — set the plan's own so its pages can inherit it, and a page's own only where its knowledge dates from elsewhere. `volatility` is judgment and can't be inherited: `enchiridion ingest` refuses a `create` without it, and an `update` whose `frontmatter` map omits it, and takes only `stable | evolving | volatile` — so an update restates `volatility` alongside every other key it rewrites, rather than writing a page `wiki-lint`'s `missing-volatility-source-date` would report.
+   **Every written page needs `volatility`** — judgment that can't be inherited: `enchiridion ingest` refuses a `create` without it, and an `update` whose `frontmatter` map omits it. So an `update` supplying a frontmatter map must restate it (`stable | evolving | volatile`), or it lands a page `wiki-lint`'s `missing-volatility-source-date` check reports.
 
-   **Consolidation variant — `action: "consolidate"`** (CONTEXT.md, **Consolidation**). Same executor, one page: `pages` holds only the **survivor** (`op: "update"`, or `op: "create"` for a fresh one), its `body` carrying each absorbed body as a section, plus a top-level `"consolidates"` list of the vault-relative refs absorbed. `raw` omitted — a Consolidation is sourced from pages, not an artifact. Executor repoints every inbound link at survivor, deletes absorbed pages, commits once; refuses a plan whose survivor body no longer contains an absorbed page's content (links compared by where they point, so a body copied across kind-folders must re-base its sibling links). Frontmatter follows ordinary update rules — list keys (`tags`, edges) union. Reached by the `--consolidate` invocation, not the procedure above — how to read the cluster, judge it, and author the survivor is [`reference/consolidation.md`](reference/consolidation.md).
+   **Consolidation variant — `action: "consolidate"`** (CONTEXT.md, **Consolidation**): one page, the **survivor** (`op: "update"`, or `op: "create"` for a fresh one) whose `body` carries each absorbed body as a section, plus a top-level `"consolidates"` list of the absorbed page references, and no `raw`. Judgment around the survivor: [`reference/consolidation.md`](reference/consolidation.md) — read before authoring one.
 
-   Judgment calls when filling in (folder's `INGESTION.md` may override any, except where noted):
-   - **Kind** (create pages only): run `"$RUNTIME" "$ENCHIRIDION" vault kinds --json` once to get the complete placement vocabulary — the four canonical kinds plus any custom kind-folders already present in the vault. Apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm) over all returned kinds, first match wins; custom kinds are peers of canonical ones. Never emit a kind not returned by `vault kinds` — `enchiridion ingest` rejects an unknown kind. `enchiridion ingest` computes kebab-slug from `kind`+`title` — never hand-slugify. When a custom kind is chosen and its `vault kinds --json` entry has `definition: null`, note it — step 6 emits a `kind-md-proposal` block. Placement into the bare folder still completes regardless; the proposal is an enrichment nudge, not a gate.
-   - **The `source/` stub is not optional** (see [The chain of evidence](../wiki-conventions/SKILL.md#the-chain-of-evidence)) — thin fine, absent not. Prior pass already filed stub: target with `op: "update"`, not second create.
-   - **Typed edges** ([vocabulary](../wiki-conventions/SKILL.md#typed-edges)) — judge for **every new or updated page** against every page surfaced in step 3. Assign most specific type true (`related` only as fallback); `contradicts`/`supersedes` decided by step 3, belong on *new* page only — never on superseded page.
-     - Non-judgment edge: **every page except stub carries `source` edge to stub** — each chunk of multi-chunk split, `op: "update"` same as `create`. Edges merge on update so restating safe; omit only if page already carries it from earlier pass.
-   - **Body** for `update` page: write *complete* new body (not diff) when material changes; omit `body` key entirely to leave existing body untouched. For `create`, `body` always required.
+   Judgment calls when filling in (folder's `INGESTION.md` may override any):
+   - **Kind** (create pages only): `"$RUNTIME" "$ENCHIRIDION" vault kinds --json` gives the placement vocabulary; apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm), first match wins. A custom kind-folder is a peer target — never emit a kind `vault kinds` doesn't return. Leave the filename to `enchiridion ingest`, which derives the kebab-slug from `kind` + `title` — never hand-slugify. A chosen custom kind with `definition: null` is noted for step 6's `kind-md-proposal` block; placement into the bare folder completes regardless.
+   - **The `source/` stub is not optional** (see [The chain of evidence](../wiki-conventions/SKILL.md#the-chain-of-evidence)) — thin fine, absent not. Prior pass already filed the stub: target it with `op: "update"`, not a second create.
+   - **Typed edges** ([vocabulary](../wiki-conventions/SKILL.md#typed-edges)) — judge for **every new or updated page** against every page surfaced in step 3. Assign the most specific type true (`related` only as fallback); `contradicts`/`supersedes` decided by step 3, belong on the *new* page only.
+     - Non-judgment edge: **every page except the stub carries a `source` edge to it** — each chunk of a multi-chunk split, `op: "update"` same as `create`. Edges merge on update so restating is safe; omit only if the page already carries it from an earlier pass.
+   - **Body** for an `update`: write the *complete* new body (not a diff) when material changes; omit `body` entirely to leave the existing body untouched.
    - **Verify the body against the artifact before it lands** ([rule](../wiki-conventions/SKILL.md#verify-against-the-source) — the artifact, then the primary source where it is silent).
-   - **`raw_source: true`** derives link from plan's `raw` field. **Ingestion never renames raw file** — file from outside plugin keeps name verbatim; don't add `YYYY-MM-DD-hhmm-` prefix (bound at creation, plugin-created files only). `enchiridion ingest` mechanics: literal `#` separates anchor from path, so `#` in *filename* must be `%23`; unbalanced `)` in filename must be encoded (destination ends at first unbalanced `)`).
-5. **Run it.** `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` validates whole plan up front (required fields, `update` `page_ref` exists, `create` target doesn't yet, every edge/`raw_source` resolves — including siblings this plan creates — and when `raw` set, chain of evidence: stub exists and every page links back) before writing, then executes place → frontmatter → body → commit in one pass (index not touched — next search's staleness scan picks the pages up) and prints commit SHA. On error: nothing committed, written pages left on disk uncommitted (writes idempotent — fix plan and rerun, don't hand-repair).
-6. **Report.** Short manifest only — pages created vs. updated, edges added, `supersedes` pairs recorded. No page-content dumps. If any page was placed into a custom kind whose `vault kinds --json` entry had `definition: null`, append one `kind-md-proposal` block per distinct missing-definition folder (invoking session uses this — see `## Invocation`):
+   - **`raw_source: true`** derives its link from the plan's `raw` field. **Ingestion never renames raw file** — a file from outside the plugin keeps its name verbatim.
+5. **Run it.** `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` validates the whole plan before writing, then executes place → frontmatter → body → commit in one pass and prints the commit SHA. The index is not touched — the next search's staleness scan picks the pages up. On error: nothing committed, written pages left on disk uncommitted (writes idempotent — fix plan and rerun, don't hand-repair).
+6. **Report.** Short manifest only — pages created vs. updated, edges added, `supersedes` pairs recorded. No page-content dumps. If step 4 noted a custom kind with no `definition`, append one `kind-md-proposal` block per distinct missing-definition folder (invoking session uses this — see `## Invocation`):
 
    ````markdown
    ```kind-md-proposal
@@ -117,4 +117,4 @@ Given one document at `<path>`.
    ```
    ````
 
-   `kind` is the value used in the plan; `summary` is a one-line definition (≤ ~20 words) inferred from the folder name and the content filed. `folder` is the vault-relative folder path. Invoking session writes the file on explicit user yes; ingestion already committed regardless.
+   `kind` is the value used in the plan; `summary` is a one-line definition (≤ ~20 words) inferred from the folder name and the content filed; `folder` is the vault-relative folder path.
