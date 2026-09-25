@@ -1,8 +1,4 @@
-/**
- * Tests for the pagepredicate module (#310) — the one definition of what
- * counts as a page. The predicate and the disk enumerator are the shared rule
- * the disk walk, the git walk, and the index's status count all delegate to.
- */
+/** Tests for the page predicate every walk and status count delegates to. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +17,7 @@ test("isPageRef accepts pages directly under a kind-folder", () => {
     "wiki/entities/b.md",
     "wiki/sources/s.md",
     "wiki/synthesis/t.md",
-    "wiki/decisions/d.md", // custom kind-folder (ADR-0008: folder → kind)
+    "wiki/decisions/d.md", // custom kind-folder
     "wiki/decisions/use-fts5.md",
   ]) {
     assert.equal(isPageRef(ref), true, `for ref ${ref}`);
@@ -55,9 +51,9 @@ test("isPageRef rejects a markdown file at the wiki root (no kind-folder)", () =
 
 test("isPageRef rejects non-pages", () => {
   for (const ref of [
-    "raw/notes.md", // outside wiki/
-    "wiki/concepts/a", // not markdown
-    "wiki/concepts.md", // a file at the wiki root
+    "raw/notes.md",
+    "wiki/concepts/a",
+    "wiki/concepts.md",
     "wiki/concepts/a.txt",
     "wiki/concepts/",
     "wiki",

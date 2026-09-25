@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# Snapshot the dogfooding vault into a throwaway temp dir and reindex it.
+# Copy the dogfooding vault into a throwaway temp dir and reindex it, so
+# measurement runs never touch the real vault.
 #
-# Free to create, byte-identical to real conditions (so overlap-candidate
-# density in the copy matches the live vault), re-runnable as often as
-# needed, and leaves no commits in the real vault. See issue #104.
-#
-# Usage: snapshot_vault.sh [source_vault_root]
-#   source_vault_root defaults to $WIKI_ROOT.
-# Prints the snapshot's path on stdout (and nothing else) on success.
+# Usage: snapshot_vault.sh [source_vault_root]   (default $WIKI_ROOT)
+# Prints the snapshot's path on stdout and nothing else.
 set -euo pipefail
 
 SRC="${1:-${WIKI_ROOT:-}}"

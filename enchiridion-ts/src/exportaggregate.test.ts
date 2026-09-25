@@ -1,10 +1,7 @@
 /**
- * Tests for exportaggregate.ts.
- *
- * Includes a property test: every intra-site link in the full generator output
- * (renderPages + renderAggregatePages) resolves to an emitted output path.
- * This is the export analogue of the "a move touches only link lines and all
- * links still resolve" invariant in wikipage.test.ts.
+ * Tests for exportaggregate.ts, including a property test: every intra-site link
+ * in the full generator output (renderPages + renderAggregatePages) resolves to
+ * an emitted output path.
  */
 
 import { test } from "node:test";
@@ -117,7 +114,6 @@ test("buildTagSlugMap: colliding tags get suffix-disambiguated slugs", () => {
   // "foo bar" and "foo-bar" both slugify to "foo-bar"
   const m = buildTagSlugMap(["foo bar", "foo-bar"]);
   const slugs = [...m.values()];
-  // Both assigned, one plain and one suffixed
   assert.equal(new Set(slugs).size, 2, "slugs must be unique");
   const sorted = slugs.sort();
   assert.equal(sorted[0], "foo-bar");
@@ -131,17 +127,11 @@ test("buildTagSlugMap: three collisions get sequential suffixes", () => {
 });
 
 test("buildTagSlugMap: the tag index's own slug is reserved", () => {
-  // Tag pages and the tag index share one directory, so a tag named "index"
-  // must not be handed the index's slug — it would take the index's path, and
-  // in single-file output its id.
   assert.equal(buildTagSlugMap(["index"]).get("index"), "index-2");
-  // Any spelling that slugifies to "index" is the same collision.
   assert.equal(buildTagSlugMap(["Index"]).get("Index"), "index-2");
 });
 
 test("buildTagSlugMap: reserving 'index' does not renumber other tags", () => {
-  // A vault that already carries both tags keeps `index-2` for the tag that
-  // earned it; only the colliding tag moves.
   const m = buildTagSlugMap(["index", "index-2", "alpha"]);
   assert.equal(m.get("index"), "index-3");
   assert.equal(m.get("index-2"), "index-2");
@@ -158,7 +148,6 @@ test("renderAggregatePages: yields one tag page per tag", () => {
   const tagPages = pages.filter(
     (p) => p.path.startsWith("tags/") && p.path !== "tags/index.html",
   );
-  // tags: alpha, beta, shared, source-tag => 4 tag pages
   assert.equal(tagPages.length, meta.tagMap.size);
 });
 
@@ -241,7 +230,6 @@ test("renderAggregatePages: tag index contains all tags with counts", () => {
   const index = pages.find((p) => p.path === "tags/index.html")!;
   assert.ok(index.content.includes("alpha"), "index should mention 'alpha'");
   assert.ok(index.content.includes("shared"), "index should mention 'shared'");
-  // alpha has 2 pages
   const alphaCount = (index.content.match(/>alpha<\/a> \(2\)/g) ?? []).length;
   assert.ok(alphaCount > 0, "alpha tag should show count 2");
 });
@@ -300,10 +288,6 @@ test("renderAggregatePages: kind index lists pages of that kind", () => {
 
 // ---------------------------------------------------------------------------
 // Front page
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Front page — replaced by a nominated start page
 // ---------------------------------------------------------------------------
 
 const START_PAGE = "wiki/concepts/alpha-concept.md";
@@ -464,7 +448,6 @@ test("renderAggregatePages: front page uses fallback ranking when no starters su
   const meta = buildExportMeta(wikiPages);
   const pages = [...renderAggregatePages(wikiPages, meta)];
   const front = pages.find((p) => p.path === "index.html")!;
-  // alpha-concept has highest inbound count — should appear in get-started
   assert.ok(
     front.content.includes("Alpha Concept"),
     "front page should include top get-started entry",
@@ -504,11 +487,10 @@ Raw content.
 `;
 
 /**
- * A page set whose raw/ entry carries a parsed record. Production loads raw
- * pages as text only, but the type allows a record — and a raw page *with* one
- * is exactly what a fallback ranking re-derived from the exported set would
- * emit, so pinning the wiki-only rule against a record-bearing raw page is
- * what makes the guard bite.
+ * A page set whose raw/ entry carries a parsed record. Pinning the wiki-only
+ * fallback rule against a record-bearing raw page is what makes the guard bite:
+ * production loads raw pages as text only, but the type allows a record, and one
+ * is exactly what a fallback ranking re-derived from the exported set would emit.
  */
 function pagesWithRecordBearingRaw(): Map<
   string,
@@ -615,10 +597,7 @@ test("renderAggregatePages: every page carries Home · Tags nav header", () => {
 // Property test: every intra-site link resolves to an emitted path
 // ---------------------------------------------------------------------------
 
-/**
- * Extract all href values from HTML content that look like intra-site links
- * (relative paths ending in .html, not starting with http(s):// or #).
- */
+/** Intra-site hrefs: relative paths ending in .html. */
 function extractIntraSiteHrefs(html: string): string[] {
   const hrefs: string[] = [];
   const re = /href="([^"#][^"]*)"/g;
@@ -639,7 +618,6 @@ function extractIntraSiteHrefs(html: string): string[] {
  */
 function resolveHref(fromHtmlPath: string, href: string): string {
   const fromDir = path.posix.dirname(fromHtmlPath);
-  // path.posix.resolve returns an absolute path; strip leading "/"
   return path.posix.resolve("/" + fromDir, href).replace(/^\//, "");
 }
 
@@ -681,7 +659,6 @@ test("property: every intra-site link resolves with a start page too", () => {
 });
 
 test("property: every intra-site link in full output resolves to an emitted path", () => {
-  // Deterministic fixture: more than enough to exercise all link types
   const meta = buildExportMeta(wikiPages);
 
   const allPages = [
@@ -808,9 +785,7 @@ test("property (fast-check): with a random start page, links resolve and no path
     fc.property(pageSpecsArb, fc.nat(), (specs, pick) => {
       const entries = specsToEntries(specs);
       const pages = makePages(entries);
-      // Any page of the vault can be the start page, kind index membership
-      // included — an arbitrary pick is part of the generated input so a
-      // failure names it.
+      // An arbitrary pick is part of the generated input so a failure names it.
       const startPage = entries[pick % entries.length][0];
       const opts = { startPage };
       const meta = buildExportMeta(pages, opts);

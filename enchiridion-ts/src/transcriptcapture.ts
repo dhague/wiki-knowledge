@@ -1,15 +1,11 @@
 /**
- * Turns a host session transcript into a vault-ready raw markdown file.
+ * Turns a host session transcript into a vault-ready raw markdown file for
+ * /save-conversation. Fetching the transcript is the single host-specific seam
+ * (one adapter per host: Claude Code JSONL, OpenCode export); everything
+ * downstream is shared.
  *
- * The capability behind the /save-conversation skill — reduce a host's wire
- * format to (role, text) turns via one adapter per host (Claude Code JSONL,
- * OpenCode export), render the turns to markdown with a host attribution
- * line, sanitise an agent-authored slug, bind a filename in the vault's raw
- * inbox. Pure or filesystem-local only; argv parsing lives in the CLI.
- *
- * **The name is bound once, at first save.** A re-save finds the existing
- * file by its short session id and rewrites it in place rather than renaming,
- * so inbound raw_source links never break.
+ * The name binds once, at first save: a re-save rewrites the existing file in
+ * place rather than renaming, so inbound raw_source links never break.
  */
 
 import fs from "node:fs";
@@ -25,23 +21,15 @@ import {
 } from "./sessionstate.js";
 import type { HostLayout, LookupEnv } from "./sessionstate.js";
 
-/** The default cap on a sanitized slug. */
 export const SLUG_MAX_LENGTH = 60;
 
-/** Collapses runs of non-[a-z0-9] to a single separator. */
 const NON_SLUG_RE = /[^a-z0-9]+/g;
 
 /**
- * Reduces a free-text phrase to a filesystem-safe kebab-case slug.
- *
- * The phrase is model-authored, so this sanitizes rather than trusts:
- * NFKD-fold to ASCII, lowercase, collapse non-`[a-z0-9]` runs to one `-`,
- * strip the ends, cap on a word boundary where there is one. The result is
- * `[a-z0-9-]` only, so it never needs percent-encoding in a link destination.
- *
- * Returns "" when nothing survives (empty, pure punctuation,
- * non-transliterable script) — the caller then falls back to the bare
- * `<date>-<short_id>` name.
+ * Reduces a model-authored free-text phrase to a filesystem-safe kebab-case slug,
+ * so it never needs percent-encoding in a link destination. Returns "" when
+ * nothing survives, and the caller falls back to the bare `<date>-<short_id>`
+ * name.
  */
 export function sanitizeSlug(phrase: string, maxLength: number): string {
   const cap = maxLength <= 0 ? SLUG_MAX_LENGTH : maxLength;
@@ -58,10 +46,9 @@ export function sanitizeSlug(phrase: string, maxLength: number): string {
     .replace(/^-+|-+$/g, "");
   if (slug.length <= cap) return slug;
 
-  // Look one character past the cap: if the cut lands on a separator, the
-  // word before it is whole. Otherwise fall back to the last boundary inside
-  // the window, and to a hard truncation when the slug is one long word with
-  // no boundary at all.
+  // Look one character past the cap: a separator there means the word before it
+  // is whole; otherwise fall back to the last boundary inside the window, and to
+  // a hard truncation when there is none.
   const window = slug.slice(0, cap + 1);
   let head = "";
   const idx = window.lastIndexOf("-");
@@ -70,7 +57,6 @@ export function sanitizeSlug(phrase: string, maxLength: number): string {
   return head.replace(/^-+|-+$/g, "");
 }
 
-/** One JSONL line of a Claude Code transcript. */
 interface TranscriptEntry {
   type?: string;
   isMeta?: boolean;
@@ -78,13 +64,8 @@ interface TranscriptEntry {
   message?: { role?: string; content?: unknown };
 }
 
-/**
- * Pulls the prose out of a transcript entry's content field.
- *
- * Two shapes: a plain string, or a list of blocks. Only `text` blocks count —
- * tool_use / tool_result / image aren't part of the conversation anyone
- * re-reads later.
- */
+/** Two content shapes: a plain string, or a list of blocks of which only `text`
+ * blocks count. */
 function extractText(content: unknown): string {
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
@@ -101,27 +82,15 @@ function extractText(content: unknown): string {
   return "";
 }
 
-/**
- * One (role, text) exchange — the domain turn shape. Each host's adapter
- * (parseClaudeTranscript, normalizeExport) reduces its wire format to this,
- * and transcriptToPage renders it.
- */
+/** One (role, text) exchange; the domain shape every host adapter reduces to. */
 export interface Turn {
   role: string;
   text: string;
 }
 
-/**
- * The Claude Code host adapter: parses a JSONL transcript into (role, text)
- * turns.
- *
- * Only user/assistant messages count; meta and sidechain entries are filtered
- * out, as is anything that isn't a `text` block — tool_use / tool_result /
- * image aren't part of the back-and-forth anyone re-reads later. Multiple
- * text blocks in one message join with a blank line. A garbled line is
- * skipped rather than fatal, so a transcript interrupted mid-write still
- * parses as far as it got.
- */
+/** The Claude Code host adapter: JSONL to (role, text) turns. Only
+ * user/assistant messages and `text` blocks count; a garbled line is skipped
+ * rather than fatal, so an interrupted transcript still parses as far as it got. */
 export function parseClaudeTranscript(jsonlLines: string[]): Turn[] {
   const turns: Turn[] = [];
   for (const rawLine of jsonlLines) {
@@ -143,10 +112,7 @@ export function parseClaudeTranscript(jsonlLines: string[]): Turn[] {
   return turns;
 }
 
-/**
- * Wraps the too-short-transcript failure so the CLI can print a
- * "not enough conversation to save" exit.
- */
+/** The too-short-transcript failure; the CLI prints it as a user-facing exit. */
 export class ErrTooFewTurns extends Error {
   turns: number;
   minTurns: number;
@@ -160,17 +126,10 @@ export class ErrTooFewTurns extends Error {
 }
 
 /**
- * Renders a session transcript into a vault-ready page.
- *
- * Pure: no I/O, no env, no filesystem. turns are the domain turn shape — the
- * host adapters (parseClaudeTranscript, normalizeExport) reduce each host's
- * wire format to this before the renderer sees it. hostLabel names the host
- * in the **Source:** attribution line. Returns [filename, markdown].
- *
- * slug is a free-text phrase naming what the session covered; it is sanitized
- * here, not trusted, and a phrase that sanitizes to nothing degrades to the
- * bare `<date>-<short_id>` name. Speaker labels are parameters, not baked in,
- * so a caller can match an existing vault's captures.
+ * Renders turns into a vault-ready page; returns [filename, markdown]. Pure: no
+ * I/O, env or filesystem. hostLabel is the `**Source:**` attribution; slug is
+ * sanitized here, and one that sanitizes to nothing degrades to the bare
+ * `<date>-<short_id>` name.
  */
 export function transcriptToPage(
   turns: Turn[],
@@ -186,8 +145,8 @@ export function transcriptToPage(
     throw new ErrTooFewTurns(turns.length, minTurns);
   }
 
-  // The short id goes last so a re-save can find the already-bound file with
-  // one '*-<short_id>.md' glob, slug present or not.
+  // Short id goes last so a re-save can find the bound file with one
+  // '*-<short_id>.md' glob, slug present or not.
   const shortID = sessionID.split("-")[0];
   const safeSlug = sanitizeSlug(slug, SLUG_MAX_LENGTH);
   const middle = safeSlug !== "" ? `${safeSlug}-` : "";
@@ -215,7 +174,6 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** Formats a Date per a tiny template: YYYY, MM, DD, hh, mm. */
 function fmtDate(d: Date, template: string): string {
   const map: Record<string, string> = {
     YYYY: String(d.getFullYear()),
@@ -235,14 +193,9 @@ export class CaptureError extends Error {
   }
 }
 
-/**
- * Returns the transcriptPath for this session, or raises a CaptureError.
- *
- * Four distinct failures, kept distinct so the user can tell them apart: no
- * `$CLAUDE_CODE_SESSION_ID`; state directory not located; located but no entry
- * for this session (the SessionStart hook never ran); entry pointing at a
- * transcript that no longer exists.
- */
+/** The transcript path for this session, or a CaptureError naming one of four
+ * distinct failures: no session id, no state directory, no entry for the session,
+ * or a recorded transcript that is gone. */
 export function findTranscriptPath(
   cwd: string,
   lookupEnv: LookupEnv = processLookupEnv,
@@ -308,22 +261,15 @@ function stateDirNotLocated(cwd: string): CaptureError {
   );
 }
 
-/** Lists one directory's entry names. Injectable so the readdir-failure paths
- * can be exercised without depending on filesystem permissions. */
+/** Injectable directory listing, so the readdir-failure paths are testable
+ * without depending on filesystem permissions. */
 export type DirLister = (dir: string) => string[];
 
 /**
- * Writes the capture into `raw/conversations/`; returns its vault-relative
- * path.
- *
- * One file per session. An earlier capture is found by globbing
- * `*-<short_id>.md` and its path reused *verbatim* — same timestamp, same
- * slug — with contents rewritten in place; filename is used only when nothing
- * is found. So no raw file is ever renamed, and inbound raw_source links stay
- * valid with no link rewriting.
- *
- * listDir is the injectable directory-listing seam; undefined runs the real
- * `fs.readdirSync`.
+ * Writes the capture into `raw/conversations/`; returns its vault-relative path.
+ * One file per session: an earlier capture found by `*-<short_id>.md` is reused
+ * verbatim, so no raw file is ever renamed and inbound raw_source links stay
+ * valid.
  */
 export function writeCapture(
   wikiRoot: string,
@@ -342,13 +288,9 @@ export function writeCapture(
       .filter((f) => f.endsWith(`-${shortID}.md`))
       .sort();
   } catch (err) {
-    // ENOENT is the directory not being there at all (removed between the
-    // mkdir above and this listing), which really does mean "no prior
-    // capture". Anything else — permissions, I/O — is a directory that may
-    // well hold this session's capture, and reading that as "no prior
-    // capture" is the one interpretation that writes a *second* raw file:
-    // the first keeps its raw_source links and any typed edges pointing at
-    // it, and the vault ends up with two artifacts for one conversation.
+    // Only ENOENT means "no prior capture" (the directory is gone); any other
+    // listing failure must refuse rather than write a second raw file and orphan
+    // the first.
     if (!isENOENT(err)) {
       throw new CaptureError(
         `Could not list ${conversationsDir} to find an existing capture of ` +
@@ -371,24 +313,13 @@ export function writeCapture(
 }
 
 /**
- * Finds, renders, and writes this session's transcript; returns its
- * vault-relative path.
+ * Finds, renders and writes this session's transcript; returns its vault-relative
+ * path. Raises CaptureError with a user-facing message on any failure.
  *
- * **The host is detected here**, from which session-id variable the environment
- * carries — Claude Code's `$CLAUDE_CODE_SESSION_ID` or OpenCode's
- * `$OPENCODE_SESSION_ID` — so /save-conversation stays host-neutral and one
- * subcommand serves both. Everything downstream of the host-specific fetch is
- * shared verbatim.
- *
- * **Both can be set at once**, because one host can be run from the other's
- * shell and env vars are inherited by every descendant. Env alone can't say
- * which host is the innermost one, so the tie is broken on evidence instead:
- * OpenCode wins only when its session-tracker plugin actually recorded *that*
- * session id in *this* project, which a leaked variable from an unrelated
- * project or an outer OpenCode process will not satisfy. Otherwise Claude Code,
- * the host whose hook recorded a transcript path on disk.
- *
- * Raises CaptureError with a user-facing message on any failure.
+ * The host is detected here from which session-id variable the environment
+ * carries, so everything downstream of the host-specific fetch is shared. Both
+ * can be set at once; env cannot say which host is innermost, so OpenCode wins
+ * only when its tracker recorded that session id in this project.
  */
 export async function captureSession(
   wikiRoot: string,
@@ -420,11 +351,7 @@ export async function captureSession(
   );
 }
 
-/**
- * The Claude Code host path: the SessionStart hook recorded a transcript
- * file, so this is findTranscriptPath -> parseClaudeTranscript ->
- * transcriptToPage -> writeCapture with no subprocess involved.
- */
+/** The Claude Code path: the recorded transcript file, no subprocess involved. */
 function captureClaudeCodeSession(
   wikiRoot: string,
   slug: string,
@@ -479,25 +406,16 @@ function isENOENT(err: unknown): boolean {
 // OpenCode host support
 // ---------------------------------------------------------------------------
 
-/** OpenCode's session-state layout — the only things OpenCode differs from
- * Claude Code in: a `.opencode/` marker and its own state path. It exports no
- * project-root variable, so the shared rule's env override is skipped. */
+/** OpenCode's layout; it exports no project-root variable, so the shared rule's
+ * env override is skipped. */
 const OpenCode: HostLayout = {
   marker: ".opencode",
   projectDirEnv: "",
   stateDir: path.join(".opencode", "wiki-knowledge", "sessions"),
 };
 
-/**
- * Where the session-tracker plugin writes its state for the project cwd
- * belongs to, or undefined when nothing identifies one.
- *
- * Resolved by sessionstate's one rule (#493, ADR-0025) — the same walk, `$HOME`
- * stop and no-cwd-guess posture Claude Code's state resolves by, with only this
- * host's layout substituted. There is no always-answers form here: the sole
- * caller (isOpenCodeSessionTracked) never surfaces the path, and "no project"
- * is its answer.
- */
+/** Where the session-tracker plugin writes this project's state, or undefined
+ * with no project (sessionstate's one rule, OpenCode's layout). */
 export function findOpenCodeSessionsDir(
   cwd: string,
   lookupEnv: LookupEnv = processLookupEnv,
@@ -505,11 +423,8 @@ export function findOpenCodeSessionsDir(
   return findProjectSessionsDir(cwd, OpenCode, lookupEnv);
 }
 
-/**
- * Whether the tracker recorded this session: the `<id>.json` file exists,
- * parses, and names sessionID back. A corrupt file counts as untracked,
- * mirroring readTranscriptPath's JSON-decode guard.
- */
+/** Whether `<id>.json` exists, parses, and names sessionID back; a corrupt file
+ * counts as untracked. */
 function openCodeSessionIsTracked(
   sessionID: string,
   stateDir: string,
@@ -528,15 +443,9 @@ function openCodeSessionIsTracked(
   }
 }
 
-/**
- * Reads `$OPENCODE_SESSION_ID`, or raises a CaptureError.
- *
- * This is the *only* hard prerequisite for an OpenCode capture. `opencode
- * export <id>` returns the transcript whether or not the session-tracker plugin
- * ever recorded the session, so a session started before the plugin was
- * installed can still be saved (#402) — the tracker state is consulted only as
- * tie-break evidence when both host ids are set (isOpenCodeSessionTracked).
- */
+/** `$OPENCODE_SESSION_ID`, or a CaptureError. `opencode export` returns the
+ * transcript whether or not the tracker recorded the session, so tracker state is
+ * consulted only as tie-break evidence. */
 export function openCodeSessionIDFromEnv(
   lookupEnv: LookupEnv = processLookupEnv,
 ): string {
@@ -552,16 +461,8 @@ export function openCodeSessionIDFromEnv(
   return sessionID;
 }
 
-/**
- * Whether the session-tracker plugin recorded this OpenCode session in this
- * project — the tie-break evidence when both host session-id variables are set.
- *
- * Never throws: false when `$OPENCODE_SESSION_ID` is unset, no `.opencode/`
- * state directory exists, or no matching `<id>.json` entry was written. It is a
- * signal about *which host is innermost*, not a capture prerequisite, so a
- * false result no longer blocks a save — captureOpenCodeSession exports
- * regardless.
- */
+/** Whether the tracker recorded this session in this project — tie-break evidence
+ * when both host ids are set, not a capture prerequisite. Never throws. */
 export function isOpenCodeSessionTracked(
   cwd: string,
   lookupEnv: LookupEnv = processLookupEnv,
@@ -580,19 +481,16 @@ export function isOpenCodeSessionTracked(
   return openCodeSessionIsTracked(sessionID, stateDir);
 }
 
-/** Fetches one OpenCode session's export document. Injectable so the pipeline
- * can be tested without the `opencode` CLI. */
+/** Injectable export fetch, so the pipeline is testable without the `opencode`
+ * CLI. */
 export type Exporter = (sessionID: string) => Promise<Uint8Array>;
 
 /**
- * Runs `<command> export <sessionID>` and returns its stdout.
+ * Runs `<command> export <sessionID>` and returns its stdout; errors when the CLI
+ * is absent from PATH or exits non-zero.
  *
- * **Strict:** errors when the CLI is absent from PATH or the command exits
- * non-zero.
- *
- * `opencode export` truncates its JSON when stdout is a pipe (observed on
- * 1.18.15: output stops ~64KB in), so stdout is written to a real temp file and
- * read back from there — a file redirect carries the whole transcript.
+ * `opencode export` truncates its JSON when stdout is a pipe, so stdout goes to a
+ * real temp file and is read back from there.
  */
 export async function exportTranscript(
   sessionID: string,
@@ -626,7 +524,6 @@ export async function exportTranscript(
   }
 }
 
-/** Spawns `<bin> export <sessionID>` with stdout redirected to a file. */
 function runExport(
   bin: string,
   sessionID: string,
@@ -703,18 +600,10 @@ function isExecutableFile(file: string): boolean {
 }
 
 /**
- * Maps an `opencode export` document into (role, text) turns.
- *
- * The export is `info` + `messages[{info:{role}, parts[{type:"text"}]}]`. Only
- * user/assistant messages and `type: "text"` parts count — tool calls,
- * reasoning, step markers, and patches are not the back-and-forth anyone
- * re-reads later. Sub-agent work runs in its own OpenCode session, so it never
- * appears in a parent session's export and needs no sidechain filter here.
- * Multiple text parts in one message join with a blank line.
- *
- * Malformed messages and parts are skipped rather than fatal, mirroring
- * parseClaudeTranscript's tolerance of a garbled JSONL line; only a document
- * that is not a JSON object at all is an error.
+ * The OpenCode host adapter: an `opencode export` document to (role, text) turns.
+ * The shape is `info` + `messages[{info:{role}, parts[{type:"text"}]}]`; only
+ * user/assistant messages and `type: "text"` parts count. Malformed messages and
+ * parts are skipped, and only a document that is not a JSON object is an error.
  */
 export function normalizeExport(exportDoc: Uint8Array): Turn[] {
   let parsed: unknown;
@@ -728,8 +617,7 @@ export function normalizeExport(exportDoc: Uint8Array): Turn[] {
   }
   const document = parsed as Record<string, unknown>;
 
-  // A messages key of the wrong shape leaves the list empty rather than
-  // failing — same tolerance the per-message decode below applies.
+  // A wrong-shaped messages key reads as empty, like the per-message decode below.
   const rawMessages = document["messages"];
   const messages = Array.isArray(rawMessages) ? rawMessages : [];
 
@@ -761,16 +649,10 @@ export function normalizeExport(exportDoc: Uint8Array): Turn[] {
 }
 
 /**
- * Resolves the current OpenCode session, exports and normalizes its
- * transcript, and writes the capture; returns its vault-relative path.
- *
- * The whole pipeline (openCodeSessionIDFromEnv -> export -> normalizeExport ->
- * transcriptToPage -> writeCapture) in one call. The session id comes from
- * `$OPENCODE_SESSION_ID` alone — no tracker state is required, so a session
- * that predates the plugin still captures via `opencode export` (#402), and no
- * project root is resolved: the transcript comes from the host, and the capture
- * goes into the vault. exportSeam is the injectable fetch seam; undefined runs
- * the real `opencode export`.
+ * Resolves the OpenCode session, exports and normalizes its transcript, and
+ * writes the capture; returns its vault-relative path. No tracker state or
+ * project root is needed: the transcript comes from the host and the capture goes
+ * into the vault.
  */
 export async function captureOpenCodeSession(
   wikiRoot: string,

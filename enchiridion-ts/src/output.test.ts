@@ -1,15 +1,13 @@
 /**
- * The output contract's own tests (#495): one per dialect, plus the exit
- * convention. These pin the spelling every command now inherits, so a command
- * test that passes alongside these cannot have quietly re-decided indentation,
- * how many JSON documents it emits, or how it fails.
+ * The output contract's own tests: one per dialect, plus the exit convention.
+ * They pin the spelling every command inherits.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 
-/** Capture exactly the bytes `console.log` would have written to stdout. */
+/** Capture what `console.log` would have written to stdout. */
 function captureLog(fn: () => void): string {
   let out = "";
   const original = console.log;
@@ -24,7 +22,7 @@ function captureLog(fn: () => void): string {
   return out;
 }
 
-/** The lines a payload occupies on stdout — the thing a consumer splits on. */
+/** The lines a payload occupies on stdout — what a consumer splits on. */
 function lines(text: string): string[] {
   return text.split("\n").slice(0, -1);
 }

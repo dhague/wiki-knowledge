@@ -1,32 +1,16 @@
-// Import-safety test for the esbuild CJS bundle (the #330 acceptance gate,
-// wired into CI by #333).
-//
-// The bundle is the whole `enchiridion` surface, built as CommonJS
-// (`dist/cli.cjs` + the node-sqlite3-wasm .wasm sidecar). A host (an OpenCode
-// plugin) imports it and calls `run(argv)` in-process; importing must be
-// inert — `main()` runs only when the module is the direct CLI entry
-// (`isMainModule()`), so a bare import must never hijack the process. This
-// script proves that on both runtimes CI covers (Node and Bun):
-//
-//   - importing the bundle does not run main() (we are still alive; the
-//     exported entry is a function, not a process that already exited);
-//   - `run([])` prints usage to captured stdout and exits 0;
-//   - `run(['place', ...])` executes an action handler in-process and exits 0;
-//   - the host process is not left with a non-zero exitCode.
-//
-// Runs under Node ESM and Bun alike. On Node ESM the CJS namespace's `default`
-// IS module.exports; on Bun `mod.run` is present directly — resolve both
-// shapes before asserting.
+// Import-safety test for the esbuild CJS bundle: importing it must be inert
+// (main() runs only when the module is the direct CLI entry), `run(...)` must
+// execute in-process, and the host's exitCode must stay clean. Runs under Node
+// ESM and Bun — on Node the CJS namespace's `default` is module.exports, on Bun
+// `mod.run` is present directly.
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-// Inertness is asserted in a CHILD process, not here: if main() ran
-// unconditionally it would process.exit during import — exit code 0 for a
-// bare run, killing the host before any assertion could run, which would look
-// like a pass. The child imports the bundle then prints a sentinel; the
-// sentinel's absence (the child died on import) is the failure signal, and a
-// non-zero child exit makes execFileSync throw. Either way this script fails.
+// Asserted in a CHILD process: if main() ran unconditionally it would
+// process.exit during import, killing the host before any assertion and
+// looking like a pass. The child prints a sentinel after importing; a missing
+// sentinel or non-zero child exit fails this script.
 const bundlePath = fileURLToPath(new URL("../dist/cli.cjs", import.meta.url));
 const inert = execFileSync(
   process.execPath,

@@ -1,20 +1,7 @@
 /**
- * Full-CLI smoke tests against the esbuild-bundled `dist/cli.cjs` artifact
- * (#266). One smoke test per subcommand, each asserting stdout + exit code
- * against a representative golden input. This complements cli.test.ts (which
- * runs `tsx src/cli.ts`): the bundle's `.cjs` + `.wasm` sidecar are the real
- * artifacts under test here — no ts-node, no source maps in the smoke run.
- *
- * The same file runs under both runtimes via the CI matrix (`npm test` on
- * Node.js, `npm run test:bun` on Bun, both globbing `src/*.test.ts`). Each
- * test spawns the current process's runtime (`process.execPath` — node under
- * `npm test`, bun under `npm run test:bun`) against the bundle, so the Node
- * leg exercises `node dist/cli.cjs` and the Bun leg `bun dist/cli.cjs`.
- *
- * Requires `npm run build` first so `dist/cli.cjs` (and its
- * `node-sqlite3-wasm.wasm` sidecar) exists. When it doesn't, every test is
- * skipped with a pointer to the build step rather than failing — so the
- * module tests can run standalone.
+ * Full-CLI smoke tests against the esbuild-bundled `dist/cli.cjs`: one test per
+ * subcommand, asserting stdout and exit code against a golden input. Skips
+ * (never fails) when the bundle is absent — `npm run build` first.
  */
 
 import { test } from "node:test";
@@ -29,13 +16,10 @@ import * as git from "isomorphic-git";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distCli = path.join(__dirname, "..", "dist", "cli.cjs");
 
-// The current process's runtime — `process.execPath` is the node binary under
-// `npm test` and the bun binary under `npm run test:bun`, so the one spawn
-// covers both legs of the CI matrix.
+// `process.execPath` is node under `npm test` and bun under `npm run test:bun`,
+// so the one spawn covers both legs of the CI matrix.
 const runtimeName = process.versions.bun !== undefined ? "bun" : "node";
 
-// Skipped (not failed) when the bundle isn't built, so the module tests can
-// run without it; CI and the verification workflow always build first.
 const skipReason = fs.existsSync(distCli)
   ? false
   : "dist/cli.cjs not built — run `npm run build` first";
@@ -218,8 +202,8 @@ test(
     ]);
     assert.equal(status, 0, stderr);
     assert.equal(stdout.trim(), path.resolve(root));
-    // The initial commit sweeps the pre-existing page in, and the converted
-    // vault gains no synthesized raw/ inbox.
+    // The initial commit sweeps the pre-existing page in; no raw/ inbox is
+    // synthesized.
     const { status: lsStatus, stdout: ls } = spawnSync(
       "git",
       ["-C", root, "ls-files"],
@@ -345,8 +329,8 @@ test(
       "wiki/concepts/connection-pooling.md",
     );
 
-    // --plan stays one document: the tag vocabulary the caller needs to mint
-    // tags rides inside it, not after it as plain text.
+    // The tag vocabulary rides inside the one --plan document, not after it as
+    // plain text.
     const planPath = path.join(root, "draft.json");
     fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
     const plan = runBundled(
@@ -524,10 +508,8 @@ test(
       JSON.stringify({ transcript_path: transcript }),
     );
 
-    // The OpenCode host path is NOT exercised here: it shells out to `opencode
-    // export`, an external tool that isn't guaranteed present or scriptable in
-    // CI. The Claude Code path (below) is self-contained and covers the same
-    // capture-and-write seam.
+    // Only the Claude Code path: the OpenCode path shells out to the external
+    // `opencode` CLI.
     const { status, stdout, stderr } = runBundled(
       ["save-session", "--slug", "a session"],
       {

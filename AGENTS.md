@@ -17,6 +17,20 @@ section.
 - **Write long `gh` bodies to a file and pass `--body-file`.** `--body "$(cat <<'EOF' …)"` breaks on backticks, which open a nested command substitution inside `$()`. `gh` also resolves this remote to `dhague/wiki-knowledge` while its URL still reads `dhague/enchiridion`.
 - **Point the tool caches inside the workspace.** `gh run view --log` and `gh api …/logs` die on `creating cache entry: open ~/.cache/gh/…: operation not permitted`, and `npm view` dies writing `~/.npm/_logs` — both directories sit outside the sandbox. Prefix `gh` with `XDG_CACHE_HOME="$PWD/temp/<dir>"` and pass `npm` a `--cache temp/<dir>`. `temp/` is gitignored, so both stay out of `git status`; delete them when you're done all the same. The `gh api` variant also needs `--allow-escape-sequences`, as runner logs carry ANSI escapes.
 
+## Comment style: minimum necessary
+
+A comment earns its place only for what the code cannot say. The code already says
+*what* happens; a comment carries the *why* an agent cannot recover by reading — an
+invariant, a non-obvious constraint, a trap, or a pointer to the authoritative
+doc. Delete far more than you write.
+
+- **Module header: one to three lines** naming what the module is and its role.
+- **Symbol JSDoc: one line, only where the name and signature don't already say it.** Keep a non-obvious contract — throw behaviour, call order, units, a guarantee a caller relies on. Skip `@param` restatements.
+- **Inline `//`: one or two lines, only for the non-obvious.** Delete anything that restates the code.
+- **Keep the spec, cut the narrative.** Where a comment is the only definition of a format, schema, or rule the code implements — the `IngestPlan` schema in `ingest.ts` module comment, the commit-message format in `commit.ts` — it stays complete: trim the story around it, not the facts.
+- **Point, don't paraphrase.** Cite a decision in a few words (`// ADR-0015: the index is a view of HEAD`) rather than retelling it.
+- **No history, no ticket stories.** "used to", "once lived in", what was tried and abandoned, and bare issue numbers all go; a guarded regression gets one line describing the trap.
+
 ## Repo gotchas
 
 - **A `src/`-only PR leaves the committed bundle alone.** The bundle freshness job runs only when `wiki-plugin/.claude-plugin/plugin.json`'s version changes; `scripts/release.sh` refreshes `wiki-plugin/scripts/` and each skill's bundled copy at release time. A **second freshness job runs on every PR** and fails when repo-root `skills/` differs from `wiki-plugin/skills/` (ADR-0026) — so touching a skill means regenerating the tree, by `rm -rf skills && cp -R wiki-plugin/skills skills` or by running `scripts/release.sh <new-version>` for a release.

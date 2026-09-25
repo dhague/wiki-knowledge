@@ -1,7 +1,4 @@
-/**
- * initwiki tests — scaffold a fresh vault: folders, git repo, gitignore,
- * optional plugin-registration settings.
- */
+/** initwiki tests — scaffolding a fresh vault and converting an existing tree. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -45,14 +42,12 @@ test("init writes the standard gitignore", async () => {
   const content = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
   for (const line of [
     "*.rsls",
-    // `**/`-prefixed so a session-state tree lands gitignored wherever it was
-    // written: a pattern containing a `/` is anchored to the directory holding
-    // the .gitignore, which would leave a nested copy one `git add -A` from
-    // being committed (#485).
+    // `**/`-prefixed: a pattern containing `/` is anchored to the .gitignore's
+    // own directory, so a nested state tree would stay committable.
     "**/.claude/wiki-knowledge/sessions/",
     "**/.opencode/wiki-knowledge/sessions/",
     ".wiki-knowledge/",
-    // LLM-wiki/Obsidian navigation scaffolding is not knowledge (#323).
+    // Navigation scaffolding is not knowledge.
     "log.md",
     "index.md",
     "_index.md",
@@ -69,8 +64,7 @@ test("init commits the scaffold", async () => {
   await init(root, ModeDedicated, "");
   const repo = new VaultGit(root);
   assert.ok(await repo.isWorkTree(), "Init left no git work tree behind");
-  // The scaffold commit is what makes the vault's git history complete from
-  // page one.
+  // A clean work tree proves the scaffold was committed.
   await assert.rejects(repo.commit("should fail: nothing left to commit"));
 });
 
@@ -115,8 +109,7 @@ test("init refuses to run twice", async () => {
 test("init refuses a vault carrying a wiki-root sentinel and git", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-initwiki-"));
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
-  // A marker alone is not a vault (#323); only a marker plus a git work tree
-  // is one, so this needs a repo before init refuses it.
+  // Only a marker plus a git work tree is a vault, so this needs a repo.
   const repo = new VaultGit(root);
   await repo.init();
   await assert.rejects(init(root, ModeDedicated, ""));
@@ -141,8 +134,7 @@ test("isVault requires a marker AND a git work tree (#323)", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-initwiki-"));
   assert.equal(await isVault(root), false);
   fs.mkdirSync(path.join(root, "wiki"));
-  // A marker without git — the conversion path a Joule user lands on — is
-  // not yet a vault; init seeds a repo around it instead of refusing.
+  // A marker without git is not a vault; init seeds a repo around it.
   assert.equal(await isVault(root), false);
   const repo = new VaultGit(root);
   await repo.init();
@@ -160,16 +152,13 @@ test("init converts an existing wiki/ tree without git (#323)", async () => {
   const got = await init(root, ModeDedicated, "");
   assert.equal(got, path.resolve(root));
 
-  // The existing page survives untouched...
   assert.ok(fs.existsSync(path.join(root, "wiki", "concepts", "existing.md")));
-  // ...the canonical kind-folders are completed...
   for (const folder of Object.values(KindFolders)) {
     assert.ok(
       fs.existsSync(path.join(root, "wiki", folder)),
       `${folder} missing`,
     );
   }
-  // ...and the initial commit sweeps the existing pages in.
   const repo = new VaultGit(root);
   assert.ok(await repo.isWorkTree(), "conversion left no git work tree");
   const files = await git.listFiles({ fs, dir: root, ref: "HEAD" });

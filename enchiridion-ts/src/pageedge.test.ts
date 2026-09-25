@@ -1,14 +1,13 @@
 /**
- * Unit tests for the edge-value rule #548 introduces: a `page set`/`page
- * merge` value is either an existing markdown link or a vault-relative page
- * ref, and a ref is composed into a link here.
+ * Unit tests for the edge-value rule: a value is either a whole markdown link
+ * or a vault-relative page ref, which is composed here.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { edgeLink, isEdgeKey, isListEdgeKey } from "./pageedge.js";
 
-/** A lookup over a fixed ref→title map; only listed refs "exist". */
+/** A lookup over a fixed ref→title map; only listed refs exist. */
 function lookupOf(titles: Record<string, string>) {
   return (ref: string) => ({
     exists: ref in titles,

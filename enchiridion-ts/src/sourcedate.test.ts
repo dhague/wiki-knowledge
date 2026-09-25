@@ -6,10 +6,8 @@ import {
   truncateSourceDate,
 } from "./sourcedate.js";
 
-// The accepted spellings of a valid source date, each mapping to its canonical
-// YYYY-MM-DD: date-only, the timestamp forms the codebase has emitted over its
-// history (RFC3339 with or without a zone, the zone-less space/T-separated
-// forms), leap years, and a Date object.
+// Accepted spellings and their canonical YYYY-MM-DD: date-only, timestamps,
+// leap days, and a Date object.
 const valid: Array<[unknown, string]> = [
   ["2026-07-20", "2026-07-20"],
   ["2026-01-02", "2026-01-02"],
@@ -38,8 +36,7 @@ test("parseSourceDate canonicalises every accepted spelling", () => {
   }
 });
 
-// Invalid calendar dates (leap-year and month/day-range failures), malformed
-// spellings, and non-dates — all "not a date".
+// Invalid calendar dates, malformed spellings, and non-dates.
 const invalid: unknown[] = [
   "2026-13-40",
   "2026-13-01",

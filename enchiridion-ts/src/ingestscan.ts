@@ -1,17 +1,11 @@
 /**
  * The ingestion sweep — scan `raw/` for files that need ingestion.
  *
- * Two independent gates: derived done-state (computed here) and declared
- * policy (a human-authored `.ingestignore`). A raw file is *offered* when
- * (a) no wiki page's `raw_source` points at it, or (b) one does but the raw
- * file is strictly newer than that page's `git_date`, or `git status
- * --porcelain` reports it dirty.
- *
- * `.ingestignore` is read from the file's own folder only, with **no ancestor
- * walk** — the same rule `INGESTION.md` follows, and what keeps a
- * hand-written policy file from drifting into a machine-written done-list.
- * The parse/append halves live in [ingestignore], shared with `ingest
- * --ignore`.
+ * Two independent gates: derived done-state (computed here) and declared policy
+ * (`.ingestignore`). A raw file is *offered* when (a) no wiki page's
+ * `raw_source` points at it, or (b) one does but the raw file is strictly newer
+ * than that page's `git_date`, or `git status --porcelain` reports it dirty.
+ * The policy file is read from the file's own folder only — see [ingestignore].
  */
 
 import fs from "node:fs";
@@ -26,20 +20,13 @@ import {
   type Matcher,
 } from "./ingestignore.js";
 
-/** The slice of [VaultGit] the sweep needs, named as an interface so tests can
- * script the git facts rather than standing up a work tree.
- *
- * Both methods are the *lenient* surface: an absent date ("") and an unknown
- * dirty state (false) are read as "fail toward offering", the safe direction. */
+/** The slice of [VaultGit] the sweep needs. Both methods are lenient: an absent
+ * date and an unknown dirty state fail toward offering. */
 export interface Git {
-  /** The last commit date of rel (YYYY-MM-DD), or "" when rel was never
-   * committed or root isn't a work tree. */
   lastCommitDate(rel: string): Promise<string>;
-  /** Whether rel is modified or untracked. */
   porcelainMentions(rel: string): Promise<boolean>;
 }
 
-/** The two reasons a raw file is offered. */
 /** No page's raw_source points at it. */
 export const ReasonNeverIngested = "never-ingested";
 /** Pages point at it, and it has moved on. */
@@ -47,21 +34,16 @@ export const ReasonChangedSinceIngestion = "changed-since-ingestion";
 
 /** One raw file the sweep wants to offer. RawRel is vault-relative. */
 export interface Candidate {
-  /** The vault-relative path of the raw file. */
   rawRel: string;
-  /** Either [ReasonNeverIngested] (BackPointers empty by construction) or
-   * [ReasonChangedSinceIngestion] (BackPointers lists the pointing pages
-   * vault-relative — the invoking session passes them to `wiki-ingest` as a
-   * reconciliation hint). */
+  /** [ReasonNeverIngested] or [ReasonChangedSinceIngestion]; the latter's
+   * backPointers list the pointing pages, passed to `wiki-ingest` as a
+   * reconciliation hint. */
   reason: string;
-  /** The pages whose raw_source points at RawRel. */
   backPointers: string[];
 }
 
-/** The sweep's verdict on one (vault, folder) pair.
- *
- * Eligible is in walk order. Ignored holds `.ingestignore` matches, reported
- * rather than silently dropped so the sweep can say "3 ignored". */
+/** The sweep's verdict on one (vault, folder). Ignored is reported rather than
+ * silently dropped, so the sweep can say "3 ignored". */
 export interface Result {
   eligible: Candidate[];
   ignored: string[];
@@ -70,11 +52,8 @@ export interface Result {
 /** The raw/ files that are instructions and policy, not content. */
 const skipNames = new Set<string>(["INGESTION.md", ".ingestignore"]);
 
-/** Return every file under `root/raw/` (or `root/raw/<folder>`), as
- * vault-relative paths in sorted order.
- *
- * Skips `INGESTION.md` and `.ingestignore`. A nonexistent folder yields
- * nothing rather than an error. */
+/** Every file under `root/raw/<folder>`, vault-relative and sorted; skips
+ * `INGESTION.md` and `.ingestignore`. A missing folder yields nothing. */
 export function walkRaw(root: string, folder: string): string[] {
   let rawRoot = path.join(root, "raw");
   if (folder !== "") rawRoot = path.join(rawRoot, ...folder.split("/"));
@@ -105,11 +84,9 @@ export function walkRaw(root: string, folder: string): string[] {
   return rels;
 }
 
-/** Read the `.ingestignore` in folder, if any — this folder only, no ancestor
- * walk. An empty slice when absent.
- *
- * A malformed policy file is an error, not an empty policy: silently reading
- * it as "ignore nothing" would offer every file it was meant to withdraw. */
+/** The `.ingestignore` in folder, if any — this folder only, no ancestor walk.
+ * A malformed policy file is an error, not an empty policy: reading it as
+ * "ignore nothing" would offer every file it was meant to withdraw. */
 export function loadIngestignore(folder: string): string[] {
   const filePath = path.join(folder, Filename);
   let text: string;
@@ -122,17 +99,9 @@ export function loadIngestignore(folder: string): string[] {
   return parseIngestignore(text);
 }
 
-/** Return `{raw_rel_lower: [page_ref, …]}` for every page with a raw_source.
- * Keys are lowercased vault-relative paths; values are page refs.
- *
- * pagerecord hands back each raw_source target already resolved to
- * vault-relative by construction (ADR-0009), so there is no re-resolution step
- * to write here.
- *
- * Keys are lowercased so that `scan()` can do a case-insensitive lookup when
- * matching against the actual filename on disk — an LLM agent may title-case a
- * filename in the plan, producing a raw_source link whose decoded path differs
- * only in case from the actual file on a case-insensitive filesystem (#368). */
+/** `{raw_rel_lower: [page_ref, …]}` for every page with a raw_source. Keys are
+ * lowercased so `scan` can match case-insensitively against the file on disk: an
+ * agent may title-case a filename in the plan. */
 export function backPointersByRaw(
   pages: Record<string, PageWithText>,
 ): Record<string, string[]> {
@@ -148,25 +117,18 @@ export function backPointersByRaw(
   return out;
 }
 
-/** Report whether rawDate > pageDate (YYYY-MM-DD lexicographic).
- *
- * An absent page date — never committed, or not a git repo — fails toward
- * true, so the file is offered rather than silently skipped. */
+/** True when rawDate > pageDate (YYYY-MM-DD lexicographic); an absent page date
+ * fails toward true, so the file is offered rather than silently skipped. */
 export function strictlyNewer(rawDate: string, pageDate: string): boolean {
   if (pageDate === "") return true;
   if (rawDate === "") return false;
   return rawDate > pageDate;
 }
 
-/** Walk `root/raw/` and return the sweep's verdict (see the module comment
- * for the eligibility rule).
- *
- * Policy trumps the eligibility signal: a file matching its own folder's
- * `.ingestignore` lands in Ignored without being evaluated.
- *
- * git is injectable for tests; pass null for the real repository at root. The
- * absent-git policy — fail toward offering — is read off [Git.lastCommitDate]
- * and [Git.porcelainMentions], whose lenient defaults this sweep relies on. */
+/** Walk `root/raw/` and return the sweep's verdict (eligibility rule in the
+ * module comment). A file matching its own folder's `.ingestignore` lands in
+ * Ignored without being evaluated. `git` is injectable; null means the real
+ * repository at root. */
 export async function scan(
   root: string,
   folder: string,
@@ -175,10 +137,8 @@ export async function scan(
   const vault = new Vault(root);
   const pages = vault.pagesWithText();
   const backPointers = backPointersByRaw(pages);
-  // A null git means "the real repository at root". Build the batched facts
-  // (one tree walk + one history walk) rather than the per-file VaultGit
-  // surface, so a folder sweep over thousands of files stays O(tree + history)
-  // instead of O(files × walks) (#415).
+  // null means the real repo: build the batched facts once, not a per-file
+  // VaultGit surface, so a folder sweep stays O(tree + history).
   if (git === null) git = await new VaultGit(root).scanFacts();
 
   const rels = walkRaw(root, folder);
@@ -186,8 +146,8 @@ export async function scan(
   const result: Result = { eligible: [], ignored: [] };
   const matcherCache = new Map<string, Matcher>();
   for (const rel of rels) {
-    // Own folder, no ancestor walk: a raw/emails/.ingestignore does not
-    // govern raw/emails/sub/ — that folder needs its own.
+    // Own folder only: raw/emails/.ingestignore does not govern
+    // raw/emails/sub/ — that folder needs its own.
     const dir = path.dirname(path.join(root, ...rel.split("/")));
     let matcher = matcherCache.get(dir);
     if (matcher === undefined) {
@@ -215,8 +175,6 @@ export async function scan(
       continue;
     }
 
-    // Ingested at least once. Offer it again only if it has moved on:
-    // dirty working tree, or newer than a back-pointer page.
     if (await git.porcelainMentions(rel)) {
       result.eligible.push({
         rawRel: rel,

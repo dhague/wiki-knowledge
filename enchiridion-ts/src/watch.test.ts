@@ -35,7 +35,6 @@ function tmpRoot(): string {
 /** A pid no live process on this machine can have. */
 const DeadPID = 1 << 30;
 
-/** Runs fn and returns the error it threw, failing the test if it didn't. */
 function thrownBy(fn: () => void): Error {
   try {
     fn();
@@ -45,16 +44,16 @@ function thrownBy(fn: () => void): Error {
   assert.fail("expected fn to throw");
 }
 
-/** Writes a lock file stamped with pid and an age, creating its directory —
- * what a killed holder, or an undecidable one, leaves behind. */
+/** Writes a lock stamped with pid and an age — what a killed or undecidable
+ * holder leaves behind. */
 function strandLock(lockPath: string, pid: number, ageSeconds = 0): void {
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
   writeLock(lockPath, pid, new Date(Date.now() - ageSeconds * 1000));
 }
 
-/** The lock files that do not decide anything on their own: an unparsable
- * file, and one whose holder is alive but has outlived [StaleLockSeconds].
- * The `.mutex` reclaims both; the `.writelock` stops on both. */
+/** Lock files [lockState] cannot decide: an unparsable file, and a live pid past
+ * [StaleLockSeconds]. The `.mutex` reclaims both; the `.writelock` stops on
+ * both. */
 const undecidableLocks: { name: string; strand: (lockPath: string) => void }[] =
   [
     {
@@ -248,8 +247,6 @@ test("acquire lock: a mutex stranded by a dead pid is reclaimed, not spun on", (
   const lockPath = path.join(tmpRoot(), ".wiki-knowledge", "watch.lock");
   strandLock(lockPath + ".mutex", DeadPID);
 
-  // Before the shared reclaim path, this call never returned: the watcher
-  // printed nothing at all, rather than reporting a stuck lock.
   const { acquired } = acquireLock(lockPath);
   assert.equal(acquired, true);
   assert.ok(fs.existsSync(lockPath), "the lock was taken inside the mutex");
@@ -386,8 +383,8 @@ test("defaults: exported constants", () => {
 
 // --- the watch loop (runWatch seam tests) ------------------------------------
 
-/** A fake file watcher: the test fires "ready"/"all" events and calls
- * close(), with no chokidar on the loop's seam. */
+/** A fake watcher: the test fires "ready"/"all" and calls close(), with no
+ * chokidar on the loop's seam. */
 class FakeWatcher implements Watcher {
   closed = false;
   private readyHandlers: (() => void)[] = [];
@@ -424,7 +421,7 @@ async function flush(): Promise<void> {
 }
 
 /** A fake signal hub: runWatch's onSignal/offSignal pair, so a test can fire
- * SIGINT/SIGTERM without touching the process. */
+ * signals without touching the process. */
 function recordSignals(): {
   onSignal: (sig: StopSignal, cb: () => void) => void;
   offSignal: (sig: StopSignal, cb: () => void) => void;
@@ -442,8 +439,7 @@ function recordSignals(): {
   };
 }
 
-/** Writes a real file under root/raw/, returning its absolute path — the loop
- * maps it through relForEvent exactly as production would. */
+/** Writes a real file under root/raw/, returning its absolute path. */
 function rawFile(root: string, name: string): string {
   const abs = path.join(root, "raw", name);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -574,8 +570,8 @@ test("run-watch: an eligibility miss settles without enqueuing", async () => {
   assert.deepEqual(readQueue(paths.queue), []);
   assert.equal(sweepRuns, 1);
 
-  // A settled-and-missed file stops being tracked: the next tick has nothing
-  // to sweep, even though the sweep would now offer the file.
+  // A settled-and-missed file stops being tracked, so the next tick has
+  // nothing to sweep even though the sweep would now offer it.
   ticks[0]();
   await flush();
   assert.equal(sweepRuns, 1);

@@ -1,74 +1,58 @@
 /**
- * ingest — the IngestPlan schema and its single-call executor. Plan in,
- * commit SHA out.
+ * ingest — the IngestPlan schema and its single-call executor. Plan in, commit
+ * SHA out.
  *
- * A [Plan] is the decided outcome of an ingestion: which pages to
- * create/update, with what frontmatter and typed edges. Semantic chunking and
- * overlap classification are judgment and stay with the ingesting agent;
- * everything downstream of that decision is mechanics and lives here.
+ * A [Plan] is the decided outcome of an ingestion: which pages to create or
+ * update, with what frontmatter and typed edges. Chunking and overlap
+ * classification are agent judgment; the mechanics downstream of that decision
+ * live here.
  *
- * **A plan names link targets by vault-relative page reference only** —
- * `edges` and `supersedes` hold paths like `wiki/concepts/foo.md`, never
- * composed `[Title](../dest.md)` strings. Composing the link (title lookup,
- * `../` relativisation, percent-encoding, YAML quoting) is this module's job.
- * `raw_source` uses a boolean sentinel for the same reason:
- * `frontmatter: {"raw_source": true}` marks the page as the stub for
- * [Plan.raw], and the link is composed from that. Body links are re-encoded
- * on write by [normalizeBodyLinks].
+ * A plan names link targets by vault-relative page reference only: `edges` and
+ * `supersedes` hold paths like `wiki/concepts/foo.md`, never composed
+ * `[Title](../dest.md)` strings. Composing the link (title lookup, `../`
+ * relativisation, percent-encoding, YAML quoting) is this module's job. The
+ * `raw_source` boolean sentinel works the same way:
+ * `frontmatter: {"raw_source": true}` marks the page as the stub for [Plan.raw]
+ * and the link is composed from it. [Plan.raw] itself is never renamed or moved
+ * — the file keeps its name forever, and the link destination is
+ * percent-encoded rather than the file sanitized. Body links are re-encoded on
+ * write by [normalizeBodyLinks].
  *
- * Pipeline: [resolve] -> [Resolved.validate] -> [Resolved.execute] -> derive
- * a [commit.Manifest] -> commit.
+ * `action` is `ingest`, `synthesize` (wiki-ask's confirmed synthesis save: one
+ * `create` of kind `synthesis`, with `source` edges and no raw artifact), or
+ * `consolidate` (CONTEXT.md, Consolidation; ADR-0021): one survivor absorbs the
+ * pages `consolidates` names, each absorbed body becoming a section of the
+ * survivor's authored body, every inbound link repointed at the survivor
+ * ([Vault.consolidate]), the absorbed pages deleted rather than marked
+ * `superseded`, and one commit. `plan.raw` stays unset — a Consolidation is
+ * sourced from pages, not an artifact. Losslessness is mechanical: validation,
+ * and the executor again immediately before the delete, refuses a survivor body
+ * that no longer reads an absorbed page's content.
  *
- * [resolve] is the single place placement ([place.path]), frontmatter
- * projection and edge/`raw_source` link composition happen: it turns a plan
- * into the exact (pageRef, page) pairs the vault will end up holding.
- * Validation then reads only resolved facts, and execution writes only
- * resolved pages — so the plan that was checked and the plan that gets
- * written cannot diverge. Resolve is pure apart from vault reads.
+ * Pipeline: [resolve] -> [Resolved.validate] -> [Resolved.execute] -> derive a
+ * [commit.Manifest] -> commit. [resolve] is the single place placement,
+ * frontmatter projection and edge/`raw_source` link composition happen;
+ * validation reads only resolved facts and execution writes only resolved
+ * pages, so the checked plan and the written plan cannot diverge. Resolve is
+ * pure apart from vault reads. Validation runs entirely before any write —
+ * shape (required fields, valid op) then semantic (an update's pageRef exists, a
+ * create's target does not yet, every edge target resolves to a page on disk or
+ * created by this same plan, and [chainofevidence.check] holds). The chain
+ * check is a courtesy; [commit.commit] re-runs it as the hard gate.
  *
- * Validation runs entirely before any write, shape (required fields, valid
- * op) then semantic (an update's pageRef exists, a create's target doesn't
- * yet, every edge target resolves to a page already on disk *or* created by
- * this same plan, and [chainofevidence.check] holds). That last check is a
- * courtesy to the agent — [commit.commit] re-runs it as the hard gate, so a
- * hand-built manifest can't route around validation into history.
+ * Two frontmatter fields are this module's to guarantee, not the agent's to
+ * forget. A page omitting `source_date` inherits the plan's top-level
+ * [Plan.source_date] — the document's own date, not today's — so a plan carrying
+ * a date cannot write a page the `missing-volatility-source-date` check reports;
+ * a page's own value (or, on an update, the one already on disk) wins, and a
+ * plan without a date inherits nothing. `volatility` is authored judgment that
+ * cannot be derived, so validation requires it — within [Volatilities] — on
+ * every `create` and on any `update` that supplies a `frontmatter` map; a
+ * body-only update leaves the existing block alone.
  *
- * **Two frontmatter fields are this module's to guarantee, not the agent's to
- * forget** (#561). A page that omits `source_date` inherits the plan's
- * top-level [Plan.source_date] — "the document's own date, not today's" — so a
- * plan that carries a date cannot write a page the `missing-volatility-
- * source-date` check reports for one; a page's own value (or, on an update,
- * the one already on disk) wins, and a plan without a date inherits nothing.
- * `volatility` is authored judgment that cannot be derived, so validation
- * requires it — within [Volatilities], the schema's domain — on every `create`
- * and on any `update` that supplies a `frontmatter` map — a body-only update
- * leaves the existing block, and the value already on disk, alone.
- *
- * Ingestion isn't the only caller: wiki-ask's confirmed synthesis-page
- * save is the same shape (one `create` of kind `synthesis`, `source` edges,
- * no raw artifact) and passes `action: "synthesize"` so the history
- * distinguishes the two without reading the diff.
- *
- * **`action: "consolidate"` is the third shape** (CONTEXT.md,
- * **Consolidation**; ADR-0021). One page — the survivor — absorbs the pages
- * [Plan.consolidates] names, each absorbed body becoming a section of the
- * survivor's authored body. The executor repoints every inbound link at the
- * survivor (reusing the move machinery, [Vault.consolidate]), deletes the
- * consolidated pages, and commits once. Losslessness is mechanical rather than
- * promised: validation — and the executor again, immediately before the delete
- * — refuses a survivor body that no longer reads the content of a page it
- * absorbs. The consolidated pages are deleted rather than recorded as
- * `superseded`: there is no conflicting claim to preserve. `plan.raw` stays
- * unset, a Consolidation being sourced from pages, not an artifact.
- *
- * [Plan.raw] is never renamed or moved — a file with external identity keeps
- * its name forever. Ingestion reads it and stages it; `raw_source` links
- * point at it where it sits, percent-encoded by the link machinery rather
- * than sanitized on disk.
- *
- * **No rollback on failure, deliberately.** A page written before a later
- * step fails stays on disk, uncommitted. Every write here is idempotent, so
- * re-running the plan after fixing the cause is always safe.
+ * No rollback on failure, deliberately: a page written before a later step fails
+ * stays on disk, uncommitted. Every write is idempotent, so re-running the plan
+ * after fixing the cause is safe.
  */
 
 import path from "node:path";
@@ -87,20 +71,16 @@ import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
 import { Volatilities } from "./pagerecord.js";
 
-/** Caps a full path (vault root plus vault-relative path), for Windows'
- * 255-char limit (#70). */
+/** Windows' 255-char path limit, measured against root plus vault-relative path. */
 export const MaxPathLength = 255;
 
-/** The two verbs a plan page may carry. */
 export const OpCreate = "create";
 export const OpUpdate = "update";
 
-/** The plan verb whose one page absorbs the pages `consolidates` names
- * (ADR-0021). */
+/** The plan verb whose one page absorbs the pages `consolidates` names (ADR-0021). */
 export const ActionConsolidate = "consolidate";
 
-/** Thrown when a plan fails shape or semantic validation. The message lists
- * every problem found, not just the first. */
+/** A plan failed validation; the message lists every problem found, not the first. */
 export class ErrPlan extends Error {
   constructor(message: string) {
     super(message);
@@ -108,48 +88,39 @@ export class ErrPlan extends Error {
   }
 }
 
-/** A JSON object that remembers its key order.
- *
- * Frontmatter keys and edge keys are applied to a page in the order the plan
- * lists them, and JS object key iteration is deterministic but not the plan's
- * order — so decoding into a plain object would make the frontmatter key order
- * of an ingested page vary run to run. ADR-0012 relaxes the *byte-identical*
- * round-trip contract; it does not license nondeterministic output.
- */
+/** A JSON object that remembers its key order: plain objects iterate in a
+ * deterministic but not plan order, which would make ingested pages vary run to
+ * run (ADR-0012 relaxes byte-identical round-tripping, not determinism). */
 export class OrderedMap<V> {
   readonly keys: string[] = [];
   readonly values = new Map<string, V>();
 
-  /** The value for key, and whether it was present. */
   get(key: string): { value: V | undefined; ok: boolean } {
     if (!this.values.has(key)) return { value: undefined, ok: false };
     return { value: this.values.get(key), ok: true };
   }
 
-  /** The number of entries. */
   length(): number {
     return this.keys.length;
   }
 
-  /** Iterate the entries in plan order. */
   *all(): Generator<[string, V]> {
     for (const key of this.keys) {
       yield [key, this.values.get(key) as V];
     }
   }
 
-  /** Record one entry, keeping its first position and taking the last value. */
   private set(key: string, value: V): void {
     if (!this.values.has(key)) this.keys.push(key);
     this.values.set(key, value);
   }
 
-  /** Decode a JSON object, recording key order as it goes. A duplicate key
-   * keeps its first position and takes the last value. */
+  /** Decode a JSON object recording key order; a duplicate keeps its first
+   * position and takes the last value. */
   static decode<V>(data: unknown): OrderedMap<V> {
     const m = new OrderedMap<V>();
     if (data === null || typeof data !== "object" || Array.isArray(data)) {
-      // an explicit null is an absent object, not an error
+      // an explicit null is absent, not an error
       return m;
     }
     for (const key of Object.keys(data as Record<string, unknown>)) {
@@ -159,40 +130,29 @@ export class OrderedMap<V> {
   }
 }
 
-/** One page this plan creates or updates. */
 export interface PagePlan {
   op: string;
   title: string;
   kind: string;
   page_ref: string;
-  /** Body is null when the plan leaves the existing body alone; an update
-   * omitting it keeps what's on disk, whereas `"body": ""` blanks it. */
+  /** Null leaves the existing body alone; `""` blanks it. */
   body: string | null;
-  /** The projected frontmatter, in plan order. */
   frontmatter: OrderedMap<unknown>;
-  /** Each typed-edge key maps to its targets, named by vault-relative page
-   * reference only. */
   edges: OrderedMap<string[]>;
 }
 
-/** The deterministic description of one ingestion's decided outcome. */
 export interface Plan {
   title: string;
-  /** The structured commit's verb ([Manifest.action]): `ingest`, `synthesize`
-   * for a wiki-ask synthesis save, or `consolidate` for a Consolidation. */
+  /** The commit verb ([Manifest.action]); see the module comment. */
   action: string;
   source_date: string;
   raw: string;
   pages: PagePlan[];
-  /** For `action: "consolidate"`, the vault-relative refs the survivor absorbs
-   * — empty for every other action. */
+  /** For `consolidate`, the vault-relative refs the survivor absorbs; empty otherwise. */
   consolidates: string[];
 }
 
-/** Read one plan from JSON.
- *
- * Action defaults to `ingest`, so a plan that omits it still commits under
- * a verb. */
+/** Read one plan from JSON; `action` defaults to `ingest`. */
 export function decodePlan(jsonText: string): Plan {
   let data: Record<string, unknown>;
   try {
@@ -237,73 +197,55 @@ export function decodePlan(jsonText: string): Plan {
   };
 }
 
-/** One plan page, resolved to the exact file the vault will hold.
- *
- * PageRef is "" and Page is null together, when placement couldn't be computed
- * (an invalid Kind, a missing PageRef) — its own shape error, reported by
- * [Resolved.validate]. */
+/** One plan page, resolved to the exact file the vault will hold. pageRef is ""
+ * and page null together when placement could not be computed (an invalid kind
+ * or a missing pageRef), each already its own shape error. */
 export interface ResolvedPage {
   plan: PagePlan;
   pageRef: string;
-  /** The full post-write content: projected frontmatter plus body. A create
-   * starts blank, an update from its on-disk copy. */
+  /** Full post-write content: a create starts blank, an update from its on-disk copy. */
   page: Page | null;
-  /** Whether anything was already at PageRef when the plan was resolved — a
-   * create may not claim it. A *directory* counts. */
+  /** Anything already at pageRef, which a create may not claim — a *directory* counts. */
   occupied: boolean;
-  /** Whether an existing page was read as this page's base. An update needs
-   * one; a create never has one. */
+  /** An existing page was read as the base — required of an update, never true of a create. */
   loaded: boolean;
 }
 
-/** One page a Consolidation absorbs, with the body resolve read from disk —
- * the left-hand side of the losslessness gate (ADR-0021). */
+/** One page a Consolidation absorbs, with the body [resolve] read from disk. */
 export interface AbsorbedPage {
-  /** Vault-relative, normalized. */
   pageRef: string;
-  /** The page's body — everything after the frontmatter block. */
   body: string;
-  /** Whether the page was on disk when the plan resolved. */
   found: boolean;
 }
 
-/** The Consolidation a plan declares, resolved: who absorbs, and what. */
 export interface ResolvedConsolidation {
   survivorRef: string;
   absorbed: AbsorbedPage[];
 }
 
-/** A plan with every derived fact computed exactly once.
- *
- * Constructible directly (no vault needed) for tests; [resolve] is the
- * production path. */
+/** A plan with every derived fact computed exactly once. Constructible directly
+ * for tests; [resolve] is the production path. */
 export class Resolved {
   constructor(
     readonly plan: Plan,
     readonly pages: ResolvedPage[],
     /** "" when resolved without a vault — shape checks only, no reads. */
     readonly root: string,
-    /** {kind: folder} for vault-discovered kind-folders beyond the four
-     * canonical ones; empty when resolved without a vault. */
+    /** {kind: folder} for discovered kind-folders beyond the canonical ones; empty without a vault. */
     readonly extraKindFolders: Record<string, string>,
-    /** The resolved Consolidation, or null when this is not one. */
     readonly consolidation: ResolvedConsolidation | null = null,
   ) {}
 
-  /** A handle on the vault this plan resolved against, or null when it
-   * resolved without one. */
   private vault(): Vault | null {
     if (this.root === "") return null;
     return new Vault(this.root);
   }
 
-  /** One page's plan verb, `create` or `update`. */
   opOf(page: ResolvedPage): string {
     return page.plan.op;
   }
 
-  /** Check this plan, shape then semantic, before any write. Throws [ErrPlan]
-   * naming every problem found. */
+  /** Check this plan, shape then semantic, before any write; throws [ErrPlan] naming every problem. */
   validate(): void {
     const problems = [...this.shapeErrors(), ...this.semanticErrors()];
     if (problems.length > 0) {
@@ -311,8 +253,7 @@ export class Resolved {
     }
   }
 
-  /** Shape errors cover required fields and valid ops — everything checkable
-   * without a vault. */
+  /** Required fields and valid ops — everything checkable without a vault. */
   private shapeErrors(): string[] {
     const problems: string[] = [];
     if (this.plan.title === "") {
@@ -362,8 +303,7 @@ export class Resolved {
         }
       }
 
-      // An explicit null reads as absent, so a plan with `raw_source: null`
-      // is treated the same as one that omits it.
+      // Null reads as absent, like an omitted key.
       const rawSource = page.frontmatter.get("raw_source");
       if (rawSource.ok && rawSource.value !== null) {
         if (rawSource.value !== true) {
@@ -377,11 +317,8 @@ export class Resolved {
         }
       }
 
-      // `source_date` is valid time and has one canonical spelling
-      // (YYYY-MM-DD). A clock on it truncates on write, but a value that
-      // isn't a valid date at all can't be — the plan is refused (#192). Null
-      // reads as absent, like raw_source. The rule itself lives in
-      // [sourcedate.parseSourceDate], the one owner (#309).
+      // A date, with an optional clock that is truncated on write; anything
+      // not a date at all is refused. The rule is [sourcedate.parseSourceDate]'s.
       const sourceDate = page.frontmatter.get("source_date");
       if (sourceDate.ok && sourceDate.value !== null) {
         if (parseSourceDate(sourceDate.value) === null) {
@@ -391,12 +328,8 @@ export class Resolved {
         }
       }
 
-      // `volatility` is a required schema field and the `missing-volatility-
-      // source-date` check reports a page without one, so a plan must not
-      // write one (#561). A create always projects fresh frontmatter; an
-      // update does so whenever it supplies a `frontmatter` map — a
-      // body-only update leaves the existing block alone, and the value on
-      // disk (if any) stands. Null and "" read as absent, like source_date.
+      // Required whenever frontmatter is rewritten — always for a create, for
+      // an update only when it supplies a map. Null and "" read as absent.
       const rewritesFrontmatter =
         page.op === OpCreate || page.frontmatter.length() > 0;
       if (rewritesFrontmatter) {
@@ -412,9 +345,8 @@ export class Resolved {
             String(volatility.value),
           )
         ) {
-          // Presence alone is not the field: a value outside the schema's
-          // domain writes a page `search --volatility` can never match. The
-          // domain itself lives in [Volatilities], the schema's one owner.
+          // A value outside [Volatilities] writes a page `search --volatility`
+          // can never match.
           problems.push(
             `${prefix}.frontmatter.volatility must be one of ${Volatilities.join("|")}, got ${String(volatility.value)}`,
           );
@@ -422,9 +354,8 @@ export class Resolved {
       }
     }
 
-    // A Consolidation is one survivor plus the pages it absorbs, and nothing
-    // else: the absorbed bodies *are* the survivor's authored body, so there is
-    // no artifact to chain evidence to and no second page to write (ADR-0021).
+    // A Consolidation is exactly one survivor: no raw artifact to chain
+    // evidence to, no second page to write (ADR-0021).
     if (this.plan.action === ActionConsolidate) {
       if (this.plan.consolidates.length === 0) {
         problems.push(
@@ -467,15 +398,14 @@ export class Resolved {
     return problems;
   }
 
-  /** Semantic errors cover the checks that need the vault: target existence,
-   * path length, evidence chain. */
+  /** The checks that need the vault: target existence, path length, evidence chain. */
   private semanticErrors(): string[] {
     if (this.root === "") return [];
     const v = this.vault() as Vault;
     const problems: string[] = [];
 
-    // A page this same plan is about to create counts as resolvable too, so
-    // sibling new pages can link to each other before either exists on disk.
+    // A page this plan creates counts as resolvable, so siblings can link to
+    // each other before either exists on disk.
     const prospective = new Set<string>();
     for (const rp of this.pages) {
       if (rp.plan.op === OpCreate && rp.pageRef !== "") {
@@ -509,8 +439,8 @@ export class Resolved {
 
       for (const target of pageLinkTargets(page, this.plan)) {
         if (prospective.has(target.ref)) continue;
-        // Exists is file-only, so a target naming a directory fails here
-        // rather than composing a link to something unopenable.
+        // `exists` is file-only, so a directory target fails here rather than
+        // composing a link to something unopenable.
         if (!v.exists(target.ref)) {
           problems.push(
             `${prefix}: ${target.key} target ${JSON.stringify(target.ref)} does not resolve to a real page`,
@@ -520,7 +450,6 @@ export class Resolved {
     }
 
     if (this.plan.raw !== "") {
-      // A courtesy check for the agent; commit re-runs it as the hard gate.
       const staged: Record<string, Page> = {};
       for (const rp of this.pages) {
         if (rp.pageRef !== "" && rp.page !== null) {
@@ -536,15 +465,14 @@ export class Resolved {
     return problems;
   }
 
-  /** Semantic half of the Consolidation checks: the absorbed pages are real
-   * pages that exist, and the survivor still reads their content. */
+  /** The absorbed pages are real and exist, and the survivor still reads their content. */
   private consolidationErrors(): string[] {
     const c = this.consolidation;
     if (c === null) return [];
     const problems: string[] = [];
     if (c.survivorRef === "") {
-      // The survivor's own shape error (an invalid kind, a missing page_ref)
-      // is already reported; there is nothing to compare it against yet.
+      // The survivor's own shape error is already reported; nothing to compare
+      // it against yet.
       return problems;
     }
     if (c.absorbed.some((a) => a.pageRef === c.survivorRef)) {
@@ -555,9 +483,8 @@ export class Resolved {
     for (let i = 0; i < c.absorbed.length; i++) {
       const absorbed = c.absorbed[i];
       if (absorbed.pageRef === "") continue;
-      // The page predicate, not a bare existence test: `wiki/_index.md`, a
-      // KIND.md and a nested file all sit on disk without being pages, and
-      // deleting one is not a Consolidation (pagepredicate, #310).
+      // The page predicate, not bare existence: `_index.md`, KIND.md and nested
+      // files sit on disk without being pages.
       if (!isPageRef(absorbed.pageRef)) {
         problems.push(
           `plan.consolidates[${i}] ${absorbed.pageRef} is not a page (wiki/<kind-folder>/<file>.md)`,
@@ -575,16 +502,11 @@ export class Resolved {
   }
 
   /**
-   * The Consolidation's losslessness gate (ADR-0021): each absorbed page's body
-   * must still be readable in the survivor's body, so the delete drops nothing.
-   *
-   * Compared through [canonicalizeLinkTargets], so the two sides are read as
-   * *where their links point* rather than how each destination is spelled. An
-   * absorbed body therefore compares equal whether it was copied verbatim or
-   * re-based with `../` after landing in a survivor in another kind-folder, and
-   * a link the merge quietly broke does not. Frontmatter is deliberately
-   * outside the comparison: the survivor's summary, tags and edges are the
-   * author's judgment about the merged page, not absorbed content.
+   * The losslessness gate (ADR-0021): each absorbed body must still be readable
+   * in the survivor's body, so the delete drops nothing. Compared through
+   * [canonicalizeLinkTargets] — by where links point, not how they are spelled —
+   * so a body re-based into another kind-folder compares equal and a link the
+   * merge broke does not. Frontmatter is deliberately outside the comparison.
    */
   private losslessnessErrors(): string[] {
     const c = this.consolidation;
@@ -620,11 +542,8 @@ export class Resolved {
     return problems;
   }
 
-  /** Write every resolved page and commit, returning the commit SHA.
-   *
-   * Assumes [Resolved.validate] has already passed. No rollback on failure.
-   * git is injectable for tests; pass a [VaultGit] over the vault root in
-   * production. */
+  /** Write every resolved page and commit, returning the SHA. Assumes
+   * [Resolved.validate] passed; no rollback on failure. */
   async execute(git: Git): Promise<string> {
     if (this.root === "") {
       throw new ErrPlan(
@@ -680,12 +599,10 @@ export class Resolved {
   }
 
   /**
-   * [execute] for `action: consolidate`: write the survivor, repoint every
-   * inbound link at it, delete the absorbed pages, commit once (ADR-0021).
-   *
-   * The losslessness check runs again here, on the same resolved facts, seconds
-   * before the delete: ADR-0021 makes the *executor* the safeguard, so a
-   * [Resolved] built by hand cannot route around [validate]. */
+   * [execute] for `consolidate`: write the survivor, repoint every inbound
+   * link, delete the absorbed pages, commit once (ADR-0021). The losslessness
+   * check runs again here so a hand-built [Resolved] cannot route around
+   * [validate]. */
   private async executeConsolidation(v: Vault, git: Git): Promise<string> {
     const c = this.consolidation;
     const survivor = this.pages.length === 1 ? this.pages[0] : null;
@@ -709,16 +626,15 @@ export class Resolved {
     }
 
     const losers = c.absorbed.map((a) => a.pageRef);
-    // The survivor is written before anything is deleted, so an interrupted
-    // Consolidation has always laid the absorbed content down first.
+    // The survivor is written before anything is deleted, so an interrupted run
+    // has always laid the absorbed content down first.
     const changed = v.consolidate(c.survivorRef, survivor.page, losers);
 
     const created: string[] = [];
     const updated: string[] = [];
     for (const ref of changed) {
-      // The survivor is accounted for below; the rest are pages whose inbound
-      // links the Consolidation rewrote. Consolidated pages are never among
-      // them — [Vault.consolidate] drops them before it writes.
+      // The rest are pages whose inbound links were rewritten;
+      // [Vault.consolidate] drops the consolidated pages before it writes.
       if (ref !== c.survivorRef) updated.push(ref);
     }
     if (survivor.plan.op === OpCreate) created.push(c.survivorRef);
@@ -752,23 +668,17 @@ export class Resolved {
   }
 }
 
-/** Turn a plan into the exact pages the vault will hold.
- *
- * Pure apart from vault reads: placement, frontmatter projection and link
- * composition each happen here and nowhere else, so validation and execution
- * read the same facts by construction. Pass root == "" to resolve without a
- * vault, for shape checks alone. */
+/** Turn a plan into the exact pages the vault will hold — pure apart from vault
+ * reads. Pass root == "" to resolve without a vault, for shape checks alone. */
 export function resolve(plan: Plan, root: string): Resolved {
   let v: Vault | null = null;
   const extraKindFolders: Record<string, string> = {};
   if (root !== "") {
     v = new Vault(root);
-    // Refuse an unmigrated vault outright rather than filing pages into the
-    // plural folders while the old ones sit in the singular.
+    // Refuse an unmigrated vault rather than split one kind across singular and
+    // plural folders.
     const legacy = v.legacyKindFolders();
     if (legacy.length > 0) {
-      // The #114 migration script this used to name is retired, so the remedy
-      // is spelled out here instead: one `git mv` per folder.
       const moves = legacy.map(
         (kind) => `git mv wiki/${kind}/* wiki/${kind}s/`,
       );
@@ -783,8 +693,7 @@ export function resolve(plan: Plan, root: string): Resolved {
 
   const refs = plan.pages.map((page) => pageRef(page, extraKindFolders));
 
-  // First page wins, so a link's title matches the earliest plan page claiming
-  // that pageRef.
+  // First page wins, so a link's title matches the earliest plan page claiming it.
   const titles = new Map<string, string>();
   for (let i = 0; i < refs.length; i++) {
     const ref = refs[i];
@@ -842,12 +751,8 @@ export function resolve(plan: Plan, root: string): Resolved {
 }
 
 /** Read the consolidation a plan declares: its survivor, and each absorbed
- * page's body as it stands on disk.
- *
- * A body is captured here, once, for the same reason every other derived fact
- * is: [Resolved.validate] and [Resolved.execute] then read the same content, so
- * the plan that was checked and the plan that gets written cannot diverge —
- * including when execute runs a second time, after the file it read is gone. */
+ * page's body as it stands on disk — captured once so validate and execute read
+ * the same content, including on a second execute after the file is gone. */
 function resolveConsolidation(
   plan: Plan,
   resolvedPages: ResolvedPage[],
@@ -870,9 +775,8 @@ function resolveConsolidation(
   return { survivorRef, absorbed };
 }
 
-/** The vault-relative path a plan page will occupy, or "" when it can't be
- * computed yet (an invalid kind or a missing pageRef, each already recorded
- * as its own shape error). */
+/** The vault-relative path a plan page will occupy, or "" when it cannot be
+ * computed (each cause is already its own shape error). */
 function pageRef(
   page: PagePlan,
   extraKindFolders: Record<string, string>,
@@ -886,13 +790,9 @@ function pageRef(
   }
 }
 
-/** The title a link to targetRef should carry.
- *
- * This plan's own page for that pageRef wins (titles), so an update that
- * corrects a title propagates to every link the same plan writes. Then the
- * on-disk title; then `""`, letting [composeEdgeLink] fall back to the
- * basename — reachable only if validation let an unresolvable target
- * through. */
+/** The title a link to targetRef should carry: this plan's own page for that
+ * ref wins, so a corrected title propagates to every link the plan writes; then
+ * the on-disk title; then `""` for [composeEdgeLink] to use the basename. */
 function resolveTitle(
   targetRef: string,
   titles: Map<string, string>,
@@ -909,7 +809,7 @@ function resolveTitle(
   return "";
 }
 
-/** The **only** frontmatter projection in this module — see [resolve]. */
+/** The only frontmatter projection in this module — see [resolve]. */
 function applyFrontmatter(
   page: Page,
   planPage: PagePlan,
@@ -923,10 +823,8 @@ function applyFrontmatter(
   }
 
   const merging = planPage.op === OpUpdate;
-  // `source_date` is deliberately absent here: [Page.set] applies the
-  // source-date rule to every value it is handed, so truncating a clock is
-  // the writer's job rather than this projection's (#499). Validation above
-  // has already refused anything that isn't a date at all.
+  // `source_date` is absent here because [Page.set] applies the source-date rule
+  // to every value it is handed; validation already refused anything not a date.
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
     if (key === "raw_source" && value === true) {
@@ -943,11 +841,9 @@ function applyFrontmatter(
     }
   }
 
-  // A page that still omits `source_date` inherits the plan's top-level value
-  // — "the document's own date, not today's" — so the writer never emits a
-  // page the `missing-volatility-source-date` check reports (#561). A value
-  // already on the page wins: the plan's own for either op, or the one an
-  // update loaded from disk.
+  // A page still omitting `source_date` inherits the plan's top-level value, so
+  // the writer never emits a page the missing-volatility-source-date check
+  // reports; a value already on the page wins.
   if (page.getString("source_date") === "" && plan.source_date !== "") {
     page = page.set("source_date", plan.source_date);
   }
@@ -965,32 +861,29 @@ function applyFrontmatter(
   return page;
 }
 
-/** Canonicalises the plan's top-level `source_date` — the commit-trailer
- * attribution — to YYYY-MM-DD (#192). A non-date passes through. The rule
- * itself lives in [sourcedate.parseSourceDate], the one owner (#309). */
+/** Canonicalises the commit-trailer `source_date` to YYYY-MM-DD; a non-date
+ * passes through ([sourcedate.parseSourceDate]). */
 function manifestSourceDate(s: string): string {
   const date = parseSourceDate(s);
   return date !== null ? date : s;
 }
 
-/** Replaces the body while leaving the frontmatter block byte-exact,
- * re-encoding the new body's link destinations on the way in. */
+/** Replaces the body, leaving the frontmatter block byte-exact and re-encoding
+ * the new body's link destinations. */
 function applyBody(page: Page, newBody: string | null): Page {
   if (newBody === null) return page;
   const { bodyOffset } = splitFrontmatter(page.text);
   return new Page(page.text.slice(0, bodyOffset) + normalizeBodyLinks(newBody));
 }
 
-/** One (edge key, normalized target pageRef) pair awaiting existence
- * validation. */
+/** One (edge key, normalized target ref) awaiting existence validation. */
 interface LinkTarget {
   key: string;
   ref: string;
 }
 
-/** The targets this page's plan asks to link to. Plans name targets by
- * vault-relative page reference only, so this is a plain normalize — no
- * markdown-link parsing. */
+/** The targets this page's plan asks to link to — plain refs, so a normalize
+ * and no markdown-link parsing. */
 function pageLinkTargets(page: PagePlan, plan: Plan): LinkTarget[] {
   const targets: LinkTarget[] = [];
   const rawSource = page.frontmatter.get("raw_source");

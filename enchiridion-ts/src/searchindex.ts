@@ -7,13 +7,8 @@
 
 import nodeSqlite3Wasm from "node-sqlite3-wasm";
 import type { Database as DatabaseType } from "node-sqlite3-wasm";
-// node-sqlite3-wasm is a CJS package (module.exports = { Database,
-// SQLite3Error }). Importing it as a static default lets esbuild INLINE it
-// into the bundle (D3 #288 / #290): a packaged install ships cli.cjs +
-// node-sqlite3-wasm.wasm with no node_modules, so a runtime createRequire
-// would fail to resolve the package. esbuild does the CJS interop at build
-// time, so this is safe on both Node and Bun. The .wasm is located relative
-// to the bundle by the package itself.
+// node-sqlite3-wasm is CJS. A static default import lets esbuild inline it into
+// the bundle; a runtime createRequire would fail with no node_modules packaged.
 const { Database } = nodeSqlite3Wasm as unknown as {
   Database: typeof import("node-sqlite3-wasm").Database;
 };
@@ -21,17 +16,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { mkdirSafe } from "./fsutil.js";
 
-// The Git surface and its types are owned by the vaultgit module (§256):
-// this index consumes them, and re-exports the type names so existing callers
-// (and the test fake) keep compiling unchanged.
+// The Git surface is vaultgit's; re-exported so existing callers keep compiling.
 export type { Git, Snapshot, PageChange, VaultGit } from "./vaultgit.js";
 import type { Git, Snapshot, PageChange } from "./vaultgit.js";
 
-// Page metadata comes from pagerecord — the one reader of the frontmatter
-// schema — never from a private copy of its parsing stack. ADR-0015's
-// dependency story holds: pagerecord (and wikipage beneath it) are pure model
-// code with no I/O, so the index still depends only on the git layer, never on
-// the vault I/O module.
+// Page metadata comes from pagerecord, the one reader of the frontmatter schema.
 import { newPageRecord, supersedes as supersedesOf } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 import { splitFrontmatter } from "./wikipage.js";
@@ -94,8 +83,7 @@ export interface TagCount {
   count: number;
 }
 
-/** One indexed page with its tag set folded in — the read surface a check that
- * reasons across the whole vault needs, without re-parsing frontmatter. */
+/** One indexed page with its tag set folded in. */
 export interface IndexedPage {
   pageRef: string;
   title: string;
@@ -110,8 +98,7 @@ export interface SharedTagPair {
   sharedTags: string[];
 }
 
-/** Separator for the SQL `GROUP_CONCAT` lists this module unpacks — a unit
- * separator, which no tag or page ref can contain. */
+/** SQL `GROUP_CONCAT` separator; char 31 cannot occur in a tag or page ref. */
 const GROUP_SEPARATOR = String.fromCharCode(31);
 const GROUP_SEPARATOR_SQL = "char(31)";
 
@@ -163,14 +150,8 @@ export class Index {
   ) {}
 
   /**
-   * Open (creating if needed) the index at root, using the real git repo
-   * there via isomorphic-git.
-   *
-   * Refuses a root that resolves as a vault but isn't a git work tree: a
-   * vault is a git repository (CONTEXT.md), and the index has no work-tree
-   * source to read from there, so "empty" would be a silent lie rather than
-   * an empty vault. A work tree with no commits stays lenient — an empty
-   * index is the correct empty-vault state.
+   * Open (creating if needed) the index at root. Throws when root is not a git
+   * work tree; a work tree with no commits is an empty index, not an error.
    */
   static async open(root: string): Promise<Index> {
     const { VaultGit } = await import("./vaultgit.js");
@@ -183,10 +164,7 @@ export class Index {
     return Index.openWithGit(root, git);
   }
 
-  /**
-   * Open with a substituted Git surface — the test seam. The real
-   * entrypoint is `open()`.
-   */
+  /** Open with a substituted Git surface — the test seam. */
   static async openWithGit(root: string, git: Git): Promise<Index> {
     const indexDir = path.join(root, ".wiki-knowledge");
     mkdirSafe(indexDir);
@@ -244,8 +222,7 @@ export class Index {
     if (full) {
       stats = await this.rebuildFull();
     } else {
-      // Forced range walk — does NOT short-circuit on HEAD == watermark,
-      // unlike the search-time sync() path.
+      // Forced range walk; unlike sync(), never short-circuits on HEAD == watermark.
       const watermark = this.watermark();
       const snap = await this.git.committedPages(watermark);
       stats = await this.apply(snap);
@@ -286,8 +263,7 @@ export class Index {
   }
 
   private applyFullRebuild(snap: Snapshot): Stats {
-    // Drop all tables including meta — delete-and-rebuild is the migration
-    // strategy; never in-place ALTER or patching.
+    // Delete-and-rebuild is the migration strategy; never in-place ALTER.
     this.db.exec(`
       DROP TABLE IF EXISTS meta;
       DROP TABLE IF EXISTS page_tag;
@@ -316,8 +292,7 @@ export class Index {
       }
       const existed = this.pageIndexed(page.pageRef);
       if (!this.upsertPage(page)) {
-        // Malformed page — skipped. When it was previously indexed, the skip
-        // dropped it, so account for that as a removal.
+        // Malformed page skipped; if it was indexed, count the drop as a removal.
         if (existed) removed++;
         continue;
       }
@@ -364,16 +339,9 @@ export class Index {
   // Per-page upsert / remove
   // -------------------------------------------------------------------------
 
-  /**
-   * Index one page, or skip it. Returns false when the page is skipped.
-   *
-   * **Malformed pages are skipped, never indexed featureless and never a
-   * crash.** A page whose pageRef isn't directly under a wiki kind-folder (or
-   * whose frontmatter edges aren't parseable) is a structural error the ingest
-   * layer would refuse; `pagerecord.newPageRecord` throws on it. The index
-   * treats that as "not indexable" — drop any stale row and move on — so a
-   * malformed page buried in git history can't take down a reindex.
-   */
+  /** Index one page, or skip it. Returns false when skipped, having removed any
+   * stale row. Malformed pages are skipped, never a crash, so one buried in git
+   * history cannot take down a reindex. */
   private upsertPage(page: PageChange): boolean {
     let rec: PageRecord;
     try {
@@ -385,7 +353,6 @@ export class Index {
     const body = splitFrontmatter(page.content).body;
     const supersedes = supersedesOf(rec) ?? [];
 
-    // Remove existing rows before re-inserting (upsert via delete+insert).
     for (const stmt of [
       "DELETE FROM page WHERE page_ref = ?",
       "DELETE FROM page_tag WHERE page_ref = ?",
@@ -475,13 +442,8 @@ export class Index {
 
     let uncommittedPages = 0;
     if (this.root !== ":memory:") {
-      // The on-disk walk uses the same page enumeration as the git walk, so
-      // the diagnostic reports exactly the pages search could return if they
-      // were committed: the pages on disk the index does not hold
-      // (pagepredicate, #310). Deliberately that one-sided set difference and
-      // not a subtraction of the two counts — a committed deletion (indexed,
-      // no longer on disk) would then cancel an uncommitted addition and
-      // report 0, the very state this number exists to surface (#496).
+      // Deliberately a one-sided set difference, not a subtraction of counts:
+      // a committed deletion would otherwise cancel an uncommitted addition.
       const indexed = new Set(
         (
           this.db.all("SELECT page_ref FROM page") as { page_ref: string }[]
@@ -510,12 +472,8 @@ export class Index {
     return rows.map((r) => ({ tag: r.tag, count: r.n }));
   }
 
-  /**
-   * Every indexed page whose kind is not in `excludeKinds`, with its tag set —
-   * one query over `page` and `page_tag`, never a frontmatter re-parse. A
-   * materialised view of HEAD (ADR-0015), so an uncommitted page is invisible,
-   * which is what ADR-0021's fragmentation consequence requires.
-   */
+  /** Every indexed page whose kind is not in `excludeKinds`, with its tag set.
+   * A view of HEAD (ADR-0015), so an uncommitted page is invisible (ADR-0021). */
   async indexedPages(excludeKinds: string[] = []): Promise<IndexedPage[]> {
     await this.sync();
     const scope =
@@ -542,13 +500,8 @@ export class Index {
     }));
   }
 
-  /**
-   * Pairs of in-scope pages sharing at least one tag, most-shared first — the
-   * tag self-join ADR-0021 names as the concept-fragmentation check's
-   * candidate generator. Scope is applied in SQL so an excluded kind never
-   * enters the pairing, and the join is over `page_tag` alone (not the FTS5
-   * content column), so the ranking is an exact-match shared-tag count.
-   */
+  /** Pairs of in-scope pages sharing at least one tag, most-shared first — an
+   * exact-match tag count over `page_tag` (ADR-0021). */
   async sharedTagPairs(excludeKinds: string[] = []): Promise<SharedTagPair[]> {
     await this.sync();
     const scope =

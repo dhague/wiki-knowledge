@@ -1,7 +1,5 @@
-/**
- * Unit tests for the sessionstate module (#257). Uses mock env lookups and
- * temp-dir state so no real Claude Code environment or hook is touched.
- */
+/** Unit tests for sessionstate: mock env lookups and temp-dir state, so no real
+ * Claude Code environment or hook is touched. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -28,12 +26,9 @@ function env(map: Record<string, string>): LookupEnv {
   };
 }
 
-/**
- * A cwd with no `.claude` anywhere above it, for the tests that must observe
- * an *unresolvable* root. The sandbox is injected as $HOME so the walk-up hits
- * the home boundary and stops, rather than escaping into the real filesystem —
- * where a stray `/tmp/.claude` left by an old run would change the answer.
- */
+/** A cwd with no `.claude` above it, for the unresolvable-root tests. The sandbox
+ * is injected as $HOME so the walk-up stops at the boundary instead of escaping
+ * into the real filesystem, where a stray marker would change the answer. */
 function sandbox(): { home: string; cwd: string } {
   const home = tmp();
   const cwd = path.join(home, "no", "project", "here");
@@ -89,7 +84,7 @@ test("sessionsDir: the walk stops at the home directory", () => {
 });
 
 // ---------------------------------------------------------------------------
-// findSessionsDir — the same rule, refusing the cwd guess (#485)
+// findSessionsDir — the same rule, refusing the cwd guess
 // ---------------------------------------------------------------------------
 
 test("findSessionsDir: CLAUDE_PROJECT_DIR, without a .claude on disk", () => {

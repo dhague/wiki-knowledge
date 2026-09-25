@@ -1,10 +1,6 @@
 /**
- * Tests for the single-file export: the whole site as one self-contained
- * document whose pages are sections.
- *
- * The claims here are about the document as a whole — the full set of
- * sections, every link in it, every resource it could fetch — so they are
- * asserted across the whole exported set rather than on a sample page.
+ * Tests for the single-file export; the claims are about the document as a
+ * whole, so they assert across the exported set rather than on a sample page.
  */
 
 import { test } from "node:test";
@@ -73,9 +69,8 @@ title: Raw Document
 Raw content mentioning Alpha Concept.
 `;
 
-/** A source page whose raw artifact is not markdown — the shape the vault's
- *  own chain of evidence produces: raw filenames are kept verbatim, so the
- *  `raw_source` pointer names `.txt`, `.html` or whatever the file was. */
+/** A raw_source pointing at a non-markdown artifact — raw filenames are kept
+ *  verbatim. */
 const sourceWithRaw = `---
 title: Source With Raw
 summary: A source page pointing at a text artifact.
@@ -156,7 +151,6 @@ function hrefs(html: string): string[] {
 test("renderSingleFile: every exported page and aggregate becomes a section", () => {
   const html = render(wikiPages, { title: "Test Vault" });
 
-  // The whole set: whatever the parts generators yield is what must appear.
   const meta = buildExportMeta(wikiPages, { title: "Test Vault" });
   const opts = { title: "Test Vault" };
   const expectedParts = [
@@ -227,12 +221,12 @@ Body.
 test("renderSingleFile: names the sections the links and the front page rely on", () => {
   const ids = sectionIds(render(wikiPages, { title: "Test Vault" }));
   for (const id of [
-    "__front", // the front page
-    "wiki-concepts-alpha-concept", // a page two directories deep
-    "wiki-entities-alpha-entity", // a page of another kind
-    "tags-alpha", // a tag page
-    "tags-index", // the tag index
-    "wiki-concepts-index", // a per-kind index page
+    "__front",
+    "wiki-concepts-alpha-concept",
+    "wiki-entities-alpha-entity",
+    "tags-alpha",
+    "tags-index",
+    "wiki-concepts-index",
   ]) {
     assert.ok(ids.includes(id), `section ${id} should be in the document`);
   }
@@ -282,8 +276,7 @@ test("renderSingleFile: no section leads with a frontmatter table", () => {
   assert.ok(sections.length > 0, "fixture should produce sections");
   let sectionsWithTable = 0;
   for (const [, id, body] of sections) {
-    // The nav is the section's first element; what follows it is the page's
-    // own content, and the first of that must be the article, not metadata.
+    // The nav is first; what follows it is the page's own content.
     assert.ok(body.includes("</nav>"), `section ${id} should carry its nav`);
     const afterNav = body
       .slice(body.indexOf("</nav>") + "</nav>".length)
@@ -292,8 +285,7 @@ test("renderSingleFile: no section leads with a frontmatter table", () => {
       !afterNav.startsWith('<table class="frontmatter">'),
       `section ${id} must not open with a frontmatter table`,
     );
-    // Where the section carries a table at all, it trails the article — the
-    // wiki page's own builder and the raw page's inline one both.
+    // A table, if any, trails the article — wiki page and raw page alike.
     const table = body.indexOf('<table class="frontmatter">');
     const article = body.indexOf("<article>");
     if (table !== -1) {
@@ -403,9 +395,8 @@ test("renderSingleFile: no internal link is a .html path any more", () => {
 });
 
 test("renderSingleFile: no href is a relative path at all", () => {
-  // The stronger claim, and the one that keeps the file's promise: every href
-  // is a fragment (it stays in the document) or an absolute URI (the author's
-  // own, and never ours). A relative path would be a link out of the file.
+  // Every href must be a fragment (stays in the document) or an absolute URI
+  // (the author's); a relative path would be a link out of the file.
   const pages = makePages([
     ["wiki/concepts/alpha-concept.md", conceptA],
     ["wiki/sources/source-with-raw.md", sourceWithRaw],
@@ -434,7 +425,6 @@ test("renderSingleFile: a raw_source pointer becomes a section fragment", () => 
     "and that section should exist — the raw file keeps its own extension",
   );
 
-  // Without --raw there is no such section, so the pointer is not a link.
   const withoutRaw = render(pages, { title: "Test Vault" });
   assert.ok(
     !withoutRaw.includes("raw/notes/transcript.txt"),
@@ -462,8 +452,6 @@ test("renderSingleFile: every fragment href resolves to an element that exists",
 test("renderSingleFile: every page link is a section, not a heading", () => {
   const html = render(wikiPages, { title: "Test Vault" });
   const ids = new Set(sectionIds(html));
-  // Cross-page links (including one carrying #section-two) are fragments too,
-  // and every one of them has to name a section.
   for (const fragment of [
     "#wiki-concepts-alpha-concept",
     "#wiki-concepts-beta-concept",
@@ -550,16 +538,10 @@ test("singleFileSizeWarning: warns above it, and suggests multi-page", () => {
 // ---------------------------------------------------------------------------
 
 /**
- * The document's own inline script, run against a stub DOM, walking `hashes`
- * one at a time (each a hashchange) and reporting which section ends up
- * shown. A section is shown by carrying the `active` class the stylesheet
- * gives a `display: block` to.
- *
- * Not a browser, but it is the whole of what the script touches — a list of
- * sections with ids, `location.hash`, and one event listener — and the
- * behaviours it decides are exactly the ones a string assertion cannot see:
- * which section a hash shows, which one an empty hash shows, and which one a
- * heading anchor leaves alone.
+ * Run the document's inline script against a stub DOM, walking `hashes` one at
+ * a time and reporting which section ends up shown. Not a browser, but the
+ * whole of what the script touches — and the behaviours a string assertion
+ * cannot see.
  */
 function walkHasher(
   html: string,
@@ -592,7 +574,7 @@ function walkHasher(
     location,
     window,
   );
-  shown.push(active()); // the cold open, before any hash change
+  shown.push(active());
 
   for (const hash of hashes) {
     location.hash = hash;
@@ -621,8 +603,8 @@ test("the script: a cold open on a hash that names no section shows the front pa
 
 test("the script: a link swaps the section, and Back swaps it back", () => {
   const html = render(wikiPages, { title: "Test Vault" });
-  // Cold open, tap through to a tag index, then Back — which returns the URL
-  // to the document root, the same no-hash state a cold open starts in.
+  // Back returns the URL to the document root, the same no-hash state a cold
+  // open starts in.
   assert.deepEqual(walkHasher(html, ["#tags-index", ""]), [
     "__front",
     "tags-index",
@@ -649,8 +631,8 @@ test("the script: Back through two pages retraces them", () => {
 
 test("the script: a heading anchor leaves the section on screen alone", () => {
   const html = render(wikiPages, { title: "Test Vault" });
-  // #section-two is a heading inside alpha-concept: the browser scrolls to it
-  // itself, and the script must not swap the page out from under it.
+  // #section-two is a heading inside alpha-concept: the script must leave the
+  // page on screen for the browser to scroll.
   assert.deepEqual(
     walkHasher(html, ["#wiki-concepts-alpha-concept", "#section-two"]),
     ["__front", "wiki-concepts-alpha-concept", "wiki-concepts-alpha-concept"],
@@ -714,7 +696,6 @@ test("renderSingleFile: links to the start page become #__front", () => {
     !hrefs(html).some((h) => h.includes("wiki-home-home")),
     "no link may point at the vacated section",
   );
-  // Both a body link and a frontmatter edge point at the landing section.
   const beta = sectionHtml(html, "wiki-concepts-beta-concept");
   assert.ok(
     beta.includes('href="#__front"'),

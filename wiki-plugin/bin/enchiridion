@@ -1,25 +1,10 @@
 #!/bin/sh
-# The one entrypoint every migrated skill and hook calls:
-#
+# The one entrypoint every skill and hook calls, e.g.
 #   "${CLAUDE_PLUGIN_ROOT}/bin/enchiridion" search "<terms>" --json
 #
-# A thin shim over the esbuild bundle (ADR-0017, issue #254). Execs `node`
-# against the bundle, forwarding every argument untouched. There is no
-# download, no per-platform binary, and no PATH-preference check to make —
-# `node` itself is the already-installed, already-trusted interpreter the
-# bundle runs inside of.
-#
-# One escape hatch, for development against unbundled source or an
-# alternate runtime:
-#
-#   ENCHIRIDION_BIN   an executable to run as-is instead of `node <bundle>`;
-#                     nothing else in this script runs. Point it at a
-#                     `tsx`/`ts-node` invocation of enchiridion-ts/src/cli.ts
-#                     to iterate without rebuilding, or at `bun` to exercise
-#                     the OpenCode runtime locally.
-#
-# Deliberately POSIX sh (no Python, no Node-only shebang trick) so the shim
-# itself never depends on the interpreter it is about to exec.
+# A POSIX-sh shim that execs `node` against the esbuild bundle (ADR-0017),
+# forwarding every argument untouched. `ENCHIRIDION_BIN` runs an executable
+# as-is instead, for development against unbundled source or another runtime.
 
 set -eu
 
@@ -29,12 +14,9 @@ if [ -n "${ENCHIRIDION_BIN:-}" ]; then
     exec "$ENCHIRIDION_BIN" "$@"
 fi
 
-# Artifact resolution order after packaging (D3 #288):
-#   1. In-plugin bundle $plugin_root/scripts/cli.cjs if present — the shipped,
-#      committed artifact a marketplace install sees (enchiridion-ts absent).
-#   2. Sibling dev path $plugin_root/../enchiridion-ts/dist/cli.cjs — the
-#      pre-release monorepo build output (scripts/ has no bundle yet).
-# In a release both exist and the in-plugin bundle wins.
+# Artifact resolution order: in-plugin $plugin_root/scripts/cli.cjs (the
+# shipped bundle a marketplace install sees) wins over the sibling dev build
+# at ../enchiridion-ts/dist/cli.cjs.
 if [ -f "$plugin_root/scripts/cli.cjs" ]; then
     bundle="$plugin_root/scripts/cli.cjs"
 else

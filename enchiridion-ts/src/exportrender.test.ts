@@ -12,8 +12,6 @@ import {
   sectionIdFor,
   type LinkMode,
 } from "./exportrender.js";
-// The other module that has to read an author's destination — the one a page
-// move rewrites links for.
 import { planMove } from "./wikipage.js";
 
 // ---------------------------------------------------------------------------
@@ -212,8 +210,6 @@ test("renderPages: frontmatter table keeps every literal key the header did not 
     html,
   )?.[1];
   assert.ok(table, "the page should carry a frontmatter table");
-  // alpha-concept has title, summary, tags, kind (literal), refines — and the
-  // title and summary are the header's now, not rows.
   assert.ok(table.includes("<td>tags</td>"), "tags key should be in the table");
   assert.ok(
     table.includes("<td>refines</td>"),
@@ -417,7 +413,6 @@ test("renderPages: a raw page keeps its frontmatter in the table and gets no hea
 test("renderPages: frontmatter table has divider row before derived fields", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
-  // Divider row and derived kind/superseded_by rows come after literal keys
   assert.ok(
     html.includes('class="fm-divider"') || html.includes("fm-divider"),
     "divider row should be present",
@@ -434,14 +429,12 @@ test("renderPages: frontmatter table shows derived kind row", () => {
 });
 
 test("renderPages: frontmatter table shows derived superseded_by row", () => {
-  // beta-concept supersedes alpha-concept, so alpha-concept has superseded_by=[beta-concept]
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
   assert.ok(
     html.includes("<td>superseded_by</td>"),
     "superseded_by row should be present for alpha-concept",
   );
-  // beta-concept should be linked
   assert.ok(
     html.includes("beta-concept.html"),
     "superseded_by should link to beta-concept",
@@ -451,8 +444,6 @@ test("renderPages: frontmatter table shows derived superseded_by row", () => {
 test("renderPages: tags in frontmatter become tag-page links", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
-  // alpha-concept has tags: [alpha, shared]
-  // From wiki/concepts/, tags are at ../../tags/
   assert.ok(
     html.includes("../../tags/alpha.html"),
     "tag 'alpha' should link to ../../tags/alpha.html",
@@ -466,8 +457,6 @@ test("renderPages: tags in frontmatter become tag-page links", () => {
 test("renderPages: markdown-link frontmatter values become HTML links", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
-  // alpha-concept has refines: ["[Beta Concept](beta-concept.md)"]
-  // beta-concept is in exported set → should be a real href
   assert.ok(
     html.includes("beta-concept.html") && html.includes("Beta Concept"),
     "refines link should be rendered as an HTML link to beta-concept.html",
@@ -481,14 +470,11 @@ test("renderPages: markdown-link frontmatter values become HTML links", () => {
 test("renderPages: .md links in body rewritten to .html", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
-  // alpha-concept body links to beta-concept.md and alpha-entity.md
-  // beta-concept is in the same dir: "beta-concept.html"
   assert.ok(
     html.includes('href="beta-concept.html"') ||
       html.includes("href='beta-concept.html'"),
     "link to beta-concept.md should be rewritten to .html",
   );
-  // alpha-entity is in ../entities/: "../entities/alpha-entity.html"
   assert.ok(
     html.includes('href="../entities/alpha-entity.html"') ||
       html.includes("href='../entities/alpha-entity.html'"),
@@ -529,7 +515,6 @@ Content.
 
 test("renderPages: .md links in frontmatter rewritten to .html", () => {
   const rendered = collectPages(wikiPages);
-  // alpha-concept has refines: ["[Beta Concept](beta-concept.md)"]
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
   assert.ok(
     html.includes("beta-concept.html"),
@@ -563,7 +548,6 @@ See [raw doc](../../raw/raw-doc.md).
   // raw excluded by default
   const rendered = collectPages(pages, { includeRaw: false });
   const html = rendered.get("wiki/concepts/orphan.html")!;
-  // Should contain "raw doc" as plain text, not as <a href=...>
   assert.ok(html.includes("raw doc"), "link label should appear as plain text");
   assert.ok(
     !html.includes("raw-doc.html"),
@@ -592,7 +576,6 @@ Body text.
   ]);
   const rendered = collectPages(pages);
   const html = rendered.get("wiki/concepts/alpha-concept.html")!;
-  // Missing Page is not in exported set → plain text, no href
   assert.ok(html.includes("Missing Page"), "label should appear as plain text");
   assert.ok(
     !html.includes("missing-page.html"),
@@ -645,7 +628,6 @@ test("renderPages: nav header links are relative to page location", () => {
 test("renderPages: absolute URLs in body are not rewritten", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/entities/alpha-entity.html")!;
-  // alpha-entity has [external link](https://example.com)
   assert.ok(
     html.includes("https://example.com"),
     "absolute URL should be preserved",
@@ -659,7 +641,6 @@ test("renderPages: absolute URLs in body are not rewritten", () => {
 test("renderPages: bare anchor links in body are preserved", () => {
   const rendered = collectPages(wikiPages);
   const html = rendered.get("wiki/entities/alpha-entity.html")!;
-  // alpha-entity has [section link](#section-two)
   assert.ok(
     html.includes('href="#section-two"') ||
       html.includes("href='#section-two'"),
@@ -740,8 +721,6 @@ test("renderPages: every page carries a sticky nav with the wiki title", () => {
 });
 
 test("renderPages: the nav puts the title before the links", () => {
-  // "title left, Home right" is the bar's markup order; the layout that
-  // realises it on screen is the shared stylesheet's, asserted separately.
   const rendered = collectPages(wikiPages, { title: "Test Vault" });
   for (const [path, html] of rendered) {
     const titleAt = html.indexOf('<span class="wiki-nav-title">');
@@ -800,8 +779,6 @@ test("buildHtmlShell: wraps parts around a shared-stylesheet link", () => {
 });
 
 test("buildDocument: the skeleton both output shapes share", () => {
-  // Nothing mode-specific lives here — no nav, no stylesheet decision, no
-  // sections. Each shape supplies its own style element and body.
   const html = buildDocument("A Title", "<style>x</style>", "<p>Body</p>");
   assert.ok(html.startsWith("<!DOCTYPE html>"));
   assert.ok(html.includes(VIEWPORT_META), "the viewport meta every mode wants");
@@ -884,10 +861,8 @@ test("renderPageParts: single-file mode rewrites nav, tag and frontmatter links"
   );
 });
 
-// A raw artifact keeps its own extension, so the links that name one — the
-// body's, and the `raw_source` pointer in the frontmatter — are not `.md`
-// links. In single-file mode they are the mode's business all the same: a
-// relative destination there is a link out of the file.
+// A raw artifact keeps its own extension, so these are not `.md` links; in
+// single-file mode a relative destination is the mode's business all the same.
 const rawLinkingSource = `---
 title: Source One
 kind: source
@@ -932,8 +907,6 @@ test("renderPageParts: single-file strips a link to a non-exported relative path
     ["wiki/sources/source-one.md", rawLinkingSource],
     ["raw/reports/report.txt", "raw text"],
   ]);
-  // Without --raw the artifact is not in the export, so there is nothing to
-  // link to — and a relative path would leave the file, so it goes.
   const main = renderOne(pages, {}, "single-file");
   assert.ok(
     main.includes("the report"),
@@ -977,11 +950,9 @@ test("renderPageParts: single-file leaves images and absolute URIs alone", () =>
 // One question, two modules: is this destination a vault-relative reference?
 // ---------------------------------------------------------------------------
 
-/** An author's destination, and what that question answers for it. The four
- * schemes are the rows #500 was about — a URI whose scheme carries no `//`,
- * which merely looks relative to a test that only knows `://`. The rest pin
- * the edges of the same rule: the vault's own extension, an external URL, an
- * absolute path, and a relative destination that is neither. */
+/** An author's destination, and whether it is a vault-relative reference. The
+ *  scheme-bearing rows pin the trap: a URI whose scheme carries no `//` — a
+ *  bare `C:` drive letter included — must not read as relative. */
 const destCases: Array<[dest: string, vaultRelative: boolean]> = [
   ["beta-concept.md", true],
   ["C:notes.md", true],
@@ -995,12 +966,8 @@ const destCases: Array<[dest: string, vaultRelative: boolean]> = [
   ["/absolute/b.md", false],
 ];
 
-/** Whether a mode claims dest — the export rewrites a claimed destination to
- * the output's own spelling of its target, or strips it to plain label text,
- * so a claimed one never survives as written; an unclaimed one is left exactly
- * as the author wrote it. (Markdown-it renders a `data:` URL as text of its
- * own accord, and an unclaimed destination is one the export did not touch —
- * which is the fact the assertion reads either way.) */
+/** Whether a mode claims dest: a claimed destination never survives as written
+ *  (it is rewritten or stripped to label text), an unclaimed one does. */
 function exportClaims(dest: string, mode: LinkMode): boolean {
   const pages = makePages([
     [
@@ -1017,11 +984,9 @@ function exportClaims(dest: string, mode: LinkMode): boolean {
   return !found.parts.main.includes(dest);
 }
 
-/** Whether a page move re-spells dest: whether wikipage reads it as a
- * vault-relative reference. The page carrying it is moved across folders, so
- * every destination it does read that way is re-spelled against a different
- * directory and cannot come back byte-identical — while one it does not read
- * that way is untouched, whether or not a page exists at the path it names. */
+/** Whether a page move re-spells dest: the page carrying it moves across
+ *  folders, so a destination wikipage reads as vault-relative cannot come back
+ *  byte-identical. */
 function moveRespells(dest: string): boolean {
   const text = `# A\n\nSee [x](${dest}).\n`;
   const moved = planMove(
@@ -1048,11 +1013,9 @@ test("export and wikipage agree on which destinations are vault-relative", () =>
 });
 
 test("multi-page output is the narrower test, and its half is deliberate", () => {
-  // Multi-page output is a directory of files: it claims the export's own
-  // `.md` destinations and leaves everything else where the author put it,
-  // relative paths included. wikipage owns every vault-relative destination,
-  // so this is the one column where the two are meant to differ — and the
-  // schemes agree in it all the same.
+  // Multi-page leaves a non-`.md` relative path where the author put it, while
+  // wikipage owns every vault-relative destination: the one column where the
+  // two are meant to differ.
   for (const [dest, vaultRelative] of destCases) {
     assert.equal(
       exportClaims(dest, "multi-page"),
@@ -1070,7 +1033,6 @@ test("renderPageParts: a bare in-page anchor is left alone in single-file mode",
   const entity = rendered.find(
     (p) => p.path === "wiki/entities/alpha-entity.html",
   )!;
-  // Same page, so the same section: the heading id is the right destination.
   assert.ok(
     entity.parts.main.includes('href="#section-two"'),
     "an in-page anchor should survive as a heading anchor",
@@ -1096,14 +1058,6 @@ test("renderPageParts: the default is still multi-page relative links", () => {
 // ---------------------------------------------------------------------------
 // 9. The frontmatter table trails the page it describes
 // ---------------------------------------------------------------------------
-
-/**
- * The frontmatter table is provenance, not the page: a reader who opens a page
- * should meet its title and content first, and the metadata as a footer. Both
- * assembly sites move together — a wiki page's `renderFrontmatterTable` and a
- * raw page's own inline builder — and these tests pin the order at both, in
- * both output modes (exportsingle.test.ts pins the single-file sections).
- */
 
 test("renderPages: the header, the article and the table come in that order", () => {
   const rendered = collectPages(wikiPages, { title: "Test Vault" });
@@ -1169,9 +1123,6 @@ test("renderPages: moving the table leaves its rows and their order alone", () =
 });
 
 test("renderPageParts: a source edge relocates and still resolves", () => {
-  // `source` is the edge key AC2 and AC5 name, so it carries the two halves
-  // those criteria turn on: an exported target becomes a link, one the export
-  // does not carry becomes label text, and both move with the table.
   const withSource = `---
 title: Sourcing Page
 kind: source
@@ -1236,8 +1187,8 @@ test("renderPages: a page with no frontmatter carries no table", () => {
 // Start page — output-path promotion and the links that follow from it
 // ---------------------------------------------------------------------------
 
-/** A front-door page in a custom `wiki/home/` folder: the shape this feature
- *  exists for (there is no `home` kind — the folder is just a folder). */
+/** A front-door page in a custom `wiki/home/` folder — there is no `home` kind,
+ *  the folder is just a folder. */
 const homePage = `---
 title: Home
 summary: The front door.

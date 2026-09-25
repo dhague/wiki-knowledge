@@ -1,21 +1,10 @@
 /**
- * vaultgit — the one module for git facts about the vault (#126), realised
- * on isomorphic-git (ADR-0017, #256).
+ * vaultgit — the one module for git facts about the vault, on isomorphic-git
+ * (ADR-0017).
  *
- * Each caller's absent-git policy reads as one of two surfaces:
- *
- *   - **Strict** — `VaultGit.init`, `VaultGit.add`, `VaultGit.commit`: throw
- *     an error when the operation can't be performed. This is `commit`'s "git
- *     is a hard dependency" reading.
- *   - **Lenient** — `VaultGit.isWorkTree`, `VaultGit.committedPages`,
- *     `VaultGit.lastCommitDate`, `VaultGit.porcelainMentions`: a missing or
- *     broken repository yields the documented default (false / an empty
- *     Snapshot / "") rather than throwing. `search` reads "no commits means
- *     nothing to index, never a failure" off this, and a lenient method never
- *     throws.
- *
- * ADR-0015: content is always read from HEAD's git blobs, never from
- * intermediate commits or files on disk.
+ * Strict methods (`init`/`add`/`commit`) throw on failure; lenient ones return
+ * their documented default and never throw. ADR-0015: content is always read
+ * from HEAD's git blobs, never from intermediate commits or files on disk.
  */
 
 import * as git from "isomorphic-git";
@@ -34,15 +23,10 @@ import { isPageRef } from "./pagepredicate.js";
 export interface PageChange {
   /** Vault-relative (ADR-0009). */
   pageRef: string;
-  /**
-   * Latest non-merge commit date touching this page (YYYY-MM-DD), or "" if
-   * it can't be attributed within the read that produced this Snapshot.
-   */
+  /** Latest non-merge commit date (YYYY-MM-DD), or "" when unattributable. */
   date: string;
-  /**
-   * The page's bytes at HEAD — always read from HEAD's tree, never from the
-   * intermediate commit that changed it. Empty when `deleted`.
-   */
+  /** Bytes at HEAD — never the intermediate commit that changed it. Empty when
+   * `deleted`. */
   content: string;
   /** Whether the page no longer exists in HEAD's tree. */
   deleted: boolean;
@@ -52,11 +36,8 @@ export interface PageChange {
 export interface Snapshot {
   /** Resolved HEAD commit SHA, or "" for a repo with no commits. */
   head: string;
-  /**
-   * Whether this read fell back to (or was asked for) a full tree read rather
-   * than an enumerated delta — `pages` then holds every `wiki/**.md` page in
-   * HEAD's tree, not a changed subset.
-   */
+  /** A full tree read rather than a delta — `pages` then holds every
+   * `wiki/**.md` page in HEAD. */
   fullRebuild: boolean;
   /** Per-page delta (or, when fullRebuild, the whole tree). */
   pages: PageChange[];
@@ -65,9 +46,8 @@ export interface Snapshot {
 /**
  * The read-only git surface a consumer (here the search index) needs.
  *
- * Defined here per the consumer-first convention (ADR-0017/CLAUDE.md): the
- * interface lives in the module that owns the type it returns, and consumers
- * depend on it; an implementing class satisfies it structurally.
+ * Defined here per the consumer-first convention (ADR-0017); an implementing
+ * class satisfies it structurally.
  */
 export interface Git {
   committedPages(since: string): Promise<Snapshot>;
@@ -89,9 +69,7 @@ export class VaultGitError extends Error {
  * Git verbs and facts over one vault root, backed by isomorphic-git.
  *
  * Constructing one never touches the filesystem — it just pins the root, and
- * `root` is never resolved or validated here. All probing is lazy, so a
- * caller can build one, ask an availability question, and never pay for
- * opening a repository if git isn't needed.
+ * all probing is lazy.
  */
 export class VaultGit implements Git {
   constructor(private readonly root: string) {}
@@ -111,11 +89,11 @@ export class VaultGit implements Git {
    * Stage vault-relative paths (a directory is staged recursively). Strict:
    * throws on failure.
    *
-   * A path that names no file on disk is a **removal** when git already tracks
-   * it (or something under it) — a Consolidation's deleted loser (ADR-0021), and
-   * the reason [stageRemovals] exists. `git.add` would answer NotFoundError for
-   * one before that ran, so it is skipped here and left to the removal pass.
-   * A path git has never tracked is a typo, not a removal, and still throws.
+   * A path missing from disk but tracked at HEAD is a **removal** — a
+   * Consolidation's deleted loser (ADR-0021), which is why `Manifest.deleted`
+   * joins created and updated refs in one `add(paths)` call. It is skipped here
+   * and left to [stageRemovals]: `git.add` would throw NotFoundError for it. A
+   * path git has never tracked is a typo, not a removal, and still throws.
    */
   async add(paths: string[]): Promise<void> {
     const tracked = await this.trackedFiles();
@@ -135,8 +113,7 @@ export class VaultGit implements Git {
       }
     }
     // isomorphic-git's `git.add` stages additions/modifications but not
-    // removals — a deleted-but-tracked file stays in the index. Stage the
-    // removals explicitly, matching isomorphic-git's own `git.remove` surface.
+    // removals, so stage those explicitly.
     await this.stageRemovals(tracked, paths);
   }
 
@@ -163,13 +140,13 @@ export class VaultGit implements Git {
   }
 
   /**
-   * Stage `paths` and commit with `message`, holding a file lock for the
-   * entire add+commit sequence so concurrent ingests can't cross-contaminate
-   * each other's commits (#405). Returns the new commit SHA.
+   * Stage `paths` and commit with `message`, holding a file lock across the
+   * whole add+commit sequence so concurrent ingests can't cross-contaminate each
+   * other's commits. Returns the new commit SHA.
    *
-   * The lock lives at `.wiki-knowledge/ingest.lock` under the vault root.
-   * It times out after 30 s — long enough for any realistic commit, short
-   * enough to surface a stuck process rather than block forever.
+   * The lock lives at `.wiki-knowledge/ingest.lock` and times out after 30 s —
+   * long enough for any realistic commit, short enough to surface a stuck
+   * process.
    */
   async stageAndCommit(paths: string[], message: string): Promise<string> {
     const lockPath = path.join(this.root, ".wiki-knowledge", "ingest.lock");
@@ -185,10 +162,8 @@ export class VaultGit implements Git {
   async commit(message: string): Promise<string> {
     const signature = await this.signature();
     try {
-      // Refuse an empty commit: make sure something is staged
-      // against HEAD before committing. statusMatrix mis-reports staged
-      // deletions (an index removal reports STAGE == HEAD), so compare the
-      // HEAD tree to the index at the blob level instead.
+      // statusMatrix mis-reports staged deletions (an index removal reports
+      // STAGE == HEAD), so compare the HEAD tree to the index at blob level.
       if (!(await this.hasStagedChanges())) {
         throw new VaultGitError("git commit: nothing to commit");
       }
@@ -218,14 +193,13 @@ export class VaultGit implements Git {
       ) => {
         const headType = head ? await head.type() : null;
         const stageType = stage ? await stage.type() : null;
-        // Only blobs have meaningful on-disk content worth committing; a tree
-        // oid difference alone isn't a reliable "staged change" signal.
+        // Only blobs have meaningful content worth committing; a tree-oid
+        // difference alone isn't a reliable "staged change" signal.
         if (headType === "blob" || stageType === "blob") {
           const headOid = head ? await head.oid() : null;
           const stageOid = stage ? await stage.oid() : null;
           if (headOid !== stageOid) staged = true;
         }
-        // Keep descending into directories on either side.
         return headType === "tree" || stageType === "tree" ? filepath : null;
       },
     });
@@ -246,17 +220,15 @@ export class VaultGit implements Git {
 
   /**
    * The vault's `wiki/**.md` pages changed since commit `since`, read from
-   * HEAD's tree. `since == ""` means "all of HEAD's tree", so a first build
-   * and a full rebuild are the same call.
+   * HEAD's tree. `since == ""` means "all of HEAD's tree", so a first build and
+   * a full rebuild are the same call.
    *
-   * Lenient: a missing repository or a repository with no commits yields an
-   * empty Snapshot (`head == ""`), never an error.
+   * Lenient: a missing repository or one with no commits yields an empty
+   * Snapshot (`head == ""`), never an error.
    *
-   * Reachability is not a separate query: the range walk stops the moment it
-   * finds `since`, and reaching a history that doesn't contain it — an
-   * unreachable or unrecognised watermark, from an amend, rebase, `reset
-   * --hard`, or a re-clone over an existing index — falls back to a full tree
-   * read (`fullRebuild == true`).
+   * Reachability is not a separate query: reaching a history that doesn't
+   * contain `since` — an amend, rebase, `reset --hard`, or re-clone over an
+   * existing index — falls back to a full tree read (`fullRebuild == true`).
    */
   async committedPages(since: string): Promise<Snapshot> {
     let headOid: string;
@@ -281,16 +253,14 @@ export class VaultGit implements Git {
 
   /**
    * The last commit date of `rel` (YYYY-MM-DD), or "" when root isn't a work
-   * tree, rel was never committed, or the history can't be walked.
-   * Lenient: "" is the default, never an error.
+   * tree, rel was never committed, or the history can't be walked. Lenient.
    *
    * Deliberately not `git.log({ filepath: rel })`: isomorphic-git's per-file
    * log stops at the first commit whose tree lacks the path, and a merge looks
    * exactly like that from the side whose branch never had it — so the per-file
-   * log can neither skip a merge nor see the non-merge commit behind one
-   * (#491). This is the single-path form of [latestCommitDates], the one
-   * implementation of the rule; a caller dating many paths at once wants
-   * [scanFacts], which batches the same walk.
+   * log can neither skip a merge nor see the non-merge commit behind one.
+   * [latestCommitDates] is the one implementation of the rule; [scanFacts]
+   * batches the same walk.
    */
   async lastCommitDate(rel: string): Promise<string> {
     let headOid: string;
@@ -303,9 +273,8 @@ export class VaultGit implements Git {
   }
 
   /**
-   * [lastCommitDate] against a caller-supplied head — the form the range
-   * walk's fallback needs, dating a page against the head that walk already
-   * resolved rather than whatever HEAD points at by then.
+   * [lastCommitDate] against a caller-supplied head — the range walk's fallback
+   * needs to date a page against the head that walk already resolved.
    */
   private async lastCommitDateAt(
     headOid: string,
@@ -317,18 +286,15 @@ export class VaultGit implements Git {
 
   /**
    * Whether `rel` is modified or untracked in the working tree — the
-   * `git status --porcelain -- rel` signal. Untracked counts: a brand-new
-   * file isn't in git's index at all, and finding it is the point.
+   * `git status --porcelain -- rel` signal. Untracked counts: a brand-new file
+   * isn't in git's index at all, and finding it is the point.
    * Lenient: false when root isn't a work tree or the status can't be read.
    *
-   * The working-tree-vs-blob content comparison is done here, not via
-   * isomorphic-git's `status`: it doesn't apply `core.autocrlf` reliably (its
-   * normalisation only reads the *local* config and compares the value to the
-   * literal string `"true"`), so a clean CRLF checkout of an LF blob — the
-   * norm under `core.autocrlf=true` on Windows — reports `*modified`. We read
-   * the blob and the working-tree file ourselves and compare them
-   * line-ending-insensitively, so a CRLF/LF-only difference is not a false
-   * "modified".
+   * The working-tree-vs-blob comparison is done here, not via isomorphic-git's
+   * `status`: that doesn't apply `core.autocrlf` reliably (it reads only the
+   * *local* config and compares to the literal string `"true"`), so a clean CRLF
+   * checkout of an LF blob — the norm under `core.autocrlf=true` on Windows —
+   * reports `*modified`. We compare line-ending-insensitively instead.
    */
   async porcelainMentions(rel: string): Promise<boolean> {
     try {
@@ -352,10 +318,9 @@ export class VaultGit implements Git {
   }
 
   /**
-   * Vault-relative paths of files under any of `subtrees` that are staged,
-   * modified-tracked, or untracked non-ignored — the dirty set the export
-   * subcommand checks before writing. Lenient: returns [] when root is not a
-   * work tree or the status can't be read.
+   * Vault-relative paths under any of `subtrees` that are staged,
+   * modified-tracked, or untracked — the dirty set the export subcommand checks
+   * before writing. Lenient: [] when root is not a work tree.
    */
   async dirtyFiles(subtrees: string[]): Promise<string[]> {
     try {
@@ -377,18 +342,15 @@ export class VaultGit implements Git {
   }
 
   /**
-   * A batched read of the two lenient facts the ingest sweep needs
-   * ([ScanFacts.lastCommitDate] and [ScanFacts.porcelainMentions]), computed in
-   * a single HEAD tree walk plus a single history walk rather than one walk per
-   * file (#415). The returned object answers per-file queries from in-memory
-   * maps, so a folder sweep over N files costs O(tree + history) instead of
-   * O(N × (tree + history)) — the difference between "returns" and "hangs" on a
-   * vault of thousands of raw files.
+   * The two lenient facts the ingest sweep needs ([ScanFacts.lastCommitDate] and
+   * [ScanFacts.porcelainMentions]), computed in a single HEAD tree walk plus a
+   * single history walk rather than one walk per file. Answers per-file queries
+   * from in-memory maps, so a sweep over N files costs O(tree + history) instead
+   * of O(N × (tree + history)).
    *
-   * Lenient like the per-file surface: a missing or unreadable repository yields
-   * empty maps, so `lastCommitDate` returns "" and `porcelainMentions` reads a
-   * file as untracked — the same fail-toward-offering defaults the sweep relies
-   * on.
+   * Lenient like the per-file surface: empty maps when the repository is
+   * unreadable, so `lastCommitDate` returns "" and `porcelainMentions` reads a
+   * file as untracked.
    */
   async scanFacts(): Promise<ScanFacts> {
     let headOid: string;
@@ -421,9 +383,7 @@ export class VaultGit implements Git {
 
   /**
    * `{path: YYYY-MM-DD}` — the latest non-merge commit date per path over every
-   * commit reachable from head, for *all* paths (not just `wiki/**.md`). One
-   * history walk feeds the sweep's date comparison for every raw file and every
-   * back-pointer page at once.
+   * commit reachable from head, for *all* paths (not just `wiki/**.md`).
    */
   private async allCommitDates(
     headOid: string,
@@ -436,9 +396,8 @@ export class VaultGit implements Git {
 
   /**
    * Committer identity from git config, falling back to `OS-user@hostname`
-   * without error when unset (the same fallback the `git` CLI derives).
-   * ADR-0003: attribution comes from ingested content, not git identity, so
-   * the committer here is bookkeeping, not provenance.
+   * without error when unset. ADR-0003: attribution comes from ingested content,
+   * not git identity, so the committer here is bookkeeping, not provenance.
    */
   private async signature(): Promise<{
     name: string;
@@ -470,9 +429,8 @@ export class VaultGit implements Git {
 
   /**
    * Range walk: the `wiki/**.md` paths touched from head's history back to
-   * `since`, read from HEAD's tree. `found` is false when the history is
-   * walked without ever seeing `since` — the caller's cue to fall back to a
-   * full tree read.
+   * `since`, read from HEAD's tree. `found` is false when the history is walked
+   * without ever seeing `since` — the caller's cue to fall back to a full read.
    */
   private async rangeSnapshot(
     headOid: string,
@@ -521,10 +479,9 @@ export class VaultGit implements Git {
     for (const filePath of changed) {
       const result = await this.tryReadFromHead(headOid, filePath);
       const when = latest.get(filePath);
-      // If the bounded walk couldn't attribute a date (a path surfaced by a
-      // merge's own diff but whose introducing commit lies on a side branch
-      // the walk didn't credit), fall back to a dedicated per-path walk —
-      // rare, so the extra cost stays bounded to the pages that need it.
+      // A path surfaced by a merge's own diff whose introducing commit lies on
+      // a side branch the walk didn't credit: fall back to a dedicated per-path
+      // walk, rare enough that the extra cost stays bounded.
       const date =
         when !== undefined
           ? formatDate(when / 1000)
@@ -559,9 +516,7 @@ export class VaultGit implements Git {
 
   /**
    * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per
-   * `wiki/**.md` path over every commit reachable from head. Used by the full
-   * read; the range walk is the bounded counterpart, applying the same
-   * [attributeDate] step as it goes.
+   * `wiki/**.md` path over every commit reachable from head.
    */
   private async commitDates(headOid: string): Promise<Map<string, string>> {
     return this.latestCommitDates(headOid, isPageRef);
@@ -570,15 +525,13 @@ export class VaultGit implements Git {
   /**
    * `{path: YYYY-MM-DD}` — the most recent non-merge commit date per path
    * accepted by `keep`, over every commit reachable from head. The one
-   * implementation of the rule: [VaultGit.lastCommitDate] is this walk
-   * narrowed to a single path, and the range walk applies the same
-   * [attributeDate] step to its own bounded walk. Newest timestamp wins, not
-   * log order.
+   * implementation of the rule: [lastCommitDate] is this walk narrowed to one
+   * path. Newest timestamp wins, never log order.
    *
    * Uses [changedBlobPaths] instead of `includeChanges` so unchanged subtrees
    * are pruned — per-commit cost is proportional to what actually changed, not
-   * to total vault size (#419) — and [attributeDate] takes the paths as a
-   * thunk, so a merge is rejected before that diff is even computed.
+   * to total vault size — and [attributeDate] takes the paths as a thunk, so a
+   * merge is rejected before that diff is computed.
    *
    * Lenient: empty dates when the history can't be walked.
    */
@@ -626,9 +579,9 @@ export class VaultGit implements Git {
   }
 
   /**
-   * Walk every blob in head's tree, invoking `visit` for each one. Directories
-   * keep being descended into (isomorphic-git's walk prunes a directory whose
-   * `map` returns null, so we must return a truthy value for them).
+   * Walk every blob in head's tree, invoking `visit` for each one.
+   * isomorphic-git prunes a directory whose `map` returns null, so directories
+   * must return a truthy value.
    */
   private async walkTree(
     headOid: string,
@@ -658,13 +611,11 @@ export class VaultGit implements Git {
 /**
  * The batched result of [VaultGit.scanFacts] — answers the ingest sweep's two
  * lenient per-file questions from in-memory maps built in one tree walk + one
- * history walk (#415). Structurally satisfies the sweep's `Git` interface in
+ * history walk. Structurally satisfies the sweep's `Git` interface in
  * `ingestscan.ts`, so it drops straight into `scan()`.
  *
- * An adapter over the one date rule, not a second opinion on it: `dates` is
- * [VaultGit.latestCommitDates]' output, so a path answers here exactly as
- * [VaultGit.lastCommitDate] answers it — the difference between the two is
- * only that this reads a map instead of walking (#491).
+ * `dates` is [VaultGit.latestCommitDates]' output, so a path answers here
+ * exactly as [VaultGit.lastCommitDate] answers it.
  */
 export class ScanFacts {
   constructor(
@@ -705,13 +656,8 @@ export class ScanFacts {
  * by the per-file [VaultGit.porcelainMentions] and the batched [ScanFacts].
  * `headBlob` is the file's bytes at HEAD, or null when it isn't in HEAD.
  *
- * The CRLF/LF-insensitive text comparison is deliberate: isomorphic-git's own
- * `status` doesn't apply `core.autocrlf` reliably, so a clean CRLF checkout of
- * an LF blob (the norm under `core.autocrlf=true` on Windows) would report
- * `*modified`. We read the blob and working-tree file ourselves and compare
- * them line-ending-insensitively — but only for text (no NUL byte); binary
- * files aren't subject to autocrlf, so a differing binary file is genuinely
- * modified.
+ * Line-ending-insensitive only for text (no NUL byte): binary files aren't
+ * subject to autocrlf, so a differing binary file is genuinely modified.
  */
 async function porcelainDiff(
   diskPath: string,
@@ -752,10 +698,8 @@ const KEEP_ALL = (): boolean => true;
  * Whether a commit sets a path's commit date. CONTEXT.md, **Commit date**: the
  * date of the latest commit touching a page, and *merge commits don't set it*.
  *
- * One predicate, because a path's date is read four ways in this module — the
- * per-file [VaultGit.lastCommitDate], the range walk, the batched walk behind
- * the full read, and the map [ScanFacts] answers from — and a rule restated at
- * each site is a rule free to disagree with itself about the same path (#491).
+ * One predicate, because a path's date is read four ways in this module; a rule
+ * restated at each site is free to disagree with itself.
  */
 function setsCommitDate(commit: git.ReadCommitResult): boolean {
   return commit.commit.parent.length <= 1;
@@ -764,12 +708,10 @@ function setsCommitDate(commit: git.ReadCommitResult): boolean {
 /**
  * The one application of that rule: attribute `commit`'s date to the paths it
  * touched, or to nothing at all when the commit is a merge. `into` maps a path
- * to the newest timestamp (ms) that set its date — newest wins, never log
- * order, so a walk's ordering can't decide a date.
+ * to the newest timestamp (ms) that set its date — newest wins, never log order.
  *
  * `touched` is a thunk so a merge is rejected before the tree diff behind the
- * paths is computed, and `keep` narrows a caller's walk to the paths it wants
- * (all of them, or one).
+ * paths is computed, and `keep` narrows a caller's walk to the paths it wants.
  */
 async function attributeDate(
   commit: git.ReadCommitResult,
@@ -787,13 +729,10 @@ async function attributeDate(
 }
 
 /**
- * The blob (leaf) paths that differ between `commitOid` and `parentOid`,
- * diffing the commit tree against its parent with pruning: when both sides of
- * a directory have the same tree oid, the subtree is skipped entirely (#419).
- * Per-commit cost is therefore proportional to what the commit actually
- * changed, not to total vault size. Output is identical to what `getChanges`
- * (`isomorphic-git` internal) would return, because pruning only skips entries
- * that `getChanges` would have found unchanged and dropped anyway.
+ * The blob (leaf) paths that differ between `commitOid` and `parentOid`, pruning
+ * a subtree when both sides carry the same tree oid. Per-commit cost is
+ * proportional to what the commit actually changed; output is identical to
+ * `getChanges`, which drops unchanged entries anyway.
  */
 async function changedBlobPaths(
   root: string,
@@ -818,17 +757,16 @@ async function changedBlobPaths(
         previous?.type(),
       ]);
 
-      // Both are trees: compare oids to decide whether to descend.
+      // Both trees: prune identical subtrees, otherwise descend.
       if (curType === "tree" || prevType === "tree") {
         if (curType === "tree" && prevType === "tree") {
           const [curOid, prevOid] = await Promise.all([
             current!.oid(),
             previous!.oid(),
           ]);
-          // Equal oids — identical subtree, nothing to report; prune.
           if (curOid === prevOid) return null;
         }
-        return true; // descend
+        return true;
       }
 
       // Blob level — record if added, removed, or changed.
@@ -837,7 +775,7 @@ async function changedBlobPaths(
         previous?.oid(),
       ]);
       if (curOid !== prevOid) out.push(filepath);
-      return null; // don't descend blobs
+      return null;
     },
   });
   return out;
@@ -855,15 +793,8 @@ function changedWikiPaths(commit: git.ReadCommitResult): string[] {
   return out;
 }
 
-/**
- * The shared page predicate (pagepredicate, #310): a page is
- * `wiki/<kind-folder>/<file>.md`, never the generated `wiki/_index.md`, never
- * a nested page. Replaces the loose `isWikiPage` predicate (any `wiki/**`
- * `.md`), which would have counted a committed generated-index artifact and
- * a nested page — diverging from the disk walk and the schema reader. The git
- * walk and the disk walk now share one predicate, so a page the index counts
- * is exactly a page the git walk can hand it (#310).
- */
+// The page predicate is pagepredicate's `isPageRef`; the git walk and the disk
+// walk share it, so both count exactly the same pages.
 
 /** Whether a vault-relative `file` is under one of the staged `paths`. */
 function coveredByPaths(file: string, paths: string[]): boolean {
@@ -903,12 +834,11 @@ function messageOf(err: unknown): string {
 
 /**
  * Acquire an exclusive lock on `lockPath` (created with the `wx` flag for
- * atomicity), run `fn`, then release. Retries every 5 ms until the lock is
- * free or `LOCK_TIMEOUT_MS` elapses.
+ * atomicity), run `fn`, then release. Retries every 5 ms until the lock is free
+ * or `LOCK_TIMEOUT_MS` elapses.
  *
- * Mirrors the sync `withExclusiveLock` in watch.ts but accepts an async
- * critical section — necessary because the add+commit sequence uses
- * isomorphic-git's Promise-based API.
+ * Async, unlike the sync `withExclusiveLock` in watch.ts, because the add+commit
+ * sequence uses isomorphic-git's Promise-based API.
  */
 async function withCommitLock<T>(
   lockPath: string,

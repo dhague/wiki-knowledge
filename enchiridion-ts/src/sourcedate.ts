@@ -1,48 +1,19 @@
 /**
- * sourcedate — the one owner of the source-date rule.
+ * sourcedate — the one owner of the source-date rule: a `source_date` is valid
+ * time with exactly one canonical spelling, [CANONICAL_DATE_FORMAT].
  *
- * A page's `source_date` is valid time and has exactly one canonical spelling,
- * [CANONICAL_DATE_FORMAT] (#192). That rule — which spellings count, and how a
- * clock truncates to its date — once lived in four private implementations
- * that drifted: `page set` accepted an invalid calendar date that ingest
- * refused, and the search index validated nothing at all (#309). This module
- * is the rule, implemented once — and applied at one place, the frontmatter
- * writer, rather than by each caller that builds a page (#499).
- *
- * [parseSourceDate] is the single shared fact: parse any accepted spelling,
- * validate the calendar date (leap years, month/day ranges), and return the
- * canonical [CANONICAL_DATE_FORMAT], or null when the value isn't a valid
- * date. The two postures on top of it — [canonicalSourceDate] refuses (throws
- * on a non-date), [truncateSourceDate] tolerates (passes the value through) —
- * split *validating* from *writing*, not one caller from another:
- *
- *   - The **writer** tolerates. Frontmatter bytes are produced in exactly one
- *     place — [wikipage.Page.set], which [wikipage.Page.merge] also goes
- *     through — so the rule is applied there and no caller can forget it:
- *     whatever spelling a value arrives in, the page that reaches disk
- *     carries the canonical one. A non-date passes through that writer
- *     untouched; a writer must never throw on content it was handed.
- *   - **Validation** refuses, and stays with the callers that validate before
- *     they write: `page set` refuses a non-date argument up front, and
- *     ingest's pre-flight refuses it in the plan. That is what turns a bad
- *     `source_date` into a message instead of a silently stored value.
- *
- * The read path (pagerecord) tolerates in the writer's way, storing the value
- * verbatim — it renders its own fallback from [parseSourceDate], not via
- * [truncateSourceDate].
+ * [parseSourceDate] is the shared fact. The writer tolerates a non-date
+ * ([truncateSourceDate], applied in [wikipage.Page.set] so no caller can skip
+ * it); validation refuses ([canonicalSourceDate], for callers that validate
+ * before writing). A writer must never throw on content it was handed.
  */
 
 /** The one canonical spelling every accepted `source_date` is truncated to. */
 export const CANONICAL_DATE_FORMAT = "YYYY-MM-DD";
 
-/**
- * The accepted spellings a hand-written `source_date` might carry, in
- * precedence order: date-only first, then the timestamp forms the codebase
- * has emitted over its history (RFC3339 with or without a zone, and the
- * zone-less space/T-separated forms). Any clock is truncated to its date.
- * Returns the canonical YYYY-MM-DD, or null when value is not a valid date at
- * all (a free-text "summer 2026", a malformed scalar, a non-string/non-Date).
- */
+/** Canonicalise any accepted spelling to YYYY-MM-DD, or null when value is not
+ * a valid date at all (free text, malformed, non-string/non-Date). Any clock
+ * truncates to its date. */
 export function parseSourceDate(value: unknown): string | null {
   if (value instanceof Date) {
     return formatDateOnly(
@@ -62,11 +33,7 @@ export function parseSourceDate(value: unknown): string | null {
     ];
     return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
   }
-  // The timestamp form: `YYYY-MM-DD` followed by a T or space, a clock, and
-  // an optional zone. The clock is `HH:MM` with optional seconds and
-  // fractional seconds; the zone is `Z`/`z` or `±HH:MM`/`±HHMM` (both the
-  // RFC3339 `±hh:mm` and the machine-terse `±hhmm` the codebase has emitted).
-  // Only the date part is kept — any clock truncates to its calendar day.
+  // The timestamp form, with an optional zone; only the date part is kept.
   const stamp = s.match(
     /^(\d{4})-(\d{2})-(\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/,
   );
@@ -77,14 +44,8 @@ export function parseSourceDate(value: unknown): string | null {
   return null;
 }
 
-/**
- * The refuse posture: canonicalise a `source_date` to YYYY-MM-DD, truncating
- * a clock, and throw on a value that isn't a valid date at all. Null and
- * undefined read as absent and pass through. This is the *validating* posture,
- * not a writing one: `page set` calls it on its argument before any bytes are
- * written, so a bad value is refused with a message rather than stored. The
- * writer itself tolerates — see the module comment.
- */
+/** The validating posture: canonicalise a `source_date`, throwing on a
+ * non-date. Null and undefined pass through as absent. */
 export function canonicalSourceDate(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return value;
   const date = parseSourceDate(value);
@@ -96,29 +57,16 @@ export function canonicalSourceDate(value: unknown): string | null | undefined {
   return date;
 }
 
-/**
- * The tolerate posture: canonicalise a `source_date` to YYYY-MM-DD when it's
- * a valid date, otherwise return the value unchanged. This is the writer's
- * posture — [wikipage.Page.set] runs every `source_date` it is handed through
- * it — so a legacy or hand-written non-date reaches disk verbatim rather than
- * being an error. The read paths tolerate the same way.
- */
+/** The writer's posture: canonicalise a valid date, otherwise return the value
+ * unchanged, so a hand-written non-date reaches disk verbatim. */
 export function truncateSourceDate(value: unknown): unknown {
   const date = parseSourceDate(value);
   return date !== null ? date : value;
 }
 
-/**
- * Report whether y/m/d is a real calendar date.
- *
- * Hand-rolled deliberately, not delegated to a date library or to stdlib
- * `Date`: the script layer carries zero runtime dependencies (ADR-0006), and
- * `new Date("2026-02-30")` silently rolls the invalid day over to March 2
- * instead of rejecting it — the whole point here is to tell a real date from
- * an impossible one so the write paths can refuse it. Days-per-month with a
- * Gregorian leap rule is the smallest correct answer, and it is stable across
- * hosts, which a `Date`-round-trip is not.
- */
+/** Whether y/m/d is a real calendar date. Hand-rolled because stdlib
+ * `new Date("2026-02-30")` rolls over to March 2 instead of rejecting, and the
+ * script layer carries zero runtime dependencies (ADR-0006). */
 function validDate(y: number, mo: number, d: number): boolean {
   if (mo < 1 || mo > 12 || d < 1) return false;
   const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;

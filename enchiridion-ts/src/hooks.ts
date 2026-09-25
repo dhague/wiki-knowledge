@@ -1,23 +1,17 @@
 /**
- * The plugin's automatic hook handlers.
+ * The plugin's automatic hook handlers: each reads a Claude Code hook payload as
+ * JSON on stdin and writes per-session state under the project's
+ * `.claude/wiki-knowledge/sessions/`.
  *
- * Both read a Claude Code hook payload as JSON on stdin and write per-session
- * state under the *project's* `.claude/wiki-knowledge/sessions/` — so state
- * lands in the project the session belongs to, never in this process's cwd and
- * never in the vault (which, in query-from-anywhere mode, is somewhere else).
+ * Hooks run automatically and unattended and must fail open: the `hook`
+ * subcommands swallow every handler error, and hooks.json tolerates even the
+ * bootstrap failing, so a failure costs one session's side effect rather than
+ * blocking the session.
  *
- * The two hooks locate that project differently, and deliberately so. The
- * payload's `cwd` is the directory the session is in *when the hook fires*:
- * the project root at SessionStart, but wherever Claude has since `cd`'d — or
- * a worktree it has entered — by PostToolUse time. So only SessionStart may
- * treat it as the project root; PostToolUse resolves the project through
- * `findSessionsDir` and writes nothing at all when it can't (#485).
- *
- * Unlike a skill, a hook runs automatically and unattended, so it must never
- * interrupt the session that triggered it (#153). These functions return errors
- * for the caller to decide about; the `hook` subcommands swallow them, and
- * hooks.json additionally tolerates the bootstrap itself failing, so a flaky
- * binary download degrades one session's side effects instead of blocking it.
+ * The two hooks locate the project differently on purpose. The payload's `cwd` is
+ * the project root at SessionStart but has followed the session's `cd`s by
+ * PostToolUse, so only SessionStart treats it as the root; PostToolUse resolves
+ * through `findSessionsDir` and writes nothing when it cannot.
  */
 
 import fs from "node:fs";
@@ -32,29 +26,21 @@ import {
 import type { LookupEnv } from "./sessionstate.js";
 import { logPath } from "./toolcallstats.js";
 
-/** The subset of the SessionStart payload this hook uses. */
 interface SessionStartPayload {
   session_id?: string;
   transcript_path?: string;
   cwd?: string;
 }
 
-/**
- * Records this session's transcript_path so /save-conversation can retrieve it
- * later by session_id, rather than guessing "most recently modified
- * transcript" — which breaks when sessions run in parallel (#23).
- *
- * A payload missing either field is a silent no-op: there is nothing to record,
- * and creating the state directory anyway would be a lie about it.
- */
+/** Records transcript_path by session_id; a payload missing either field is a
+ * silent no-op. */
 export function sessionStart(
   payload: unknown,
   lookupEnv: LookupEnv = processLookupEnv,
 ): void {
   const p = (payload ?? {}) as SessionStartPayload;
   if (!p.session_id || !p.transcript_path) return;
-  // sessionsDir's cwd fallback is right here: at session start the payload cwd
-  // *is* the project root, and creating its state directory is this hook's job.
+  // Here the payload cwd is the project root, so sessionsDir's fallback is right.
   writeTranscriptPath(
     p.session_id,
     p.transcript_path,
@@ -62,7 +48,6 @@ export function sessionStart(
   );
 }
 
-/** The subset of the PostToolUse payload this hook logs. */
 interface PostToolUsePayload {
   session_id?: string;
   cwd?: string;
@@ -74,9 +59,8 @@ interface PostToolUsePayload {
   duration_ms?: unknown;
 }
 
-/** One line of the tool-call log. `unknown` fields, so an absent payload key
- * is logged as an explicit null rather than being dropped — toolcallstats
- * reads back a stable key set either way. */
+/** One line of the tool-call log; `unknown` fields log an absent key as an
+ * explicit null, keeping the key set stable for toolcallstats. */
 interface LoggedCall {
   tool: unknown;
   tool_use_id: unknown;
@@ -86,22 +70,9 @@ interface LoggedCall {
   duration_ms: unknown;
 }
 
-/**
- * Appends one JSON line per tool call to the session's log, so
- * `enchiridion tool-call-stats` can summarise a run's cost (#100).
- *
- * Per #99's spike the payload carries no per-assistant-message identifier and
- * no timestamp, so tool-call count — not exact turn count — is the recoverable
- * metric. prompt_id is logged anyway as the closest available grouping key, and
- * agent_id/agent_type separate subagent calls from the top-level agent's own.
- *
- * The log goes to the *project's* state directory, never to the payload's
- * `cwd`: that field follows the session around as the agent works, so treating
- * it as the project root scattered `.claude/wiki-knowledge/sessions/` trees
- * through content folders (#485). Where the project can't be identified, this
- * hook writes nothing — a lost line is cheaper than state in a directory that
- * isn't the project's.
- */
+/** Appends one JSON line per tool call to the session's log, for
+ * `enchiridion tool-call-stats`; the payload carries no timestamp, so tool-call
+ * count is the recoverable metric. */
 export function postToolUse(
   payload: unknown,
   lookupEnv: LookupEnv = processLookupEnv,

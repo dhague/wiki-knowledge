@@ -1,16 +1,10 @@
-/**
- * Filesystem utilities shared across the enchiridion script layer.
- */
+/** Filesystem utilities shared across the enchiridion script layer. */
 import fs from "node:fs";
 
 /**
- * Like `fs.mkdirSync(path, { recursive: true })` but tolerates EEXIST even
- * when the target already exists as a directory — which Windows + OneDrive
- * triggers on directories carrying the ReparsePoint attribute (cloud-first
- * sync stubs). Re-throws EEXIST only when the path is a plain file.
- *
- * On Linux/macOS `recursive: true` never throws on existing directories, so
- * this is a no-op on those platforms.
+ * `fs.mkdirSync(path, { recursive: true })` that tolerates EEXIST when the
+ * target already exists as a directory — Windows + OneDrive ReparsePoint stubs
+ * trigger this. Re-throws EEXIST only when the path is a plain file.
  */
 export function mkdirSafe(dir: string, mode?: number): void {
   try {
@@ -29,6 +23,5 @@ export function mkdirSafe(dir: string, mode?: number): void {
         { cause: err },
       );
     }
-    // directory already exists — treat as success (Windows+OneDrive ReparsePoint)
   }
 }

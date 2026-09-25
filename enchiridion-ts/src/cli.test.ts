@@ -1,11 +1,7 @@
 /**
- * CLI-level smoke tests (#252's "Testing Decisions": one test per
- * subcommand is enough at this level — correctness lives in module tests
- * once those land; these confirm the commander wiring).
- *
- * Spawns `tsx src/cli.ts` as a subprocess for each case so commander's own
- * process.exit()/process.exitCode calls behave exactly as they would for a
- * real invocation, without taking down the test runner.
+ * CLI-level smoke tests: one per subcommand, confirming the commander wiring.
+ * Each case spawns `tsx src/cli.ts` as a subprocess so commander's own
+ * process.exit()/process.exitCode behave as in a real invocation.
  */
 
 import { test } from "node:test";
@@ -170,8 +166,7 @@ test("vault move: moves a page and fixes inbound links", () => {
     { cwd: root, env: { WIKI_ROOT: root } },
   );
   assert.equal(status, 0, stderr);
-  // The moved page is newly written and the referencing page changed — both
-  // are reported, sorted (matches MovePage's changed set).
+  // Both changed pages are reported, sorted (MovePage's changed set).
   assert.equal(stdout.trim(), "wiki/concepts/a.md\nwiki/entities/b.md");
   assert.equal(
     fs.existsSync(path.join(root, "wiki", "concepts", "b.md")),
@@ -200,8 +195,8 @@ test("vault move: missing source errors non-zero", () => {
 });
 
 test("vault move resolves the vault root; place resolves none (boundary)", () => {
-  // `place` is pure path computation: it must succeed from a directory with
-  // no vault marker and no WIKI_ROOT, resolving no vault root at all.
+  // `place` is pure path computation — no vault marker, no WIKI_ROOT, no root
+  // resolved.
   const plain = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   const place = runEnv(["place", "concept", "A Thing"], {
     cwd: plain,
@@ -210,9 +205,8 @@ test("vault move resolves the vault root; place resolves none (boundary)", () =>
   assert.equal(place.status, 0, place.stderr);
   assert.equal(place.stdout.trim(), "wiki/concepts/a-thing.md");
 
-  // A `vault` subcommand with no marker anywhere above cwd and no WIKI_ROOT
-  // falls back to cwd as the root (ADR-0004 step 3) — so `vault root` prints
-  // the cwd itself, not a path computed in isolation.
+  // With no marker above cwd and no WIKI_ROOT, `vault` falls back to cwd as the
+  // root (ADR-0004 step 3) — it prints the cwd itself.
   const vault = runEnv(["vault", "root"], {
     cwd: plain,
     env: { WIKI_ROOT: "" },
@@ -268,9 +262,8 @@ test("page set: canonicalises source_date, truncating a clock", () => {
 });
 
 test("page set: rejects an invalid calendar date in source_date", () => {
-  // The bug this guards: `page set` accepted 2026-13-40 (its regex truncated
-  // without validating) while ingest refused it. Both now share the one
-  // sourcedate rule and reject exactly the same spellings.
+  // `page set` shares ingest's sourcedate rule, so both reject the same
+  // spellings.
   const file = writeTempPage("---\nkind: concept\n---\nbody\n", "");
   const { status, stderr } = run([
     "page",
@@ -308,12 +301,8 @@ test("page merge: unions values into a list-valued key", () => {
   );
 });
 
-// #575: `page set <file> tags <value>` without `--json` wrote the value as a
-// YAML scalar, which `stringList` reads as no tags at all — the page silently
-// vanished from every tag-filtered search, discover and check. These pin the
-// list-valued-key contract: one bare value becomes a one-element list, a list
-// arrives as `--json` — or as the JSON-array text `page merge` already takes
-// with no flag — and a value that is neither is refused rather than written.
+// A scalar in a list-valued key reads back as no tags at all, hiding the page
+// from tag-filtered search, discover and check.
 
 test("page set: writes a bare tags value as a one-element list", () => {
   const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
@@ -347,9 +336,8 @@ test("page set: writes a --json tags array as a list", () => {
 });
 
 test("page set: reads a bare JSON-array value as the list, no flag needed", () => {
-  // The trap the issue names: `page merge` takes a JSON list with no flag, so
-  // a caller reusing that shape on `page set` used to write one scalar — and
-  // now would write one literal `["a","b"]` tag if the shape went unread.
+  // `page merge` takes a JSON list with no flag, so `page set` must read that
+  // shape too rather than writing it as one literal tag.
   const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
   const { status, stderr } = run(["page", "set", file, "tags", '["a", "b"]']);
   assert.equal(status, 0, stderr);
@@ -396,10 +384,8 @@ test("page set: refuses a --json non-string for tags, leaving the file alone", (
   assert.equal(fs.readFileSync(file, "utf8"), before);
 });
 
-// The retrieval consequence the rows above only imply: a page whose tags
-// `page set` wrote is actually indexed under them, so a tag-filtered search
-// finds it. The index is a view of HEAD (ADR-0015), so the vault is committed
-// after the edit.
+// The tags must actually be indexed under: the index is a view of HEAD
+// (ADR-0015), so the vault is committed after the edit.
 test("page set: tags written this way are indexed and findable by --tag", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-tags-"));
   const ref = "wiki/concepts/a.md";
@@ -440,10 +426,8 @@ test("page set: tags written this way are indexed and findable by --tag", async 
   );
 });
 
-// #548: `page merge`/`page set` used to write the value verbatim, so a caller
-// reusing `ingest`'s documented vault-relative-ref shape produced malformed
-// frontmatter edges. These pin the asymmetric-fix: a ref is composed, a link
-// passes through, and anything else fails without touching the file.
+// Edge values: a vault-relative ref is composed, a link passes through, and
+// anything else fails without touching the file.
 
 test("page merge: composes a vault-relative ref into an edge link", () => {
   const root = makeVault({
@@ -673,9 +657,9 @@ test("hook session-start: malformed stdin fails open, exits 0", () => {
 test("hook post-tool-use: reads stdin, appends one JSON line, exits 0", () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hook-"));
   const sessionID = "hook-sess-2";
-  // The tool call runs in a content folder, while $CLAUDE_PROJECT_DIR — which
-  // Claude Code exports to every hook process — still names the project, so
-  // the line belongs at the project root, not beside the tool call (#485).
+  // The tool call runs in a content folder, but $CLAUDE_PROJECT_DIR (exported
+  // to every hook process) names the project, so the line belongs at the
+  // project root, not beside the tool call.
   const contentDir = path.join(project, "wiki", "concepts");
   fs.mkdirSync(contentDir, { recursive: true });
   const payload = JSON.stringify({
@@ -735,8 +719,7 @@ test("init: scaffolds a vault, commits it, and prints the root", () => {
   }
   assert.ok(fs.existsSync(path.join(root, "raw", ".gitkeep")));
   assert.ok(fs.existsSync(path.join(root, ".gitignore")));
-  // The scaffold is committed — the vault's git history is complete from page
-  // one.
+  // The scaffold is committed, so the vault's history is complete from page one.
   const { status: logStatus } = spawnSync("git", ["-C", root, "log"], {
     encoding: "utf8",
   });
@@ -756,7 +739,7 @@ test("init: requires --mode", () => {
 test("init: refuses a directory that already looks like a vault", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-init-"));
   fs.mkdirSync(path.join(root, "wiki"));
-  // A marker alone is not a vault (#323) — a repo is what makes it one.
+  // A marker alone is not a vault; a repo is what makes it one.
   const { status: initStatus } = spawnSync("git", ["-C", root, "init"], {
     encoding: "utf8",
   });
@@ -834,9 +817,8 @@ test("save-session: writes a raw capture and prints its vault-relative path", ()
     JSON.stringify({ transcript_path: transcript }),
   );
 
-  // cwd must be inside `project` (which carries `.claude`) so the SessionStart
-  // hook's state is found; WIKI_ROOT points at the vault. OPENCODE_SESSION_ID is
-  // cleared so an inherited value can't divert this onto the OpenCode path.
+  // cwd must be inside `project` so the hook's state is found; WIKI_ROOT points
+  // at the vault, and an inherited OPENCODE_SESSION_ID must not divert the path.
   const { status, stdout, stderr } = runEnv(
     ["save-session", "--slug", "a session"],
     {
@@ -867,8 +849,7 @@ test("save-session: errors and exits non-zero when no session id is set", () => 
     cwd: project,
     env: {
       WIKI_ROOT: vault,
-      // Explicitly clear any inherited session-id vars (the outer process may
-      // run inside a real session) so this exercises the no-id path.
+      // Clear inherited session-id vars so this exercises the no-id path.
       CLAUDE_CODE_SESSION_ID: "",
       OPENCODE_SESSION_ID: "",
     },
@@ -1000,14 +981,12 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
   // The commit SHA is always the first line of stdout.
   const firstLine = stdout.split("\n")[0];
   assert.match(firstLine, /^[0-9a-f]{40}$/);
-  // The pages were written and committed.
   assert.ok(fs.existsSync(path.join(root, "wiki", "sources", "doc.md")));
   assert.ok(
     fs.existsSync(
       path.join(root, "wiki", "concepts", "prepared-statements.md"),
     ),
   );
-  // Plan file deleted on success.
   assert.ok(
     !fs.existsSync(planPath),
     "plan file should be deleted after successful ingest",
@@ -1023,10 +1002,7 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
   assert.equal(logStatus, 0);
 });
 
-// #561: the documented flow must leave a vault the documented check passes.
-// Ingest a minimal plan whose pages carry no `source_date` of their own, then
-// run `check missing-volatility-source-date` over what it committed — the
-// writer and the checker must not disagree about a fresh vault.
+// The writer and the checker must not disagree about a fresh vault.
 test("ingest: a freshly ingested vault is clean under missing-volatility-source-date", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-clean-"),
@@ -1108,8 +1084,8 @@ test("ingest: a consolidate plan absorbs, deletes and commits once", async () =>
     "---\ntitle: Caching TTL\n---\nA cache entry expires after its TTL.\n",
   );
 
-  // Committed first: the executor stages the deleted loser as a removal, and an
-  // untracked missing path is still an error (vaultgit.add).
+  // Committed first: the executor stages the deleted loser as a removal, and a
+  // path git never tracked is a hard error.
   const signature = {
     name: "test",
     email: "t@e.com",
@@ -1190,7 +1166,7 @@ test("ingest: plan file NOT deleted when ingest fails", async () => {
     },
   });
 
-  // Plan references a non-existent raw file — validation fails, ingest errors.
+  // The plan names a missing raw file, so validation fails.
   const planPath = path.join(root, "plan.json");
   fs.writeFileSync(
     planPath,
@@ -1475,7 +1451,7 @@ test("read-page --json: emits {page_ref, frontmatter, body} as one compact line"
   assert.equal(payload.page_ref, "wiki/concepts/a.md");
   assert.deepEqual(payload.frontmatter, { title: "A", tags: ["db"] });
   assert.equal(payload.body, "\nbody text\n");
-  // One document, one line: the page is not pretty-printed across many.
+  // One document, one line: not pretty-printed across many.
   assert.equal(stdout, JSON.stringify(payload) + "\n");
 });
 
@@ -1589,10 +1565,9 @@ function buildLintableVault(): string {
   return root;
 }
 
-/** The same vault plus one page whose frontmatter carries an unquoted YAML
- * list link — `frontmatter-link-format`'s check and fix shared defect. Kept out of
- * buildLintableVault: the sequence `- [B](b.md)` does not merely look wrong,
- * it is unparseable, so every record-reading check on that vault throws. */
+/** The lintable vault plus a page with an unquoted YAML list link. Kept out of
+ * [buildLintableVault]: `- [B](b.md)` is unparseable, so every record-reading
+ * check on that vault would throw. */
 function buildQuotelessVault(): string {
   const root = buildLintableVault();
   fs.writeFileSync(
@@ -1618,8 +1593,7 @@ test("check --json: one finding per line, each a self-contained object", () => {
     ["wiki/concepts/nested/deep.md", "wiki/loose.md"],
   );
   assert.match(rows[1].detail, /at wiki\/ root/);
-  // One object per line, not one array wrapping them — a consumer iterates
-  // stdout line by line without buffering the whole result.
+  // One object per line, not an array: a consumer iterates without buffering.
   assert.notEqual(stdout.trim()[0], "[");
 });
 
@@ -1643,10 +1617,8 @@ test("check: an unknown name errors non-zero, naming the known ones", () => {
   assert.match(stderr, /unknown check "nope"/);
 });
 
-/** A lintable vault plus one page whose frontmatter carries a bare-path edge —
- * the shape a pre-#548 `page merge` wrote (#549). Unlike the unquoted link in
- * [buildQuotelessVault], this is valid YAML, so the page's own fields still
- * decode and only the edge is refused. */
+/** The lintable vault plus a page with a bare-path edge. Valid YAML, unlike
+ * [buildQuotelessVault], so only the edge is refused. */
 function buildBareEdgeVault(): string {
   const root = buildLintableVault();
   fs.writeFileSync(
@@ -1697,9 +1669,8 @@ test("check missing-volatility-source-date --json: a bare-path edge does not bla
   );
 });
 
-/** A committed vault with one fragmented concept pair, for `concept-fragmentation` at the
- * CLI seam. Committed because the check reads the search index, which is a
- * view of HEAD (ADR-0015). */
+/** A committed vault with one fragmented concept pair; committed because the
+ * check reads the search index, a view of HEAD (ADR-0015). */
 async function buildFragmentedVault(): Promise<string> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-frag-"));
   const files = {
@@ -1972,8 +1943,7 @@ test("discover: --plan --tags-containing folds the matches into the one document
     { cwd: root, env: { WIKI_ROOT: root } },
   );
   assert.equal(status, 0, stderr);
-  // Still exactly one JSON document — the matches ride inside it as a named
-  // field, not after it as plain text a JSON reader would discard.
+  // One JSON document: the matches ride inside it as a named field.
   const payload = JSON.parse(stdout);
   assert.deepEqual(payload.tag_matches, ["database"]);
   assert.equal(payload.vocabulary, undefined);
@@ -2020,7 +1990,7 @@ test("search --json: one hit object per line", async () => {
     .split("\n")
     .map((l) => JSON.parse(l));
   assert.equal(rows[0].page_ref, "wiki/concepts/connection-pooling.md");
-  // The row's keys are the contract, unchanged by this ticket.
+  // The row's keys are the contract.
   for (const key of [
     "page_ref",
     "score",
@@ -2181,7 +2151,7 @@ test("vault kinds: respects WIKI_ROOT env var", () => {
 });
 
 // ---------------------------------------------------------------------------
-// export: --candidates, and the wiki title (#477)
+// export: --candidates, and the wiki title
 // ---------------------------------------------------------------------------
 
 test("export --candidates: the ranked list is one compact JSON document", async () => {
@@ -2199,8 +2169,8 @@ test("export --candidates: the ranked list is one compact JSON document", async 
       "wiki/concepts/sourdough-starter.md",
     ],
   );
-  // The whole list is one document the caller parses in one go — the dialect
-  // is how many documents, not the outer JSON type.
+  // One document in one go: the dialect is how many documents, not the outer
+  // JSON type.
   assert.equal(stdout, JSON.stringify(candidates) + "\n");
   assert.ok(!stdout.includes("\n "));
 });
@@ -2273,7 +2243,7 @@ test("export: a saved title persists across runs; --title overrides one run only
 });
 
 // ---------------------------------------------------------------------------
-// export: single-file mode (#478)
+// export: single-file mode
 // ---------------------------------------------------------------------------
 
 test("export --single-file: defaults to wiki.html at the vault root", async () => {
@@ -2306,8 +2276,7 @@ test("export --single-file --out: names the file, and re-running replaces it", a
   assert.ok(fs.existsSync(outFile), "the named file should be written");
   const before = fs.readFileSync(outFile, "utf8");
 
-  // A second run refreshes it — no --force, and no refusal for a non-empty
-  // parent directory.
+  // A second run refreshes it: no --force, no refusal for a non-empty parent.
   fs.writeFileSync(
     path.join(root, "wiki", "concepts", "new-page.md"),
     "---\ntitle: A New Page\nkind: concept\n---\n\nBody.\n",
@@ -2380,7 +2349,7 @@ test("export --single-file: a vault with uncommitted changes is still refused", 
 });
 
 // ---------------------------------------------------------------------------
-// export: the start page (#567)
+// export: the start page
 // ---------------------------------------------------------------------------
 
 test("export --save-start-page: persists the ref, normalised, and writes no site", async () => {

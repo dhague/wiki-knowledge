@@ -1,21 +1,11 @@
 /**
  * Compute a new page's vault-relative path: kind-folder plus kebab-slug of
- * title.
- *
- * *Which* kind a page belongs to is judgment (wiki-conventions' placement
- * algorithm) and stays with the ingesting agent. Turning a chosen kind +
- * title into `wiki/<kind-folder>/<slug>.md` is mechanics, and lives here so
- * filenames are consistent regardless of who — or which model — is ingesting.
- * Kind *values* stay singular (`concept`); kind *folders* pluralize
- * (`concepts/`), except `synthesis` — see [KindFolders] (ADR-0008).
+ * title. Which kind a page belongs to is the agent's judgment; this module is
+ * the mechanics. Kind values stay singular, folders pluralize (ADR-0008).
  */
 
-/**
- * Maps a kind value to its `wiki/` folder name (ADR-0008: folders pluralize,
- * values stay singular — `synthesis` has no distinct plural, so it's
- * unchanged). The single source of truth for the mapping; no other package
- * may hardcode a kind-folder string.
- */
+/** A kind value's `wiki/` folder name. The single source of truth for the
+ * mapping; no other package may hardcode a kind-folder string. */
 export const KindFolders: Record<string, string> = {
   source: "sources",
   synthesis: "synthesis",
@@ -23,33 +13,23 @@ export const KindFolders: Record<string, string> = {
   concept: "concepts",
 };
 
-/**
- * Maps a folder name to its kind value, for readers going the other direction
- * (pagerecord deriving a page's kind from its path).
- */
+/** Folder name → kind value, for readers deriving a page's kind from its path. */
 export const FolderKinds: Record<string, string> = Object.fromEntries(
   Object.entries(KindFolders).map(([kind, folder]) => [folder, kind]),
 );
 
-/** The fixed kind-value set (wiki-conventions, "Vault structure"), in the
- * canonical order the CLI presents them. */
+/** The fixed kind-value set, in the canonical order the CLI presents them. */
 export const Kinds: string[] = ["concept", "entity", "source", "synthesis"];
 
-/** Caps generated kebab-slug filenames — readability, plus headroom under
- * the Windows 255-char path limit (#70). */
+/** Caps generated slug filenames — readability, and headroom under the
+ * Windows 255-char path limit. */
 export const MaxSlugLength = 64;
 
-/** The shortest prefix worth keeping when truncating at a hyphen boundary;
- * below it, a hard cut reads better. */
 const minWordCut = 8;
 
 const APOSTROPHE_RE = /['’]/g;
 const NON_ALNUM_RE = /[^a-z0-9]+/g;
 
-/**
- * Truncates slug to maxLength at the last hyphen boundary, when that leaves
- * at least minWordCut chars. Otherwise a hard cut.
- */
 function truncateSlug(slug: string, maxLength: number): string {
   if (slug.length <= maxLength) return slug;
   const cut = slug.slice(0, maxLength).lastIndexOf("-");
@@ -59,12 +39,8 @@ function truncateSlug(slug: string, maxLength: number): string {
   return slug.slice(0, maxLength).replace(/-+$/, "");
 }
 
-/**
- * Returns title as a lowercase kebab-slug. Apostrophes are dropped rather
- * than hyphenated ("What's" -> "whats", not "what-s"); every other run of
- * non-alphanumerics collapses to one hyphen; ends are stripped. maxLength,
- * when positive, truncates via truncateSlug.
- */
+/** Title as a lowercase kebab-slug. Apostrophes are dropped, not hyphenated
+ * ("What's" -> "whats"); a positive maxLength truncates at a word boundary. */
 export function slugify(title: string, maxLength: number): string {
   let slug = title.toLowerCase().replace(APOSTROPHE_RE, "");
   slug = slug.replace(NON_ALNUM_RE, "-");
@@ -75,25 +51,14 @@ export function slugify(title: string, maxLength: number): string {
   return slug;
 }
 
-/**
- * Derives a kind value from a folder name using the ADR-0008 rule: strip a
- * trailing `s` if present (`decisions` → `decision`); otherwise return the
- * folder name verbatim (`people` → `people`).
- *
- * Intended for custom kind-folders not already in [FolderKinds] — canonical
- * folders should be looked up there directly.
- */
+/** Strip a trailing `s` (ADR-0008). For custom kind-folders only; canonical
+ * folders are looked up in [FolderKinds] directly. */
 export function folderToKind(folder: string): string {
   return folder.replace(/s$/, "");
 }
 
-/**
- * Returns the vault-relative path for a new page of kind titled title.
- *
- * Canonical kinds are resolved from [KindFolders]. Custom (discovered) kinds
- * are resolved from extraKindFolders (a {kind: folder} map). Throws an error
- * when kind is unknown in both.
- */
+/** The vault-relative path for a new page: canonical kinds resolve from
+ * [KindFolders], custom ones from extraKindFolders. Throws on an unknown kind. */
 export function path(
   kind: string,
   title: string,

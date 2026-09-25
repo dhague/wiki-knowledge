@@ -1,37 +1,20 @@
 /**
  * Per-page HTML render pass for `enchiridion export`.
  *
- * Two layers, deliberately separable:
+ * Two layers, deliberately separable: renderPageParts yields a page's parts
+ * (title, nav, main) with no document shell, and renderPages wraps those parts
+ * in the multi-page shell (assets/style.css). Both are lazy generators and
+ * pure; the path is vault-relative with .html extension.
  *
- *   1. renderPageParts — a page's parts (title, nav, main) with no document
- *      shell around them. This is what a mode that assembles its own document
- *      needs: single-file export nests the same fragments in its own sections.
- *   2. renderPages — the multi-page shape, wrapping each page's parts in the
- *      shared shell and pointing it at `assets/style.css`.
+ * Link rewriting follows [LinkMode]: multi-page rewrites the export's own `.md`
+ * destinations to `.html` (anchors preserved), single-file rewrites every
+ * relative destination to the section that holds it, and either mode strips a
+ * claimed destination outside the exported set to plain label text. Aggregate
+ * pages are a separate pass in exportaggregate.ts, in the same two layers.
  *
- * Both are lazy generators over page records + export metadata + options, and
- * both are pure — no filesystem access, no model. The path is vault-relative
- * with .html extension.
- *
- * Link rewriting uses the iterLinks/offset-splice path from wikipage.ts, and
- * follows the mode: multi-page output rewrites the export's own `.md`
- * destinations to `.html` (anchors preserved), single-file output rewrites
- * every relative destination to the section that holds it — and either mode
- * strips a claimed destination whose target is outside the exported set to
- * plain label text rather than leaving a dead href. See [LinkMode].
- *
- * Aggregate pages (tag pages, tag index, per-kind index pages, front page)
- * are a separate pass in exportaggregate.ts, in the same two layers —
- * concatenate the page generators to get the full output set.
- *
- * When a start page is nominated (`meta.startPage`), the promotion is an
- * output-path redirect rather than a splice of finished HTML: the page is
- * yielded at the front page's path and every link site asks
- * `meta.outputPathFor` for both ends of an href, so "exported once" and "every
- * reference resolves to the landing page" hold by construction. The generated
- * front page is then not rendered at all (exportaggregate), and the promoted
- * page carries a list of the remaining kind indexes at the foot of its
- * article.
+ * A nominated start page is an output-path redirect: it is yielded at the front
+ * page's path, every link site asks `meta.outputPathFor` for both ends, and the
+ * generated front page is then not rendered at all (see exportaggregate).
  */
 
 import path from "node:path";
@@ -75,16 +58,13 @@ export interface RenderedPage {
  * mode assembles for itself.
  */
 export interface PageParts {
-  /** Text for the document's <title> — this page's own title (a tag name, a
-   *  kind's label, a page title); the generated front page alone carries the
-   *  wiki's title. A nominated start page is an ordinary page here: its own
-   *  title, exported at the front page's path. Unescaped: the shell escapes
-   *  it. */
+  /** Text for the document's <title>. A nominated start page is an ordinary
+   *  page here: its own title, exported at the front page's path. Unescaped. */
   title: string;
   /** The sticky navigation bar, already positioned for this page's depth. */
   nav: string;
-  /** Everything below the nav: the page header (title and summary, when the
-   *  page has them), then the article, then the frontmatter table as a footer. */
+  /** Everything below the nav: the page header, then the article, then the
+   *  frontmatter table as a footer. */
   main: string;
 }
 
@@ -154,10 +134,8 @@ function rootPrefix(htmlPath: string): string {
 }
 
 /**
- * Relative path to the shared stylesheet directory from a page's own HTML
- * file — "./assets" at the root, "../assets" one level deep, and so on. Every
- * page's stylesheet link is this plus the stylesheet's filename, so the href
- * is right by construction rather than by a per-page hand-count.
+ * Relative path to the shared stylesheet directory from a page's own HTML file
+ * — "./assets" at the root, "../assets" one level deep, and so on.
  */
 export function assetsRootFor(htmlPath: string): string {
   return `${rootPrefix(htmlPath)}${STYLESHEET_DIR}`;
@@ -176,15 +154,10 @@ export const FRONT_SECTION_ID = "__front";
 
 /**
  * The id of the `<section>` a page becomes in single-file output — and so the
- * fragment every link to that page is rewritten to. Derived from the page's
- * output path alone (separators and the `.html` extension dropped, every run
- * of remaining non-alphanumerics collapsed to one `-`), so the id a section is
- * written with and the fragment a link to it carries cannot disagree: both are
- * this function's answer for the same path.
- *
- * The front page is the one page whose id is not derived — it takes the
- * reserved [FRONT_SECTION_ID], because "the page you land on with no hash" is
- * a role the document needs to name, not a path.
+ * fragment every link to that page is rewritten to. Derived from the output path
+ * alone, so the id a section is written with and the fragment a link carries
+ * cannot disagree. The front page alone is not derived: it takes the reserved
+ * [FRONT_SECTION_ID].
  */
 export function sectionIdFor(htmlPath: string): string {
   if (htmlPath === FRONT_PAGE_PATH) return FRONT_SECTION_ID;
@@ -196,14 +169,10 @@ export function sectionIdFor(htmlPath: string): string {
 
 /**
  * The two shapes the export takes, as the render layer sees them: a directory
- * of linked `.html` pages, or one document whose pages are sections.
- *
- * The mode is one choice, not two. Which href a link to a page carries and
- * what happens to a relative destination the export does not carry are the
- * same question asked twice — a document with no second file to point at
- * cannot spell a relative path either — so they are decided together, here,
- * rather than at each of a dozen link sites or by a pair of flags that could
- * be set to disagree.
+ * of linked `.html` pages, or one document whose pages are sections. The mode
+ * decides both the href a link carries and what happens to a relative
+ * destination the export does not carry — they are the same question, so they
+ * are answered together.
  */
 export type LinkMode = "multi-page" | "single-file";
 
@@ -224,18 +193,15 @@ const relativeHref: HrefFor = (
 /**
  * Single-file: the target section's fragment.
  *
- * A cross-page `#anchor` is dropped rather than carried. One fragment can name
- * either the section to show or a heading inside it, and showing the section
- * is the part that must not fail — so the link lands at the top of the target
- * page. In-page anchors never come through here (they name no page) and keep
- * resolving to their heading.
+ * A cross-page `#anchor` is dropped: showing the section is the part that must
+ * not fail, so the link lands at the top of the target page. In-page anchors
+ * name no page and keep resolving to their heading.
  */
 const hashHref: HrefFor = (_fromHtmlPath, toHtmlPath) =>
   `#${sectionIdFor(toHtmlPath)}`;
 
-/** The href strategy a mode spells a page link with. The link sites that know
- *  their target is a page (tag links, index listings) call this directly; the
- *  ones that resolve an author's destination ask the rewriters above instead. */
+/** The href strategy a mode spells a page link with. Link sites that know
+ *  their target is a page call this; the rewriters above serve the rest. */
 export function hrefFor(mode: LinkMode): HrefFor {
   return mode === "single-file" ? hashHref : relativeHref;
 }
@@ -243,11 +209,7 @@ export function hrefFor(mode: LinkMode): HrefFor {
 /**
  * Everything a link site needs to spell a destination: which refs the export
  * carries, which mode's href strategy to use, and where each ref is written.
- *
- * They travel together because no site ever wants one without the others — a
- * link written with one mode's strategy and another's path is exactly the bug
- * the single mapper exists to prevent — so bundling them keeps a site's
- * parameters about *what it links*, not about the export's shape.
+ * They travel together — a site never wants one without the others.
  */
 export interface LinkContext {
   /** `meta.exported` — the one owner of "the export carries this ref". */
@@ -263,12 +225,9 @@ export function linkContext(meta: ExportMeta, mode: LinkMode): LinkContext {
 }
 
 /**
- * One kind index page as a list entry: the label, count and href both the
- * generated front page's browse block and a start page's foot list need.
- *
- * The two lists are never rendered together — a start page replaces the
- * generated front page — but they must agree on *which* kinds appear, in what
- * order, and at what href, so that set-and-order decision is made once, here.
+ * One kind index page as a list entry, shared by the generated front page's
+ * browse block and a start page's foot list. The two are never rendered
+ * together, but must agree on which kinds appear, in what order, at what href.
  */
 export interface KindIndexEntry {
   kind: string;
@@ -280,8 +239,7 @@ export interface KindIndexEntry {
 
 /**
  * The kind index entries, in the display order both lists use — by kind name.
- * `fromHtmlPath` is the listing page's own output path, which is `index.html`
- * for both lists.
+ * `fromHtmlPath` is the listing page's own output path, `index.html` for both.
  */
 export function kindIndexEntries(
   meta: ExportMeta,
@@ -303,16 +261,9 @@ export function kindIndexEntries(
 }
 
 /**
- * The nav bar's link to one of the site's own two landmarks — the front page
- * and the tag index — which is the one link in the export that is not spelled
- * as a path to a sibling.
- *
- * Multi-page output has written these from the output root since the bar
- * existed: `./index.html` at the root, `../tags/index.html` a level down.
- * That is not the sibling-relative spelling [hrefFor] produces, and it is not
- * worth restating 300 pages' worth of nav bars to unify them; single-file
- * output names the two sections, which is the same idea — a destination
- * absolute to the document that carries it.
+ * The nav bar's link to one of the site's own two landmarks (the front page and
+ * the tag index): a path from the output root in multi-page output, the
+ * section's fragment in single-file output. Never sibling-relative.
  */
 function navHref(htmlPath: string, targetPath: string, mode: LinkMode): string {
   if (mode === "single-file") return hashHref(htmlPath, targetPath);
@@ -344,22 +295,13 @@ function applyEdits(src: string, edits: Edit[]): string {
 }
 
 /**
- * Whether a mode claims a destination an author wrote — whether the export
- * rewrites it, rather than leaving it as it stands.
+ * Whether a mode claims a destination an author wrote — the export rewrites it
+ * rather than leaving it as it stands. A `.md` destination is a vault page in
+ * either mode; every other relative destination belongs to single-file output
+ * alone, since a relative path in a one-file document is a link out of it.
  *
- * A `.md` destination is a page of the vault in either mode, and the export
- * owns it. Everything else belongs to single-file output alone: multi-page
- * output is a directory of files and leaves a destination it does not own
- * where the author put it, while single-file output cannot — a relative path
- * in a one-file document is a link out of that file, so it claims them all.
- *
- * Nobody's to rewrite, in either mode: a bare in-page anchor (it names a
- * heading of the page it is on), an absolute destination (`/…` or a URL), and
- * a URI with a scheme (`mailto:`, `data:`) — which is exactly the question
- * [isVaultRelativeDest] answers, asked of the same destinations in the same
- * words, so that the export and a page move cannot disagree about one. What
- * is *not* shared is the mode-dependent half below it, which is the export's
- * own business and stays as it has always been.
+ * Neither mode rewrites a bare in-page anchor, an absolute destination, or a
+ * URI with a scheme — exactly the question [isVaultRelativeDest] answers.
  */
 function claimsDest(dest: string, mode: LinkMode): boolean {
   if (!isVaultRelativeDest(dest)) return false;
@@ -368,13 +310,9 @@ function claimsDest(dest: string, mode: LinkMode): boolean {
 }
 
 /**
- * Rewrite/strip links in the body text before markdown-it rendering.
- *
- * A claimed destination naming a page of the export becomes that page's href
- * in this mode (`foo.html`, or the target's section in a one-file document);
- * a claimed destination naming anything else is stripped to its label, so a
- * link to a page the export does not carry is plain text rather than a dead
- * href.
+ * Rewrite/strip links in the body text before markdown-it rendering: a claimed
+ * destination naming an exported page becomes that page's href in this mode; one
+ * naming anything else is stripped to its label, not left as a dead href.
  */
 function rewriteBodyLinks(
   bodyText: string,
@@ -388,10 +326,8 @@ function rewriteBodyLinks(
   const edits: Edit[] = [];
 
   for (const anchor of iterLinks(bodyText)) {
-    // A picture cannot navigate anywhere, so single-file output has no reason
-    // to touch one — and stripping it would replace the picture with its alt
-    // text. Multi-page output goes on rewriting the export's own `.md` links
-    // wherever they appear, images included, exactly as it always has.
+    // A picture cannot navigate, so single-file output leaves images alone —
+    // stripping one would replace the picture with its alt text.
     if (anchor.isImage && mode === "single-file") continue;
     const p = anchor.decodedPath;
     if (!claimsDest(p, mode)) continue;
@@ -428,22 +364,17 @@ function rewriteBodyLinks(
 const FM_LINK_KEYS = new Set(EdgeKeys);
 
 /**
- * The two frontmatter keys lifted out of the table and into the page header.
- * They are the page's identity and its one-line abstract, so they belong above
- * the article rather than with the provenance below it; the table keeps every
- * other authored key.
+ * The two frontmatter keys lifted out of the table and into the page header:
+ * the page's identity and its one-line abstract.
  */
 const HEADER_KEYS = new Set(["title", "summary"]);
 
 /**
  * Render a frontmatter value that is a markdown link string as HTML — a typed
- * edge, a `supersedes`, or the `raw_source` pointer, which is the reason this
- * is not a `.md`-only path: a raw artifact keeps its own extension, so a
- * `raw_source` link names `.txt`, `.html`, `.pdf` or whatever the file was.
+ * edge, a `supersedes`, or the `raw_source` pointer, which is why this is not a
+ * `.md`-only path: a raw artifact keeps its own extension (`.txt`, `.pdf`, …).
  *
- * The same two rules as the body, for the same reason: a `.md` destination is
- * the export's own link surface in either mode, and in single-file mode every
- * relative destination is claimed, so that none of them can leave the file.
+ * The same two [claimsDest] rules as the body, for the same reason.
  */
 function renderFmLink(
   markdownLink: string,
@@ -559,8 +490,7 @@ function renderFrontmatterTable(
   const fmMap = fm as Record<string, unknown>;
   const rows: string[] = [];
 
-  // Literal keys in original order — except the two the page header has
-  // already lifted to the top of the page. They are shown once, there.
+  // Literal keys in original order, minus the two the page header owns.
   for (const [key, value] of Object.entries(fmMap)) {
     if (HEADER_KEYS.has(key)) continue;
     rows.push(
@@ -568,9 +498,8 @@ function renderFrontmatterTable(
     );
   }
 
-  // Divider — the table keeps it wherever the remaining authored rows leave
-  // it, including with nothing above it, so the block's shape stays what the
-  // relocation promised: the same table, minus the two rows the header owns.
+  // The table keeps the divider wherever the remaining authored rows leave it,
+  // including with nothing above it.
   rows.push(`<tr class="fm-divider"><td colspan="2"></td></tr>`);
 
   // Derived: kind
@@ -596,9 +525,8 @@ function renderFrontmatterTable(
 // ---------------------------------------------------------------------------
 
 /**
- * The sticky navigation bar every page carries: the wiki title on the left,
- * the site's own links on the right. Styled in the shared stylesheet
- * (`nav.wiki-nav`), never inline.
+ * The sticky navigation bar every page carries: the wiki title on the left, the
+ * site's own links on the right. Styled in the shared stylesheet, never inline.
  */
 export function buildNavBar(
   htmlPath: string,
@@ -615,15 +543,10 @@ export function buildNavBar(
 
 /**
  * The skeleton every exported document shares: one HTML file, a title, the
- * viewport meta a phone needs, one source of styling, and a body. Both output
- * shapes are this and differ only in what fills `style` and `body` — the
- * multi-page shell puts one page's parts in each file, the single-file
- * builder puts every page's parts in one.
+ * viewport meta, one source of styling, and a body.
  *
- * `style` is a whole element (`<link …>` or `<style>…</style>`), not a value:
- * the two shapes do not merely spell the same thing differently, they carry
- * different styling — one shared file linked from every page, versus one
- * document with its own copy inlined.
+ * `style` is a whole element (`<link …>` or `<style>…</style>`): the two output
+ * shapes carry different styling, not merely a different spelling of it.
  */
 export function buildDocument(
   title: string,
@@ -647,8 +570,7 @@ ${body}
 /**
  * Wrap a page's parts in a complete document, pointing it at the shared
  * stylesheet at its own depth — the multi-page shape. `assetsRoot` is the
- * relative path to the `assets/` directory from this page's own location (see
- * [assetsRootFor]).
+ * relative path to the `assets/` directory (see [assetsRootFor]).
  */
 export function buildHtmlShell(parts: PageParts, assetsRoot: string): string {
   const style = `<link rel="stylesheet" href="${escHtml(assetsRoot)}/${STYLESHEET_FILE}">`;
@@ -657,11 +579,9 @@ export function buildHtmlShell(parts: PageParts, assetsRoot: string): string {
 
 /**
  * A page's `<article>` followed by the blocks that trail it: the start page's
- * kind-index list (when there is one), then the frontmatter table. The table is
- * a footer, never a header: provenance trails the content it describes, and it
- * stays last — the kind list is navigation, and provenance is the last thing on
- * the page. Both assembly sites below share this one spelling so they cannot
- * drift apart on the order of the blocks.
+ * kind-index list (when there is one), then the frontmatter table, which stays
+ * last — provenance trails the content it describes. One spelling for both
+ * assembly sites so they cannot drift on block order.
  */
 function articleWithFooter(
   bodyHtml: string,
@@ -675,17 +595,10 @@ function articleWithFooter(
 }
 
 /**
- * The list of kind index pages a start page carries at the foot of its
- * article. The generated front page is the only other place a kind index is
- * linked from, and a start page replaces it — so without this list the kind
- * indexes become unreachable. It is the same arrangement the generated page
- * used (same heading, same labels, same counts), moved to the page that took
- * its place; the counts come from the kind-index membership `meta.kindMap`
- * already holds, so the start page is absent from its own kind's row exactly
- * as it is from the index page.
- *
- * Empty when no kind remains — the start page was its kind's only member —
- * since a "Browse by Kind" heading over nothing is worse than no heading.
+ * The list of kind index pages a start page carries at the foot of its article.
+ * A start page replaces the generated front page, so without this list the kind
+ * indexes become unreachable. Counts come from `meta.kindMap`, so the start page
+ * is absent from its own kind's row. Empty when no kind remains.
  */
 function renderKindIndexList(
   meta: ExportMeta,
@@ -708,13 +621,11 @@ function renderKindIndexList(
 }
 
 /**
- * The page header: the frontmatter's `title` and `summary`, above the article
- * where a reader meets them first. Empty when the page has neither, so a page
- * with no frontmatter gets no header at all — and no empty one.
+ * The page header: the frontmatter's `title` and `summary`, above the article.
+ * Empty when the page has neither.
  *
  * `anchor` is the slug of a body heading this header replaced (see
- * [liftTitleEcho]); the `<h1>` carries it so a link to that heading still
- * lands.
+ * [liftTitleEcho]); the `<h1>` carries it so a link to that heading still lands.
  */
 function renderPageHeader(
   title: string,
@@ -735,8 +646,7 @@ function renderPageHeader(
 
 /**
  * The visible text of a small HTML fragment, for comparing a rendered heading
- * against the frontmatter title it may echo. Enough to undo the escapes
- * markdown-it's `html: false` renderer emits.
+ * against the frontmatter title it may echo.
  */
 function htmlText(html: string): string {
   return html
@@ -750,20 +660,10 @@ function htmlText(html: string): string {
 
 /**
  * A page's rendered body, with a leading H1 removed when it merely repeats the
- * frontmatter title — plus that heading's `id` when one was removed.
- *
- * The vault repeats the frontmatter title as a body H1 on many pages, and the
- * header now shows the title itself, so rendering both would give the page two
- * identical top-level headings. Removing the body copy must not remove the
- * anchor it carried, so the header's `<h1>` takes the removed heading's own
- * `id` and `page.html#the-title` still resolves.
- *
- * Detection is on the rendered HTML rather than the markdown on purpose:
- * markdown-it is what decided this was an H1 and what its `id` is, so ATX
- * (`#`, closed or not) and setext (`===`) spellings all work, and the anchor
- * is the one markdown-it would have written — not a second slug that could
- * disagree with it. A leading H1 that says something else is the author's own
- * heading, and stays.
+ * frontmatter title — plus that heading's `id`, so `page.html#the-title` still
+ * resolves once the header shows the title. Detection is on the rendered HTML,
+ * not the markdown, so every H1 spelling works and the anchor is the one
+ * markdown-it wrote rather than a second slug that could disagree with it.
  */
 function liftTitleEcho(
   bodyHtml: string,
@@ -791,8 +691,8 @@ function buildPageParts(
   wikiTitle: string,
   mode: LinkMode,
 ): PageParts {
-  // The page's own output path — `index.html` when it is the start page. Both
-  // the nav bar and every href are spelled from it, never from the ref.
+  // `index.html` when this is the start page — both the nav bar and every href
+  // are spelled from the output path, never from the ref.
   const htmlPath = meta.outputPathFor(pageRef);
   const context = linkContext(meta, mode);
   const nav = buildNavBar(htmlPath, wikiTitle, mode);
@@ -839,9 +739,7 @@ function buildRawPageParts(
     }
   }
   const bodyHtml = mdRender.render(rewriteBodyLinks(body, pageRef, context));
-  // A raw page can be the start page too, so it needs the same foot-of-page
-  // kind list the ordinary builder adds — the parts, not the HTML, are where
-  // the promotion is spelled.
+  // A raw page can be the start page too, so it needs the same kind list.
   const kindList =
     meta.startPage === pageRef ? renderKindIndexList(meta, htmlPath, mode) : "";
   const main = articleWithFooter(bodyHtml, kindList, fmSection);
@@ -853,24 +751,13 @@ function buildRawPageParts(
 // ---------------------------------------------------------------------------
 
 /**
- * Lazy generator yielding one page's parts per exported page, with no
- * document shell wrapped around them.
+ * Lazy generator yielding one page's parts per exported page, with no document
+ * shell around them.
  *
- * `pages` is the same Map<pageRef, {record?, text}> fed to buildExportMeta.
- * `meta` carries pre-computed aggregate metadata, including which refs the
- * export carries (`meta.exported` — the one owner of that rule; this pass
- * neither re-derives it nor takes opts.includeRaw as a second opinion).
- * `opts` supplies the wiki title the nav bar shows.
- *
- * `mode` decides how each link names its target and what becomes of a
- * relative destination the export does not carry — multi-page output (the
- * default, and what renderPages wraps) links a relative `.html` file, while a
- * single-file caller assembling its own document links sections by fragment
- * and claims every relative destination. See [LinkMode].
- *
- * A page is yielded at `meta.outputPathFor(pageRef)` — the front page's path
- * for the start page, its own otherwise — so the promoted page is exported
- * exactly once and nothing is written at its old path.
+ * A page is yielded at `meta.outputPathFor(pageRef)` — the front page's path for
+ * the start page, its own otherwise — so the promoted page is exported exactly
+ * once and nothing is written at its old path. `meta.exported` is the one owner
+ * of what the export carries; `mode` is [LinkMode].
  */
 export function* renderPageParts(
   pages: Map<string, { record?: PageRecord; text: string }>,
@@ -910,10 +797,9 @@ export function* renderPageParts(
 }
 
 /**
- * Wrap a stream of page parts in the multi-page shape: each page's parts in
- * the shared shell, pointed at the shared stylesheet at that page's own
- * depth. The one place the multi-page output shape is spelled, so the
- * per-page and aggregate passes cannot drift.
+ * Wrap a stream of page parts in the multi-page shape: the shared shell, pointed
+ * at the shared stylesheet at that page's own depth. The one place that shape is
+ * spelled, so the per-page and aggregate passes cannot drift.
  */
 export function* shellPages(
   parts: Iterable<RenderedParts>,

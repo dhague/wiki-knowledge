@@ -41,8 +41,7 @@ function writeVault(pages: Record<string, string>): Vault {
 }
 
 test("resolveRoot prefers WIKI_ROOT env", () => {
-  // $WIKI_ROOT wins even when `start` is itself a marked vault — the
-  // query-from-anywhere mode depends on it (ADR-0004).
+  // $WIKI_ROOT wins even when `start` is itself a marked vault (ADR-0004).
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   const start = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   fs.mkdirSync(path.join(start, "wiki"));
@@ -245,8 +244,6 @@ test("consolidate accepts a fresh survivor and is idempotent", () => {
   ]);
   assert.equal(v.exists("wiki/concepts/a.md"), false);
 
-  // A second run has nothing left to write or delete, and must not throw on the
-  // pages the first run removed.
   const again = v.consolidate("wiki/concepts/merged.md", survivor, [
     "wiki/concepts/a.md",
     "wiki/concepts/b.md",
@@ -318,7 +315,6 @@ test("discoveredKinds uses KIND.md declared value when present", () => {
   const v = writeVault({
     "wiki/people/alice.md": "---\ntitle: Alice\n---\n",
   });
-  // Write a KIND.md declaring kind: person
   fs.writeFileSync(
     path.join(v.root, "wiki", "people", "KIND.md"),
     "---\nkind: person\nsummary: A human individual.\n---\n",
@@ -337,12 +333,10 @@ test("discoveredKinds ignores KIND.md in canonical kind folders", () => {
   const v = writeVault({
     "wiki/concepts/a.md": "a\n",
   });
-  // Even if someone puts a KIND.md in a canonical folder, it is ignored
   fs.writeFileSync(
     path.join(v.root, "wiki", "concepts", "KIND.md"),
     "---\nkind: custom-concept\nsummary: Should be ignored.\n---\n",
   );
-  // concepts is canonical — still resolves to the empty discovered map (concepts stays canonical)
   assert.deepEqual(v.discoveredKinds(), {});
 });
 
@@ -368,10 +362,8 @@ test("vaultForFile: resolves the vault and page dir from the file's own path", (
 });
 
 test("vaultForFile: ignores $WIKI_ROOT in favour of the file's own vault", () => {
-  // #548: a `page` file path is authoritative about which vault it belongs
-  // to. The env rule (ADR-0004) is for query-from-anywhere, where no path is
-  // given — honouring it here would resolve the wrong vault whenever
-  // $WIKI_ROOT points elsewhere.
+  // The file's own vault is authoritative. The env rule (ADR-0004) covers the
+  // no-path case; honouring it here would resolve the wrong vault.
   const own = writeVault({ "wiki/concepts/a.md": "a\n" });
   const other = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-other-"));
   const saved = process.env.WIKI_ROOT;

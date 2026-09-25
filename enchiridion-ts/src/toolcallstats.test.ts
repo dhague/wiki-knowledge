@@ -1,7 +1,4 @@
-/**
- * Unit tests for the toolcallstats module (#257). Uses fixture JSONL logs in
- * temp dirs — no real hook or Claude Code session involved.
- */
+/** Unit tests for toolcallstats, over fixture JSONL logs in temp dirs. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -15,7 +12,6 @@ function tmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "toolcallstats-test-"));
 }
 
-/** Write a fixture JSONL log for `id` under `stateDir` and return its path. */
 function writeLog(stateDir: string, id: string, lines: string[]): string {
   fs.mkdirSync(stateDir, { recursive: true });
   const file = path.join(stateDir, `${id}-tool-calls.jsonl`);
@@ -72,7 +68,7 @@ test("summarize counts totals, a stable histogram, and distinct prompts", () => 
   ];
   const s = summarize(events);
   assert.equal(s.total, 5);
-  // Histogram: Read=3, Write=1, Bash=1. Ties (Write/Bash) break by first-seen.
+  // Ties (Write/Bash) break by first-seen order.
   assert.deepEqual(s.byTool, [
     { tool: "Read", count: 3 },
     { tool: "Write", count: 1 },

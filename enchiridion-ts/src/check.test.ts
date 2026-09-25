@@ -1,12 +1,6 @@
-/**
- * Tests for the ten mechanical vault health checks.
- *
- * Strategy: build minimal on-disk vault fixtures with writeVault(); for
- * staleSynthesis also initialise a real git repo so that
- * VaultGit.lastCommitDate can return a controlled past/recent date, and for
- * conceptFragmentation commit the fixture so the search index —
- * a view of HEAD (ADR-0015) — has pages to score.
- */
+/** Tests for the ten mechanical vault health checks. staleSynthesis and
+ * conceptFragmentation need a real git commit: the index is a view of HEAD
+ * (ADR-0015). */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -40,8 +34,6 @@ import { newPageRecord } from "./pagerecord.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Create a temp dir with the given vault-relative paths written to disk.
- * Returns the vault root. */
 function writeVault(pages: Record<string, string>): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-check-"));
   for (const [rel, text] of Object.entries(pages)) {
@@ -57,8 +49,8 @@ function page(title: string, extra = "", body = "Body text.\n"): string {
   return `---\ntitle: ${title}\n${extra}---\n${body}`;
 }
 
-/** Init a bare git repo at root, stage and commit all files with a specific
- * author timestamp (Unix seconds). */
+/** Init a git repo at root and commit everything with the given author
+ * timestamp (Unix seconds). */
 async function gitCommit(root: string, timestamp: number): Promise<void> {
   const author = {
     name: "Test",
@@ -198,7 +190,7 @@ test("frontmatter-link-format: properly quoted and encoded links are clean", asy
 
 test("frontmatter-link-format: unquoted list item link is a violation", async () => {
   const root = writeVault({
-    // YAML parses "- [Bar](...)" as a sequence, not a link string
+    // YAML reads "- [Bar](...)" as a sequence, not a link string.
     "wiki/concepts/foo.md":
       "---\ntitle: Foo\nrelated:\n  - [Bar](../entities/bar.md)\n---\nBody.\n",
   });
@@ -210,11 +202,8 @@ test("frontmatter-link-format: unquoted list item link is a violation", async ()
   );
 });
 
-// #549: a bare path is a valid YAML string but not a markdown link — the shape
-// a pre-#548 `page merge` wrote. The record parser refuses it, so before this
-// check reported it, it was the one malformation no check named: every
-// record-reading check threw and printed nothing, and a JSON-Lines consumer
-// read the silence as "clean".
+// A bare path is valid YAML but not a markdown link, so the record parser
+// refuses it — this raw-text check is the only one that can name it.
 test("frontmatter-link-format: an edge value that is not a markdown link is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/a.md": page("A"),
@@ -242,10 +231,8 @@ test("frontmatter-link-format: a non-string edge entry is a finding", async () =
   ]);
 });
 
-// The settled anchor rule (#492 §1, recorded in `wiki-conventions`): a
-// frontmatter relationship link is the same link form as a body link, anchors
-// included. The `#` introducing an anchor is written literally; a literal `#`
-// *inside a filename* is spelled `%23`.
+// The anchor rule (`wiki-conventions`): `#` introducing an anchor is literal; a
+// `#` inside a filename is spelled `%23`.
 test("frontmatter-link-format: frontmatter destination carrying a genuine anchor is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page(
@@ -259,8 +246,6 @@ test("frontmatter-link-format: frontmatter destination carrying a genuine anchor
 });
 
 test("frontmatter-link-format: an unencoded # is the anchor separator, not a filename character", async () => {
-  // Asking for `%23` here was the inversion: it read a legal heading link as a
-  // filename and reported it, and the fix then wrote a dangling `%23ttl`.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -295,7 +280,6 @@ test("frontmatter-link-format: an anchor is no hiding place for an unencoded pat
       (f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail),
     ),
   );
-  // and what it asks for keeps the anchor as an anchor
   assert.ok(
     findings.some((f) =>
       f.detail.includes(`should be "../entities/my%28page%29.md#ttl"`),
@@ -304,8 +288,6 @@ test("frontmatter-link-format: an anchor is no hiding place for an unencoded pat
 });
 
 test("frontmatter-link-format: a folded destination is checked, not skipped", async () => {
-  // Before the fold was joined, this link was invisible to the raw-text scan
-  // and its unencoded parens went unreported.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -321,8 +303,6 @@ test("frontmatter-link-format: a folded destination is checked, not skipped", as
 });
 
 test("frontmatter-link-format: a boundary fold does not hide an unencoded destination", async () => {
-  // #550: the link was invisible to the raw-text scan, so its unencoded parens
-  // went unreported — the same blindness that hid the destination fold.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -340,11 +320,9 @@ test("frontmatter-link-format: a boundary fold does not hide an unencoded destin
 });
 
 test("frontmatter-link-format: an unquoted boundary-shaped line is reported once, not twice", async () => {
-  // A plain scalar is not a link: YAML folds the break to a space and keeps
-  // the backslash, so `[A]\ (…)` is literal. The scan is quote-blind and does
-  // match the boundary shape, so the unquoted-line suppression has to key on
-  // the line the link *opens* on — otherwise the encoding pass adds a second,
-  // bogus finding beside the real unquoted one.
+  // A plain scalar is not a link, but the quote-blind scan still matches the
+  // boundary shape — so suppression must key on the line the link opens on, or
+  // a bogus second finding appears beside the real unquoted one.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -371,7 +349,7 @@ test("stale-synthesis: synthesis page committed recently is clean", async () => 
       "volatility: evolving\nsource_date: 2026-01-01\n",
     ),
   });
-  const recentTs = Math.floor(Date.now() / 1000) - 5 * 24 * 60 * 60; // 5 days ago
+  const recentTs = Math.floor(Date.now() / 1000) - 5 * 24 * 60 * 60;
   await gitCommit(root, recentTs);
   const findings = await staleSynthesis(root);
   assert.deepEqual(findings, []);
@@ -381,7 +359,7 @@ test("stale-synthesis: synthesis page committed >30 days ago is a violation", as
   const root = writeVault({
     "wiki/synthesis/old.md": page("Old"),
   });
-  const oldTs = Math.floor(Date.now() / 1000) - 45 * 24 * 60 * 60; // 45 days ago
+  const oldTs = Math.floor(Date.now() / 1000) - 45 * 24 * 60 * 60;
   await gitCommit(root, oldTs);
   const findings = await staleSynthesis(root);
   assert.equal(findings.length, 1);
@@ -432,9 +410,8 @@ test("missing-volatility-source-date: page missing source_date is a violation", 
   assert.match(findings[0].detail, /source_date/);
 });
 
-// #549: a malformed edge on one page must not suppress every other page's
-// findings. The malformed page still reports its own — the rest of its
-// frontmatter decoded fine — so the run carries on instead of aborting empty.
+// A malformed edge must not abort the run: the malformed page still reports its
+// own findings, and the rest of the run carries on.
 test("missing-volatility-source-date: a malformed edge does not abort the run", async () => {
   const root = writeVault({
     "wiki/concepts/a-missing-both.md": page("A"),
@@ -529,7 +506,6 @@ test("orphans: page with inbound link is clean", async () => {
     "wiki/entities/bar.md": page("Bar"),
   });
   const findings = await orphans(root);
-  // bar.md has one inbound link from foo.md
   assert.ok(!findings.some((f) => f.pageRef === "wiki/entities/bar.md"));
 });
 
@@ -555,9 +531,8 @@ test("orphans: frontmatter edge counts as inbound link", async () => {
 });
 
 test("orphans: folded frontmatter edge counts as inbound link", async () => {
-  // The writer folds a destination that outgrows the line width with a
-  // trailing backslash (YAML escaped line break), which is exactly what
-  // `enchiridion ingest` and `enchiridion page merge` emit for a long slug.
+  // A destination folded past the line width with a trailing backslash (YAML
+  // escaped line break).
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -580,10 +555,7 @@ test("orphans: folded frontmatter edge counts as inbound link", async () => {
 // splitLinks
 // ---------------------------------------------------------------------------
 //
-// Every fixture here is hand-written: the writer emits no fold at all since
-// `docs/adr/0024-emitted-lines-are-not-folded.md`, so the only way to build a
-// folded page is to write the bytes by hand — which is also the shape every
-// page written before that ADR carries.
+// Every fixture here is hand-written: the writer emits no fold since ADR-0024.
 
 test("split-links: folded destination is a finding", async () => {
   const root = writeVault({
@@ -595,8 +567,7 @@ test("split-links: folded destination is a finding", async () => {
   const findings = await splitLinks(root);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
-  // The link starts on the file's fourth line: the opening fence, `title:`,
-  // `related:`.
+  // Fourth line: the opening fence, `title:`, `related:`.
   assert.match(findings[0].detail, /destination/);
   assert.match(findings[0].detail, /line 4/);
   assert.match(
@@ -620,8 +591,7 @@ test("split-links: folded label is a finding", async () => {
 });
 
 test("split-links: a fold between label and destination is a finding", async () => {
-  // #550's third shape: the break falls at the label/destination boundary,
-  // which the parser resolves with nothing (`"]\⏎  ("` reads as `"]("`).
+  // The break falls at the label/destination boundary, resolved with nothing.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -637,8 +607,7 @@ test("split-links: a fold between label and destination is a finding", async () 
 });
 
 test("split-links: a boundary fold does not mask a fold in the destination", async () => {
-  // The field shape (#550): one link carrying both, which the missing link
-  // match hid entirely — `check split-links` certified a three-line link clean.
+  // One link carrying both folds — the shape a missing link match hid entirely.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -663,10 +632,9 @@ test("split-links: a well-formed link on one line is not a finding", async () =>
 });
 
 test("split-links: a fold inside a block scalar is not a finding", async () => {
-  // The documented blind spot (wikipage.ts, `ESCAPED_LINE_BREAK_RE`): a `\` at
-  // the end of a literal block scalar is content, not a fold, and raw text
-  // cannot tell the two apart. It must not be reported — and, above all, not
-  // joined, which would corrupt the literal.
+  // A `\` at the end of a literal block scalar is content, not a fold
+  // (wikipage.ts's `ESCAPED_LINE_BREAK_RE`), and raw text cannot tell the two
+  // apart — reporting or joining it would corrupt the literal.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -681,9 +649,8 @@ test("split-links: a fold inside a block scalar is not a finding", async () => {
 });
 
 test("split-links: a fold inside a single-quoted scalar is not a finding", async () => {
-  // A single-quoted scalar folds a line break to a space but keeps a `\`
-  // literal, so joining there is not semantics-preserving either. Only
-  // double-quoted scalars are in scope.
+  // A single-quoted scalar folds a break to a space but keeps `\` literal, so
+  // only double-quoted scalars are in scope.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -694,8 +661,8 @@ test("split-links: a fold inside a single-quoted scalar is not a finding", async
 });
 
 test("split-links: body destination split across a line break is a finding", async () => {
-  // Not a link at all under CommonMark — a destination cannot span lines — so
-  // `iterLinks` never sees it and `vault move` would leave it dangling.
+  // Not a link under CommonMark, so `iterLinks` never sees it and `vault move`
+  // would leave it dangling.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -712,8 +679,8 @@ test("split-links: body destination split across a line break is a finding", asy
 });
 
 test("split-links: a break after a destination is legal markdown, not a finding", async () => {
-  // `[T](path.md` / `"title")` is a legal link, and the one shape a fixer
-  // joining on sight would silently repoint.
+  // `[T](path.md` / `"title")` is a legal link; joining on sight would silently
+  // repoint it.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -725,8 +692,7 @@ test("split-links: a break after a destination is legal markdown, not a finding"
 });
 
 test("split-links: a split inside a fenced code block is not a finding", async () => {
-  // `iterLinks` skips code blocks; a split destination there is not a link
-  // either, so reporting it would be noise no reader shares.
+  // `iterLinks` skips code blocks; a split there is not a link either.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -774,14 +740,13 @@ test("fix frontmatter-link-format: quotes unquoted YAML list link", async () => 
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
   assert.match(text, /- "\[Bar\]/);
-  // After fix, check should be clean
   const findings = await frontmatterLinkFormat(root);
   assert.deepEqual(findings, []);
 });
 
 test("fix frontmatter-link-format: leaves an anchor-carrying destination byte-identical", async () => {
-  // The corruption #492 is about: `#ttl` here is a heading fragment, and the
-  // fixer turned it into `%23ttl` — a working link into a dangling filename.
+  // `#ttl` is a heading fragment; encoding it as `%23ttl` turns a working link
+  // into a dangling filename.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -828,8 +793,8 @@ test("fix frontmatter-link-format: fixes an unencoded path and keeps the anchor"
 
   // The anchor survives as an anchor, never as a filename character.
   assert.doesNotMatch(text, /%23ttl/);
-  // Byte-level: one destination re-encoded, every other byte — the other
-  // frontmatter keys included — untouched (ADR-0012's relaxed round-trip).
+  // Byte-level: one destination re-encoded, every other byte untouched
+  // (ADR-0012's relaxed round-trip).
   assert.equal(
     text,
     src.replace(
@@ -841,8 +806,8 @@ test("fix frontmatter-link-format: fixes an unencoded path and keeps the anchor"
 });
 
 test("fix frontmatter-link-format: repairs a folded destination whole", async () => {
-  // The splice must consume the backslash continuation with the destination:
-  // a partial replacement would leave a stray `\` and break the YAML.
+  // The splice must consume the backslash continuation, or a stray `\` breaks
+  // the YAML.
   const root = writeVault({
     "wiki/concepts/foo.md": page(
       "Foo",
@@ -854,9 +819,8 @@ test("fix frontmatter-link-format: repairs a folded destination whole", async ()
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
   assert.match(text, /- "\[Bar\]\(\.\.\/entities\/bar%28draft%29\.md#ttl\)"/);
   assert.doesNotMatch(text, /%23ttl/);
-  // The page still parses, and the edge still points where it did — read back
-  // through the YAML parser, not the raw-text link scan. The anchor is a
-  // fragment of that page, so it is not part of the target.
+  // The anchor is a fragment, not part of the target: read the edge back through
+  // the YAML parser, not the raw-text link scan.
   const findings = await frontmatterLinkFormat(root);
   assert.deepEqual(findings, []);
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
@@ -888,12 +852,10 @@ test("fix ingestion-source-integrity: moves raw/ body link to raw_source frontma
   assert.deepEqual(changed, ["wiki/sources/doc.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/sources/doc.md"), "utf8");
   assert.match(text, /raw_source: "\[doc\.md\]\(\.\.\/\.\.\/raw\/doc\.md\)"/);
-  // raw/ link removed from body
   assert.doesNotMatch(
     text.split("---\n").slice(2).join("---\n"),
     /raw\/doc\.md/,
   );
-  // After fix, check should be clean
   const findings = await ingestionSourceIntegrity(root);
   assert.deepEqual(findings, []);
 });
@@ -974,7 +936,7 @@ test("fix split-links: joins a folded destination with nothing", async () => {
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
 
   // The backslash and the continuation's indentation are not content, so the
-  // join inserts nothing — exactly what a YAML reader already made of it.
+  // join inserts nothing.
   assert.equal(
     text,
     src.replace(
@@ -995,8 +957,8 @@ test("fix split-links: joins a folded label with a single space", async () => {
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
 
-  // YAML folds a line break inside a quoted scalar to a space, so the join
-  // inserts exactly one.
+  // YAML folds a break inside a quoted scalar to a space, so the join inserts
+  // exactly one.
   assert.equal(
     text,
     src.replace(
@@ -1008,9 +970,8 @@ test("fix split-links: joins a folded label with a single space", async () => {
 });
 
 test("fix split-links: joins a boundary fold with nothing", async () => {
-  // YAML's escaped line break at the label/destination boundary drops the
-  // backslash and the continuation's indent, so the join inserts nothing and
-  // `]\⏎  (` becomes `](` — the value the parser already read.
+  // The escaped break at the boundary drops the backslash and the indent, so
+  // the join inserts nothing and `]\⏎  (` becomes `](`.
   const src = page(
     "Foo",
     'related:\n  - "[A missing both]\\\n    (../concepts/a-missing-both.md)"\n',
@@ -1022,7 +983,7 @@ test("fix split-links: joins a boundary fold with nothing", async () => {
   assert.equal(text, src.replace("]\\\n    (", "]("));
   assert.deepEqual(await splitLinks(root), []);
 
-  // The edge reads back through the YAML parser exactly as it did before.
+  // The edge reads back unchanged through the YAML parser.
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
     {
       key: "related",
@@ -1032,9 +993,8 @@ test("fix split-links: joins a boundary fold with nothing", async () => {
 });
 
 test("fix split-links: joins a boundary fold and a destination fold together", async () => {
-  // The field shape #550 reports: one link split across three lines, both a
-  // boundary fold and a destination fold, which the fixer left untouched while
-  // reporting the vault clean.
+  // One link split across three lines — both a boundary fold and a destination
+  // fold, which the fixer left untouched while reporting the vault clean.
   const src = page(
     "Foo",
     'raw_source: "[2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md]\\\n  (../../raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-wind\\\n  sor.md)"\n',
@@ -1062,9 +1022,8 @@ test("fix split-links: joins a boundary fold and a destination fold together", a
 });
 
 test("fix split-links: both folds on one link, every other byte untouched", async () => {
-  // ADR-0012: frontmatter round-trip is relaxed, not byte-identical — but only
-  // the spliced regions may differ. Nothing here re-serialises the block, so
-  // key order, quote styles and spacing all survive.
+  // ADR-0012: only the spliced regions may differ, so nothing here
+  // re-serialises the block — key order, quote styles and spacing survive.
   const src =
     "---\n" +
     "title: Foo\n" +
@@ -1093,8 +1052,8 @@ test("fix split-links: both folds on one link, every other byte untouched", asyn
       "---\nBody.\n",
   );
 
-  // The edge reads back through the YAML parser as it did before the fix: the
-  // join is semantics-preserving, not merely tidy.
+  // The edge reads back through the YAML parser unchanged: the join is
+  // semantics-preserving, not merely tidy.
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
     {
       key: "related",
@@ -1105,9 +1064,8 @@ test("fix split-links: both folds on one link, every other byte untouched", asyn
 });
 
 test("fix split-links: never touches a body split", async () => {
-  // A break after a destination is legal markdown, so a fixer that joins on
-  // sight can silently repoint a path at the wrong page. Body findings are
-  // report-only, and the fixer must leave the file byte-identical.
+  // A body split is report-only: a fixer joining on sight can silently repoint
+  // a path, so the file must stay byte-identical.
   const src = page(
     "Foo",
     "",
@@ -1180,8 +1138,8 @@ function taggedPage(
   return `---\ntitle: ${title}\ntags:\n${lines}\n---\n${body}`;
 }
 
-/** A committed vault: [writeVault] plus a real git commit, so the index has a
- * HEAD to read (ADR-0015) and every page has a committed byte size. */
+/** [writeVault] plus a git commit, so the index has a HEAD to read (ADR-0015)
+ * and every page a committed byte size. */
 async function writeCommittedVault(
   pages: Record<string, string>,
 ): Promise<string> {
@@ -1190,12 +1148,9 @@ async function writeCommittedVault(
   return root;
 }
 
-/**
- * The check-10 fixture. Two clusters sit above the default bar — a concept
- * pair and a custom-kind pair — and a third pair (a shared tag, nothing else)
- * sits between the default bar and 0.3, so the cutoff has something to move.
- * Three pages of the excluded kinds are near-identical to the concept pair.
- */
+/** The check-10 fixture: two clusters above the default bar (a concept pair and
+ * a custom-kind pair), one shared-tag-only pair between the bar and 0.3 so the
+ * cutoff has something to move, and near-identical pages of the excluded kinds. */
 const FRAGMENTATION_FIXTURE: Record<string, string> = {
   "wiki/concepts/cache-eviction.md": taggedPage(
     "Cache eviction",
@@ -1238,7 +1193,6 @@ function clusterWith(findings: Findings, ref: string) {
   return finding.cluster;
 }
 
-/** Every page ref any finding names as a member. */
 function memberRefs(findings: Findings): string[] {
   return findings.flatMap(
     (f) => f.cluster?.members.map((m) => m.pageRef) ?? [],

@@ -18,8 +18,8 @@ import {
   type Git,
 } from "./ingestscan.js";
 
-// fakeGit scripts the lenient git facts the sweep reads, mirroring
-// wiki-plugin/tests/fake_vault_git.py's last_commit_dates/dirty state.
+// Scripts the lenient git facts the sweep reads (mirrors
+// wiki-plugin/tests/fake_vault_git.py).
 class fakeGit implements Git {
   constructor(
     readonly lastCommitDates: Record<string, string>,
@@ -178,8 +178,7 @@ test("scan: file with back-pointer but no git is still offered", async () => {
   );
   write(root, "raw/foo.md", "raw");
 
-  // No git here: the real repo's lenient surface returns ""/false, and the
-  // absent page date fails toward offering.
+  // No git: the lenient defaults fail toward offering.
   const result = await scan(root, "", null);
   assert.equal(result.eligible.length, 1);
   const cand = result.eligible[0];
@@ -270,9 +269,7 @@ test("scan: same commit means not offered", async () => {
 });
 
 test("scan: raw file recommitted after its page is offered (batched dates, #415)", async () => {
-  // Exercises the batched real-git path: the page is committed first, the raw
-  // file re-committed on a later date. The sweep must offer it via the
-  // one-pass commit-date map, not a per-file git log.
+  // Real-git batched path: page committed first, raw re-committed later.
   const root = tmpRoot();
   const repo = new VaultGit(root);
   await repo.init();
@@ -287,17 +284,17 @@ test("scan: raw file recommitted after its page is offered (batched dates, #415)
     fs,
     dir: root,
     message: "ingest notes",
-    author: deterministicSignature(0), // 2026-01-01
+    author: deterministicSignature(0),
     committer: deterministicSignature(0),
   });
-  // Re-commit only the raw file on a later date.
+  // Re-commit only the raw file, two days later.
   write(root, "raw/notes.md", "raw notes revised");
   await git.add({ fs, dir: root, filepath: "raw/notes.md" });
   await git.commit({
     fs,
     dir: root,
     message: "revise raw",
-    author: deterministicSignature(48), // 2026-01-03
+    author: deterministicSignature(48),
     committer: deterministicSignature(48),
   });
 
@@ -318,7 +315,7 @@ test("scan: dirty working tree overrides date equality", async () => {
     '---\ntitle: Notes\nraw_source: "[notes.md](../../raw/notes.md)"\n---\n# Notes\n',
   );
   await commitAll(root, "ingest notes");
-  // Edit the raw file but DON'T commit; dirty status flips the offer.
+  // Edited but uncommitted: dirty status flips the offer.
   write(root, "raw/notes.md", "raw notes v2 (uncommitted)");
 
   const result = await scan(root, "", null);
@@ -346,9 +343,6 @@ test("scan: staged (but uncommitted) modification is detected (#366)", async () 
 });
 
 test("scan: raw file in subfolder matched by back-pointer in wiki/sources", async () => {
-  // Regression test for #299: raw/notes/foo.md linked via "../../raw/notes/foo.md"
-  // must not be reported as never-ingested — the path resolution was never broken,
-  // but wiki/_index.md (see next test) prevented the back-pointer map from forming.
   const root = tmpRoot();
   seedVault(root);
   write(root, "raw/notes/foo.md", "raw notes content");
@@ -358,8 +352,7 @@ test("scan: raw file in subfolder matched by back-pointer in wiki/sources", asyn
     '---\ntitle: Foo\nraw_source: "[foo.md](../../raw/notes/foo.md)"\n---\n# Foo\n',
   );
 
-  // No git: lenient defaults mean the file is offered (changed-since-ingestion),
-  // but it must NOT be reported as never-ingested.
+  // Offered by the lenient defaults, but not as never-ingested.
   const result = await scan(root, "", null);
   assert.equal(result.eligible.length, 1);
   const cand = result.eligible[0];
@@ -369,8 +362,6 @@ test("scan: raw file in subfolder matched by back-pointer in wiki/sources", asyn
 });
 
 test("scan: wiki/_index.md does not break back-pointer recognition", async () => {
-  // Regression test for #299: wiki/_index.md was included in page enumeration,
-  // causing loadRecords to throw and preventing any back-pointer from being built.
   const root = tmpRoot();
   seedVault(root);
   write(root, "wiki/_index.md", "generated table of contents\n");
@@ -409,15 +400,12 @@ test("scan: wiki page with CRLF line endings is recognised as a back-pointer", a
 });
 
 test("scan: raw_source casing mismatch does not re-offer as never-ingested (#368)", async () => {
-  // LLM agent may title-case the filename in the plan's raw field, producing a
-  // raw_source link whose decoded path differs only in case from the actual file.
-  // On a case-insensitive filesystem (Windows/macOS) these are the same file;
-  // the scanner must not classify the file as never-ingested.
+  // The raw_source target differs only in case; on a case-insensitive
+  // filesystem that names the same file, so it must not read as never-ingested.
   const root = tmpRoot();
   seedVault(root);
-  // File on disk: uppercase "RE"
   write(root, "raw/emails/RE Are we test.eml", "raw email content");
-  // raw_source decoded target: "raw/emails/Re Are we test.eml" (title-cased by LLM)
+  // raw_source target, title-cased.
   write(
     root,
     "wiki/sources/re-are-we-test.md",

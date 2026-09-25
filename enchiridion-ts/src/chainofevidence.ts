@@ -1,37 +1,24 @@
 /**
- * chainofevidence — the page -> stub -> raw file chain every raw ingestion
- * must leave.
+ * chainofevidence — the page -> stub -> raw file chain every raw ingestion must
+ * leave: a raw file producing pages must also produce a `wiki/sources/` stub
+ * whose `raw_source` points back at it, and every other page from it must carry
+ * a `source` edge to that stub.
  *
- * **The rule** (stated here once; the ingest and commit packages only point
- * at it): a raw file that produces pages at all must also produce a
- * `wiki/sources/` stand-in for itself — a stub whose `raw_source` points back
- * at the file — and every other page produced from it must carry a `source`
- * edge back to that stub. So a reader can always walk from a claim to the
- * artifact it came from.
- *
- * Two callers, one function, so the two checks cannot diverge: `ingest`
- * validates a plan before any write; `commit` is the hard gate. Neither knows
- * which one this is serving.
+ * `ingest` runs it before any write; `commit` re-runs it as the hard gate.
  */
 
 import path from "node:path";
 import { KindFolders } from "./place.js";
 import { Page, linkDest, resolveLinkDest } from "./wikipage.js";
 
-/** The `source` kind's folder — the one hardcoded folder string this module
- * needs, kept in sync with place rather than duplicated. */
 const sourceDir = `wiki/${KindFolders["source"]}`;
 
 /**
- * Report whether staged leaves a valid page -> stub -> raw chain.
- *
- * staged is every page one ingestion/commit touches, keyed by its
- * (post-write) vault-relative path. Returns human-readable error strings,
- * empty when the chain holds. Both loops iterate the staged refs in sorted
- * order, so the result never depends on map order.
- *
- * A page whose frontmatter cannot be parsed is an error in its own right,
- * thrown rather than silently treated as edge-less.
+ * Report whether staged leaves a valid page -> stub -> raw chain. staged holds
+ * every page one ingestion/commit touches, keyed by its post-write
+ * vault-relative path. Returns problems, empty when the chain holds, in
+ * sorted-ref order so the result never depends on map order. Throws on
+ * unparseable frontmatter rather than treating the page as edge-less.
  */
 export function check(staged: Record<string, Page>, raw: string): string[] {
   raw = path.posix.normalize(raw);

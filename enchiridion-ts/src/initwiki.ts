@@ -1,23 +1,11 @@
 /**
-/**
- * Scaffolds a brand-new, empty wiki vault — folders, git repo, .gitignore,
- * and (for query-from-anywhere mode) the plugin-registration settings.json —
- * or seeds a repo around a directory that already carries a `wiki/` tree but
- * no git work tree, the conversion path a Joule user lands on (#323).
+ * Scaffolds a new wiki vault — kind-folders, git repo, .gitignore, and (for
+ * query-from-anywhere mode) the plugin-registration settings.json — or seeds a
+ * git repo around an existing `wiki/` tree that has no git work tree.
  *
- * One-time setup, distinct from `wiki-ingest`, which fills a vault that
- * already exists — [init] refuses to run against a directory that is already
- * a vault ([isVault]: a marker **and** a git work tree). A marker without
- * git still resolves as a vault root for reads ([vault.resolveRoot]'s walk
- * is untouched), but it isn't a seedable-away vault; [init] proceeds over
- * the existing tree, git-inits around it, and the initial commit sweeps the
- * existing pages in.
- *
- * Deployment mode (ADR-0004) is the caller's judgment call, never inferred
- * here: [ModeQueryFromAnywhere] writes `.claude/settings.json` registering
- * pluginRoot as a local-directory marketplace; [ModeDedicated] skips that
- * write, since installing a plugin project-scope into someone else's
- * directory isn't this module's job.
+ * [init] refuses a directory that is already a vault ([isVault]: a marker and a
+ * git work tree). Deployment mode (ADR-0004) is the caller's judgment, never
+ * inferred here.
  */
 
 import fs from "node:fs";
@@ -34,44 +22,27 @@ export const ModeDedicated = "dedicated";
 /** The accepted --mode values, for CLI help and validation. */
 export const Modes = [ModeQueryFromAnywhere, ModeDedicated];
 
-/**
- * Session-tracker state is per-host and never committed: Claude Code's
- * SessionStart hook writes under `.claude/`, OpenCode's session-tracker plugin
- * under `.opencode/`. In dedicated mode the project dir *is* the vault, so both
- * land here.
- */
+/** Session-tracker state is per-host and never committed; in dedicated mode the
+ * project dir is the vault, so both hosts' state trees land here. */
 export const gitignore =
   "*.rsls\n" +
-  // `**/`-prefixed: a pattern containing a `/` is anchored to the directory
-  // holding the .gitignore, so the un-prefixed form would ignore only the root
-  // copy of a state tree and leave a nested one untracked-but-committable
-  // (#485). No writer scatters state any more, but the #323 conversion path
-  // runs over a tree that may predate the fix — and a fresh vault has nothing
-  // to ignore, so the prefix costs nothing either way.
+  // `**/`-prefixed: a pattern containing `/` is anchored to the directory
+  // holding the .gitignore, so the un-prefixed form would leave a nested state
+  // tree untracked-but-committable.
   "**/.claude/wiki-knowledge/sessions/\n" +
   "**/.opencode/wiki-knowledge/sessions/\n" +
-  // Search index, gitignored per ADR-0006. Must ALSO be added to Resilio
-  // Sync's own ignore list — a gitignore doesn't propagate to the syncer,
-  // and a synced SQLite sidecar corrupts.
+  // Search index (ADR-0006). Also add it to Resilio Sync's own ignore list: a
+  // .gitignore doesn't propagate there, and a synced SQLite sidecar corrupts.
   ".wiki-knowledge/\n" +
-  // LLM-wiki/Obsidian navigation scaffolding (log.md, index.md, _index.md)
-  // is not knowledge, so a converted vault's initial commit skips it — and
-  // since search reads git blobs (ADR-0015), a gitignored index is invisible
-  // to search by construction (#323).
+  // LLM-wiki/Obsidian navigation scaffolding (log.md, index.md, _index.md) is
+  // not knowledge, so a converted vault's initial commit skips it.
   "log.md\n" +
   "index.md\n" +
   "_index.md\n";
 
-/**
- * Report whether root already looks like a vault — the gate [init] refuses
- * on.
- *
- * A root is a vault only when it carries a marker (`wiki/` dir or
- * `.wiki-root`) **and** is a git work tree. A marker without git still
- * resolves as a vault root for reads; it just isn't a seedable-away vault —
- * that's the conversion path (#323), where [init] proceeds over the existing
- * tree instead of refusing.
- */
+/** Whether root already looks like a vault — the gate [init] refuses on. A root
+ * qualifies only with a marker (`wiki/` or `.wiki-root`) and a git work tree; a
+ * marker without git still resolves as a vault root for reads. */
 export async function isVault(root: string): Promise<boolean> {
   if (!hasMarker(root)) return false;
   return await new VaultGit(root).isWorkTree();
@@ -89,18 +60,9 @@ function settingsJSON(pluginRoot: string): string {
   return JSON.stringify(settings, null, 2) + "\n";
 }
 
-/**
- * Scaffolds vaultRoot as a new vault and returns the vault root.
- *
- * mode is [ModeQueryFromAnywhere] (requires pluginRoot, the plugin's install
- * directory) or [ModeDedicated] (no settings.json; the caller installs the
- * plugin themselves).
- *
- * git comes from [VaultGit], the one module that talks to git (#126) — there
- * is no "git missing on PATH" failure mode; an unwritable root or an
- * unconfigured committer identity instead surface from the git verbs
- * themselves.
- */
+/** Scaffolds vaultRoot as a new vault and returns the resolved root. mode is
+ * [ModeQueryFromAnywhere] (requires pluginRoot) or [ModeDedicated] (no
+ * settings.json). */
 export async function init(
   vaultRoot: string,
   mode: string,
@@ -128,11 +90,8 @@ export async function init(
 
   mkdirSafe(vaultRoot, 0o755);
 
-  // A pre-existing wiki/ tree means conversion (#323): init proceeds over
-  // the existing tree instead of scaffolding empty, and the initial commit
-  // sweeps the existing pages in. Existing kind-folders are left untouched;
-  // missing ones (a converted LLM-wiki typically carries only a few) are
-  // created with a .gitkeep so the canonical layout is complete and tracked.
+  // A pre-existing wiki/ tree means conversion: existing kind-folders are left
+  // alone, missing ones are created with a .gitkeep.
   const converting = fs.existsSync(path.join(vaultRoot, "wiki"));
   for (const folder of Object.values(KindFolders)) {
     const kindDir = path.join(vaultRoot, "wiki", folder);
@@ -140,8 +99,7 @@ export async function init(
     mkdirSafe(kindDir, 0o755);
     touch(path.join(kindDir, ".gitkeep"));
   }
-  // raw/ is part of a fresh scaffold; a converted vault that has no inbox yet
-  // keeps none — addPaths below stages only what exists.
+  // raw/ is part of a fresh scaffold only; a conversion keeps no inbox.
   const rawDir = path.join(vaultRoot, "raw");
   if (!converting && !fs.existsSync(rawDir)) {
     mkdirSafe(rawDir, 0o755);
@@ -152,10 +110,8 @@ export async function init(
     mode: 0o644,
   });
 
-  // Stage only what exists: a fresh init stages every scaffolded path; a
-  // conversion of an existing wiki/ tree may lack raw/ entirely, and a raw/
-  // that does exist — even one carrying content rather than a scaffold
-  // .gitkeep — is swept into the initial commit.
+  // Stage only what exists: a conversion may lack raw/, and an existing raw/ is
+  // swept into the initial commit.
   const addPaths: string[] = [];
   for (const rel of ["wiki", "raw", ".gitignore"]) {
     const abs = path.join(vaultRoot, ...rel.split("/"));

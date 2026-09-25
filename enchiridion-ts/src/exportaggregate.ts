@@ -1,20 +1,14 @@
 /**
- * Aggregate HTML pages for `enchiridion export`.
- *
- * Yields the index and listing pages that sit alongside the per-page output
- * from renderPages:
+ * Aggregate HTML pages for `enchiridion export` — the index and listing pages
+ * that sit alongside the per-page output from renderPages:
  *   - tags/<slug>.html   — one per tag, listing every page that carries it
  *   - tags/index.html    — all tags with page counts
  *   - wiki/<folder>/index.html — per-kind listing pages
- *   - index.html         — front page (counts, kind summaries, get-started)
- *     omitted entirely when a start page fills the front page instead
+ *   - index.html         — front page; omitted when a start page fills it
  *
- * Two layers, matching exportrender: renderAggregateParts yields pages with
- * no document shell, renderAggregatePages wraps them in the multi-page shape.
- *
- * Pure: no filesystem access, no model. The same RenderedParts/RenderedPage
- * types as exportrender; callers concatenate the matching generators from both
- * modules to get the full output set.
+ * Same two layers as exportrender: renderAggregateParts yields parts without a
+ * document shell, renderAggregatePages wraps them in the multi-page shape.
+ * Concatenate the matching generators from both modules for the full set.
  */
 
 import { parse as parseYaml } from "yaml";
@@ -64,10 +58,6 @@ function kindBlurb(
   if (typeof fm !== "object" || fm === null) return "";
   return String((fm as Record<string, unknown>)["summary"] ?? "");
 }
-
-// `kindFolder` — the folder a kind's pages live in — now lives in exportmeta,
-// because the start page's kind-index list needs it too and exportrender (which
-// builds that list) must not import this module.
 
 // ---------------------------------------------------------------------------
 // Page link helper (used by tag pages and kind index pages)
@@ -178,14 +168,13 @@ function renderFrontPage(
   const htmlPath = "index.html";
   const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
 
-  // Total page count
   const totalPages = Array.from(meta.kindMap.values()).reduce(
     (sum, refs) => sum + refs.length,
     0,
   );
 
-  // Per-kind section. The same entries a start page's foot list uses, plus the
-  // KIND.md blurb this page is the only one to carry.
+  // The same entries a start page's foot list uses, plus the KIND.md blurb this
+  // page is the only one to carry.
   const kindRows = kindIndexEntries(meta, htmlPath, context.mode).map(
     ({ kind, href, label, count }) => {
       const blurb = kindBlurb(kind, pages);
@@ -194,11 +183,9 @@ function renderFrontPage(
     },
   );
 
-  // Get-started block. An explicitly supplied starter is admitted when the
-  // export carries it — `meta.exported` is that set, raw/ included under
-  // includeRaw, so a raw starter the operator named is emitted. The fallback
-  // list below is the ranked candidates, which are wiki-only by their own
-  // construction (see buildExportMeta); nothing here re-derives either rule.
+  // A supplied starter is admitted only when the export carries it
+  // (`meta.exported`, raw/ included under includeRaw); the fallback list is the
+  // ranked candidates, which are wiki-only by construction (see buildExportMeta).
   let startedItems: string[];
   const suppliedStarters = opts.starters?.filter((s) =>
     meta.exported.has(s.pageRef),
@@ -245,17 +232,9 @@ function renderFrontPage(
 
 /**
  * Lazy generator yielding the aggregate pages' parts, with no document shell
- * wrapped around them.
- *
- * Yields (in order): tag pages, tag index, per-kind index pages, front page —
- * the last unless a start page has taken the front page's path, in which case
- * only the listing pages are yielded. Concatenate with renderPageParts for the
- * complete set of page fragments.
- *
- * `mode` is the same choice renderPageParts takes: multi-page output (the
- * default) links relative `.html` files, a single-file caller links sections
- * by fragment. The aggregate pages link to each other and to every listed
- * page, so they need it at least as much as the pages do.
+ * around them. Yields tag pages, tag index, per-kind index pages, then the front
+ * page — unless a start page has taken the front page's path. Concatenate with
+ * renderPageParts for the complete set.
  */
 export function* renderAggregateParts(
   pages: Map<string, { record?: PageRecord; text: string }>,
@@ -283,10 +262,8 @@ export function* renderAggregateParts(
     yield renderKindIndex(kind, folder, pageRefs, pages, wikiTitle, context);
   }
 
-  // Front page — the generated aggregate, unless a start page has taken the
-  // front page's path. Writing both would put two files at `index.html` (two
-  // sections in single-file mode), and this pass runs last, so it would win
-  // silently; skipping it here is what makes the promotion exclusive.
+  // Writing both would put two files at `index.html`, and this pass runs last,
+  // so it would win silently; skipping it is what makes the promotion exclusive.
   if (!meta.startPage) {
     yield renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, context);
   }

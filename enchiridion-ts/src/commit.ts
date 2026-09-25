@@ -1,9 +1,7 @@
 /**
  * commit — write one structured git commit per ingestion/edit.
  *
- * The commit message is a compounding asset — audit log, "what changed this
- * week" feed, manager-report source — so it is emitted here, never freehand
- * by the agent. This doc comment is the format's only specification:
+ * This doc comment is the commit-message format's only specification:
  *
  *	ingest: <source doc title>
  *
@@ -13,18 +11,11 @@
  *	superseded: wiki/sources/deploy-capistrano.md -> wiki/sources/deploy-github-actions.md
  *	source-date: 2026-03-01
  *
- * `deleted` is a Consolidation's absorbed pages (ADR-0021) — gone from the
- * vault, and deliberately *not* spelled `superseded`, which keeps both pages to
- * preserve a conflicting claim. A Consolidation has no conflict to preserve.
+ * `deleted` is a Consolidation's absorbed pages (ADR-0021) — deliberately not
+ * spelled `superseded`, which keeps both pages to preserve a conflicting claim.
  *
- * Git is a **hard dependency**: a root that isn't a work tree is an error,
- * never a silent skip — the time model depends on the history being
- * complete.
- *
- * A manifest naming a RawSource is additionally gated on
- * [checkChainOfEvidence], failing before anything is staged. This is the
- * hard block; the ingest package runs the same check earlier, at
- * plan-validation time, as a courtesy to the agent.
+ * Git is a hard dependency: a root that isn't a work tree is an error, never a
+ * silent skip.
  */
 
 import fs from "node:fs";
@@ -32,11 +23,8 @@ import path from "node:path";
 import { Page } from "./wikipage.js";
 import { check } from "./chainofevidence.js";
 
-/** Thrown when a manifest fails the chain-of-evidence gate.
- *
- * Distinct from a git failure: a rejected manifest is a planning bug, a git
- * failure is an environment problem.
- */
+/** Thrown when a manifest fails the chain-of-evidence gate; distinct from a
+ * git failure, which is an environment problem rather than a planning bug. */
 export class ErrGate extends Error {
   constructor(message: string) {
     super(message);
@@ -44,12 +32,9 @@ export class ErrGate extends Error {
   }
 }
 
-/** The slice of [VaultGit] this module needs, named as an interface so tests
- * can commit against an in-memory fake instead of a real repository.
- *
- * [stageAndCommit] is one atomic unit so implementations can hold a file lock
- * across the stage+commit sequence — preventing concurrent ingests from
- * cross-contaminating each other's commits (#405). */
+/** The slice of [VaultGit] this module needs, so tests can commit against an
+ * in-memory fake. [stageAndCommit] is one atomic unit so implementations can
+ * hold a file lock across the stage+commit sequence (concurrent ingests). */
 export interface Git {
   isWorkTree(): Promise<boolean>;
   stageAndCommit(paths: string[], message: string): Promise<string>;
@@ -72,16 +57,15 @@ export interface Manifest {
   deleted?: string[];
   superseded?: Supersession[];
   source_date?: string;
-  /** The raw/ artifact this ingestion is sourced from, if any. Staged
-   * automatically, so the source document always lands in the same commit as
-   * the pages it produced. */
+  /** The raw/ artifact this ingestion is sourced from, if any. Staged in the
+   * same commit as the pages it produced. */
   raw_source?: string;
 }
 
 /** The verb a manifest that names none commits under. */
 const defaultAction = "ingest";
 
-/** Return every path this manifest touches, de-duplicated, in a stable order. */
+/** Every path this manifest touches, de-duplicated, in a stable order. */
 export function stagedPaths(m: Manifest): string[] {
   const paths: string[] = [];
   paths.push(...(m.created ?? []));
@@ -101,8 +85,8 @@ export function stagedPaths(m: Manifest): string[] {
   return ordered;
 }
 
-/** Render manifest to the structured commit message (see the package comment
- * for the format). Deterministic. */
+/** Render the manifest to its structured commit message (format above).
+ * Deterministic. */
 export function buildMessage(m: Manifest): string {
   const action = m.action === "" ? defaultAction : (m.action ?? defaultAction);
   const lines: string[] = [`${action}: ${m.title}`, ""];
@@ -115,14 +99,9 @@ export function buildMessage(m: Manifest): string {
   return lines.join("\n") + "\n";
 }
 
-/**
- * Gate the commit on [check].
- *
- * A no-op when RawSource is unset (a synthesis save has no raw artifact to
- * demand a stub for). Pages are read from disk — the caller has already
- * written them by the time [commit] runs. A staged page missing from disk is
- * silently skipped: that's the caller's bug to report, not this gate's.
- */
+/** Gate the commit on [check]; a no-op when `raw_source` is unset. Pages are
+ * read from disk — the caller has already written them — and a staged page
+ * missing from disk is skipped. */
 async function checkChainOfEvidence(root: string, m: Manifest): Promise<void> {
   if (!m.raw_source) return;
 
@@ -144,14 +123,8 @@ async function checkChainOfEvidence(root: string, m: Manifest): Promise<void> {
   }
 }
 
-/**
- * Stage the manifest's paths and write one structured commit, returning the
- * SHA.
- *
- * git is injectable for tests; pass a [VaultGit] over root in production. Git
- * stays a hard dependency: a root that isn't a work tree is an error, not a
- * skip.
- */
+/** Stage the manifest's paths and write one structured commit, returning the
+ * SHA. Git is injectable for tests. */
 export async function commit(
   root: string,
   m: Manifest,

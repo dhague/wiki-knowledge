@@ -1,10 +1,5 @@
-/**
- * hooks tests — the session-start and post-tool-use handlers, failing open.
- *
- * The handlers are driven through an injected LookupEnv, so each test states
- * which environment the hook believes it is running in rather than mutating
- * the real one (#485).
- */
+/** hooks tests — the session-start and post-tool-use handlers, failing open. Each
+ * test drives an injected LookupEnv rather than mutating the real one. */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -23,8 +18,7 @@ function env(map: Record<string, string>): LookupEnv {
   };
 }
 
-/** Where the hooks should have written for `project`, read back through the
- * same resolution rule they use. */
+/** Where the hooks should have written for `project`. */
 function sessionsDirFor(project: string): string {
   return sessionsDir("", env({ CLAUDE_PROJECT_DIR: project }));
 }
@@ -33,11 +27,8 @@ function tmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hooks-"));
 }
 
-/**
- * A project that no hook has touched yet: no `.claude` anywhere in it, and a
- * sandbox injected as $HOME so a walk-up stops there instead of escaping into
- * the real filesystem.
- */
+/** A project no hook has touched: no `.claude` in it, with `home` injected as
+ * $HOME so a walk-up stops there. */
 function freshProject(): {
   home: string;
   project: string;
@@ -69,9 +60,7 @@ test("sessionStart records transcript path under $CLAUDE_PROJECT_DIR", () => {
 });
 
 test("sessionStart falls back to the payload cwd", () => {
-  // At session start the payload cwd *is* the project root, so it is the right
-  // last resort here — unlike in postToolUse, where it has followed the session
-  // into whatever folder Claude last cd'd to.
+  // At session start the payload cwd is the project root, unlike in postToolUse.
   const { home, project } = freshProject();
   sessionStart(
     {
@@ -188,11 +177,9 @@ test("postToolUse missing session id is a silent no-op", () => {
   );
 });
 
-// --- #485: the payload cwd follows the session, so it is not the root -------
+// --- The payload cwd follows the session, so it is not the root -------------
 
 test("postToolUse ignores the payload cwd (#485)", () => {
-  // The reported bug: once the session had cd'd into a content folder, every
-  // tool call dropped a whole `.claude/wiki-knowledge/sessions/` tree inside it.
   const project = tmp();
   fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
   const contentDir = path.join(project, "wiki", "concepts");
@@ -226,8 +213,6 @@ test("postToolUse walks up from the payload cwd when the env var is unset", () =
 });
 
 test("postToolUse writes nothing when no project is identifiable (#485)", () => {
-  // An agent that cd'd outside the project must not conjure a state tree
-  // where it happens to be standing.
   const { home, project, contentDir } = freshProject();
   postToolUse(
     { session_id: "abc123", cwd: contentDir, tool_name: "Bash" },
@@ -240,8 +225,6 @@ test("postToolUse writes nothing when no project is identifiable (#485)", () => 
 });
 
 test("sessionStart and postToolUse agree on one directory (#485)", () => {
-  // The reported symptom was state split across two directories within one
-  // session, because the two hooks answered "where is the project?" differently.
   const { home, project, contentDir } = freshProject();
   const lookupEnv = env({ HOME: home });
 
