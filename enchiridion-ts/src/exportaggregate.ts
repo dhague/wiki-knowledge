@@ -23,10 +23,12 @@ import {
   ExportMeta,
   ExportOptions,
   GetStartedEntry,
+  TAGS_INDEX_PATH,
   buildTagSlugMap,
   exportTitle,
   kindFolder,
   kindLabel,
+  tagPagePath,
 } from "./exportmeta.js";
 import {
   LinkContext,
@@ -92,7 +94,7 @@ function renderTagPage(
   wikiTitle: string,
   context: LinkContext,
 ): RenderedParts {
-  const htmlPath = `tags/${slug}.html`;
+  const htmlPath = tagPagePath(slug);
   const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
   const items = pageRefs
     .map((ref) => {
@@ -115,14 +117,14 @@ function renderTagIndex(
   wikiTitle: string,
   context: LinkContext,
 ): RenderedParts {
-  const htmlPath = "tags/index.html";
+  const htmlPath = TAGS_INDEX_PATH;
   const nav = buildNavBar(htmlPath, wikiTitle, context.mode);
 
   const sortedTags = [...tagSlugMap.keys()].sort();
   const rows = sortedTags.map((tag) => {
     const slug = tagSlugMap.get(tag)!;
     const count = meta.tagMap.get(tag)?.length ?? 0;
-    const href = escHtml(hrefFor(context.mode)(htmlPath, `tags/${slug}.html`));
+    const href = escHtml(hrefFor(context.mode)(htmlPath, tagPagePath(slug)));
     return `<li><a href="${href}">${escHtml(tag)}</a> (${count})</li>`;
   });
 
@@ -216,7 +218,7 @@ function renderFrontPage(
     });
   }
 
-  const tagsHref = escHtml(hrefFor(context.mode)(htmlPath, "tags/index.html"));
+  const tagsHref = escHtml(hrefFor(context.mode)(htmlPath, TAGS_INDEX_PATH));
   const main = [
     `<h1>${escHtml(wikiTitle)}</h1>`,
     `<p>${totalPages} page${totalPages === 1 ? "" : "s"} · <a href="${tagsHref}">Tags</a></p>`,

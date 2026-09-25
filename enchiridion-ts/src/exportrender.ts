@@ -43,11 +43,13 @@ import {
   ExportOptions,
   FRONT_PAGE_PATH,
   OutputPathFor,
+  TAGS_INDEX_PATH,
   buildTagSlugMap,
   exportTitle,
   kindFolder,
   kindLabel,
   mdToHtml,
+  tagPagePath,
 } from "./exportmeta.js";
 import {
   isVaultRelativeDest,
@@ -164,9 +166,6 @@ export function assetsRootFor(htmlPath: string): string {
 // ---------------------------------------------------------------------------
 // Where a link points: the one thing that differs between the two output modes
 // ---------------------------------------------------------------------------
-
-/** The tag index's output path. */
-const TAGS_INDEX_PATH = "tags/index.html";
 
 /**
  * The section id of the front page in single-file output. No derived id can
@@ -477,7 +476,7 @@ function renderTagLink(
   const slug = tagSlugMap.get(tag) ?? slugify(tag, 0);
   const href = hrefFor(context.mode)(
     context.outputPathFor(pageRef),
-    `tags/${slug}.html`,
+    tagPagePath(slug),
   );
   return `<a href="${escHtml(href)}">${escHtml(tag)}</a>`;
 }
