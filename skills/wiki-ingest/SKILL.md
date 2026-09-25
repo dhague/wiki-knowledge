@@ -46,7 +46,7 @@ Given one document at `<path>`.
    ```jsonc
    {
      "title": "<source document's title>",
-     "source_date": "<the document's own date, not today's>",
+     "source_date": "<the document's own date, not today's; pages inherit it, so omit only when the artifact has no date of its own>",
      "raw": "raw/<artifact's path, exactly as it sits on disk>",   // omit if nothing came from raw/
      "pages": [
        {
@@ -56,7 +56,8 @@ Given one document at `<path>`.
          "body": "<what this artifact is; thin when its content was distilled into the pages below>",
          "frontmatter": {
            "summary": "<one line, ≤~20 words>",
-           "raw_source": true   // required here, omitted on every other kind — marks this page as the "raw" field's stub; `enchiridion ingest` composes the actual link
+           "raw_source": true,  // required here, omitted on every other kind — marks this page as the "raw" field's stub; `enchiridion ingest` composes the actual link
+           "volatility": "stable"        // an artifact is frozen: its stub is stable
          },
          "edges": {}
        },
@@ -68,7 +69,7 @@ Given one document at `<path>`.
          "frontmatter": {
            "summary": "<one line, ≤~20 words>",
            "tags": ["<reuse an existing tag where one fits, mint only when nothing does>"],
-           "source_date": "<same as above, or this page's own if it differs>",
+           "source_date": "<omit to inherit the plan's date above; set this page's own only when it differs>",
            "volatility": "stable | evolving | volatile"
          },
          "edges": {
@@ -92,6 +93,8 @@ Given one document at `<path>`.
    ```
 
    Every `edges` value and `raw_source: true` names target by **vault-relative path only** (`"wiki/concepts/foo.md"`, matching the kind-folders in [Vault structure](../wiki-conventions/SKILL.md)) — never a composed `[Title](../dest.md)` string. `enchiridion ingest` reads each target's title (on disk or from sibling in plan), works out `../` relativisation, percent-encodes destination; never build link string by hand. Exception: *body* links — write as ordinary markdown (`[label](destination)`), encoded or not; `enchiridion ingest` re-encodes on write.
+
+   **Every written page needs `volatility`; `source_date` defaults to the plan's.** A page that omits `source_date` inherits the plan's top-level one, so a page sharing the document's date lists none — set the plan's own so its pages can inherit it, and a page's own only where its knowledge dates from elsewhere. `volatility` is judgment and can't be inherited: `enchiridion ingest` refuses a `create` without it, and an `update` whose `frontmatter` map omits it, and takes only `stable | evolving | volatile` — so an update restates `volatility` alongside every other key it rewrites, rather than writing a page `wiki-lint`'s `missing-volatility-source-date` would report.
 
    **Consolidation variant — `action: "consolidate"`** (CONTEXT.md, **Consolidation**). Same executor, one page: `pages` holds only the **survivor** (`op: "update"`, or `op: "create"` for a fresh one), its `body` carrying each absorbed body as a section, plus a top-level `"consolidates"` list of the vault-relative refs absorbed. `raw` omitted — a Consolidation is sourced from pages, not an artifact. Executor repoints every inbound link at survivor, deletes absorbed pages, commits once; refuses a plan whose survivor body no longer contains an absorbed page's content (links compared by where they point, so a body copied across kind-folders must re-base its sibling links). Frontmatter follows ordinary update rules — list keys (`tags`, edges) union. Reached by the `--consolidate` invocation, not the procedure above — how to read the cluster, judge it, and author the survivor is [`reference/consolidation.md`](reference/consolidation.md).
 

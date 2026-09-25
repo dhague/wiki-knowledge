@@ -37,6 +37,12 @@ export const EdgeKeys: string[] = [
  * them. */
 const singleLinkKeys: Record<string, boolean> = { raw_source: true };
 
+/** The values the frontmatter schema allows for `volatility`, in the order the
+ * conventions spec lists them. Exported so a module that must judge the field
+ * reads its domain from the schema's one owner rather than respelling it — the
+ * same reason [isSingleLinkEdgeKey] exports `raw_source`'s shape (#548). */
+export const Volatilities = ["stable", "evolving", "volatile"] as const;
+
 /** Report whether key's YAML value is one link rather than a list of them —
  * `raw_source` alone. Exported so a module that must treat this key
  * differently reads the fact from the schema's one owner rather than

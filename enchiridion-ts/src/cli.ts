@@ -59,6 +59,7 @@ import {
   type RefLookup,
 } from "./pageedge.js";
 import { CHECKS, DefaultMinSimilarity, FIXES } from "./check.js";
+import { Volatilities } from "./pagerecord.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
   runExport,
@@ -499,7 +500,7 @@ export function buildProgram(): Command {
     )
     .option(
       "--volatility <vols>",
-      "filter by volatility (stable|evolving|volatile); comma-separated for multiple",
+      `filter by volatility (${Volatilities.join("|")}); comma-separated for multiple`,
       splitCommaList,
       [] as string[],
     )

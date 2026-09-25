@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import * as git from "isomorphic-git";
 import { decodePlan, resolve, Resolved, ErrPlan, type Plan } from "./ingest.js";
+import { missingVolatilitySourceDate } from "./check.js";
 import { Vault } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
 import type { Git } from "./commit.js";
@@ -115,12 +116,68 @@ test("frontmatter key order is preserved", () => {
 // not that resolve remembers to canonicalise.
 test("resolve writes a canonical source_date", () => {
   const src = `{"title":"T","pages":[{"op":"create","title":"A","kind":"concept","body":"b",
-    "frontmatter":{"summary":"s","source_date":"2026-07-20T14:30:00Z"}}]}`;
+    "frontmatter":{"summary":"s","volatility":"stable","source_date":"2026-07-20T14:30:00Z"}}]}`;
   const resolved = resolveOK(decodePlanOK(src), newVault({}));
   resolved.validate();
   const text = resolved.pages[0].page!.text;
   assert.ok(text.includes("2026-07-20"));
   assert.ok(!text.includes("14:30"));
+});
+
+// #561: a page that omits `source_date` inherits the plan's top-level value —
+// "the document's own date" — rather than being written without the field, so
+// a fresh vault passes the `missing-volatility-source-date` check.
+test("create inherits the plan's source_date when the page omits it", () => {
+  const plan = decodePlanOK(`{"title":"T","source_date":"2026-03-01","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"summary":"s","volatility":"stable"}}]}`);
+  const resolved = resolveOK(plan, newVault({}));
+  resolved.validate();
+  assert.ok(
+    resolved.pages[0].page!.text.includes("source_date: 2026-03-01"),
+    resolved.pages[0].page!.text,
+  );
+});
+
+test("a page's own source_date wins over the plan's", () => {
+  const plan = decodePlanOK(`{"title":"T","source_date":"2026-03-01","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"summary":"s","volatility":"stable","source_date":"2026-07-20"}}]}`);
+  const resolved = resolveOK(plan, newVault({}));
+  const text = resolved.pages[0].page!.text;
+  assert.ok(text.includes("source_date: 2026-07-20"), text);
+  assert.ok(!text.includes("2026-03-01"), text);
+});
+
+test("update inherits the plan's source_date when the page omits it", () => {
+  const root = newVault({ "wiki/concepts/a.md": "---\ntitle: A\n---\nold\n" });
+  const plan = decodePlanOK(`{"title":"T","source_date":"2026-03-01","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"new\\n"}]}`);
+  const resolved = resolveOK(plan, root);
+  assert.ok(
+    resolved.pages[0].page!.text.includes("source_date: 2026-03-01"),
+    resolved.pages[0].page!.text,
+  );
+});
+
+test("update keeps the on-disk source_date over the plan's", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\nsource_date: 2026-07-20\n---\nold\n",
+  });
+  const plan = decodePlanOK(`{"title":"T","source_date":"2026-03-01","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"new\\n"}]}`);
+  const resolved = resolveOK(plan, root);
+  const text = resolved.pages[0].page!.text;
+  assert.ok(text.includes("source_date: 2026-07-20"), text);
+  assert.ok(!text.includes("2026-03-01"), text);
+});
+
+test("no inherited source_date when the plan has none", () => {
+  const plan = decodePlanOK(`{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"summary":"s","volatility":"stable"}}]}`);
+  const resolved = resolveOK(plan, newVault({}));
+  assert.equal(resolved.pages[0].page!.getString("source_date"), "");
 });
 
 test("decodePlan rejects malformed JSON", () => {
@@ -249,7 +306,8 @@ test("update replaces body when given", () => {
 test("create accepts a vault-discovered kind", () => {
   const root = newVault({ "wiki/decisions/.keep": "" });
   const plan = decodePlanOK(`{"title":"T","pages":[
-    {"op":"create","title":"Use Go","kind":"decision","body":"b"}]}`);
+    {"op":"create","title":"Use Go","kind":"decision","body":"b",
+     "frontmatter":{"volatility":"stable"}}]}`);
   const resolved = resolveOK(plan, root);
 
   assert.equal(resolved.pages[0].pageRef, "wiki/decisions/use-go.md");
@@ -385,7 +443,7 @@ test("shape validation accepts a timestamp source_date", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
     {"op":"create","title":"A","kind":"concept","body":"b",
-     "frontmatter":{"source_date":"2026-07-20T14:30:00Z"}}]}`,
+     "frontmatter":{"volatility":"stable","source_date":"2026-07-20T14:30:00Z"}}]}`,
     "",
   );
   assert.equal(got, "");
@@ -395,7 +453,7 @@ test("shape validation treats null source_date as absent", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
     {"op":"create","title":"A","kind":"concept","body":"b",
-     "frontmatter":{"source_date":null}}]}`,
+     "frontmatter":{"volatility":"stable","source_date":null}}]}`,
     "",
   );
   assert.equal(got, "");
@@ -405,10 +463,91 @@ test("shape validation treats null raw_source as absent", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
     {"op":"create","title":"A","kind":"concept","body":"b",
-     "frontmatter":{"raw_source":null}}]}`,
+     "frontmatter":{"volatility":"stable","raw_source":null}}]}`,
     "",
   );
   assert.equal(got, "");
+});
+
+// #561: `volatility` is a required schema field the checker reports on, so a
+// plan must not write a page without one. A create always rewrites its
+// frontmatter; an update does so whenever it supplies a `frontmatter` map.
+test("shape validation requires volatility on a create", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"summary":"s"}}]}`,
+    "",
+  );
+  assert.ok(got.includes("pages[0].frontmatter.volatility is required"), got);
+});
+
+test("shape validation requires volatility when an update rewrites frontmatter", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md",
+     "frontmatter":{"summary":"s"}}]}`,
+    "",
+  );
+  assert.ok(got.includes("pages[0].frontmatter.volatility is required"), got);
+});
+
+test("shape validation allows an update that leaves frontmatter alone", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"b\\n"}]}`,
+    "",
+  );
+  assert.equal(got, "");
+});
+
+test("shape validation treats null volatility as absent", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":null}}]}`,
+    "",
+  );
+  assert.ok(got.includes("pages[0].frontmatter.volatility is required"), got);
+});
+
+test("shape validation rejects an empty volatility", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":""}}]}`,
+    "",
+  );
+  assert.ok(got.includes("pages[0].frontmatter.volatility is required"), got);
+});
+
+test("shape validation accepts each canonical volatility", () => {
+  for (const v of ["stable", "evolving", "volatile"]) {
+    const got = validationErrors(
+      `{"title":"T","pages":[{"op":"create","title":"A","kind":"concept","body":"b",
+       "frontmatter":{"volatility":"${v}"}}]}`,
+      "",
+    );
+    assert.equal(got, "", `volatility ${v} was refused: ${got}`);
+  }
+});
+
+// The schema's domain, not just its presence: a value outside
+// `stable | evolving | volatile` writes a page `search --volatility` can never
+// match, so the plan is refused rather than written.
+test("shape validation rejects a volatility outside the schema domain", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"banana"}}]}`,
+    "",
+  );
+  assert.ok(
+    got.includes(
+      "pages[0].frontmatter.volatility must be one of stable|evolving|volatile, got banana",
+    ),
+    got,
+  );
 });
 
 // --- semantic validation ----------------------------------------------------
@@ -493,8 +632,10 @@ test("semantic validation rejects an unresolvable edge target", () => {
 test("semantic validation accepts a sibling create as an edge target", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
-    {"op":"create","title":"First Page","kind":"concept","body":"b"},
+    {"op":"create","title":"First Page","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"}},
     {"op":"create","title":"Second","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"},
      "edges":{"related":["wiki/concepts/first-page.md"]}}]}`,
     newVault({}),
   );
@@ -539,7 +680,7 @@ const wholeIngestPlan = `{
   "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","raw":"raw/doc.md",
   "pages":[
     {"op":"create","title":"Doc","kind":"source","body":"stub body\\n",
-     "frontmatter":{"summary":"the doc","raw_source":true}},
+     "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
     {"op":"create","title":"Prepared Statements","kind":"concept","body":"page body\\n",
      "frontmatter":{"summary":"s","volatility":"stable"},
      "edges":{"source":["wiki/sources/doc.md"],"supersedes":["wiki/concepts/old.md"]}}]}`;
@@ -710,6 +851,7 @@ test("execute a synthesis save", async () => {
   const resolved = resolveOK(
     decodePlanOK(`{"title":"Q","action":"synthesize","pages":[
     {"op":"create","title":"Answer","kind":"synthesis","body":"b",
+     "frontmatter":{"volatility":"stable"},
      "edges":{"source":["wiki/concepts/a.md"]}}]}`),
     root,
   );
@@ -723,7 +865,8 @@ test("execute truncates the manifest source date", async () => {
   const root = newVault({});
   const resolved = resolveOK(
     decodePlanOK(`{"title":"T","source_date":"2026-07-20T14:30:00Z","pages":[
-    {"op":"create","title":"A","kind":"concept","body":"b"}]}`),
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"}}]}`),
     root,
   );
   resolved.validate();
@@ -758,7 +901,7 @@ const fragmentedVault: Record<string, string> = {
 };
 
 const consolidatePlan = `{"title":"Caching","action":"consolidate","consolidates":["wiki/concepts/caching-ttl.md","wiki/concepts/cache-expiry.md"],"pages":[
-  {"op":"update","page_ref":"wiki/concepts/caching.md","frontmatter":{"tags":["caching"]},
+  {"op":"update","page_ref":"wiki/concepts/caching.md","frontmatter":{"volatility":"stable","tags":["caching"]},
    "body":"Caching is remembering a value.\\n\\n## TTL\\n\\nA cache entry expires after its TTL.\\n\\n## Eviction\\n\\nEntries also expire when evicted.\\n"}]}`;
 
 /** The consolidate plan with one its pieces swapped out for a broken one. */
@@ -981,7 +1124,8 @@ test("execute consolidation may author a fresh survivor", async () => {
   });
   const resolved = resolveOK(
     decodePlanOK(`{"title":"AB","action":"consolidate","consolidates":["wiki/concepts/a.md","wiki/concepts/b.md"],"pages":[
-      {"op":"create","title":"Alpha Beta","kind":"concept","body":"Alpha.\\n\\nBeta.\\n"}]}`),
+      {"op":"create","title":"Alpha Beta","kind":"concept","body":"Alpha.\\n\\nBeta.\\n",
+       "frontmatter":{"volatility":"stable"}}]}`),
     root,
   );
   resolved.validate();
@@ -1047,7 +1191,7 @@ const multiPagePlan = `{
   "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","raw":"raw/doc.md",
   "pages":[
     {"op":"create","title":"Doc","kind":"source","body":"stub body\\n",
-     "frontmatter":{"summary":"the doc","raw_source":true}},
+     "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
     {"op":"create","title":"Prepared Statements","kind":"concept","body":"page body\\n",
      "frontmatter":{"summary":"s","volatility":"stable"},
      "edges":{"source":["wiki/sources/doc.md"]}},
@@ -1121,6 +1265,7 @@ test("integration: a synthesize action commits under its own verb", async () => 
   const resolved = resolve(
     decodePlanOK(`{"title":"Q","action":"synthesize","pages":[
       {"op":"create","title":"Answer","kind":"synthesis","body":"b",
+       "frontmatter":{"volatility":"stable"},
        "edges":{"source":["wiki/concepts/a.md"]}}]}`),
     root,
   );
@@ -1180,4 +1325,27 @@ test("integration: a Consolidation deletes its losers in one real commit", async
   // The loser is gone from HEAD's tree, not just from the working tree.
   const head = await git.listFiles({ fs, dir: root, ref: "HEAD" });
   assert.ok(!head.includes("wiki/concepts/caching-ttl.md"), String(head));
+});
+
+// #561 regression: the writer and check 5 must agree. Ingest a minimal plan
+// shaped like the documented `wiki-ingest` one — a source stub and a content
+// page, neither carrying a `source_date` of its own — and assert the vault it
+// leaves behind is clean under `check missing-volatility-source-date`.
+test("an ingested plan leaves no missing-volatility-source-date findings", async () => {
+  const root = newVault({ "raw/doc.md": "raw\n" });
+  const resolved = resolveOK(
+    decodePlanOK(`{
+    "title":"Doc","source_date":"2026-03-01","raw":"raw/doc.md","pages":[
+      {"op":"create","title":"Doc","kind":"source","body":"stub\\n",
+       "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
+      {"op":"create","title":"Prepared Statements","kind":"concept","body":"body\\n",
+       "frontmatter":{"summary":"s","volatility":"stable"},
+       "edges":{"source":["wiki/sources/doc.md"]}}]}`),
+    root,
+  );
+  resolved.validate();
+  await resolved.execute(new Fake());
+
+  const findings = await missingVolatilitySourceDate(root);
+  assert.deepEqual(findings, []);
 });
