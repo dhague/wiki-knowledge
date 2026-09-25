@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as git from "isomorphic-git";
+import { CHECKS } from "./check.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(__dirname, "cli.ts");
@@ -1700,7 +1701,9 @@ test("check missing-volatility-source-date --json: a bare-path edge does not bla
 
 /** A committed vault with one fragmented concept pair; committed because the
  * check reads the search index, a view of HEAD (ADR-0015). */
-async function buildFragmentedVault(): Promise<string> {
+async function buildFragmentedVault(
+  extra: Record<string, string> = {},
+): Promise<string> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-frag-"));
   const files = {
     "wiki/concepts/cache-eviction.md":
@@ -1709,6 +1712,7 @@ async function buildFragmentedVault(): Promise<string> {
     "wiki/concepts/cache-invalidation.md":
       "---\ntitle: Cache invalidation\ntags:\n  - caching\n  - performance\n---\n" +
       "Body.\n",
+    ...extra,
   };
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(root, rel);
@@ -1770,6 +1774,65 @@ test("check --min-similarity: a value above every pair scores is silent", async 
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout, "");
+});
+
+test("check --all --json: every row names its check, in registry order", async () => {
+  // Two independent checks seeded, so a run that stops at the first is caught.
+  const root = await buildFragmentedVault({
+    "wiki/concepts/bare-edge.md":
+      "---\ntitle: Bare edge\nrelated:\n  - wiki/concepts/cache-eviction.md\n---\n\n",
+  });
+  const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  // Hand-rolled, not read back out of CHECKS: the fixture's violations are
+  // known, so a check that silently stopped running shows up as a missing slug.
+  const expected = [
+    "frontmatter-link-format",
+    "missing-volatility-source-date",
+    "orphans",
+    "concept-fragmentation",
+  ];
+  assert.deepEqual([...new Set(rows.map((r) => r.check))], expected);
+  // Registry order, not grouped by page: a consumer reads the run as one pass.
+  const order = Object.keys(CHECKS);
+  const ranks = rows.map((r) => order.indexOf(r.check));
+  assert.deepEqual(
+    ranks,
+    [...ranks].sort((a, b) => a - b),
+  );
+  // The fragmented pair's cluster still carries its structured proposal.
+  const fragmented = rows.find((r) => r.check === "concept-fragmentation");
+  assert.equal(fragmented.cluster.members.length, 2);
+});
+
+test("check: neither a name nor --all errors non-zero", () => {
+  const root = buildLintableVault();
+  const { status, stderr } = runEnv(["check"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /--all/);
+});
+
+test("check --all: the text form prefixes each finding with its check", async () => {
+  const root = await buildFragmentedVault();
+  const { status, stdout, stderr } = runEnv(["check", "--all"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(
+    stdout,
+    /^concept-fragmentation: wiki\/concepts\/cache-invalidation\.md: .+$/m,
+  );
 });
 
 test("check --min-similarity: rejects a value outside [0, 1]", () => {

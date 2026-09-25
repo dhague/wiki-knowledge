@@ -52,7 +52,12 @@ import {
   isListEdgeKey,
   type RefLookup,
 } from "./pageedge.js";
-import { CHECKS, DefaultMinSimilarity, FIXES } from "./check.js";
+import {
+  CHECKS,
+  DefaultMinSimilarity,
+  FIXES,
+  type TaggedFinding,
+} from "./check.js";
 import { Volatilities } from "./pagerecord.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
@@ -700,13 +705,20 @@ export function buildProgram(): Command {
       emitDocument(result);
     });
 
-  // check <name> [--json] — run one vault health check by name.
+  // check [<name>] [--json] — run one vault health check by name, or every one
+  // with --all. The name is optional only alongside --all.
   const checkNames = Object.keys(CHECKS).join(", ");
   const check = program
     .command("check")
-    .description(`Run a vault health check by name; names: ${checkNames}`)
-    .argument("<name>", "check name")
+    .description(
+      `Run a vault health check by name, or --all; names: ${checkNames}`,
+    )
+    .argument("[name]", "check name")
     .option("--json", "emit findings as JSON Lines (one object per line)")
+    .option(
+      "--all",
+      "run every check; each row carries its slug (JSON) or is prefixed with it (text)",
+    )
     .option(
       "--min-similarity <n>",
       `concept-fragmentation cutoff, 0-1 (default ${DefaultMinSimilarity})`,
@@ -722,22 +734,37 @@ export function buildProgram(): Command {
     )
     .action(
       async (
-        name: string,
-        opts: { json?: boolean; minSimilarity?: number },
+        name: string | undefined,
+        opts: { json?: boolean; all?: boolean; minSimilarity?: number },
       ) => {
-        const fn = CHECKS[name];
+        if (opts.all) {
+          const { root } = resolveRoot();
+          const rows: TaggedFinding[] = [];
+          for (const [checkName, fn] of Object.entries(CHECKS)) {
+            const findings = await fn(root, {
+              minSimilarity: opts.minSimilarity,
+            });
+            rows.push(...findings.map((f) => ({ ...f, check: checkName })));
+          }
+          if (opts.json) emitRows(rows);
+          else
+            for (const f of rows)
+              console.log(`${f.check}: ${f.pageRef}: ${f.detail}`);
+          return;
+        }
+        const fn = name ? CHECKS[name] : undefined;
         if (!fn) {
           fail(
-            `enchiridion check: unknown check "${name}"; known: ${checkNames}`,
+            name
+              ? `enchiridion check: unknown check "${name}"; known: ${checkNames}`
+              : `enchiridion check: name a check or pass --all; known: ${checkNames}`,
           );
         }
+        // One check's findings carry no check name — the caller named it.
         const { root } = resolveRoot();
         const findings = await fn(root, { minSimilarity: opts.minSimilarity });
-        if (opts.json) {
-          emitRows(findings);
-        } else {
-          for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
-        }
+        if (opts.json) emitRows(findings);
+        else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
       },
     );
   void check; // referenced only for side effect of registering the command

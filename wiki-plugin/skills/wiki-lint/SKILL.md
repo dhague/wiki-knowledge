@@ -34,7 +34,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the 
 
 ### 2. Run mechanical checks
 
-Run every check below, in parallel where the vault is large. Each emits JSON Lines — one `{"pageRef": "...", "detail": "..."}` object per finding, and nothing at all when clean (no `[]` to unwrap). The `concept-fragmentation` check adds a structured `cluster` key (members, basis, similarity, suggested survivor) to each row:
+Run every check below, in parallel where the vault is large. `"$RUNTIME" "$ENCHIRIDION" check --all --json` runs all eleven in one call — the form `wiki-ingest`'s post-commit lint pass uses; its rows carry a `check` slug the rows below do not, so the two forms are not interchangeable here. This procedure spells the checks out individually because each finding has to be classified, fixed or proposed by check. Each emits JSON Lines — one `{"pageRef": "...", "detail": "..."}` object per finding, and nothing at all when clean (no `[]` to unwrap). The `concept-fragmentation` check adds a structured `cluster` key (members, basis, similarity, suggested survivor) to each row:
 
 ```bash
 "$RUNTIME" "$ENCHIRIDION" check kind-folder-conformance --json
