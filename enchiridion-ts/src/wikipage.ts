@@ -22,7 +22,9 @@
  *     its one spelling whatever spelling the caller handed over, because the
  *     rule is applied here rather than by each caller (#499). A value that
  *     isn't a date at all passes through untouched — see
- *     [canonicalForWrite] and `sourcedate.ts`.
+ *     [canonicalForWrite] and `sourcedate.ts`. The same posture wraps a scalar
+ *     for a list-valued key in a one-element list (#575) — see
+ *     [isStringListKey].
  */
 
 import {
@@ -361,6 +363,26 @@ export function linkDest(link: string): { dest: string; ok: boolean } {
 // ---------------------------------------------------------------------------
 
 const YAML_INDENT = 2;
+
+/** The frontmatter keys whose value is a **list of strings**, as the writer
+ * understands the shape (#575). `tags` is the schema's one such non-edge key,
+ * and [isStringListKey] is how a caller reads it rather than respelling it.
+ *
+ * A key is on the list because a **scalar** value for it is not a shape the
+ * record reader can use — `stringList` reads anything that isn't an array as no
+ * tags at all, so the page silently drops out of every tag-filtered retrieval
+ * while the file still shows a value. [canonicalForWrite] is where that cannot
+ * happen: it wraps the one value in a one-element list, which is what the
+ * conventions document `page set` as doing anyway. */
+const StringListKeys: readonly string[] = ["tags"];
+
+/** Report whether key's frontmatter value is a list of strings rather than a
+ * scalar. Exported so a caller that must refuse a scalar (the `page set`
+ * argument parser) reads the fact from the writer's one list rather than
+ * respelling `tags`. */
+export function isStringListKey(key: string): boolean {
+  return StringListKeys.includes(key);
+}
 
 /**
  * One page's frontmatter plus body. Pure-functional — no I/O, no mutation:
@@ -769,12 +791,14 @@ function setKey(mapping: YAMLMap, key: string, value: Scalar | YAMLSeq): void {
 
 /**
  * Canonicalise a frontmatter value on its way to disk — the writer's half of
- * the source-date rule (#499).
+ * the source-date rule (#499) and of the list-valued-key rule (#575).
  *
  * [Page.set] is the one place frontmatter bytes are produced, so applying the
- * rule here is what makes it unreachable for a caller — or for a writer added
- * later — to skip: whatever spelling a `source_date` arrives in, the page
- * that reaches disk carries the canonical one.
+ * rules here is what makes them unreachable for a caller — or for a writer
+ * added later — to skip: whatever spelling a `source_date` arrives in, the page
+ * that reaches disk carries the canonical one, and a scalar handed to a
+ * list-valued key ([isStringListKey]) reaches disk as the one-element list the
+ * conventions document.
  *
  * The posture is [sourcedate.truncateSourceDate]'s: tolerate, never refuse. A
  * recognised non-canonical spelling truncates to its date
@@ -785,8 +809,9 @@ function setKey(mapping: YAMLMap, key: string, value: Scalar | YAMLSeq): void {
  * write, through [sourcedate.canonicalSourceDate].
  */
 function canonicalForWrite(key: string, value: unknown): unknown {
-  if (key !== "source_date") return value;
-  return truncateSourceDate(value);
+  if (key === "source_date") return truncateSourceDate(value);
+  if (isStringListKey(key) && !Array.isArray(value)) return [value];
+  return value;
 }
 
 /**

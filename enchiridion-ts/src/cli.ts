@@ -18,7 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import util from "node:util";
-import { Page } from "./wikipage.js";
+import { Page, isStringListKey } from "./wikipage.js";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
 import { KindFolders, Kinds, path as placePath } from "./place.js";
@@ -134,6 +134,23 @@ function edgeSetValue(
   return items.map((item) => {
     if (typeof item !== "string") fail(edgeRefusal(key, item));
     return normalize(key, item);
+  });
+}
+
+/**
+ * The value `page set` writes for a string-list key — a one-element list for
+ * one bare value, unchanged for a list (#575).
+ *
+ * `--json` is the list's door: a parsed non-list, such as the scalar a caller
+ * passes by mistake, is refused rather than written as the scalar the record
+ * reader reads as no value at all.
+ */
+function stringListSetValue(key: string, value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) fail(`${key} expects a JSON list of values`);
+  return value.map((item) => {
+    if (typeof item !== "string") fail(`${key} expects a JSON list of strings`);
+    return item;
   });
 }
 
@@ -814,9 +831,9 @@ export function buildProgram(): Command {
     .argument("<key>", "frontmatter key")
     .argument(
       "<value>",
-      "value; for an edge key, exactly one markdown link or a vault-relative page ref (a list-valued key is replaced)",
+      "value; for an edge key, exactly one markdown link or a vault-relative page ref; for tags, one value or a --json list (a list-valued key is replaced)",
     )
-    .option("--json", "parse value as JSON")
+    .option("--json", "parse value as JSON; a list for a list-valued key")
     .description(
       "Set a frontmatter value in place — replaces the key, including a list-valued edge key",
     )
@@ -833,6 +850,9 @@ export function buildProgram(): Command {
         }
         if (key === "source_date") value = canonicalSourceDate(value);
         if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
+        // The writer wraps a bare value for a list-valued key (#575); the CLI
+        // only refuses the `--json` shape that is not a list at all.
+        if (isStringListKey(key)) value = stringListSetValue(key, value);
         const updated = p.set(key, value);
         writePageFile(file, updated);
       },

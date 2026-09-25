@@ -175,6 +175,9 @@ function decodeRecord(
       kind,
       title: scalar(data["title"]),
       summary: scalar(data["summary"]),
+      // The writer's list-valued-key rule (wikipage.ts's `isStringListKey`)
+      // guarantees this is a list on disk; a scalar here is a page written by
+      // something else, and reads as no tags rather than as a malformation.
       tags: stringList(data["tags"]),
       sourceDate: sourceDate(data["source_date"]),
       volatility: scalar(data["volatility"]),
