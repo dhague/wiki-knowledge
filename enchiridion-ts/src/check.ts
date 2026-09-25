@@ -64,7 +64,7 @@ function walkAllMd(root: string): string[] {
 /**
  * A YAML list item whose value begins with a bare `[` — an unquoted markdown
  * link, which YAML reads as a flow sequence rather than as the link string the
- * schema wants. The one test decides both what check 3 reports and what its
+ * schema wants. The one test decides both what frontmatterLinkFormat reports and what its
  * fix quotes, so the two cannot drift apart.
  */
 const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
@@ -88,10 +88,10 @@ function regexEscape(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// The nine mechanical checks
+// The mechanical checks
 // ---------------------------------------------------------------------------
 
-// Check 1 — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
+// kindFolderConformance (kind-folder-conformance) — any existing folder under wiki/ is a valid kind-folder (ADR-0020); only structural violations (wiki root or nested) are flagged.
 export async function kindFolderConformance(root: string): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const ref of walkAllMd(root)) {
@@ -111,7 +111,7 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** Check 2 — every wiki/sources/ page must carry raw_source pointing into raw/. */
+/** ingestionSourceIntegrity (ingestion-source-integrity) — every wiki/sources/ page must carry raw_source pointing into raw/. */
 export async function ingestionSourceIntegrity(
   root: string,
 ): Promise<Finding[]> {
@@ -131,7 +131,7 @@ export async function ingestionSourceIntegrity(
   return findings;
 }
 
-// Check 3 — operates on raw text, not parsed records: frontmatter the record parser refuses — an unquoted link, an edge value that is not a markdown link — is what this check surfaces.
+// frontmatterLinkFormat (frontmatter-link-format) — operates on raw text, not parsed records: frontmatter the record parser refuses — an unquoted link, an edge value that is not a markdown link — is what this check surfaces.
 export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   const pages = new Vault(root).loadWikiPages();
   const findings: Finding[] = [];
@@ -179,7 +179,7 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** Check 4 — synthesis pages whose last git commit is more than 30 days ago. */
+/** staleSynthesis (stale-synthesis) — synthesis pages whose last git commit is more than 30 days ago. */
 export async function staleSynthesis(root: string): Promise<Finding[]> {
   const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const vaultGit = new VaultGit(root);
@@ -201,7 +201,7 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** Check 5 — pages missing volatility or source_date degrade search ranking and temporal filtering. */
+/** missingVolatilitySourceDate (missing-volatility-source-date) — pages missing volatility or source_date degrade search ranking and temporal filtering. */
 export async function missingVolatilitySourceDate(
   root: string,
 ): Promise<Finding[]> {
@@ -216,8 +216,8 @@ export async function missingVolatilitySourceDate(
   return findings;
 }
 
-// Check 6 — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
-// Pages with contradicts + active callout are live contradictions (check 7's domain), not a violation here.
+// unresolvedSupersession (unresolved-supersession) — contradicts + no supersedes + no active callout: resolved contradiction with supersession unrecorded.
+// Pages with contradicts + active callout are live contradictions (contradiction-callouts' domain), not a violation here.
 export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText({
     skipMalformedEdges: true,
@@ -243,7 +243,7 @@ export async function unresolvedSupersession(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** Check 7 — pages with an active `> [!warning] Contradiction` callout in the body. */
+/** contradictionCallouts (contradiction-callouts) — pages with an active `> [!warning] Contradiction` callout in the body. */
 export async function contradictionCallouts(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText({
     skipMalformedEdges: true,
@@ -257,7 +257,7 @@ export async function contradictionCallouts(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** Check 8 — pages with zero inbound links from other wiki pages (body or frontmatter). */
+/** orphans — pages with zero inbound links from other wiki pages (body or frontmatter). */
 export async function orphans(root: string): Promise<Finding[]> {
   const pagesWithText = new Vault(root).pagesWithText({
     skipMalformedEdges: true,
@@ -285,7 +285,7 @@ export async function orphans(root: string): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Check 9 — splitLinks
+// splitLinks (split-links)
 // ---------------------------------------------------------------------------
 
 /**
@@ -478,7 +478,7 @@ function bodySplits(
 }
 
 /**
- * Check 9 — no link is split across lines.
+ * splitLinks (split-links) — no link is split across lines.
  *
  * Four shapes, one vocabulary (`wiki-conventions`, "Links";
  * docs/adr/0024-emitted-lines-are-not-folded.md):
@@ -520,13 +520,13 @@ export async function splitLinks(root: string): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Check 10 — conceptFragmentation
+// conceptFragmentation (concept-fragmentation)
 // ---------------------------------------------------------------------------
 
 /**
  * Default `--min-similarity`: the bar at or above which two pages are one
  * concept (a Consolidation) rather than two merely-related ones (a link, owned
- * by check 12). One number, so the two checks partition.
+ * by the Missing cross-references check). One number, so the two checks partition.
  */
 export const DefaultMinSimilarity = 0.5;
 
@@ -668,7 +668,7 @@ function titleMatch(title: string): string {
 }
 
 /** Inbound link count per page ref across one HEAD snapshot, counting only
- * links from *other* pages to pages the snapshot holds — check 8's rule. */
+ * links from *other* pages to pages the snapshot holds — orphans' rule. */
 function inboundCounts(text: Map<string, string>): Map<string, number> {
   const counts = new Map<string, number>();
   for (const [ref, content] of text) {
@@ -698,7 +698,7 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
 }
 
 /**
- * Check 10 — concept fragmentation (#452/#454, ADR-0021).
+ * conceptFragmentation (concept-fragmentation) — #452/#454, ADR-0021.
  *
  * Finds clusters of small, closely-related concept (and custom-kind) pages
  * that would read better as one page with sections, and proposes a
@@ -711,8 +711,8 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
  * indexed titles. Both halves read the index — a view of HEAD (ADR-0015) — so
  * an uncommitted fragmented draft is invisible until committed, which the
  * ticket's user story 15 asks for. Each surviving pair is scored by
- * [similarity] against `minSimilarity`; pairs below the bar are left to check
- * 12 (`missing-cross-references`), which renders them as a typed edge.
+ * [similarity] against `minSimilarity`; pairs below the bar are left to
+ * Missing cross-references, which renders them as a typed edge.
  *
  * `entity`, `source` and `synthesis` pages are excluded: their one-per-thing
  * or one-per-artifact identity forbids consolidation.
@@ -903,7 +903,7 @@ export const CHECKS: Record<string, CheckFn> = {
 // All return the list of page refs that were modified.
 // ---------------------------------------------------------------------------
 
-// Fix for check 3 — apply quoting and encoding corrections to frontmatter links in place.
+// fixFrontmatterLinkFormat (frontmatter-link-format) — apply quoting and encoding corrections to frontmatter links in place.
 export async function fixFrontmatterLinkFormat(
   root: string,
 ): Promise<string[]> {
@@ -953,7 +953,7 @@ export async function fixFrontmatterLinkFormat(
   return changed;
 }
 
-// Fix for check 2 — move the one unambiguous raw/ body link to raw_source: frontmatter.
+// fixIngestionSourceIntegrity (ingestion-source-integrity) — move the one unambiguous raw/ body link to raw_source: frontmatter.
 export async function fixIngestionSourceIntegrity(
   root: string,
 ): Promise<string[]> {
@@ -988,7 +988,7 @@ export async function fixIngestionSourceIntegrity(
   return changed;
 }
 
-// Fix for check 12 (unambiguous case) — insert relative markdown links for exact title
+// fixMissingCrossReferences (missing-cross-references, unambiguous case) — insert relative markdown links for exact title
 // matches that appear in body text without an existing link to that page.
 export async function fixMissingCrossReferences(
   root: string,
@@ -1077,7 +1077,7 @@ export async function fixMissingCrossReferences(
   return changed;
 }
 
-// Fix for check 9 — join the three frontmatter shapes in place. Body splits
+// fixSplitLinks (split-links) — join the three frontmatter shapes in place. Body splits
 // are never joined (a break after a destination is legal markdown, so a join
 // on sight can silently repoint the link); they stay a report-only finding.
 export async function fixSplitLinks(root: string): Promise<string[]> {

@@ -1374,7 +1374,7 @@ function buildLintableVault(): string {
 }
 
 /** The same vault plus one page whose frontmatter carries an unquoted YAML
- * list link — check 3's and fix 3's shared defect. Kept out of
+ * list link — `frontmatter-link-format`'s check and fix shared defect. Kept out of
  * buildLintableVault: the sequence `- [B](b.md)` does not merely look wrong,
  * it is unparseable, so every record-reading check on that vault throws. */
 function buildQuotelessVault(): string {
@@ -1481,7 +1481,7 @@ test("check missing-volatility-source-date --json: a bare-path edge does not bla
   );
 });
 
-/** A committed vault with one fragmented concept pair, for check 10 at the
+/** A committed vault with one fragmented concept pair, for `concept-fragmentation` at the
  * CLI seam. Committed because the check reads the search index, which is a
  * view of HEAD (ADR-0015). */
 async function buildFragmentedVault(): Promise<string> {
