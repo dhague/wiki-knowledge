@@ -1,30 +1,28 @@
 ---
 name: wiki-ask
-description: Answer questions from the wiki vault — search, follow typed edges, synthesise, cite with age and volatility. Use whenever the vault should be queried.
+description: Answer questions from the wiki vault — search, follow typed edges, cite with age and volatility. Use to run retrieval for a question, directly or through a subagent.
 ---
 # Wiki Ask
 
-Reads `wiki-conventions` for anything this procedure doesn't cover — folder structure, frontmatter schema, link format, typed-edge vocabulary.
+Reads [`wiki-conventions`](../wiki-conventions/SKILL.md) for the vault's format contract.
 
 Retrieval **never modifies an existing page** — no edit, no move, no delete, ever. One write: new `synthesis/` page, only on explicit user confirmation ([saving-synthesis.md](saving-synthesis.md)).
 
-The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
 ```bash
 RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop.
 
 ## Invocation
 
-- **If this session can spawn a subagent** (and is not already running the retrieval procedure as one): the only action is to spawn one to run the procedure below on the question, then relay the answer. That keeps reading and link-following inside the subagent's context regardless of the invoking session's model.
+- **If this session can spawn a subagent** (and is not already running the retrieval procedure as one): the only action is to spawn one to run the procedure below on the question, then relay its answer — that keeps reading and link-following inside the subagent's context regardless of the invoking session's model.
+- **If already running the retrieval procedure as a subagent**: continue with the procedure below using your own tools.
 
-  If returned answer carries `save-candidate` block, you also **put the offer to user and perform save on yes** — see [saving-synthesis.md](saving-synthesis.md). You hold the conversation; confirmation can only happen here.
-- **If already running the retrieval procedure as a subagent**: continue directly with procedure below using own tools. **Recommend** save (step 8); never perform one — a subagent can't ask the user, and unconfirmed save is the exact failure this design prevents.
-
-Scripts resolve vault root themselves — see `## Scripts` in `wiki-conventions`.
+Scripts resolve the vault root themselves: [`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue.
 
 Search `wiki/**` only — `raw/` is not indexed; its `source/` stub has the summary.
 
@@ -32,40 +30,25 @@ Search `wiki/**` only — `raw/` is not indexed; its `source/` stub has the summ
 
 Given a question:
 
-1. **Expand the query.** Before searching, write **5–8 alternative phrasings** of key terms: synonyms, jargon form, plain-English form, singular/plural, acronym and expansion, verb and noun forms. Single word choice must not decide whether a page is found — vault tags are emergent, so target page may name the thing differently. Expansions become the term list passed to `enchiridion search` below.
+1. **Expand the query.** Before searching, write **5–8 alternative phrasings** of the key terms: synonyms, jargon form, plain-English form, singular/plural, acronym and expansion, verb and noun forms. Expansions become the term list passed to `enchiridion search` below.
 
-2. **Single search call.** One call to `enchiridion search` does the work — composes BM25 text matching with metadata filters, ranks results, defaults to excluding superseded pages. Pass **only term list** from step 1 as single space-separated string (it tokenizes and phrase-quotes each term). Use `--json` and read the records:
+2. **Single search call.** One call to `enchiridion search` does the work — composes BM25 text matching with metadata filters, ranks results, defaults to excluding superseded pages. Pass the whole term list from step 1 as **one quoted argument** — `search "<term1> <term2> <term3>"` — it tokenizes and phrase-quotes each term. Use `--json` and read the records.
 
-   ```bash
-   "$RUNTIME" "$ENCHIRIDION" search \
-       "<term1> <term2> <term3>" \
-       --kind concept \
-       --since 2026-07-01 --date-field source_date \
-       --limit 20 --json
-   ```
+   The flag judgement `--help` does not carry: `--tag`/`--tag-any` only for a clearly tag-shaped question ("all pages tagged `db`"); `--date-field source_date` for when the knowledge is *from*, `git_date` for when it was written; `--include-superseded` only when discussing history; `--raw` only for a named FTS5 operator (`NEAR`, `OR`, prefix `*`).
 
-   Filter flags worth knowing:
-   - `--tag <t>` (repeat for AND) and `--tag-any <t>` (OR). Tags are emergent — leave off unless question is clearly tag-shaped ("all pages tagged `db`").
-   - `--kind concept|entity|source|synthesis` (comma-separated). Use when kind is obvious ("who is X" → `--kind entity`).
-   - `--since` / `--until` against `--date-field source_date` (valid time, default) or `git_date` (transaction time). Use `git_date` for "updated this week" / "since last ingestion"; use `source_date` for "knowledge from before X" / "2023 view of Y".
-   - `--include-superseded` only when discussing history, not answering "what is current". Default excludes superseded.
-   - `--raw` is escape hatch for callers who need FTS5 operators (`NEAR`, `OR`, prefix `*`). Don't reach for it without specific reason.
+3. **Expand frontier, frontmatter-first.** Hits are candidates, not answers. Judge each by its **`summary`**; discard the ones that don't bear on the question, and only a candidate that survives summary judgment earns a full read of its body. Most of the frontier dies at summary — a body read is expensive and never the first move. Where more than one candidate survives a hop's summary judgment, issue their body reads together in one message, not serially; each extra turn re-reads full context.
 
-3. **Expand frontier, frontmatter-first.** Hits are candidates, not answers. Judge each by **`summary`** field — that is what `summary` exists for — discard ones that don't bear on question. **Only candidate surviving summary judgment earns a full read of its body.** Most frontier should die at summary; body read is expensive and never the first move. Where more than one candidate survives the same hop's summary judgment, issue their body reads together in one message, not serially; each extra turn re-reads full context.
+   From each page read, harvest outbound relationships — typed-edge keys and `supersedes` in frontmatter, plus body links to other `wiki/` pages — as **next-hop candidates**.
 
-   From each page read, harvest outbound relationships — typed-edge keys and `supersedes` in frontmatter, plus body links to other `wiki/` pages — as **next-hop candidates**; judge those same way (summary first, body only on survival).
+   **Follow the typed edge the question implies** — an unambiguous shape maps to one edge and one direction, anything else to all typed edges both ways **except `source`**. Rules and the provenance chain: [Edge-following rules](#edge-following-rules).
 
-   **Follow typed edge the question implies.** Unambiguous shapes map to one edge and one direction; anything else defaults to "follow all typed edges both directions **except `source`**." Patterns in [Edge-following rules](#edge-following-rules) below. Direction matters: "what does X refine" asks for X's outbound `refines:` list; "what refines X" asks which pages name X under their own `refines:`. Inverting is a silent miss.
-
-   `source` excluded from fallback — belongs to provenance path, not general expansion. Only follow it when question matches provenance row below.
-
-4. **Filter frontier for currency.** Superseded page is never an answer — `supersedes` is a *recorded fact* (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)), and recorded fact beats any recency guess. Run `"$RUNTIME" "$ENCHIRIDION" superseded-by` with every candidate's `page_ref` as positional arg (`--json` for machine-readable line per candidate); walks each one's `supersedes` inversions in-process and returns each candidate's *active* page:
+4. **Filter frontier for currency.** A superseded page is never the answer — `supersedes` is a *recorded fact* (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)) and beats any recency guess. Run `"$RUNTIME" "$ENCHIRIDION" superseded-by` with every candidate's `page_ref` as positional arg (`--json` for machine-readable line per candidate); walks each one's `supersedes` inversions in-process and returns each candidate's *active* page:
 
    ```
    "$RUNTIME" "$ENCHIRIDION" superseded-by wiki/concepts/a.md wiki/concepts/x.md --json
    ```
 
-   Each result: `{"seed": ..., "active": ..., "chain": [...]}`. Apply directly — **no need to re-derive by hand:**
+   Each result: `{"seed": ..., "active": ..., "chain": [...]}`. Apply directly:
 
    - **`active == seed`** — candidate is current; keep it.
    - **`active != seed`** — **drop seed from active set and keep `active` instead**, adding to candidate set if not already there. Seed is history, not the answer, whether replacement was one hop or multi-page chain — script already walked to head.
@@ -73,34 +56,28 @@ Given a question:
 5. **Stop at budget.** Retrieval is bounded:
    - **max 2 hops** from seed set,
    - **~12 pages read** in full,
-   - **stop early when next page adds nothing** — if last page or two contributed no new fact, done regardless of counters.
+   - **stop early when a hop adds no new fact.** Recency is never a stop signal — an older page is not skipped for being old, and a newer one does not end the search.
 
    If budget hit with question unanswered, say so (what was searched, what to read next) — never silently truncate or blow through it.
 
-6. **Synthesize, with honest temporal framing.** Answer from what was actually read; **cite every claim** with source page (relative link or vault path — reader must be able to open it).
+6. **Synthesize, with honest temporal framing.** Answer from what was actually read; **cite every claim** with its source page (relative link or vault path — the reader must be able to open it).
 
-   **Two citation modes — question decides:**
-   - **Normal** — common case, every question that isn't provenance-shaped. Cite concept (or entity/synthesis) page itself, with age and `volatility` as below. Don't read `source` stub or raw artifact behind it; concept page stands in for that raw material, reading through it wastes budget the question didn't ask for.
-   - **Provenance** — when question matches provenance row in [Edge-following rules](#edge-following-rules). Follow chain to raw artifact (concept page → `source` → stub → `raw_source` → raw file) and cite raw artifact itself, with specific location (line or page number). Frame concept page as lens on source, not citation: *"per [Concept](...), drawing on [raw-file.md](...) line 42…"*. If provenance question lands on page with no `source` edge (pre-#34 content), degrade gracefully — cite page normally and note no provenance chain exists.
+   **Normal** questions cite the page itself — it stands in for the raw material beneath it — and leave the `source` stub unread. **Provenance** questions ([Edge-following rules](#edge-following-rules)) follow the chain to the raw artifact (page → `source` → stub → `raw_source` → raw file) and cite that with a location (line or page number), the concept page as lens: *"per [Concept](...), drawing on [raw-file.md](...) line 42…"*; a page with no `source` edge has no chain, so cite it normally and say so.
 
-   For each cited page state age (`source_date` or `git_date` — see [Derived from git](../wiki-conventions/SKILL.md#derived-from-git)) and `volatility` (see [Frontmatter schema](../wiki-conventions/SKILL.md#frontmatter-schema)) plainly so asker can calibrate trust. Sanity-check `git_date` before quoting: bulk-imported vault gives every page same commit date, which says nothing about the knowledge — when commit dates are uninformative, frame on `source_date` and say so.
+   For each cited page state its age (`source_date` or `git_date`) and its `volatility` ([field semantics](../wiki-conventions/SKILL.md#frontmatter-schema)) in the answer, so the asker can calibrate trust — e.g. *"per [Rate limits](wiki/concepts/rate-limits.md), marked `volatile`, from 2025-01-12 and last committed 14 months ago…"*. A `volatile` fact never carries the confidence of a `stable` one. Sanity-check `git_date` before quoting: a bulk-imported vault gives every page the same commit date, which says nothing about the knowledge — frame on `source_date` and say so.
 
-   Phrase it in the answer, don't bury it — e.g. *"per [Rate limits](wiki/concepts/rate-limits.md), marked `volatile`, from 2025-01-12 and last committed 14 months ago…"*. `stable` page from three years ago is not stale; `volatile` page from last quarter may already be wrong. Never present `volatile` fact with same confidence as `stable` just because it's what was found.
+   **Recency is never a re-ranking signal.** Exception: an explicitly time-anchored question ("what's the latest X", "as of YYYY-MM-DD"), where recency is the signal; even then the `supersedes` edge wins.
 
-   **Recency is never a re-ranking signal.** When question matches an older `stable` page and a newer `volatile` one, don't promote the newer — present both with volatilities and let asker judge. Exception: explicitly time-anchored question ("what's the latest X", "as of YYYY-MM-DD"), where recency IS the signal; even then, `supersedes` edge wins — recorded fact beats any recency guess.
+   **A superseded page is history, not the current answer** — step 4 already filtered them, so this keeps the *answer* consistent. Frame on the *current* page ("per [Current]…") and name the older one only as what it replaced; a question about the chain itself spells it out: *"per [A] (now superseded by [C] via [B])…"*. Where pages genuinely conflict without one superseding the other, show both — resolving a live contradiction is the asker's call.
 
-   **Never present superseded page as current** — step 4 already filtered them; framing here keeps the *answer* consistent. When user asked about replaced page, frame on *current* page ("per [Current]…") and mention older only as what it replaced ("replaces [Old], which said…"). When user asks about chain itself ("what did we use before X?"), say so explicitly: *"per [A] (now superseded by [C] via [B])…"*.
+7. **Report.** Reply with the answer and its citations, plus one short line on what was searched (expansions used, pages read, hops taken) so the asker can see whether the search missed their framing. The answer is prose; the page bodies stay in the reading context.
 
-   Where pages genuinely conflict without one superseding the other, say so and show both — resolving live contradiction is asker's call.
-
-7. **Report.** Reply with answer and citations, plus one short line on what was searched (expansions used, pages read, hops taken) so asker can see if search missed their framing. Never dump page bodies into answer — that is the reading noise this subagent exists to keep out of main thread.
-
-8. **Offer to save when answer worth keeping.** Judge against both bars — *both* must hold or say nothing:
+8. **Offer to save when the answer is worth keeping.** Append a `save-candidate` block only when **both** bars hold:
 
    - **Durable** — not a one-off lookup expiring with session, and not a single page's content restated (if one page answered the question, cite it; synthesis duplicating it is vault noise).
    - **Reusable** — drew several pages into something next asker would otherwise re-derive, and still true next month.
 
-   When both hold, append `save-candidate` block to report — **proposal, not a write**. No way to ask the user; invoking session puts the offer and, on explicit yes, performs save — see [saving-synthesis.md](saving-synthesis.md).
+   The block is **a proposal, not a write** — the session holding the conversation puts the offer and performs the save on explicit yes ([saving-synthesis.md](saving-synthesis.md)); a subagent cannot ask, which is why it proposes.
 
    ````markdown
    ```save-candidate
@@ -117,22 +94,10 @@ Given a question:
 
    Field notes: `summary` is one line, ≤ ~20 words — what *next* retrieval judges this page by, write it as well as you'd want to find it. `source_date` is **today** — synthesis made today even if inputs are older. `volatility` is **most volatile** of cited pages: synthesis only as durable as shakiest input. `source:` lists every page actually cited, as vault-relative paths (`enchiridion ingest` composes actual links when plan runs) — nothing merely skimmed.
 
-   If neither bar holds, don't mention saving. Offering every answer trains user to say no — how confirmation gate stops working.
-
 ## Edge-following rules
 
-When question's shape implies specific typed edge, follow *that* edge in implied direction. Table covers unambiguous cases. Anything not on it defaults to "follow all typed edges both directions" — broader `related` graph is fallback.
+An unambiguous question shape maps to one edge and one direction; anything else follows **all typed edges in both directions, `source` excepted**. Direction is the trap — "what does X refine" asks for X's outbound `refines:` list, "what refines X" asks which pages name X under their own `refines:`; inverting is a silent miss.
 
-| Question pattern | Edge | Direction | What to follow |
-|---|---|---|---|
-| "what does X refine" / "X refines" | `refines` | outbound from X | X's `refines:` list |
-| "what refines X" / "refined by" | `refines` | inbound to X | pages whose `refines:` lists X |
-| "what superseded X" / "replaces X" / "is X still current" | `supersedes` | inbound to X | pages whose `supersedes:` lists X |
-| "what does X supersede" | `supersedes` | outbound from X | X's `supersedes:` list |
-| "what contradicts X" / "is X contradicted" | `contradicts` | inbound to X | pages whose `contradicts:` lists X |
-| "examples of X" / "what is an example of X" | `example-of` | inbound to X | pages whose `example-of:` lists X |
-| "what is X an example of" | `example-of` | outbound from X | X's `example-of:` list |
-| "what did X draw on" / "what sources X" | `source` | outbound from X | X's `source:` list |
-| "where is X used" / "what uses X" | `source` | inbound to X | pages whose `source:` lists X |
-| "related to X" (default) | `related` | both | X's `related:` list + pages whose `related:` lists X |
-| "provenance of X" / "evidence for X" / "raw data behind X" / "cite the original" | `source` | outbound from X | X's `source:` list → stub page → its `raw_source:` → raw artifact, with location (line or page number) |
+**Provenance questions** — "provenance of X", "evidence for X", "raw data behind X", "cite the original" — follow `source` outbound: X's `source:` list → stub page → its `raw_source:` → raw artifact, cited with a location (line or page number).
+
+The rest of the question-to-edge table: [`reference/edge-following.md`](reference/edge-following.md) — read when the question's shape is not one you have already mapped.

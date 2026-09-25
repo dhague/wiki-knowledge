@@ -4,14 +4,16 @@ Read only when the prompt names a **Consolidation** — the `wiki-lint` procedur
 
 **Input:** the cluster's member refs plus the check's suggested survivor. **Output:** one plan through `enchiridion ingest` — survivor written, every inbound link repointed, absorbed pages deleted, one commit under `deleted:`.
 
-The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
 ```bash
 RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop.
+
+[`wiki-conventions` → Scripts](../../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue
 
 ## Procedure
 
