@@ -18,7 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import util from "node:util";
-import { Page } from "./wikipage.js";
+import { Page, isStringListKey } from "./wikipage.js";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
 import { KindFolders, Kinds, path as placePath } from "./place.js";
@@ -134,6 +134,42 @@ function edgeSetValue(
   return items.map((item) => {
     if (typeof item !== "string") fail(edgeRefusal(key, item));
     return normalize(key, item);
+  });
+}
+
+/**
+ * The value `page set` writes for a string-list key — a one-element list for
+ * one bare value, the list itself for a list (#575).
+ *
+ * `--json` is the list's door, but a bare value that is *shaped* like a JSON
+ * array is read as one too: that is the argument shape the sibling `page merge`
+ * takes with no flag at all, so a caller that reached for `page set` from
+ * `page merge` means the list it wrote. Reading it as the one literal string
+ * `["a","b"]` would be the same silent wrong-tags write this rule exists to
+ * close, one step later. A value that is neither a JSON array nor a plain
+ * string — the scalar a caller passes by mistake — is refused rather than
+ * written as the scalar the record reader reads as no value at all.
+ *
+ * The *write* rule is [canonicalForWrite]'s, which wraps a scalar whatever
+ * caller hands it over; this function's half is the argument, mirroring how
+ * `source_date`'s date is validated here and canonicalised there.
+ */
+function stringListSetValue(key: string, value: unknown): string[] {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text.startsWith("[") || !text.endsWith("]")) return [value];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      fail(`${key} starts like a JSON list but does not parse: ${value}`);
+    }
+    return stringListSetValue(key, parsed);
+  }
+  if (!Array.isArray(value)) fail(`${key} expects a JSON list of values`);
+  return value.map((item) => {
+    if (typeof item !== "string") fail(`${key} expects a JSON list of strings`);
+    return item;
   });
 }
 
@@ -814,9 +850,9 @@ export function buildProgram(): Command {
     .argument("<key>", "frontmatter key")
     .argument(
       "<value>",
-      "value; for an edge key, exactly one markdown link or a vault-relative page ref (a list-valued key is replaced)",
+      "value; for an edge key, exactly one markdown link or a vault-relative page ref; for tags, one value or a JSON list (a list-valued key is replaced)",
     )
-    .option("--json", "parse value as JSON")
+    .option("--json", "parse value as JSON; a list for a list-valued key")
     .description(
       "Set a frontmatter value in place — replaces the key, including a list-valued edge key",
     )
@@ -833,6 +869,11 @@ export function buildProgram(): Command {
         }
         if (key === "source_date") value = canonicalSourceDate(value);
         if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
+        // The write rule itself is the writer's ([canonicalForWrite] wraps a
+        // scalar); the CLI's job is the *argument*, so a value that is not a
+        // string — the scalar a caller passes under `--json` — is refused here
+        // rather than written as the scalar the record reader reads as nothing.
+        if (isStringListKey(key)) value = stringListSetValue(key, value);
         const updated = p.set(key, value);
         writePageFile(file, updated);
       },

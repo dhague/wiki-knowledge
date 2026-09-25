@@ -308,6 +308,138 @@ test("page merge: unions values into a list-valued key", () => {
   );
 });
 
+// #575: `page set <file> tags <value>` without `--json` wrote the value as a
+// YAML scalar, which `stringList` reads as no tags at all — the page silently
+// vanished from every tag-filtered search, discover and check. These pin the
+// list-valued-key contract: one bare value becomes a one-element list, a list
+// arrives as `--json` — or as the JSON-array text `page merge` already takes
+// with no flag — and a value that is neither is refused rather than written.
+
+test("page set: writes a bare tags value as a one-element list", () => {
+  const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
+  const { status, stderr } = run(["page", "set", file, "tags", "alpha"]);
+  assert.equal(status, 0, stderr);
+  const { stdout } = run(["page", "get", file, "tags"]);
+  assert.equal(stdout.trim(), "['alpha']");
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    "---\ntitle: A\ntags:\n  - alpha\n---\nbody\n",
+  );
+});
+
+test("page set: writes a --json tags array as a list", () => {
+  const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
+  const { status, stderr } = run([
+    "page",
+    "set",
+    file,
+    "tags",
+    '["a", "b"]',
+    "--json",
+  ]);
+  assert.equal(status, 0, stderr);
+  const { stdout } = run(["page", "get", file, "tags"]);
+  assert.equal(stdout.trim(), "['a', 'b']");
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    "---\ntitle: A\ntags:\n  - a\n  - b\n---\nbody\n",
+  );
+});
+
+test("page set: reads a bare JSON-array value as the list, no flag needed", () => {
+  // The trap the issue names: `page merge` takes a JSON list with no flag, so
+  // a caller reusing that shape on `page set` used to write one scalar — and
+  // now would write one literal `["a","b"]` tag if the shape went unread.
+  const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
+  const { status, stderr } = run(["page", "set", file, "tags", '["a", "b"]']);
+  assert.equal(status, 0, stderr);
+  const { stdout } = run(["page", "get", file, "tags"]);
+  assert.equal(stdout.trim(), "['a', 'b']");
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    "---\ntitle: A\ntags:\n  - a\n  - b\n---\nbody\n",
+  );
+});
+
+test("page set: refuses JSON-array text that does not parse", () => {
+  const before = "---\ntitle: A\ntags: []\n---\nbody\n";
+  const file = writeTempPage(before, "");
+  const { status, stderr } = run(["page", "set", file, "tags", '["a",]']);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /does not parse/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+test("page set: a --json string for tags is still the one-element list", () => {
+  const file = writeTempPage("---\ntitle: A\ntags: []\n---\nbody\n", "");
+  const { status, stderr } = run([
+    "page",
+    "set",
+    file,
+    "tags",
+    '"alpha"',
+    "--json",
+  ]);
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(file, "utf8"),
+    "---\ntitle: A\ntags:\n  - alpha\n---\nbody\n",
+  );
+});
+
+test("page set: refuses a --json non-string for tags, leaving the file alone", () => {
+  const before = "---\ntitle: A\ntags:\n  - a\n---\nbody\n";
+  const file = writeTempPage(before, "");
+  const { status, stderr } = run(["page", "set", file, "tags", "1", "--json"]);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /tags expects a JSON list of values/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
+// The retrieval consequence the rows above only imply: a page whose tags
+// `page set` wrote is actually indexed under them, so a tag-filtered search
+// finds it. The index is a view of HEAD (ADR-0015), so the vault is committed
+// after the edit.
+test("page set: tags written this way are indexed and findable by --tag", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-tags-"));
+  const ref = "wiki/concepts/a.md";
+  const abs = path.join(root, ref);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, "---\ntitle: A\ntags: []\n---\n\nbody\n");
+  await git.init({ fs, dir: root });
+  await git.add({ fs, dir: root, filepath: ref });
+  const author = {
+    name: "t",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.commit({ fs, dir: root, message: "init", author });
+
+  const set = run(["page", "set", abs, "tags", "alpha"]);
+  assert.equal(set.status, 0, set.stderr);
+  await git.add({ fs, dir: root, filepath: ref });
+  await git.commit({ fs, dir: root, message: "tag", author });
+
+  const { status, stdout, stderr } = runEnv(
+    ["search", "--tag", "alpha", "--json"],
+    {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    rows.map((row) => row.page_ref),
+    [ref],
+  );
+});
+
 // #548: `page merge`/`page set` used to write the value verbatim, so a caller
 // reusing `ingest`'s documented vault-relative-ref shape produced malformed
 // frontmatter edges. These pin the asymmetric-fix: a ref is composed, a link

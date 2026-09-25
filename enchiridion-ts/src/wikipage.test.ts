@@ -407,6 +407,17 @@ describe("Page.set", () => {
     const page = new Page("").set("tags", ["deploy", "ci"]);
     assert.ok(!page.text.includes('"'));
   });
+
+  it("coerces a scalar for a list-valued key into a one-element list", () => {
+    // #575: `tags` is list-valued, and the record reader reads a scalar as no
+    // tags at all — `stringList` returns [] for anything that is not an array,
+    // so the page silently drops out of every tag-filtered retrieval. The
+    // writer wraps the one value in the one-element list the conventions
+    // document, so the tags survive to the index whatever shape they arrive in.
+    const page = new Page("---\ntitle: A\n---\nbody\n").set("tags", "alpha");
+    assert.equal(page.text, "---\ntitle: A\ntags:\n  - alpha\n---\nbody\n");
+    assert.deepEqual(page.getStringList("tags"), ["alpha"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1360,7 +1371,13 @@ describe("consolidation preserves every link target", () => {
 // Value pool for generated frontmatter: safe plain tokens plus markdown-link
 // scalars, authored with single quotes (non-canonical) so a no-op Set provably
 // normalises the quote style and is never byte-identical.
-const FM_KEYS = ["title", "summary", "volatility", "tags", "source"];
+//
+// `tags` is deliberately absent: it is list-valued, so a scalar Set on it is
+// not the no-op shape this property is about — the writer wraps the value in a
+// one-element list (#575). `source` is a list *edge* key, but the writer
+// normalises no edge key, so a scalar Set on it stays the scalar it was and the
+// round trip below still holds.
+const FM_KEYS = ["title", "summary", "volatility", "source"];
 const FM_VALUES = [
   "deploy",
   "ci",
@@ -1376,7 +1393,10 @@ const FM_VALUES = [
 
 const genPageArb = fc
   .record({
-    keys: fc.shuffledSubarray(FM_KEYS, { minLength: 1, maxLength: 5 }),
+    keys: fc.shuffledSubarray(FM_KEYS, {
+      minLength: 1,
+      maxLength: FM_KEYS.length,
+    }),
     values: fc.array(fc.constantFrom(...FM_VALUES), {
       minLength: 1,
       maxLength: 5,
