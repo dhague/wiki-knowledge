@@ -119,11 +119,20 @@ block holds is recoverable by a rewrite.
 
 ## `concept-fragmentation`
 
-Clusters of small, closely-related `concept` pages — and custom-kind pages that
-behave like concepts — whose knowledge reads better as one page with sections
-(CONTEXT.md, **Concept fragmentation**). `entity`, `source` and `synthesis`
-pages are never in scope: their one-per-thing or one-per-artifact identity
-forbids consolidation.
+Clusters of small, closely-related pages whose knowledge reads better as one
+page with sections (CONTEXT.md, **Concept fragmentation**). Scope is an
+allowlist: `concept` by default, plus any kind whose `wiki/<kind>/KIND.md`
+declares `consolidatable: true` — a custom kind or `wiki/synthesis/` alike.
+`entity` and `source` are never in scope, whatever they declare: their
+one-per-thing or one-per-artifact identity forbids consolidation. A cluster
+never mixes kinds, so two syntheses on one topic consolidate while a synthesis
+and the concept it draws on never do.
+
+A declaration is advisory — it narrows what the check proposes, and a
+deliberate hand-authored merge stays possible. Scope is read from the working
+tree, so a `KIND.md` takes effect uncommitted; the members scored are still a
+view of HEAD. A concept-like custom kind that declares nothing simply stops
+being reported.
 
 One finding per cluster. Its `cluster` payload carries the members with committed
 byte size and inbound-link count, the shared basis (tags or title words), the

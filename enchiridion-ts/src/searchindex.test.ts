@@ -1185,7 +1185,7 @@ describe("tagCounts", () => {
 // ---------------------------------------------------------------------------
 
 describe("indexedPages", () => {
-  it("folds tags in and drops the excluded kinds", async () => {
+  it("folds tags in and keeps only the included kinds", async () => {
     const fake = fakeAtHead(
       "head1",
       pageChange(
@@ -1202,7 +1202,7 @@ describe("indexedPages", () => {
     );
     const index = await openIndex(fake);
     try {
-      const pages = await index.indexedPages(["entity", "source", "synthesis"]);
+      const pages = await index.indexedPages(["concept", "tool"]);
       assert.deepEqual(pages, [
         {
           pageRef: "wiki/concepts/a.md",
@@ -1212,6 +1212,9 @@ describe("indexedPages", () => {
         },
         { pageRef: "wiki/tools/c.md", title: "C", kind: "tool", tags: [] },
       ]);
+      // An empty include-list names no kind, so it matches nothing.
+      assert.deepEqual(await index.indexedPages([]), []);
+      assert.deepEqual(await index.sharedTagPairs([]), []);
     } finally {
       index.close();
     }
@@ -1227,7 +1230,7 @@ describe("sharedTagPairs", () => {
       pageChange("wiki/concepts/c.md", "C", "s", "body", ["z"], "", ""),
       pageChange("wiki/concepts/e.md", "E", "s", "body", ["z"], "", ""),
       pageChange("wiki/concepts/f.md", "F", "s", "body", ["z"], "", ""),
-      // Overlaps every concept but is out of scope.
+      // Overlaps every concept but its kind is out of scope.
       pageChange(
         "wiki/entities/d.md",
         "D",
@@ -1240,11 +1243,7 @@ describe("sharedTagPairs", () => {
     );
     const index = await openIndex(fake);
     try {
-      const pairs = await index.sharedTagPairs([
-        "entity",
-        "source",
-        "synthesis",
-      ]);
+      const pairs = await index.sharedTagPairs(["concept"]);
       assert.deepEqual(pairs, [
         {
           a: "wiki/concepts/a.md",
