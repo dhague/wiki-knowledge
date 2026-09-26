@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { Vault } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
@@ -792,6 +793,133 @@ export async function conceptFragmentation(
 }
 
 // ---------------------------------------------------------------------------
+// duplicateFrontmatter
+// ---------------------------------------------------------------------------
+
+/** A `---`-delimited block at the head of a page, with its byte span (fences
+ * included) so a redundant one can be dropped verbatim. */
+interface FrontmatterBlock {
+  yaml: string;
+  start: number;
+  end: number;
+}
+
+/** A page's leading blocks, and the indices holding every other block's keys
+ * when each block is a readable mapping. */
+interface DuplicateAnalysis {
+  blocks: FrontmatterBlock[];
+  readable: boolean;
+  dominant: number[];
+}
+
+/** Every `---` block at the head of a page, in order; a blank line between
+ * blocks is skipped, since it is the same corruption with a stray newline. A
+ * fence with no closing `---` is not a block. */
+function leadingFrontmatterBlocks(text: string): FrontmatterBlock[] {
+  const blocks: FrontmatterBlock[] = [];
+  let offset = 0;
+  while (offset < text.length) {
+    if (blocks.length > 0) {
+      const gap = /^(?:[ \t]*\r?\n)+/.exec(text.slice(offset));
+      if (gap) offset += gap[0].length;
+    }
+    const { frontmatter, hasFrontmatter, bodyOffset } = splitFrontmatter(
+      text.slice(offset),
+    );
+    if (!hasFrontmatter) break;
+    blocks.push({ yaml: frontmatter, start: offset, end: offset + bodyOffset });
+    offset += bodyOffset;
+  }
+  return blocks;
+}
+
+/** The block's decoded mapping. An empty block decodes to `{}`, a subset of
+ * every mapping; null means the block holds no mapping — a comment-only block,
+ * a sequence, a scalar, or YAML the parser refuses. */
+function blockMapping(yaml: string): Record<string, unknown> | null {
+  if (yaml.trim() === "") return {};
+  let doc;
+  try {
+    doc = parseDocument(yaml);
+  } catch {
+    return null;
+  }
+  if (doc.errors.length > 0 || doc.contents === null) return null;
+  if (!isMap(doc.contents)) return null;
+  return doc.contents.toJSON() as Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** a ⊆ b over decoded YAML: every key present, every list entry matched, order
+ * irrelevant — a stale block that lost entries is a subset of the repaired one. */
+function yamlSubset(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a))
+    return (
+      Array.isArray(b) && a.every((x) => b.some((y) => isDeepStrictEqual(x, y)))
+    );
+  if (isRecord(a) && isRecord(b))
+    return Object.entries(a).every(([k, v]) => k in b && yamlSubset(v, b[k]));
+  return a === b;
+}
+
+/** The indices of the blocks that hold every other block's keys — several only
+ * when they carry the same information. */
+function dominantIndices(mappings: Array<Record<string, unknown>>): number[] {
+  return mappings
+    .map((_, i) => i)
+    .filter((i) => mappings.every((m) => yamlSubset(m, mappings[i])));
+}
+
+/** A page's leading blocks when it carries more than one, else null. */
+function duplicateAnalysis(text: string): DuplicateAnalysis | null {
+  const blocks = leadingFrontmatterBlocks(text);
+  if (blocks.length < 2) return null;
+  const mappings: Array<Record<string, unknown>> = [];
+  let readable = true;
+  for (const block of blocks) {
+    const mapping = blockMapping(block.yaml);
+    if (mapping === null) readable = false;
+    else mappings.push(mapping);
+  }
+  return {
+    blocks,
+    readable,
+    dominant: readable ? dominantIndices(mappings) : [],
+  };
+}
+
+/** The finding's one-line detail, naming whether the fix will take the page. */
+function duplicateDetail(analysis: DuplicateAnalysis): string {
+  const reason = !analysis.readable
+    ? "a block is not a readable mapping, so merge by hand"
+    : analysis.dominant.length > 0
+      ? "redundant, so fix collapses them"
+      : "divergent, so merge by hand";
+  return (
+    `${analysis.blocks.length} frontmatter blocks before the body; the parser ` +
+    `reads only the first, so later blocks' edges are invisible and their text ` +
+    `renders as body — ${reason}`
+  );
+}
+
+/** duplicateFrontmatter — a page's frontmatter is exactly one leading `---`
+ * block; the parser reads the first and stops, so every later block's edges are
+ * invisible and its text renders as body. */
+export async function duplicateFrontmatter(root: string): Promise<Finding[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const findings: Finding[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    const analysis = duplicateAnalysis(text);
+    if (analysis === null) continue;
+    findings.push({ pageRef: ref, detail: duplicateDetail(analysis) });
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Check registry
 // ---------------------------------------------------------------------------
 
@@ -808,6 +936,7 @@ export const CHECKS: Record<string, CheckFn> = {
   "contradiction-callouts": contradictionCallouts,
   orphans,
   "split-links": splitLinks,
+  "duplicate-frontmatter": duplicateFrontmatter,
   "concept-fragmentation": conceptFragmentation,
 };
 
@@ -1010,9 +1139,30 @@ export async function fixSplitLinks(root: string): Promise<string[]> {
   return changed;
 }
 
+// fixDuplicateFrontmatter — collapse the leading blocks to the one holding every
+// key; divergent or unreadable blocks are left for a hand merge.
+export async function fixDuplicateFrontmatter(root: string): Promise<string[]> {
+  const pages = new Vault(root).loadWikiPages();
+  const changed: string[] = [];
+  for (const [ref, text] of Object.entries(pages)) {
+    const analysis = duplicateAnalysis(text);
+    if (analysis === null || !analysis.readable) continue;
+    if (analysis.dominant.length === 0) continue;
+
+    const keep = analysis.blocks[analysis.dominant[0]];
+    const last = analysis.blocks[analysis.blocks.length - 1];
+    const collapsed = text.slice(keep.start, keep.end) + text.slice(last.end);
+    if (collapsed === text) continue;
+    fs.writeFileSync(path.join(root, ref), collapsed, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
+
 export const FIXES: Record<string, (root: string) => Promise<string[]>> = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
   "missing-cross-references": fixMissingCrossReferences,
   "split-links": fixSplitLinks,
+  "duplicate-frontmatter": fixDuplicateFrontmatter,
 };
