@@ -47,6 +47,7 @@ Run every check below, in parallel where the vault is large. Each emits JSON Lin
 "$RUNTIME" "$ENCHIRIDION" check contradiction-callouts --json
 "$RUNTIME" "$ENCHIRIDION" check orphans --json
 "$RUNTIME" "$ENCHIRIDION" check split-links --json
+"$RUNTIME" "$ENCHIRIDION" check duplicate-frontmatter --json
 "$RUNTIME" "$ENCHIRIDION" check concept-fragmentation --json
 ```
 
@@ -60,6 +61,7 @@ Run every check below, in parallel where the vault is large. Each emits JSON Lin
 - **Contradiction callouts** (`contradiction-callouts`) — pages carrying an active `> [!warning] Contradiction` callout. Fix level: **report only**.
 - **Orphans** (`orphans`) — pages with no inbound link, body or frontmatter. Fix level: **confirm first** (delete only after the user confirms).
 - **Split links** (`split-links`) — no link split across lines, in frontmatter or body. Fix level: **auto-fix** the folded frontmatter shapes (a destination joins with nothing, a label with one space); **report only** body splits — a break after a destination is legal markdown, so joining on sight can silently repoint the link. Scoped to double-quoted frontmatter scalars: raw text cannot tell a block scalar (`related: |`) from a fold, so nothing outside that shape is reported or joined.
+- **Duplicate frontmatter** (`duplicate-frontmatter`) — a page's frontmatter is exactly one leading `---` block. A second block is invisible: the parser reads only the first, so its edges reach no check and its text renders as body. Fix level: **auto-fix** when one block holds every key of the others; **report only** when they diverge or a block is not a readable mapping — which side is current is a judgment call.
 - **Concept fragmentation** (`concept-fragmentation`) — clusters of small, closely-related `concept` pages, and custom-kind pages behaving like concepts, whose knowledge reads better as one page with sections (CONTEXT.md, **Concept fragmentation**). One finding per cluster, whose `cluster` payload carries the members with committed byte size and inbound-link count, the shared basis (tags / title words), the weakest pairwise similarity holding the cluster together, and a suggested survivor (most inbound links, largest body as tie-break). The `pageRef` is that survivor and the `detail` a one-line summary. `--min-similarity <n>` (default `0.5`) is the one cutoff; `entity`, `source` and `synthesis` pages are never in scope. Reads the index, so it sees only committed pages — an uncommitted draft is invisible until committed. Fix level: **confirm first** — a Consolidation, always one cluster per handoff.
 
 Per-check semantics and the rationale behind each fix: [`reference/checks.md`](reference/checks.md) — read before explaining a finding you cannot classify.
@@ -107,6 +109,7 @@ For each auto-fix finding, apply without asking:
 "$RUNTIME" "$ENCHIRIDION" fix ingestion-source-integrity
 "$RUNTIME" "$ENCHIRIDION" fix missing-cross-references
 "$RUNTIME" "$ENCHIRIDION" fix split-links
+"$RUNTIME" "$ENCHIRIDION" fix duplicate-frontmatter
 ```
 
 Each prints the vault-relative refs it modified, one per line, or nothing if no change was needed. Ambiguous cases are skipped by the fix — surface them as report-only findings. Note each changed ref in the summary (file, what changed).
@@ -143,7 +146,7 @@ After auto-fixes and confirms, emit the final report:
 ```
 
 Priority ordering in the report:
-1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links.
+1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter.
 2. **MEDIUM** — orphans, concept fragmentation, under-typed edges, stale synthesis, missing `volatility`/`source_date`.
 3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession.
 
@@ -165,6 +168,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `contradiction-callouts` | report only |
 | `orphans` | confirm first |
 | `split-links` | auto-fix (frontmatter) / report only (body) |
+| `duplicate-frontmatter` | auto-fix (redundant) / report only (divergent) |
 | `concept-fragmentation` | confirm first |
 | Stale claims | report only |
 | Implicit concepts | confirm first |

@@ -1,4 +1,4 @@
-/** Tests for the eleven mechanical vault health checks. staleSynthesis and
+/** Tests for the twelve mechanical vault health checks. staleSynthesis and
  * conceptFragmentation need a real git commit: the index is a view of HEAD
  * (ADR-0015). */
 
@@ -19,6 +19,7 @@ import {
   contradictionCallouts,
   orphans,
   splitLinks,
+  duplicateFrontmatter,
   conceptFragmentation,
   DefaultMinSimilarity,
   titleTokens,
@@ -27,6 +28,7 @@ import {
   fixIngestionSourceIntegrity,
   fixMissingCrossReferences,
   fixSplitLinks,
+  fixDuplicateFrontmatter,
   FIXES,
 } from "./check.js";
 import { newPageRecord } from "./pagerecord.js";
@@ -813,10 +815,139 @@ test("split-links: a split inside a fenced code block is not a finding", async (
 });
 
 // ---------------------------------------------------------------------------
+// duplicateFrontmatter
+// ---------------------------------------------------------------------------
+
+const fmBlock = (extra = ""): string =>
+  `---\ntitle: Foo\nsummary: s\n${extra}---\n`;
+
+test("duplicate-frontmatter: a second block after the first is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + fmBlock() + "Body text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
+  assert.match(findings[0].detail, /2 frontmatter blocks/);
+  assert.match(findings[0].detail, /parser reads only the first/);
+});
+
+test("duplicate-frontmatter: a stale subset block reports as fixable", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      fmBlock('related:\n  - "[Bar](../entities/bar.md)"\n') +
+      fmBlock() +
+      "Body text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /fix collapses/);
+});
+
+test("duplicate-frontmatter: divergent blocks report as a hand merge", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      "---\ntitle: Foo\nsummary: s\n---\n" +
+      "---\ntitle: Bar\nsummary: t\n---\n" +
+      "Body text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /merge by hand/);
+});
+
+test("duplicate-frontmatter: three blocks are one finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + fmBlock() + fmBlock() + "Body text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /3 frontmatter blocks/);
+});
+
+test("duplicate-frontmatter: one block is clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "Body text.\n",
+  });
+  assert.deepEqual(await duplicateFrontmatter(root), []);
+});
+
+test("duplicate-frontmatter: a thematic break in the body is not a second block", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "\n# Heading\n\n---\n\nmore\n",
+  });
+  assert.deepEqual(await duplicateFrontmatter(root), []);
+});
+
+test("duplicate-frontmatter: an unclosed fence is not a second block", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "---\nprose, with no closing fence\n",
+  });
+  assert.deepEqual(await duplicateFrontmatter(root), []);
+});
+
+test("duplicate-frontmatter: a blank line between blocks is still a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "\n" + fmBlock() + "Body text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /2 frontmatter blocks/);
+  assert.match(findings[0].detail, /fix collapses/);
+});
+
+test("duplicate-frontmatter: a body opening with a blank line and a break is not a block", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "\n---\nprose, not YAML\n",
+  });
+  assert.deepEqual(await duplicateFrontmatter(root), []);
+});
+
+test("duplicate-frontmatter: an empty second block is a finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "---\n---\nBody text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /fix collapses/);
+});
+
+test("duplicate-frontmatter: an unreadable second block asks for a hand merge", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "---\n- a\n- b\n---\nBody text.\n",
+  });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /not a readable mapping/);
+});
+
+test("duplicate-frontmatter: a comment-only block is not auto-fixed", async () => {
+  // `# Section` is a YAML comment but markdown prose, so the fix must not
+  // delete the body region it fences.
+  const src = fmBlock() + "---\n# Section\n---\nBody text.\n";
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  const findings = await duplicateFrontmatter(root);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /not a readable mapping/);
+  assert.deepEqual(await fixDuplicateFrontmatter(root), []);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    src,
+  );
+});
+
+test("duplicate-frontmatter: a page without frontmatter is clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": "# Heading\n\nBody text.\n",
+  });
+  assert.deepEqual(await duplicateFrontmatter(root), []);
+});
+
+// ---------------------------------------------------------------------------
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all eleven check names", () => {
+test("CHECKS registry contains all twelve check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
@@ -828,6 +959,7 @@ test("CHECKS registry contains all eleven check names", () => {
     "contradiction-callouts",
     "orphans",
     "split-links",
+    "duplicate-frontmatter",
     "concept-fragmentation",
   ];
   for (const name of expected) {
@@ -1217,15 +1349,121 @@ test("fix split-links: clean page is not modified", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// fix duplicateFrontmatter
+// ---------------------------------------------------------------------------
+
+test("fix duplicate-frontmatter: drops a stale block that repeats the first's keys", async () => {
+  const repaired = fmBlock('related:\n  - "[Bar](../entities/bar.md)"\n');
+  const root = writeVault({
+    "wiki/concepts/foo.md": repaired + fmBlock() + "Body text.\n",
+  });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), [
+    "wiki/concepts/foo.md",
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    repaired + "Body text.\n",
+  );
+  assert.deepEqual(await duplicateFrontmatter(root), []);
+});
+
+test("fix duplicate-frontmatter: promotes a later block that holds the first's keys", async () => {
+  const repaired = fmBlock('related:\n  - "[Bar](../entities/bar.md)"\n');
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + repaired + "Body text.\n",
+  });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), [
+    "wiki/concepts/foo.md",
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    repaired + "Body text.\n",
+  );
+});
+
+test("fix duplicate-frontmatter: identical blocks collapse to the first", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + fmBlock() + "Body text.\n",
+  });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), [
+    "wiki/concepts/foo.md",
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    fmBlock() + "Body text.\n",
+  );
+});
+
+test("fix duplicate-frontmatter: divergent blocks are left alone", async () => {
+  const src =
+    "---\ntitle: Foo\nsummary: s\n---\n" +
+    "---\ntitle: Bar\nsummary: t\n---\n" +
+    "Body text.\n";
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), []);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    src,
+  );
+});
+
+test("fix duplicate-frontmatter: an unparseable second block is left alone", async () => {
+  const src = fmBlock() + "---\ntitle: [unclosed\n---\nBody text.\n";
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), []);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    src,
+  );
+});
+
+test("fix duplicate-frontmatter: drops an empty second block", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "---\n---\nBody text.\n",
+  });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), [
+    "wiki/concepts/foo.md",
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    fmBlock() + "Body text.\n",
+  );
+});
+
+test("fix duplicate-frontmatter: collapses blocks separated by a blank line", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md": fmBlock() + "\n" + fmBlock() + "Body text.\n",
+  });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), [
+    "wiki/concepts/foo.md",
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    fmBlock() + "Body text.\n",
+  );
+});
+
+test("fix duplicate-frontmatter: clean page is not modified", async () => {
+  const src = fmBlock() + "Body text.\n";
+  const root = writeVault({ "wiki/concepts/foo.md": src });
+  assert.deepEqual(await fixDuplicateFrontmatter(root), []);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
+    src,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // FIXES registry
 // ---------------------------------------------------------------------------
 
-test("FIXES registry contains all four fix names", () => {
+test("FIXES registry contains all five fix names", () => {
   const expected = [
     "frontmatter-link-format",
     "ingestion-source-integrity",
     "missing-cross-references",
     "split-links",
+    "duplicate-frontmatter",
   ];
   for (const name of expected) {
     assert.ok(name in FIXES, `FIXES missing: ${name}`);

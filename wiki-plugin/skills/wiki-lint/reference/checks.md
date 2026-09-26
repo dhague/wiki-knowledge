@@ -102,6 +102,21 @@ prose — so `vault move` never rewrites it, and joining on sight could silently
 repoint one. That rule and its reason are deliberate: a legal markdown break is
 not the agent's to join.
 
+## `duplicate-frontmatter`
+
+A page's frontmatter is exactly one leading `---` block. A second block is
+invisible: the parser stops at the first, so the later block's typed edges reach
+no check, and its text renders as body prose in a Markdown viewer. No check that
+reads edges can see it — they all read the first block — and the raw-text checks
+see well-formed frontmatter either way.
+
+Auto-fix when one block holds every key and list entry of the others: dropping
+the rest is lossless, whichever block wins, and the fix promotes the winner when
+it is the later one. Report only when the blocks diverge — two different
+`title:` values, or a key present with a different value — or when a block is
+not a readable YAML mapping, because neither which side is current nor what the
+block holds is recoverable by a rewrite.
+
 ## `concept-fragmentation`
 
 Clusters of small, closely-related `concept` pages — and custom-kind pages that

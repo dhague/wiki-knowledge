@@ -514,6 +514,44 @@ describe("Page.merge", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The write path leaves exactly one frontmatter block
+// ---------------------------------------------------------------------------
+
+/** True when a second `---` block sits immediately after the page's own — the
+ * shape the parser cannot see past. */
+function hasSecondBlock(text: string): boolean {
+  return splitFrontmatter(text).body.startsWith("---");
+}
+
+describe("Page.set/merge write exactly one frontmatter block", () => {
+  it("set replaces the block, never concatenates a second", () => {
+    const out = new Page("---\ntitle: A\nsummary: s\n---\nbody\n").set(
+      "title",
+      "B",
+    ).text;
+    assert.equal(out, "---\ntitle: B\nsummary: s\n---\nbody\n");
+    assert.ok(!hasSecondBlock(out));
+  });
+
+  it("merge replaces the block, never concatenates a second", () => {
+    const out = new Page(
+      "---\ntitle: A\ntags:\n  - a\n---\nbody\n",
+    ).mergeStrings("tags", ["b"]).text;
+    assert.equal(out, "---\ntitle: A\ntags:\n  - a\n  - b\n---\nbody\n");
+    assert.ok(!hasSecondBlock(out));
+  });
+
+  it("set splices a fenced body region back without minting a second block", () => {
+    const out = new Page("# Heading\n\n---\nnote: not frontmatter\n---\n").set(
+      "title",
+      "A",
+    ).text;
+    assert.ok(!hasSecondBlock(out));
+    assert.ok(out.endsWith("# Heading\n\n---\nnote: not frontmatter\n---\n"));
+  });
+});
+
 describe("Page.get", () => {
   it("is absent without frontmatter or for a missing key", () => {
     assert.equal(new Page("body\n").get("title").ok, false);

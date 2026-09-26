@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as git from "isomorphic-git";
 import { CHECKS } from "./check.js";
+import { splitFrontmatter } from "./wikipage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(__dirname, "cli.ts");
@@ -243,6 +244,25 @@ test("page set: writes the file back", () => {
   assert.equal(
     fs.readFileSync(file, "utf8"),
     "---\nkind: concept\nvolatility: stable\n---\nbody\n",
+  );
+});
+
+test("page set and page merge each leave one frontmatter block", () => {
+  const root = buildLintableVault();
+  const file = path.join(root, "wiki/concepts/a.md");
+  const env = { WIKI_ROOT: root };
+  const set = runEnv(["page", "set", file, "volatility", "stable"], {
+    cwd: root,
+    env,
+  });
+  assert.equal(set.status, 0, set.stderr);
+  const merge = runEnv(
+    ["page", "merge", file, "related", '["wiki/concepts/b.md"]'],
+    { cwd: root, env },
+  );
+  assert.equal(merge.status, 0, merge.stderr);
+  assert.ok(
+    !splitFrontmatter(fs.readFileSync(file, "utf8")).body.startsWith("---"),
   );
 });
 
@@ -1637,6 +1657,26 @@ test("check tags-shape --json: names each page and its offending value", () => {
   ]);
 });
 
+test("check duplicate-frontmatter --json: names a page with a second block", () => {
+  const root = buildLintableVault();
+  const block = "---\ntitle: A\nsummary: s\n---\n";
+  fs.writeFileSync(path.join(root, "wiki/concepts/a.md"), block + block + "\n");
+  const { status, stdout, stderr } = runEnv(
+    ["check", "duplicate-frontmatter", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.deepEqual(
+    rows.map((r) => r.pageRef),
+    ["wiki/concepts/a.md"],
+  );
+  assert.match(rows[0].detail, /2 frontmatter blocks/);
+});
+
 test("check: an unknown name errors non-zero, naming the known ones", () => {
   const root = buildLintableVault();
   const { status, stderr } = runEnv(["check", "nope"], {
@@ -1859,6 +1899,22 @@ test("fix: prints each changed page ref, one per line", () => {
   assert.match(
     fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8"),
     /- "\[B\]\(b\.md\)"/,
+  );
+});
+
+test("fix duplicate-frontmatter: collapses the redundant block", () => {
+  const root = buildLintableVault();
+  const block = "---\ntitle: A\nsummary: s\n---\n";
+  fs.writeFileSync(path.join(root, "wiki/concepts/a.md"), block + block + "\n");
+  const { status, stdout, stderr } = runEnv(["fix", "duplicate-frontmatter"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "wiki/concepts/a.md\n");
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki/concepts/a.md"), "utf8"),
+    block + "\n",
   );
 });
 
