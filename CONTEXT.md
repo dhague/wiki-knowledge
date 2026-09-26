@@ -21,7 +21,7 @@ The vault-relative path by which a page is named (`wiki/concepts/a.md`) — the 
 _Avoid_: `rel` (code shorthand for the same thing), `wiki-relative path` (the deleted second spelling — a page reference is always vault-relative).
 
 **Kind**:
-The axis that places a page into one of the four `wiki/` folders. The only axis that is both decidable from a page's own content and independent of any particular vault's subject domain — which is why the folder tree is fixed by the plugin rather than configured per vault. The kind **value** is singular (`concept`, `entity`, `source`, `synthesis`, as authored/compared in code); the kind **folder** it maps to pluralizes (`concepts/`, `entities/`, `sources/`; `synthesis/` has no distinct plural, so it's unchanged) — the two are deliberately decoupled, not a 1:1 name match ([ADR-0008](docs/adr/0008-kind-folders-plural-kind-values-singular.md)).
+The axis that places a page into a `wiki/` kind-folder — one of the four the plugin fixes, or a custom folder the vault already carries, whose value it declares in `wiki/<kind>/KIND.md` ([ADR-0020](docs/adr/0020-custom-kind-folders.md)). It is the one axis both decidable from a page's own content and independent of any particular vault's subject domain, which is why the plugin fixes the four rather than configuring them per vault; the only policy a kind declares for itself is whether its pages are consolidatable ([ADR-0027](docs/adr/0027-fragmentation-scope-is-a-declared-allowlist.md)). The kind **value** is singular (`concept`, `entity`, `source`, `synthesis`, as authored/compared in code); the kind **folder** it maps to pluralizes (`concepts/`, `entities/`, `sources/`; `synthesis/` has no distinct plural, so it's unchanged) — the two are deliberately decoupled, not a 1:1 name match ([ADR-0008](docs/adr/0008-kind-folders-plural-kind-values-singular.md)).
 _Avoid_: Category, type (too generic — "kind" names specifically this folder axis).
 
 **Concept**:
@@ -48,7 +48,7 @@ _Avoid_: Link (a typed edge is a specific relationship; "link" alone means any m
 A recorded fact that one page replaces another, distinct from a `newer wins` recency guess. On a contradiction, ingestion appends a new page and records `supersedes` — it never overwrites the superseded page.
 
 **Concept fragmentation**:
-A cluster of small, closely-related concept pages whose knowledge is better expressed as one page with sections. The degenerate two-member case is a pair of near-duplicate pages. Distinct from concepts that are merely *related*: distinct-but-related concepts are joined by a typed edge, not consolidated.
+A cluster of small, closely-related concept pages whose knowledge is better expressed as one page with sections. The degenerate two-member case is a pair of near-duplicate pages. Distinct from concepts that are merely *related*: distinct-but-related concepts are joined by a typed edge, not consolidated. A cluster never mixes kinds, and the pages in scope are `concept` plus any kind that declares itself consolidatable — never `entity` or `source` ([ADR-0027](docs/adr/0027-fragmentation-scope-is-a-declared-allowlist.md)).
 _Avoid_: Duplication (too narrow — fragmentation is scatter across pages, not only exact copies).
 
 **Consolidation**:
