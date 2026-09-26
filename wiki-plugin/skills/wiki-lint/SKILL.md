@@ -92,6 +92,8 @@ Compare `git_date`; where a related page is substantially newer and covers the s
 
 **Under-typed edges:** `related:` targets whose bodies support a sharper type — `refines`, `example-of` or `contradicts`, per the typed-edge vocabulary in `wiki-conventions`. Fix level: **confirm first** (retype with `page set` or `page merge`).
 
+**Over-typed and stale edges:** the converse of under-typed edges — a `refines`, `example-of` or `contradicts` edge whose justification is missing or no longer holds. Start from the `contradicts:` edges `unresolved-supersession` and `contradiction-callouts` surface, then review `refines:` and `example-of:` edges the same way. Read both bodies. Fix level: **confirm first** (retype, drop, record `supersedes`, or keep and add the callout).
+
 **The three-way boundary — fragmentation / cross-reference / implicit concept.** One question (*is this one concept or two?*) and one dial (`--min-similarity`) split three checks, so they partition rather than double-report. Read this before raising any of them:
 
 - **Concept fragmentation** (`concept-fragmentation`): the pages are the same concept → **Consolidation**: absorb into one survivor, delete the losers. Several pages in, one page out.
@@ -147,7 +149,7 @@ After auto-fixes and confirms, emit the final report:
 
 Priority ordering in the report:
 1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter.
-2. **MEDIUM** — orphans, concept fragmentation, under-typed edges, stale synthesis, missing `volatility`/`source_date`.
+2. **MEDIUM** — orphans, concept fragmentation, under-typed edges, over-typed and stale edges, stale synthesis, missing `volatility`/`source_date`.
 3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession.
 
 If no findings remain after fixes, report "Vault is clean."
@@ -176,5 +178,6 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | Data gaps | report only |
 | Summary quality | report only |
 | Under-typed edges | confirm first |
+| Over-typed and stale edges | confirm first |
 
 Every `fix <slug>` the run above calls, and why each skips an ambiguous page: [`reference/checks.md`](reference/checks.md).

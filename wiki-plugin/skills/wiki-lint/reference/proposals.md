@@ -38,6 +38,13 @@ term and the context pages as input.
 
 Command on yes: `"$RUNTIME" "$ENCHIRIDION" page merge <absolute-path> <specific-type> '["<vault-relative-ref>"]'`, then rewrite `related:` without that target via `page set <absolute-path> related --json '<remaining-links>'`. An edge value is a markdown link or a vault-relative ref (`wiki/concepts/foo.md`) — the command composes the link. `page set` **replaces** a list-valued key; `page merge` **unions** into it.
 
+**Edge review** (over-typed and stale edges) — "In `<page>`, `<type>:` → `<target>`: `<why the recorded type does not hold>`. Which disposition — keep, retype, drop, or supersede?" Name the reason from both bodies, and offer every disposition the case admits.
+
+- **Keep** — the edge holds and its justification is missing: add the `> [!warning] Contradiction` callout to `<page>`'s body ([`wiki-conventions`](../../wiki-conventions/SKILL.md#typed-edges)).
+- **Retype** — the relationship holds under a different type; run the Edge-retyping command above with the recorded type in place of `related`.
+- **Drop** — `"$RUNTIME" "$ENCHIRIDION" page set <absolute-path> <type> --json '<remaining-links>'`, then delete the empty key by hand when that was its only link — the conventions omit a key with no links, and `page set` leaves an empty list. A page whose own claim is the error needs its body corrected too, which no edge edit does.
+- **Supersede** — `<page>` replaces `<target>`: keep the `contradicts:` edge and record the replacement with `"$RUNTIME" "$ENCHIRIDION" page merge <absolute-path> supersedes '["<target-ref>"]'`.
+
 **Delete orphan page** — "Page `<path>` has no inbound links and no apparent
 purpose. Delete it?"
 
