@@ -2213,6 +2213,7 @@ test("vault kinds: canonical-only vault returns four entries", () => {
     kind: string;
     folder: string;
     canonical: boolean;
+    consolidatable: boolean;
     definition: null;
   }[];
   assert.equal(kinds.length, 4);
@@ -2225,6 +2226,30 @@ test("vault kinds: canonical-only vault returns four entries", () => {
   assert.ok(kindNames.includes("entity"));
   assert.ok(kindNames.includes("source"));
   assert.ok(kindNames.includes("synthesis"));
+  // Concept is in scope by default; its floor kinds and synthesis are not.
+  const byKind = new Map(kinds.map((e) => [e.kind, e.consolidatable]));
+  assert.equal(byKind.get("concept"), true);
+  assert.equal(byKind.get("entity"), false);
+  assert.equal(byKind.get("source"), false);
+  assert.equal(byKind.get("synthesis"), false);
+});
+
+test("vault kinds: synthesis reports consolidatable when its KIND.md opts in", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "synthesis"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "synthesis", "KIND.md"),
+    "---\nconsolidatable: true\n---\n",
+  );
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    consolidatable: boolean;
+  }[];
+  assert.equal(kinds.find((e) => e.kind === "synthesis")!.consolidatable, true);
 });
 
 test("vault kinds: custom folder without KIND.md has definition null", () => {
@@ -2238,6 +2263,7 @@ test("vault kinds: custom folder without KIND.md has definition null", () => {
     kind: string;
     folder: string;
     canonical: boolean;
+    consolidatable: boolean;
     definition: unknown;
   }[];
   const custom = kinds.filter((e) => !e.canonical);
@@ -2245,6 +2271,7 @@ test("vault kinds: custom folder without KIND.md has definition null", () => {
   assert.equal(custom[0].kind, "decision");
   assert.equal(custom[0].folder, "decisions");
   assert.equal(custom[0].definition, null);
+  assert.equal(custom[0].consolidatable, false);
 });
 
 test("vault kinds: custom folder with KIND.md reports declared kind and summary", () => {
@@ -2262,17 +2289,37 @@ test("vault kinds: custom folder with KIND.md reports declared kind and summary"
     kind: string;
     folder: string;
     canonical: boolean;
-    definition: { kind: string; summary: string } | null;
+    consolidatable: boolean;
+    definition: { kind: string | null; summary: string } | null;
   }[];
   const custom = kinds.filter((e) => !e.canonical);
   assert.equal(custom.length, 1);
   assert.equal(custom[0].kind, "person");
   assert.equal(custom[0].folder, "people");
   assert.equal(custom[0].canonical, false);
+  assert.equal(custom[0].consolidatable, false);
   assert.deepEqual(custom[0].definition, {
     kind: "person",
     summary: "A human individual.",
   });
+});
+
+test("vault kinds: a custom kind declaring consolidatable reports it", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "research"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "research", "KIND.md"),
+    "---\nkind: research\nsummary: Long-form research.\nconsolidatable: true\n---\n",
+  );
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as {
+    kind: string;
+    consolidatable: boolean;
+  }[];
+  assert.equal(kinds.find((e) => e.kind === "research")!.consolidatable, true);
 });
 
 test("vault kinds: respects WIKI_ROOT env var", () => {

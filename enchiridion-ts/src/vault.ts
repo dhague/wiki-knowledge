@@ -85,16 +85,23 @@ function isENOENT(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === "ENOENT";
 }
 
+/** A `KIND.md` declaration: the kind value a folder declares (`null` when only
+ * other keys are present), its summary, and whether its pages consolidate. */
+export interface KindMeta {
+  kind: string | null;
+  summary: string;
+  consolidatable: boolean;
+}
+
 /**
  * Reads the `KIND.md` declaration in an absolute folder path.
  *
- * Returns `{kind, summary}` on a non-empty `kind:` frontmatter key, else `null`
- * — a missing file, missing frontmatter, malformed YAML, or missing key all
- * fall back to [folderToKind] at the caller.
+ * `null` only when the file is absent or unparseable (no frontmatter,
+ * non-mapping YAML); parseable frontmatter missing `kind:` still returns a
+ * [KindMeta], so a `KIND.md` carrying the flag alone is not dropped. Callers
+ * fall back to [folderToKind] for a null `kind`.
  */
-export function readKindMeta(
-  folderAbsPath: string,
-): { kind: string; summary: string } | null {
+export function readKindMeta(folderAbsPath: string): KindMeta | null {
   let text: string;
   try {
     text = fs.readFileSync(path.join(folderAbsPath, "KIND.md"), "utf8");
@@ -105,15 +112,35 @@ export function readKindMeta(
     const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
     if (!hasFrontmatter || frontmatter === "") return null;
     const data = parseYaml(frontmatter) as unknown;
-    if (data === null || typeof data !== "object") return null;
+    if (data === null || typeof data !== "object" || Array.isArray(data))
+      return null;
     const map = data as Record<string, unknown>;
     const kind = typeof map["kind"] === "string" ? map["kind"].trim() : "";
-    if (!kind) return null;
     const summary = typeof map["summary"] === "string" ? map["summary"] : "";
-    return { kind, summary };
+    return {
+      kind: kind === "" ? null : kind,
+      summary,
+      consolidatable: map["consolidatable"] === true,
+    };
   } catch {
     return null;
   }
+}
+
+/** The kind value [Index] stores for a folder: canonical folders resolve from
+ * [FolderKinds], custom ones strip a trailing `s`. The index ignores a declared
+ * kind, so the scope rule must speak its vocabulary. */
+function indexedKind(folder: string): string {
+  return FolderKinds[folder] ?? folderToKind(folder);
+}
+
+/** ADR-0027's scope rule, on the kind the index stores: `concept` always,
+ * `entity`/`source` never — their identity forbids consolidation (ADR-0021) —
+ * and every other kind exactly as `declared`. */
+function isConsolidatableKind(indexKind: string, declared: boolean): boolean {
+  if (indexKind === "concept") return true;
+  if (indexKind === "entity" || indexKind === "source") return false;
+  return declared;
 }
 
 /** A decoded record paired with the page text it was decoded from. */
@@ -139,6 +166,19 @@ export class Vault {
    * [place.path] resolves canonical kinds from [KindFolders], so an unmigrated
    * vault would split one kind across two spellings. A writer refuses instead. */
   legacyKindFolders(): string[] {
+    const legacy: string[] = [];
+    for (const folder of this.wikiSubdirectories()) {
+      // Legacy means the singular of a canonical kind but not itself canonical
+      // — `concept` yes, `synthesis` no (folder and kind are the same word).
+      if (FolderKinds[folder] !== undefined) continue;
+      const canonical = KindFolders[folder];
+      if (canonical !== undefined && canonical !== folder) legacy.push(folder);
+    }
+    return legacy;
+  }
+
+  /** The `wiki/` subdirectory names, sorted; empty when there is no `wiki/`. */
+  private wikiSubdirectories(): string[] {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(path.join(this.root, "wiki"), {
@@ -148,17 +188,10 @@ export class Vault {
       if (isENOENT(err)) return [];
       throw err;
     }
-    const legacy: string[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      // Legacy means the singular of a canonical kind but not itself canonical
-      // — `concept` yes, `synthesis` no (folder and kind are the same word).
-      if (FolderKinds[entry.name] !== undefined) continue;
-      const folder = KindFolders[entry.name];
-      if (folder !== undefined && folder !== entry.name)
-        legacy.push(entry.name);
-    }
-    return legacy.sort();
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
   }
 
   /** The absolute filesystem path for a vault-relative page ref. */
@@ -203,24 +236,34 @@ export class Vault {
    * a canonical kind-folder. The folder must pre-exist — the plugin never
    * auto-creates custom kind-folders. */
   discoveredKinds(): Record<string, string> {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(path.join(this.root, "wiki"), {
-        withFileTypes: true,
-      });
-    } catch (err) {
-      if (isENOENT(err)) return {};
-      throw err;
-    }
     const out: Record<string, string> = {};
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (FolderKinds[entry.name] !== undefined) continue;
-      const meta = readKindMeta(path.join(this.root, "wiki", entry.name));
-      const kind = meta?.kind ?? folderToKind(entry.name);
-      out[kind] = entry.name;
+    for (const folder of this.wikiSubdirectories()) {
+      if (FolderKinds[folder] !== undefined) continue;
+      const meta = readKindMeta(path.join(this.root, "wiki", folder));
+      out[meta?.kind ?? folderToKind(folder)] = folder;
     }
     return out;
+  }
+
+  /** Whether the kind-folder `folder` is consolidatable (ADR-0027), reading its
+   * `KIND.md` declaration from the working tree. */
+  isConsolidatable(folder: string): boolean {
+    const declared =
+      readKindMeta(path.join(this.root, "wiki", folder))?.consolidatable ??
+      false;
+    return isConsolidatableKind(indexedKind(folder), declared);
+  }
+
+  /** The kind values `concept-fragmentation` scores, in [Index]'s vocabulary:
+   * `concept` plus every folder whose `KIND.md` declares `consolidatable: true`
+   * (ADR-0027). Read from the working tree, where `KIND.md` lives — the members
+   * scored stay a view of HEAD (ADR-0015). */
+  consolidatableKinds(): string[] {
+    const kinds = new Set<string>(["concept"]);
+    for (const folder of this.wikiSubdirectories()) {
+      if (this.isConsolidatable(folder)) kinds.add(indexedKind(folder));
+    }
+    return [...kinds].sort();
   }
 
   /** Every `wiki/**` page as a {pageRef: text} map. Never walks `raw/`. */

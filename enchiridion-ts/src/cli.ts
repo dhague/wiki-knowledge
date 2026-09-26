@@ -683,24 +683,39 @@ export function buildProgram(): Command {
     )
     .action(() => {
       const { root } = resolveRoot();
-      const custom = new Vault(root).discoveredKinds();
+      const vault = new Vault(root);
+      const custom = vault.discoveredKinds();
       const result: {
         kind: string;
         folder: string;
         canonical: boolean;
+        consolidatable: boolean;
         definition: { kind: string; summary: string } | null;
       }[] = [];
       for (const kind of Kinds) {
+        const folder = KindFolders[kind];
         result.push({
           kind,
-          folder: KindFolders[kind],
+          folder,
           canonical: true,
+          consolidatable: vault.isConsolidatable(folder),
           definition: null,
         });
       }
       for (const [kind, folder] of Object.entries(custom)) {
         const meta = readKindMeta(path.join(root, "wiki", folder));
-        result.push({ kind, folder, canonical: false, definition: meta });
+        result.push({
+          kind,
+          folder,
+          canonical: false,
+          consolidatable: vault.isConsolidatable(folder),
+          // Unchanged shape: a KIND.md declaring no kind contributes the flag,
+          // not a definition.
+          definition:
+            meta === null || meta.kind === null
+              ? null
+              : { kind: meta.kind, summary: meta.summary },
+        });
       }
       emitDocument(result);
     });
