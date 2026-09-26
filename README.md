@@ -74,14 +74,15 @@ against the plugin's own copy of the bundle.
 
 ### Vault lint
 
-`/wiki-lint` runs 18 checks in two dimensions — structural (kind-folder
+`/wiki-lint` runs 19 checks in two dimensions — structural (kind-folder
 conformance, frontmatter link format, split links, duplicate frontmatter,
 orphans, concept fragmentation) and retrievability (missing
 `volatility`/`source_date`, unresolved supersession, data gaps, summary quality,
-under-typed edges) — and reports what it finds ordered HIGH, MEDIUM, LOW.
+under-typed edges, over-typed and stale edges) — and reports what it finds
+ordered HIGH, MEDIUM, LOW.
 
 Twelve of the checks are mechanical, run through `enchiridion check <name> --json`;
-the other six need page judgment. Every finding carries a fix level:
+the other seven need page judgment. Every finding carries a fix level:
 **auto-fix** (applied without asking — link format, unambiguous `raw_source`
 and cross-reference repairs, folded frontmatter links, redundant frontmatter
 blocks), **report-only** (the fix
