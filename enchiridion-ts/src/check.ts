@@ -30,6 +30,10 @@ export interface Finding {
   cluster?: FragmentationCluster;
 }
 
+/** A finding naming the check that raised it — `check --all`'s row shape, the
+ * one run where the caller did not name the check itself. */
+export type TaggedFinding = Finding & { check: string };
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
