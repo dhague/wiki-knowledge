@@ -31713,7 +31713,7 @@ var program = new Command();
 var import_node_fs21 = __toESM(require("node:fs"), 1);
 var import_node_path26 = __toESM(require("node:path"), 1);
 var import_node_url = require("node:url");
-var import_node_util4 = __toESM(require("node:util"), 1);
+var import_node_util5 = __toESM(require("node:util"), 1);
 
 // src/wikipage.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -42127,6 +42127,7 @@ function defaultOffSignal(signal, cb) {
 // src/check.ts
 var import_node_fs18 = __toESM(require("node:fs"), 1);
 var import_node_path21 = __toESM(require("node:path"), 1);
+var import_node_util4 = require("node:util");
 var import_yaml4 = __toESM(require_dist(), 1);
 init_vaultgit();
 init_pagepredicate();
@@ -42645,6 +42646,78 @@ async function conceptFragmentation(root, opts = {}) {
     index.close();
   }
 }
+function leadingFrontmatterBlocks(text2) {
+  const blocks = [];
+  let offset = 0;
+  while (offset < text2.length) {
+    if (blocks.length > 0) {
+      const gap = /^(?:[ \t]*\r?\n)+/.exec(text2.slice(offset));
+      if (gap) offset += gap[0].length;
+    }
+    const { frontmatter, hasFrontmatter, bodyOffset } = splitFrontmatter(
+      text2.slice(offset)
+    );
+    if (!hasFrontmatter) break;
+    blocks.push({ yaml: frontmatter, start: offset, end: offset + bodyOffset });
+    offset += bodyOffset;
+  }
+  return blocks;
+}
+function blockMapping(yaml) {
+  if (yaml.trim() === "") return {};
+  let doc;
+  try {
+    doc = (0, import_yaml4.parseDocument)(yaml);
+  } catch {
+    return null;
+  }
+  if (doc.errors.length > 0 || doc.contents === null) return null;
+  if (!(0, import_yaml4.isMap)(doc.contents)) return null;
+  return doc.contents.toJSON();
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function yamlSubset(a, b) {
+  if (Array.isArray(a))
+    return Array.isArray(b) && a.every((x) => b.some((y) => (0, import_node_util4.isDeepStrictEqual)(x, y)));
+  if (isRecord(a) && isRecord(b))
+    return Object.entries(a).every(([k, v]) => k in b && yamlSubset(v, b[k]));
+  return a === b;
+}
+function dominantIndices(mappings) {
+  return mappings.map((_, i) => i).filter((i) => mappings.every((m) => yamlSubset(m, mappings[i])));
+}
+function duplicateAnalysis(text2) {
+  const blocks = leadingFrontmatterBlocks(text2);
+  if (blocks.length < 2) return null;
+  const mappings = [];
+  let readable = true;
+  for (const block2 of blocks) {
+    const mapping = blockMapping(block2.yaml);
+    if (mapping === null) readable = false;
+    else mappings.push(mapping);
+  }
+  return {
+    blocks,
+    readable,
+    dominant: readable ? dominantIndices(mappings) : []
+  };
+}
+function duplicateDetail(analysis) {
+  const reason = !analysis.readable ? "a block is not a readable mapping, so merge by hand" : analysis.dominant.length > 0 ? "redundant, so fix collapses them" : "divergent, so merge by hand";
+  return `${analysis.blocks.length} frontmatter blocks before the body; the parser reads only the first, so later blocks' edges are invisible and their text renders as body \u2014 ${reason}`;
+}
+async function duplicateFrontmatter(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const findings = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    const analysis = duplicateAnalysis(text2);
+    if (analysis === null) continue;
+    findings.push({ pageRef: ref, detail: duplicateDetail(analysis) });
+  }
+  return findings;
+}
 var CHECKS = {
   "kind-folder-conformance": kindFolderConformance,
   "ingestion-source-integrity": ingestionSourceIntegrity,
@@ -42656,6 +42729,7 @@ var CHECKS = {
   "contradiction-callouts": contradictionCallouts,
   orphans,
   "split-links": splitLinks,
+  "duplicate-frontmatter": duplicateFrontmatter,
   "concept-fragmentation": conceptFragmentation
 };
 async function fixFrontmatterLinkFormat(root) {
@@ -42798,11 +42872,28 @@ ${body}`, "utf8");
   }
   return changed;
 }
+async function fixDuplicateFrontmatter(root) {
+  const pages = new Vault(root).loadWikiPages();
+  const changed = [];
+  for (const [ref, text2] of Object.entries(pages)) {
+    const analysis = duplicateAnalysis(text2);
+    if (analysis === null || !analysis.readable) continue;
+    if (analysis.dominant.length === 0) continue;
+    const keep = analysis.blocks[analysis.dominant[0]];
+    const last = analysis.blocks[analysis.blocks.length - 1];
+    const collapsed = text2.slice(keep.start, keep.end) + text2.slice(last.end);
+    if (collapsed === text2) continue;
+    import_node_fs18.default.writeFileSync(import_node_path21.default.join(root, ref), collapsed, "utf8");
+    changed.push(ref);
+  }
+  return changed;
+}
 var FIXES = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
   "missing-cross-references": fixMissingCrossReferences,
-  "split-links": fixSplitLinks
+  "split-links": fixSplitLinks,
+  "duplicate-frontmatter": fixDuplicateFrontmatter
 };
 
 // src/output.ts
@@ -45090,10 +45181,10 @@ async function run(argv) {
     return true;
   });
   console.log = (...args) => {
-    stdout.push(import_node_util4.default.format(...args) + "\n");
+    stdout.push(import_node_util5.default.format(...args) + "\n");
   };
   console.error = (...args) => {
-    stderr.push(import_node_util4.default.format(...args) + "\n");
+    stderr.push(import_node_util5.default.format(...args) + "\n");
   };
   try {
     if (argv.length === 0) {
