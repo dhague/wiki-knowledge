@@ -472,20 +472,19 @@ export class Index {
     return rows.map((r) => ({ tag: r.tag, count: r.n }));
   }
 
-  /** Every indexed page whose kind is not in `excludeKinds`, with its tag set.
+  /** Every indexed page whose kind is in `includeKinds`, with its tag set. An
+   * empty include-list names no kind, so it matches nothing — never everything.
    * A view of HEAD (ADR-0015), so an uncommitted page is invisible (ADR-0021). */
-  async indexedPages(excludeKinds: string[] = []): Promise<IndexedPage[]> {
+  async indexedPages(includeKinds: string[]): Promise<IndexedPage[]> {
     await this.sync();
-    const scope =
-      excludeKinds.length > 0
-        ? `WHERE p.kind NOT IN (${placeholders(excludeKinds.length)})`
-        : "";
+    if (includeKinds.length === 0) return [];
     const rows = this.db.all(
       `SELECT p.page_ref, p.title, p.kind,
               (SELECT GROUP_CONCAT(t.tag, ${GROUP_SEPARATOR_SQL})
                  FROM page_tag t WHERE t.page_ref = p.page_ref) AS tags
-       FROM page p ${scope} ORDER BY p.page_ref`,
-      excludeKinds as import("node-sqlite3-wasm").JSValue[],
+       FROM page p WHERE p.kind IN (${placeholders(includeKinds.length)})
+       ORDER BY p.page_ref`,
+      includeKinds as import("node-sqlite3-wasm").JSValue[],
     ) as unknown as {
       page_ref: string;
       title: string | null;
@@ -501,14 +500,11 @@ export class Index {
   }
 
   /** Pairs of in-scope pages sharing at least one tag, most-shared first — an
-   * exact-match tag count over `page_tag` (ADR-0021). */
-  async sharedTagPairs(excludeKinds: string[] = []): Promise<SharedTagPair[]> {
+   * exact-match tag count over `page_tag` (ADR-0021). An empty include-list
+   * matches nothing. */
+  async sharedTagPairs(includeKinds: string[]): Promise<SharedTagPair[]> {
     await this.sync();
-    const scope =
-      excludeKinds.length > 0
-        ? `AND p1.kind NOT IN (${placeholders(excludeKinds.length)})
-             AND p2.kind NOT IN (${placeholders(excludeKinds.length)})`
-        : "";
+    if (includeKinds.length === 0) return [];
     const rows = this.db.all(
       `SELECT t1.page_ref AS a, t2.page_ref AS b,
               GROUP_CONCAT(t1.tag, ${GROUP_SEPARATOR_SQL}) AS tags
@@ -516,12 +512,13 @@ export class Index {
        JOIN page_tag t2 ON t1.tag = t2.tag AND t1.page_ref < t2.page_ref
        JOIN page p1 ON p1.page_ref = t1.page_ref
        JOIN page p2 ON p2.page_ref = t2.page_ref
-       WHERE 1=1 ${scope}
+       WHERE p1.kind IN (${placeholders(includeKinds.length)})
+         AND p2.kind IN (${placeholders(includeKinds.length)})
        GROUP BY t1.page_ref, t2.page_ref
        ORDER BY COUNT(*) DESC, a, b`,
       [
-        ...excludeKinds,
-        ...excludeKinds,
+        ...includeKinds,
+        ...includeKinds,
       ] as import("node-sqlite3-wasm").JSValue[],
     ) as unknown as { a: string; b: string; tags: string }[];
     return rows.map((r) => ({

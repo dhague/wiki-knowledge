@@ -473,10 +473,6 @@ export async function splitLinks(root: string): Promise<Finding[]> {
  * Consolidation); below, merely related (a link, for Missing cross-references). */
 export const DefaultMinSimilarity = 0.5;
 
-/** Kinds fragmentation never considers: one-per-thing or one-per-artifact
- * identity forbids consolidation (ADR-0021). */
-const NonConsolidatableKinds = ["entity", "source", "synthesis"];
-
 /** Cap on the FTS5 title hits one page may contribute as candidates. */
 const TitleMatchLimit = 200;
 
@@ -624,64 +620,66 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
 }
 
 /**
- * conceptFragmentation — ADR-0021.
+ * conceptFragmentation — ADR-0021, ADR-0027.
  *
- * Finds clusters of small, closely-related concept (and custom-kind) pages and
- * proposes a Consolidation per cluster: a confirm-first, lossless merge. It
- * only surfaces candidates — the judgment that a cluster truly consolidates,
- * and the merged body, belong to the `/wiki-ingest` flow.
+ * Finds clusters of small, closely-related consolidatable pages and proposes a
+ * Consolidation per cluster: a confirm-first, lossless merge. It only surfaces
+ * candidates — the judgment that a cluster truly consolidates, and the merged
+ * body, belong to the `/wiki-ingest` flow.
  *
  * Candidates are ADR-0021's pair: a shared-tag self-join unioned with an FTS5
  * title match. Both read the index, a view of HEAD (ADR-0015), so an
  * uncommitted fragmented draft is invisible. Each surviving pair is scored by
  * [similarity] against `minSimilarity`; pairs below the bar are left to Missing
- * cross-references. `entity`, `source` and `synthesis` pages are excluded
- * ([NonConsolidatableKinds]).
+ * cross-references. Scope and kind-homogeneity are ADR-0027's; the declaration
+ * is read from the working tree, where `KIND.md` lives.
  */
 export async function conceptFragmentation(
   root: string,
   opts: CheckOptions = {},
 ): Promise<Finding[]> {
   const minSimilarity = opts.minSimilarity ?? DefaultMinSimilarity;
+  const scope = new Vault(root).consolidatableKinds();
   const index = await Index.open(root);
   try {
-    const pages = await index.indexedPages(NonConsolidatableKinds);
+    const pages = await index.indexedPages(scope);
     const signals = new Map<string, Signals>();
+    const kindOf = new Map<string, string>();
     for (const page of pages) {
       signals.set(page.pageRef, {
         tags: new Set(page.tags),
         titleTokens: titleTokens(page.title),
       });
+      kindOf.set(page.pageRef, page.kind);
     }
 
     // Union of the two generators, keyed unordered so a pair found twice is
-    // scored once.
+    // scored once. Cross-kind pairs are dropped here, which is what keeps every
+    // cluster kind-homogeneous.
     const candidates = new Set<string>();
     const addPair = (a: string, b: string): void => {
       if (a === b || !signals.has(a) || !signals.has(b)) return;
+      if (kindOf.get(a) !== kindOf.get(b)) return;
       candidates.add(a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
     };
 
-    for (const pair of await index.sharedTagPairs(NonConsolidatableKinds)) {
+    for (const pair of await index.sharedTagPairs(scope)) {
       addPair(pair.a, pair.b);
     }
 
-    const scopeKinds = [...new Set(pages.map((p) => p.kind))];
-    if (scopeKinds.length > 0) {
-      for (const page of pages) {
-        const match = titleMatch(page.title);
-        if (match === "") continue;
-        const hits = await index.search({
-          text: match,
-          raw: true,
-          kinds: scopeKinds,
-          // The tag self-join does not skip superseded pages either, so the
-          // two generators see the same scope.
-          includeSuperseded: true,
-          limit: TitleMatchLimit,
-        });
-        for (const hit of hits) addPair(page.pageRef, hit.pageRef);
-      }
+    for (const page of pages) {
+      const match = titleMatch(page.title);
+      if (match === "") continue;
+      const hits = await index.search({
+        text: match,
+        raw: true,
+        kinds: scope,
+        // The tag self-join does not skip superseded pages either, so the
+        // two generators see the same scope.
+        includeSuperseded: true,
+        limit: TitleMatchLimit,
+      });
+      for (const hit of hits) addPair(page.pageRef, hit.pageRef);
     }
 
     const scored: Array<{ a: string; b: string; sim: number }> = [];

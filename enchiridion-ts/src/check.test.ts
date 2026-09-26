@@ -1496,9 +1496,10 @@ async function writeCommittedVault(
   return root;
 }
 
-/** The check-10 fixture: two clusters above the default bar (a concept pair and
- * a custom-kind pair), one shared-tag-only pair between the bar and 0.3 so the
- * cutoff has something to move, and near-identical pages of the excluded kinds. */
+/** The fragmentation fixture: one concept pair above the default bar, a
+ * custom-kind pair that opts in only when its KIND.md says so, one
+ * shared-tag-only concept pair between the bar and 0.3 so the cutoff has
+ * something to move, and near-identical pages of the out-of-scope kinds. */
 const FRAGMENTATION_FIXTURE: Record<string, string> = {
   "wiki/concepts/cache-eviction.md": taggedPage(
     "Cache eviction",
@@ -1551,10 +1552,11 @@ test("concept-fragmentation: clusters closely-related concept pages at the defau
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   const findings = await conceptFragmentation(root);
 
-  // One proposal per cluster, anchored on the suggested survivor.
+  // One proposal per cluster, anchored on the suggested survivor. The
+  // custom-kind pair is out of scope until its kind opts in.
   assert.deepEqual(
     findings.map((f) => f.pageRef),
-    ["wiki/concepts/cache-invalidation.md", "wiki/tools/memcached.md"],
+    ["wiki/concepts/cache-invalidation.md"],
   );
   assert.deepEqual(
     clusterWith(findings, "wiki/concepts/cache-eviction.md")!.members.map(
@@ -1595,8 +1597,20 @@ test("concept-fragmentation: a finding carries member sizes, inbound counts, bas
   assert.ok(Math.abs(cluster.similarity - 0.6) < 1e-9);
 });
 
-test("concept-fragmentation: custom-kind pages are in scope", async () => {
+test("concept-fragmentation: a custom kind is out of scope until its KIND.md opts in", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  assert.ok(
+    !memberRefs(await conceptFragmentation(root)).includes(
+      "wiki/tools/redis.md",
+    ),
+  );
+
+  // The declaration is vault configuration read from the working tree, so an
+  // uncommitted KIND.md is enough (ADR-0027).
+  fs.writeFileSync(
+    path.join(root, "wiki", "tools", "KIND.md"),
+    "---\nkind: tool\nsummary: A tool.\nconsolidatable: true\n---\n",
+  );
   const cluster = clusterWith(
     await conceptFragmentation(root),
     "wiki/tools/redis.md",
@@ -1607,18 +1621,64 @@ test("concept-fragmentation: custom-kind pages are in scope", async () => {
   );
 });
 
-test("concept-fragmentation: entity, source and synthesis pages are never members", async () => {
+test("concept-fragmentation: entity and source pages are never members", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
-  // At 0.3 every in-scope near-duplicate is clustered, so an excluded kind
-  // leaking in would show up here.
+  // At 0.3 every in-scope near-duplicate is clustered, so a floor kind leaking
+  // in would show up here.
   const findings = await conceptFragmentation(root, { minSimilarity: 0.3 });
   for (const ref of memberRefs(findings)) {
     assert.ok(
-      !/^wiki\/(entities|sources|synthesis)\//.test(ref),
+      !/^wiki\/(entities|sources)\//.test(ref),
       `${ref} is out of scope`,
     );
   }
+  assert.ok(!memberRefs(findings).some((r) => r.startsWith("wiki/synthesis/")));
   assert.ok(memberRefs(findings).includes("wiki/concepts/cache-eviction.md"));
+});
+
+test("concept-fragmentation: a cluster never mixes kinds", async () => {
+  const root = await writeCommittedVault({
+    "wiki/concepts/cache-eviction.md": taggedPage("Cache eviction", [
+      "caching",
+    ]),
+    "wiki/synthesis/cache-strategy.md": taggedPage("Cache eviction", [
+      "caching",
+    ]),
+    "wiki/synthesis/cache-plan.md": taggedPage("Cache eviction", ["caching"]),
+  });
+  // Synthesis opts in with the flag alone — no `kind:` needed.
+  fs.writeFileSync(
+    path.join(root, "wiki", "synthesis", "KIND.md"),
+    "---\nconsolidatable: true\n---\n",
+  );
+
+  const findings = await conceptFragmentation(root);
+  assert.deepEqual(
+    findings.map((f) => f.pageRef),
+    ["wiki/synthesis/cache-plan.md"],
+  );
+  assert.deepEqual(
+    clusterWith(findings, "wiki/synthesis/cache-strategy.md")!.members.map(
+      (m) => m.pageRef,
+    ),
+    ["wiki/synthesis/cache-plan.md", "wiki/synthesis/cache-strategy.md"],
+  );
+  // Every page here scores 1.0 pairwise, so without kind-homogeneity the
+  // concept would have joined the synthesis cluster.
+  assert.ok(!memberRefs(findings).includes("wiki/concepts/cache-eviction.md"));
+});
+
+test("concept-fragmentation: concept cannot be declared out", async () => {
+  const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "KIND.md"),
+    "---\nconsolidatable: false\n---\n",
+  );
+  assert.ok(
+    memberRefs(await conceptFragmentation(root)).includes(
+      "wiki/concepts/cache-eviction.md",
+    ),
+  );
 });
 
 test("concept-fragmentation: --min-similarity moves the Consolidation/link boundary", async () => {
