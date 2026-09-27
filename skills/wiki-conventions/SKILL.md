@@ -1,11 +1,11 @@
 ---
 name: wiki-conventions
-description: The wiki vault's format contract — kind-axed folder structure, frontmatter schema, relative-markdown link rules, typed-edge vocabulary. It is what `wiki-ingest` writes and `wiki-ask` reads — load it before creating, moving, linking or reading a wiki page.
+description: The wiki vault's format contract — kind-axed folder structure, frontmatter schema, relative-markdown link rules, typed-edge vocabulary. It is the page shape `wiki-ingest` writes and `wiki-ask` reads — load it before creating, moving, linking or reading a wiki page.
 ---
 
 # Wiki conventions
 
-Shared contract between the ingestion procedure (`wiki-ingest`) and retrieval (`wiki-ask`). Ingestion writes to these rules; retrieval reads assuming them. On any conflict between this file and information from elsewhere, this file wins.
+The vault's pure format contract — the page shape ingestion writes and retrieval reads. The rules for authoring a page are [`wiki-ingest` → reference/authoring.md](../wiki-ingest/reference/authoring.md); the script runtime contract is [`reference/scripts.md`](reference/scripts.md). On any conflict between this file and information from elsewhere, this file wins on format.
 
 ## Vault structure
 
@@ -37,21 +37,6 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
 3. Primarily a named thing linked repeatedly? → **`entities/`**.
 4. **Custom kind** — does the subject fit a custom kind-folder that already exists in the vault? → **`wiki/<custom>/`**. Call `enchiridion vault kinds --json` to discover available custom kinds before deciding; each entry carries `{kind, folder, canonical, consolidatable, definition}` (`consolidatable` tells whether `concept-fragmentation` scores the kind — derived for the canonical four, declared in `KIND.md` for the rest). Custom kinds are peers of canonical ones — weigh them alongside the canonical four, not as a last resort. The plugin never auto-creates a kind-folder; only a pre-existing folder is a valid target.
 5. Otherwise → **`concepts/`** (default).
-
-### The chain of evidence
-
-**Every raw file a pass produces pages from gets a `sources/` stand-in, and every page produced carries a `source` edge back to it.** Reader can always walk *page → `sources/` stub → `raw/` artifact* — the one path that makes a citation checkable.
-
-- **No exemption for distillation.** When raw file's value lands in `concepts/`/`entities/` pages, stub still created — just a **thin stub**: `title`, one-paragraph `summary`, required `raw_source` link. Its job is to be the addressable link target.
-- **`source` back-edge is not judgment.** Unlike `refines`/`contradicts`/`example-of`/`related` (weighed per page), this edge is mandatory on every page of the pass — each page of a multi-chunk split, and a page **updated in place** as much as newly created.
-- **Enforced, not merely conventional.** `enchiridion ingest` validates both halves before writing: plan naming a `raw` artifact must place a `sources/` page whose `raw_source` resolves to it, and every other page in that plan must carry a `source` edge to that stub. Plan that doesn't is rejected.
-- **Raw file ingestion declines outright** — spam, exact duplicate, junk — produces no pages; rule doesn't apply.
-
-### Verify against the source
-
-**The edge makes a citation checkable; it does not make it checked.** Every claim — a figure, a date, a name, a superlative ("best", "first", "only") — is verified when written, against the artifact that owns it: the page's own `raw/` artifact, or the primary source behind it where the artifact is silent. A `synthesis/` page has no artifact of its own, so it follows the input page carrying the claim through to *that* page's artifact — the input page points at the evidence, it is not the evidence. **A sibling `wiki/` page is never evidence:** restating one copies its error, which is how one wrong figure reaches six pages while every structural check stays green.
-
-Settling a disagreement, and recomputing a derived figure: [`reference/verification.md`](reference/verification.md) — read before resolving a contradiction or signing off a figure.
 
 ### The `raw/` layer
 
@@ -144,39 +129,11 @@ Edge is **directional** — reads *this page* → *key* → *target*. Include on
 | **`refines`** | *this page refines the target* | Sharpens, extends, or adds precision to target's idea. Target is broader/earlier statement; this page is finer. |
 | **`contradicts`** | *this page contradicts the target* | Claim conflicts with target's. Record edge even before conflict is resolved; when resolved by replacement, also set `supersedes`. |
 | **`example-of`** | *this page is an example of the target* | Concrete instance / case study of general concept target describes. |
-| **`source`** | *this page is sourced from the target* | Page draws content from target **page**. Two uses: `synthesis/` page lists under `source:` each `wiki/` page it was synthesized from, and — **mandatorily**, see [The chain of evidence](#the-chain-of-evidence) — every page an ingestion produces points at that raw file's `sources/` stub. |
+| **`source`** | *this page is sourced from the target* | Page draws content from target **page**. Two uses: `synthesis/` page lists under `source:` each `wiki/` page it was synthesized from, and — **mandatorily**, see [The chain of evidence](../wiki-ingest/reference/authoring.md#the-chain-of-evidence) — every page an ingestion produces points at that raw file's `sources/` stub. |
 | **`related`** | *this page is associatively related to the target* | **Catch-all** — prefer sharper type whenever one fits; retrieval can follow specific type purposefully but can only wander a `related` one. |
 
 **Ingestion guidance:** assign the most specific type that is true; the mandatory `source` back-edge is the one exception to judging per page. Under-assigning edges is silent quality loss — the graph is only as navigable as the edges recorded. **Retrieval guidance:** follow the edges the question implies (a "how does X work in practice" follows `example-of`; "is this still true" follows `contradicts`/`supersedes`), within the stated hop budget.
 
-## Pages state facts
-
-**A page records what is true — not what was previously believed, and not how the page came to be written.** Correction narration ("this corrects", "the brief's premise", "previously said") and vault-process meta ("this page records a `contradicts` edge", "the page ingested on <date>", "earlier passes recorded") do not belong in a page. Both read as diligence while adding nothing a reader needs, and both turn a reference work into a changelog.
-
-Where an earlier statement or an outside source conflicts with the current one, record the [`contradicts`/`supersedes`](#typed-edges) edge and — if the disagreement is live — say so in a `> [!warning] Contradiction` callout, **in facts, naming both statements**. The disagreement is knowledge; the page's own history is not.
-
 ## Scripts
 
-Full subcommand catalogue — every subcommand, what to call it for, and its usage: [`reference/scripts.md`](reference/scripts.md) — read it for a row's exact spelling or rationale.
-
-The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
-
-```bash
-RUNTIME=$(command -v node || command -v bun)
-ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
-```
-
-Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop. This file makes no calls of its own.
-
-**The vault root — the one place this rule is stated; every other skill points here.** The script resolves it itself: `$WIKI_ROOT` when set and non-empty, else the nearest ancestor of the working directory carrying a `wiki/` or `.wiki-root` marker, else the working directory.
-
-One exception: `page` resolves no root for a plain value — an edge value's vault-relative ref is composed against the vault the file sits in, so the file's own location wins and `$WIKI_ROOT` is not consulted.
-
-**Batch independent invocations** — several `search` queries, say — into one shell call rather than issuing each separately; every extra tool call costs a full turn.
-
-**`--json` output contract — one dialect, one spelling (#495).** Two shapes, and the choice is *how many documents*, not the outer JSON type:
-
-- **JSON Lines** — one compact object per line, nothing at all when there are no rows (never `[]`). Row-producing commands: `search`, `superseded-by`, `ingest-scan`, `check`, and `discover`'s single-page mode. Consume by splitting stdout on newlines; never buffer the whole result first.
-- **One document** — a single compact JSON value on one line, the value itself an array where the run is a table (`read-page`, `discover --plan`, `vault kinds`, `export --candidates`, `search --status`/`--reindex`). Consume with one `JSON.parse(stdout)`.
-
-Never indented, never pretty-printed. **Failure is the other half of the contract**: message on stderr, non-zero exit, same whichever host ran it. **One exception — `page set --json` means *input*, not output**: it parses the value argument as JSON, and is the one subcommand whose stdout no consumer parses.
+The script layer's runtime contract — vault-root resolution, batch invocation, the `--json` output contract — and the full subcommand catalogue: [`reference/scripts.md`](reference/scripts.md). This file makes no calls of its own.

@@ -15,7 +15,7 @@ ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 
 Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
-[`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue
+[`wiki-conventions` → Scripts](../wiki-conventions/reference/scripts.md#script-runtime-contract) — the shared reference for vault-root resolution and the full subcommand catalogue
 
 ## Procedure
 

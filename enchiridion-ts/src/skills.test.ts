@@ -275,17 +275,20 @@ test("cut-release is marked internal with a real boolean", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Prose fenced against the script layer
+// Prose homes and the fences against the script layer
 // ---------------------------------------------------------------------------
 
-/** The one file that states the vault-root rule, per ADR-0004, and the two
- * wiki-lint files the prose fences read. */
+/** The format contract; the vault-root rule's home, per ADR-0004; the
+ * ingestion-authoring rules' home; and the two wiki-lint files the prose fences
+ * read. */
 const CONVENTIONS = "wiki-plugin/skills/wiki-conventions/SKILL.md";
+const SCRIPTS_REF = "wiki-plugin/skills/wiki-conventions/reference/scripts.md";
+const AUTHORING_REF = "wiki-plugin/skills/wiki-ingest/reference/authoring.md";
 const LINT_SKILL = "wiki-plugin/skills/wiki-lint/SKILL.md";
 const LINT_CHECKS = "wiki-plugin/skills/wiki-lint/reference/checks.md";
 
 /** The bundle-resolution paragraph every skill that calls the script carries
- * verbatim; the vault-root rule belongs to [CONVENTIONS] alone. */
+ * verbatim; the vault-root rule belongs to [SCRIPTS_REF] alone. */
 const SHARED_INVOCATION = [
   "The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:",
   "",
@@ -330,13 +333,13 @@ test("the vault-root rule is stated by exactly one file", () => {
     .map(({ label }) => label);
   assert.deepEqual(
     owners,
-    [CONVENTIONS],
-    "the vault-root rule belongs in wiki-conventions alone; every other file points at it",
+    [SCRIPTS_REF],
+    "the vault-root rule belongs in the script runtime contract alone; every other file points at it",
   );
 });
 
 test("the vault-root rule names the markers and env var the script implements", () => {
-  const text = proseFor(CONVENTIONS);
+  const text = proseFor(SCRIPTS_REF);
   const start = text.indexOf("**The vault root");
   const end = text.indexOf("\n\n", start);
   const rule = text.slice(start, end < 0 ? undefined : end);
@@ -345,11 +348,11 @@ test("the vault-root rule names the markers and env var the script implements", 
   ).join(" or ");
   assert.ok(
     rule.includes(markers),
-    `${CONVENTIONS}: the rule must name ${markers}, the markers vault.ts declares`,
+    `${SCRIPTS_REF}: the rule must name ${markers}, the markers vault.ts declares`,
   );
   assert.ok(
     rule.includes(`\`$${RootEnvVar}\``),
-    `${CONVENTIONS}: the rule must name $${RootEnvVar}, the override vault.ts reads`,
+    `${SCRIPTS_REF}: the rule must name $${RootEnvVar}, the override vault.ts reads`,
   );
 });
 
@@ -357,8 +360,39 @@ test("every skill points at the vault-root rule rather than restating it", () =>
   for (const dir of skillDirs()) {
     if (dir === "wiki-conventions") continue;
     assert.ok(
-      readSkill(dir).includes("wiki-conventions/SKILL.md#scripts"),
-      `${dir}/SKILL.md must point at wiki-conventions → Scripts for the vault-root rule`,
+      readSkill(dir).includes("wiki-conventions/reference/scripts.md"),
+      `${dir}/SKILL.md must point at the script runtime contract for the vault-root rule`,
+    );
+  }
+});
+
+test("each ingestion-authoring rule is stated by exactly one file", () => {
+  // A distinctive phrase per rule, not its heading: a renamed heading must not
+  // let a second copy hide.
+  const phrases = [
+    "carries a `source` edge back to it",
+    "A sibling `wiki/` page is never evidence",
+    "A page records what is true",
+  ];
+  for (const phrase of phrases) {
+    const owners = pluginProse()
+      .filter(({ text }) => text.includes(phrase))
+      .map(({ label }) => label);
+    assert.deepEqual(
+      owners,
+      [AUTHORING_REF],
+      `"${phrase}" belongs in ${AUTHORING_REF} alone`,
+    );
+  }
+  // The headings are the anchors every citation targets.
+  for (const heading of [
+    "## The chain of evidence",
+    "## Verify against the source",
+    "## Pages state facts",
+  ]) {
+    assert.ok(
+      proseFor(AUTHORING_REF).includes(heading),
+      `${AUTHORING_REF} must carry the heading "${heading}"`,
     );
   }
 });

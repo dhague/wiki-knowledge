@@ -1,6 +1,23 @@
-# Script catalogue
+# Script catalogue and runtime contract
 
-Every `enchiridion` subcommand the skills call: what to call it for, and its usage. `enchiridion --help` is the complete list, including the few the procedures never reach. The `--json` output contract lives in [`../SKILL.md`](../SKILL.md#scripts).
+The runtime rules for calling the script layer, and every `enchiridion` subcommand the skills call: what to call it for, and its usage. `enchiridion --help` is the complete list, including the few the procedures never reach.
+
+## Script runtime contract
+
+**The vault root — the one place this rule is stated; every other skill points here.** The script resolves it itself: `$WIKI_ROOT` when set and non-empty, else the nearest ancestor of the working directory carrying a `wiki/` or `.wiki-root` marker, else the working directory.
+
+One exception: `page` resolves no root for a plain value — an edge value's vault-relative ref is composed against the vault the file sits in, so the file's own location wins and `$WIKI_ROOT` is not consulted.
+
+**Batch independent invocations** — several `search` queries, say — into one shell call rather than issuing each separately; every extra tool call costs a full turn.
+
+**`--json` output contract — one dialect, one spelling.** Two shapes, and the choice is *how many documents*, not the outer JSON type:
+
+- **JSON Lines** — one compact object per line, nothing at all when there are no rows (never `[]`). Row-producing commands: `search`, `superseded-by`, `ingest-scan`, `check`, and `discover`'s single-page mode. Consume by splitting stdout on newlines; never buffer the whole result first.
+- **One document** — a single compact JSON value on one line, the value itself an array where the run is a table (`read-page`, `discover --plan`, `vault kinds`, `export --candidates`, `search --status`/`--reindex`). Consume with one `JSON.parse(stdout)`.
+
+Never indented, never pretty-printed. **Failure is the other half of the contract**: message on stderr, non-zero exit, same whichever host ran it. **One exception — `page set --json` means *input*, not output**: it parses the value argument as JSON, and is the one subcommand whose stdout no consumer parses.
+
+## Subcommand catalogue
 
 | Subcommand | Call it for | Usage |
 |---|---|---|

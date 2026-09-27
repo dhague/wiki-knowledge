@@ -5,7 +5,9 @@ description: Lint a vault against the wiki-conventions contract after ingestion 
 
 # Wiki Lint
 
-Reads [`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue — for folder structure, frontmatter schema, link format and typed-edge vocabulary this procedure doesn't cover.
+Reads [`wiki-conventions`](../wiki-conventions/SKILL.md) for the folder structure, frontmatter schema, link format and typed-edge vocabulary this procedure doesn't cover, and [`wiki-conventions` → Scripts](../wiki-conventions/reference/scripts.md#script-runtime-contract) for vault-root resolution and the full subcommand catalogue.
+
+The ingestion-authoring rules it enforces — [the chain of evidence](../wiki-ingest/reference/authoring.md#the-chain-of-evidence), [verify against the source](../wiki-ingest/reference/authoring.md#verify-against-the-source), [pages state facts](../wiki-ingest/reference/authoring.md#pages-state-facts) — are [`wiki-ingest` → reference/authoring.md](../wiki-ingest/reference/authoring.md); read it before judging an authoring finding.
 
 The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
@@ -30,7 +32,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 ### 1. Resolve vault root
 
-The script resolves it ([the rule](../wiki-conventions/SKILL.md#scripts)); when invoked with a vault-root argument, put it in `WIKI_ROOT` for the run so every call below resolves there. Verify the resolved root has a `wiki/` subdirectory, else stop and report "not a vault root."
+The script resolves it ([the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)); when invoked with a vault-root argument, put it in `WIKI_ROOT` for the run so every call below resolves there. Verify the resolved root has a `wiki/` subdirectory, else stop and report "not a vault root."
 
 ### 2. Run mechanical checks
 
