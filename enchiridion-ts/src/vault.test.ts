@@ -7,11 +7,11 @@ import {
   Markers,
   Vault,
   hasMarker,
-  readKindMeta,
   resolveRoot,
   vaultForFile,
 } from "./vault.js";
 import type { LookupEnv } from "./vault.js";
+import { readKindMeta } from "./kindmeta.js";
 import { Page } from "./wikipage.js";
 
 function env(pairs: Record<string, string>): LookupEnv {
@@ -167,9 +167,16 @@ test("consolidatableKinds adds a custom folder declaring consolidatable", () => 
     path.join(v.root, "wiki", "research", "KIND.md"),
     "---\nkind: research\nsummary: Long-form research.\nconsolidatable: true\n---\n",
   );
-  // The index stores the folder's strip-`s` kind (#589), so the allowlist
-  // speaks that vocabulary.
   assert.deepEqual(v.consolidatableKinds(), ["concept", "research"]);
+});
+
+test("consolidatableKinds records a custom folder's declared kind", () => {
+  const v = writeVault({ "wiki/people/ada.md": "a\n" });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "people", "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\nconsolidatable: true\n---\n",
+  );
+  assert.deepEqual(v.consolidatableKinds(), ["concept", "person"]);
 });
 
 test("consolidatableKinds ignores a custom folder that declares nothing", () => {
@@ -213,8 +220,8 @@ test("consolidatableKinds cannot declare concept out", () => {
   assert.deepEqual(v.consolidatableKinds(), ["concept"]);
 });
 
-test("consolidatableKinds keys the floor on the index kind, not the folder name", () => {
-  // A non-canonical singular folder still indexes as the floor kind.
+test("consolidatableKinds keys the floor on the resolved kind, not the folder name", () => {
+  // A non-canonical singular folder still resolves to the floor kind.
   const v = writeVault({ "wiki/entity/e.md": "e\n" });
   fs.writeFileSync(
     path.join(v.root, "wiki", "entity", "KIND.md"),

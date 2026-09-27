@@ -7,17 +7,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
 import { mkdirSafe } from "./fsutil.js";
-import {
-  Page,
-  planConsolidate,
-  planMove,
-  splitFrontmatter,
-} from "./wikipage.js";
+import { kindByFolder, kindForFolder, readKindMeta } from "./kindmeta.js";
+import { Page, planConsolidate, planMove } from "./wikipage.js";
 import { loadRecords } from "./pagerecord.js";
 import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";
-import { FolderKinds, KindFolders, folderToKind } from "./place.js";
+import { FolderKinds, KindFolders } from "./place.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
 
 /** The filenames that make a directory a vault root. */
@@ -85,61 +80,12 @@ function isENOENT(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === "ENOENT";
 }
 
-/** A `KIND.md` declaration: the kind value a folder declares (`null` when only
- * other keys are present), its summary, and whether its pages consolidate. */
-export interface KindMeta {
-  kind: string | null;
-  summary: string;
-  consolidatable: boolean;
-}
-
-/**
- * Reads the `KIND.md` declaration in an absolute folder path.
- *
- * `null` only when the file is absent or unparseable (no frontmatter,
- * non-mapping YAML); parseable frontmatter missing `kind:` still returns a
- * [KindMeta], so a `KIND.md` carrying the flag alone is not dropped. Callers
- * fall back to [folderToKind] for a null `kind`.
- */
-export function readKindMeta(folderAbsPath: string): KindMeta | null {
-  let text: string;
-  try {
-    text = fs.readFileSync(path.join(folderAbsPath, "KIND.md"), "utf8");
-  } catch {
-    return null;
-  }
-  try {
-    const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
-    if (!hasFrontmatter || frontmatter === "") return null;
-    const data = parseYaml(frontmatter) as unknown;
-    if (data === null || typeof data !== "object" || Array.isArray(data))
-      return null;
-    const map = data as Record<string, unknown>;
-    const kind = typeof map["kind"] === "string" ? map["kind"].trim() : "";
-    const summary = typeof map["summary"] === "string" ? map["summary"] : "";
-    return {
-      kind: kind === "" ? null : kind,
-      summary,
-      consolidatable: map["consolidatable"] === true,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** The kind value [Index] stores for a folder: canonical folders resolve from
- * [FolderKinds], custom ones strip a trailing `s`. The index ignores a declared
- * kind, so the scope rule must speak its vocabulary. */
-function indexedKind(folder: string): string {
-  return FolderKinds[folder] ?? folderToKind(folder);
-}
-
-/** ADR-0027's scope rule, on the kind the index stores: `concept` always,
+/** ADR-0027's scope rule, on the resolved kind: `concept` always,
  * `entity`/`source` never — their identity forbids consolidation (ADR-0021) —
  * and every other kind exactly as `declared`. */
-function isConsolidatableKind(indexKind: string, declared: boolean): boolean {
-  if (indexKind === "concept") return true;
-  if (indexKind === "entity" || indexKind === "source") return false;
+function isConsolidatableKind(kind: string, declared: boolean): boolean {
+  if (kind === "concept") return true;
+  if (kind === "entity" || kind === "source") return false;
   return declared;
 }
 
@@ -239,29 +185,39 @@ export class Vault {
     const out: Record<string, string> = {};
     for (const folder of this.wikiSubdirectories()) {
       if (FolderKinds[folder] !== undefined) continue;
-      const meta = readKindMeta(path.join(this.root, "wiki", folder));
-      out[meta?.kind ?? folderToKind(folder)] = folder;
+      out[kindForFolder(this.root, folder)] = folder;
     }
     return out;
+  }
+
+  /** The kind value and consolidation flag a folder resolves to, by the rule
+   * the index and `pagerecord` share: canonical folders from [FolderKinds], a
+   * custom folder from its `KIND.md` declaration, else strip-`s` (ADR-0020). */
+  private kindOf(folder: string): { kind: string; consolidatable: boolean } {
+    return {
+      kind: kindForFolder(this.root, folder),
+      consolidatable:
+        readKindMeta(path.join(this.root, "wiki", folder))?.consolidatable ??
+        false,
+    };
   }
 
   /** Whether the kind-folder `folder` is consolidatable (ADR-0027), reading its
    * `KIND.md` declaration from the working tree. */
   isConsolidatable(folder: string): boolean {
-    const declared =
-      readKindMeta(path.join(this.root, "wiki", folder))?.consolidatable ??
-      false;
-    return isConsolidatableKind(indexedKind(folder), declared);
+    const { kind, consolidatable } = this.kindOf(folder);
+    return isConsolidatableKind(kind, consolidatable);
   }
 
-  /** The kind values `concept-fragmentation` scores, in [Index]'s vocabulary:
-   * `concept` plus every folder whose `KIND.md` declares `consolidatable: true`
-   * (ADR-0027). Read from the working tree, where `KIND.md` lives — the members
-   * scored stay a view of HEAD (ADR-0015). */
+  /** The kind values `concept-fragmentation` scores, in the index's vocabulary
+   * of declared kinds: `concept` plus every folder whose `KIND.md` declares
+   * `consolidatable: true` (ADR-0027). Read from the working tree, where
+   * `KIND.md` lives — the members scored stay a view of HEAD (ADR-0015). */
   consolidatableKinds(): string[] {
     const kinds = new Set<string>(["concept"]);
     for (const folder of this.wikiSubdirectories()) {
-      if (this.isConsolidatable(folder)) kinds.add(indexedKind(folder));
+      const { kind, consolidatable } = this.kindOf(folder);
+      if (isConsolidatableKind(kind, consolidatable)) kinds.add(kind);
     }
     return [...kinds].sort();
   }
@@ -279,12 +235,7 @@ export class Vault {
    * [LoadRecordsOptions] — a tolerant check run sets `skipMalformedEdges`. */
   pagesWithText(opts: LoadRecordsOptions = {}): Record<string, PageWithText> {
     const pages = this.loadWikiPages();
-    const discovered = this.discoveredKinds(); // {kind: folder}
-    const kindByFolder: Record<string, string> = {};
-    for (const [kind, folder] of Object.entries(discovered)) {
-      kindByFolder[folder] = kind;
-    }
-    const records = loadRecords(pages, kindByFolder, opts);
+    const records = loadRecords(pages, kindByFolder(this.root), opts);
     const out: Record<string, PageWithText> = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: pages[ref] };
