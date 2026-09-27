@@ -28,4 +28,4 @@
 - `Vault.readKindMeta` returns `kind: null` rather than `null` when only `kind:` is absent, so a `KIND.md` carrying the flag alone is not silently dropped; `discoveredKinds` keeps its `folderToKind` fallback.
 - `enchiridion vault kinds` carries a top-level `consolidatable: boolean` on every entry — derived for the canonical four, read for custom kinds — leaving `definition` unchanged (`null` for canonical).
 - **Migration is silent.** Concept-like custom kinds stop being reported until they declare themselves. Documented here, in `wiki-lint`'s check reference and the release note, with `vault kinds` making the default visible. No warning check: it would fire forever on `home`, which is legitimately out of scope.
-- `enchiridion place` still rejects custom kinds — a separate root-resolution question ([#588](https://github.com/dhague/wiki-knowledge/issues/588)).
+- `enchiridion place` resolves the vault root and accepts discovered custom kinds, keyed on the declared `kind:` — unlike the index's scope vocabulary, which stays strip-`s` ([#589](https://github.com/dhague/wiki-knowledge/issues/589)).

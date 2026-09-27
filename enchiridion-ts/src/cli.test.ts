@@ -129,6 +129,97 @@ test("place: errors on wrong argument count", () => {
   assert.notEqual(status, 0);
 });
 
+test("place: resolves a custom kind-folder declaring its kind", () => {
+  const root = makeVault({
+    "wiki/research/KIND.md": "---\nkind: research\n---\n",
+  });
+  const { status, stdout, stderr } = runEnv(
+    ["place", "research", "Windsor desk research"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout.trim(), "wiki/research/windsor-desk-research.md");
+});
+
+test("place: resolves an irregular folder via its declared kind value", () => {
+  const root = makeVault({
+    "wiki/people/KIND.md": "---\nkind: person\n---\n",
+  });
+  const { status, stdout, stderr } = runEnv(
+    ["place", "person", "Ada Lovelace"],
+    {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout.trim(), "wiki/people/ada-lovelace.md");
+});
+
+test("place: a custom folder with no KIND.md resolves via the strip-s fallback", () => {
+  const root = makeVault({ "wiki/decisions/.keep": "" });
+  const { status, stdout, stderr } = runEnv(["place", "decision", "Use FTS5"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout.trim(), "wiki/decisions/use-fts5.md");
+});
+
+test("place: the canonical four resolve with no vault present", () => {
+  const plain = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  const cases: Array<[string, string, string]> = [
+    ["concept", "Connection Pooling", "wiki/concepts/connection-pooling.md"],
+    ["entity", "Ada Lovelace", "wiki/entities/ada-lovelace.md"],
+    ["source", "Some Artifact", "wiki/sources/some-artifact.md"],
+    ["synthesis", "A Synthesis", "wiki/synthesis/a-synthesis.md"],
+  ];
+  for (const [kind, title, want] of cases) {
+    const { status, stdout, stderr } = runEnv(["place", kind, title], {
+      cwd: plain,
+      env: { WIKI_ROOT: "" },
+    });
+    assert.equal(status, 0, stderr);
+    assert.equal(stdout.trim(), want);
+  }
+});
+
+test("place: an unknown kind fails, naming the discovered kinds", () => {
+  const root = makeVault({
+    "wiki/research/KIND.md": "---\nkind: research\n---\n",
+    "wiki/people/KIND.md": "---\nkind: person\n---\n",
+  });
+  const { status, stderr } = runEnv(["place", "nonsense", "X"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /unknown kind "nonsense"/);
+  for (const kind of [
+    "concept",
+    "entity",
+    "source",
+    "synthesis",
+    "research",
+    "person",
+  ]) {
+    assert.ok(stderr.includes(kind), `error should name ${kind}`);
+  }
+});
+
+test("place: a legacy singular folder does not repeat a canonical kind in the error", () => {
+  const root = makeVault({ "wiki/concept/.keep": "" });
+  const { status, stderr } = runEnv(["place", "nonsense", "X"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.equal(
+    stderr.trim(),
+    'unknown kind "nonsense"; must be one of concept, entity, source, synthesis',
+  );
+});
+
 test("vault (bare): prints the resolved root", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   fs.mkdirSync(path.join(root, "wiki"));
@@ -196,25 +287,14 @@ test("vault move: missing source errors non-zero", () => {
   assert.notEqual(status, 0);
 });
 
-test("vault move resolves the vault root; place resolves none (boundary)", () => {
-  // `place` is pure path computation — no vault marker, no WIKI_ROOT, no root
-  // resolved.
+test("vault root: falls back to cwd with no marker or WIKI_ROOT", () => {
   const plain = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
-  const place = runEnv(["place", "concept", "A Thing"], {
+  const { status, stdout, stderr } = runEnv(["vault", "root"], {
     cwd: plain,
     env: { WIKI_ROOT: "" },
   });
-  assert.equal(place.status, 0, place.stderr);
-  assert.equal(place.stdout.trim(), "wiki/concepts/a-thing.md");
-
-  // With no marker above cwd and no WIKI_ROOT, `vault` falls back to cwd as the
-  // root (ADR-0004 step 3) — it prints the cwd itself.
-  const vault = runEnv(["vault", "root"], {
-    cwd: plain,
-    env: { WIKI_ROOT: "" },
-  });
-  assert.equal(vault.status, 0, vault.stderr);
-  assert.equal(vault.stdout.trim(), fs.realpathSync(plain));
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout.trim(), fs.realpathSync(plain));
 });
 
 test("page get: prints the frontmatter value", () => {
