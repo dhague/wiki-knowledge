@@ -14,7 +14,7 @@ import {
   FIXES,
   StaleSynthesisDays,
 } from "./check.js";
-import { SummaryWordGuideline } from "./ingest.js";
+import { isPlanAction, PlanActions, SummaryWordGuideline } from "./ingest.js";
 import { Markers, RootEnvVar } from "./vault.js";
 import { EncodeChars } from "./wikipage.js";
 
@@ -291,6 +291,7 @@ test("cut-release is marked internal with a real boolean", () => {
  * read. */
 const CONVENTIONS = "wiki-plugin/skills/wiki-conventions/SKILL.md";
 const SCRIPTS_REF = "wiki-plugin/skills/wiki-conventions/reference/scripts.md";
+const INGEST_SKILL = "wiki-plugin/skills/wiki-ingest/SKILL.md";
 const AUTHORING_REF = "wiki-plugin/skills/wiki-ingest/reference/authoring.md";
 const LINT_SKILL = "wiki-plugin/skills/wiki-lint/SKILL.md";
 const LINT_CHECKS = "wiki-plugin/skills/wiki-lint/reference/checks.md";
@@ -513,7 +514,7 @@ test("the four prose constants track their code constants", () => {
   const summary = `≤ ~${SummaryWordGuideline} words`;
   for (const label of [
     CONVENTIONS,
-    "wiki-plugin/skills/wiki-ingest/SKILL.md",
+    INGEST_SKILL,
     "wiki-plugin/skills/wiki-ask/SKILL.md",
     LINT_SKILL,
   ]) {
@@ -530,5 +531,39 @@ test("the four prose constants track their code constants", () => {
   assert.ok(
     proseFor(CONVENTIONS).includes(`encode ${charset};`),
     `${CONVENTIONS}: must list the encode set as "encode ${charset};"`,
+  );
+});
+
+/** The plan schema's `action: "<slug>"` field, however a document spaces or
+ * quotes its key. The lookbehind keeps a longer key such as `reaction` out. */
+const PLAN_ACTION_SPELLING =
+  /(?<![A-Za-z-])"?action"?\s*:\s*"([A-Za-z][A-Za-z0-9-]*)"/g;
+
+test("no shipped prose names a plan action the validator would refuse", () => {
+  for (const { label, text } of pluginProse()) {
+    for (const match of text.matchAll(PLAN_ACTION_SPELLING)) {
+      assert.ok(
+        isPlanAction(match[1]),
+        `${label}: "${match[1]}" is named as a plan action but is not in ingest.ts's PlanActions`,
+      );
+    }
+  }
+});
+
+test("the agent-facing plan shape names every accepted action", () => {
+  const text = proseFor(INGEST_SKILL);
+  const start = text.indexOf("**Accepted actions**");
+  assert.ok(
+    start >= 0,
+    `${INGEST_SKILL} must declare the accepted plan actions`,
+  );
+  const end = text.indexOf("\n", start);
+  const named = [...text.slice(start, end).matchAll(/`"([a-z][a-z0-9-]*)"`/g)]
+    .map((match) => match[1])
+    .sort();
+  assert.deepEqual(
+    named,
+    [...PlanActions].sort(),
+    `${INGEST_SKILL} must name exactly the actions ingest.ts accepts`,
   );
 });

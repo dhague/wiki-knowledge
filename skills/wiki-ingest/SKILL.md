@@ -92,6 +92,8 @@ Given one document at `<path>`.
    }
    ```
 
+   **Accepted actions** — `action` is `"ingest"` (the default when omitted), `"synthesize"` (wiki-ask's confirmed synthesis save), or `"consolidate"` (the variant below). Any other value is refused, naming the set.
+
    Every `edges` value and `raw_source: true` names its target by **page reference** — vault-relative path only, `wiki/concepts/foo.md` — never a composed `[Title](../dest.md)` string; `enchiridion ingest` composes the link. Exception: *body* links are ordinary markdown (`[label](destination)`), encoded or not — `enchiridion ingest` re-encodes on write.
 
    **Every written page needs `volatility`** — judgment that can't be inherited: `enchiridion ingest` refuses a `create` without it, and an `update` whose `frontmatter` map omits it. So an `update` supplying a frontmatter map must restate it (`stable | evolving | volatile`), or it lands a page `wiki-lint`'s `missing-volatility-source-date` check reports.
