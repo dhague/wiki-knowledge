@@ -120,7 +120,7 @@ block holds is recoverable by a rewrite.
 ## `concept-fragmentation`
 
 Clusters of small, closely-related pages whose knowledge reads better as one
-page with sections (CONTEXT.md, **Concept fragmentation**). Scope is an
+page with sections. Scope is an
 allowlist: `concept` by default, plus any kind whose `wiki/<kind>/KIND.md`
 declares `consolidatable: true` — a custom kind or `wiki/synthesis/` alike.
 `entity` and `source` are never in scope, whatever they declare: their

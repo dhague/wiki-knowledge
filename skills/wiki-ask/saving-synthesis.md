@@ -1,6 +1,6 @@
 # Saving an answer as a synthesis page
 
-For the **session holding the conversation** — it received a `save-candidate` block back (or ran the procedure and reached step 8 itself). A retrieval subagent never gets here.
+For the **session holding the conversation** — it received a `save-candidate` block back (or ran the procedure and reached step 8 itself). A retrieval subagent never gets here. The block's fields and their semantics: [the block protocol](../wiki-conventions/reference/blocks.md#save-candidate).
 
 **Gate:** vault not written unless user says yes to question you actually asked. Silence isn't yes; "sounds useful" isn't yes; fresh session isn't holding earlier yes. If unsure whether told to save — you were not.
 

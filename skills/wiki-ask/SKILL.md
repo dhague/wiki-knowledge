@@ -92,7 +92,7 @@ Given a question:
    ```
    ````
 
-   Field notes: `summary` is one line, ≤ ~20 words — what *next* retrieval judges this page by, write it as well as you'd want to find it. `source_date` is **today** — synthesis made today even if inputs are older. `volatility` is **most volatile** of cited pages: synthesis only as durable as shakiest input. `source:` lists every page actually cited, as vault-relative paths (`enchiridion ingest` composes actual links when plan runs) — nothing merely skimmed.
+   Field semantics and the rejection rule for a malformed block: [the block protocol](../wiki-conventions/reference/blocks.md#save-candidate).
 
 ## Edge-following rules
 

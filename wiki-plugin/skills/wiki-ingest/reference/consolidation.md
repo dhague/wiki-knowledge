@@ -1,6 +1,6 @@
 # Wiki Ingest — Consolidation procedure
 
-Read only when the prompt names a **Consolidation** — the `wiki-lint` procedure's handoff for the `concept-fragmentation` check (CONTEXT.md, **Consolidation**). The single-file procedure in [`../SKILL.md`](../SKILL.md) does not apply: a Consolidation is sourced from *pages*, not from an artifact, and it **deletes committed pages**. Step 4's **Consolidation variant** owns the plan shape; this file owns the judgment around it.
+Read only when the prompt names a **Consolidation** — the `wiki-lint` procedure's handoff for the `concept-fragmentation` check. A Consolidation absorbs a cluster of pages into one survivor, each absorbed page's content becoming a section of it and every inbound link repointed; lossless by construction, which is why the absorbed pages are **deleted** rather than recorded as superseded. The single-file procedure in [`../SKILL.md`](../SKILL.md) does not apply: a Consolidation is sourced from *pages*, not from an artifact, and it **deletes committed pages**. Step 4's **Consolidation variant** owns the plan shape; this file owns the judgment around it.
 
 **Input:** the cluster's member refs plus the check's suggested survivor. **Output:** one plan through `enchiridion ingest` — survivor written, every inbound link repointed, absorbed pages deleted, one commit under `deleted:`.
 

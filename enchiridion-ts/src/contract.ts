@@ -1,7 +1,7 @@
 /**
- * The stdout lines and fields shipped procedures parse, declared once so a
- * producer's help can show them and the structural checks can tie the prose to
- * them. [output.ts] owns the *format*; this owns the caller-visible content.
+ * The stdout lines, fields and reply blocks shipped procedures parse, declared
+ * once so the structural checks can tie the prose to them. [output.ts] owns the
+ * *format*; this owns the caller-visible content.
  */
 
 /** `ingest`'s stdout, in the order it is written: the commit SHA first, then
@@ -24,3 +24,20 @@ export const KindDefinitionFields = ["kind", "summary"] as const;
  * running watcher, and the refusal when another holds the vault's lock. */
 export const WatchStartedMarker = "watching ";
 export const WatchLockedMarker = "another watcher is already running (lock at ";
+
+/** `kind-md-proposal`: the block `wiki-ingest` emits for a missing `KIND.md`. */
+export const KindMdProposalBlock = "kind-md-proposal";
+/** The fields a `kind-md-proposal` block carries, in declared order. */
+export const KindMdProposalFields = ["kind", "summary", "folder"] as const;
+
+/** `save-candidate`: the block read-only retrieval emits for a keepable answer. */
+export const SaveCandidateBlock = "save-candidate";
+/** The fields a `save-candidate` block carries, in declared order. */
+export const SaveCandidateFields = [
+  "title",
+  "summary",
+  "tags",
+  "source_date",
+  "volatility",
+  "source",
+] as const;
