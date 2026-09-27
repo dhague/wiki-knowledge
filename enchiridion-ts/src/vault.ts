@@ -234,11 +234,20 @@ export class Vault {
     return pages;
   }
 
+  /** Decode an already-read {pageRef: text} map, so a caller holding the text
+   * shares one parse. `opts` per [LoadRecordsOptions]. */
+  recordsFor(
+    pages: Record<string, string>,
+    opts: LoadRecordsOptions = {},
+  ): Record<string, PageRecord> {
+    return loadRecords(pages, kindByFolder(this.root), opts);
+  }
+
   /** Every `wiki/**` page as a {pageRef: record + text} map. `opts` per
    * [LoadRecordsOptions] — a tolerant check run sets `skipMalformedEdges`. */
   pagesWithText(opts: LoadRecordsOptions = {}): Record<string, PageWithText> {
     const pages = this.loadWikiPages();
-    const records = loadRecords(pages, kindByFolder(this.root), opts);
+    const records = this.recordsFor(pages, opts);
     const out: Record<string, PageWithText> = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: pages[ref] };

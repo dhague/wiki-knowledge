@@ -5,6 +5,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { Vault } from "./vault.js";
+import { VaultRead } from "./vaultread.js";
 import { VaultGit } from "./vaultgit.js";
 import { Index } from "./searchindex.js";
 import {
@@ -39,28 +40,6 @@ export type TaggedFinding = Finding & { check: string };
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** All .md refs under wiki/, including ones that fail isPageRef and that enumeratePageRefs skips. */
-function walkAllMd(root: string): string[] {
-  const wikiDir = path.join(root, "wiki");
-  const refs: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(abs);
-      else if (entry.name.endsWith(".md")) {
-        const rel = path.relative(root, abs).split(path.sep).join("/");
-        refs.push(rel);
-      }
-    }
-  };
-  try {
-    walk(wikiDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-  }
-  return refs.sort();
-}
-
 /** A YAML list item whose value begins with a bare `[`: YAML reads it as a flow
  * sequence, not the link string the schema wants. */
 const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
@@ -79,9 +58,11 @@ function regexEscape(s: string): string {
 // ---------------------------------------------------------------------------
 
 // kindFolderConformance — any folder under wiki/ is a valid kind-folder (ADR-0020); only a page at the wiki root or nested below a kind-folder is flagged.
-export async function kindFolderConformance(root: string): Promise<Finding[]> {
+export async function kindFolderConformance(
+  read: VaultRead,
+): Promise<Finding[]> {
   const findings: Finding[] = [];
-  for (const ref of walkAllMd(root)) {
+  for (const ref of read.allRefs()) {
     const filename = ref.split("/").at(-1)!;
     if (filename === "KIND.md") continue;
     if (ref === "wiki/_index.md") continue;
@@ -100,9 +81,9 @@ export async function kindFolderConformance(root: string): Promise<Finding[]> {
 
 /** ingestionSourceIntegrity — every source page must carry raw_source pointing into raw/. */
 export async function ingestionSourceIntegrity(
-  root: string,
+  read: VaultRead,
 ): Promise<Finding[]> {
-  const pages = new Vault(root).pages({ skipMalformedEdges: true });
+  const pages = read.records();
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -119,8 +100,10 @@ export async function ingestionSourceIntegrity(
 }
 
 // frontmatterLinkFormat — works on raw text, not parsed records, so it can surface frontmatter the record parser refuses.
-export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
-  const pages = new Vault(root).loadWikiPages();
+export async function frontmatterLinkFormat(
+  read: VaultRead,
+): Promise<Finding[]> {
+  const pages = read.texts();
   const findings: Finding[] = [];
   for (const [ref, text] of Object.entries(pages)) {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
@@ -162,8 +145,8 @@ export async function frontmatterLinkFormat(root: string): Promise<Finding[]> {
 
 /** tagsShape — `tags` must be a YAML list of plain tags, or the page drops out
  * of every tag filter without a symptom (`pagerecord.malformedTags`). */
-export async function tagsShape(root: string): Promise<Finding[]> {
-  const pages = new Vault(root).loadWikiPages();
+export async function tagsShape(read: VaultRead): Promise<Finding[]> {
+  const pages = read.texts();
   const findings: Finding[] = [];
   for (const [ref, text] of Object.entries(pages)) {
     for (const detail of malformedTags(text))
@@ -177,9 +160,9 @@ export const StaleSynthesisDays = 30;
 
 /** staleSynthesis — synthesis pages whose last git commit is older than
  * [StaleSynthesisDays]. */
-export async function staleSynthesis(root: string): Promise<Finding[]> {
-  const pages = new Vault(root).pages({ skipMalformedEdges: true });
-  const vaultGit = new VaultGit(root);
+export async function staleSynthesis(read: VaultRead): Promise<Finding[]> {
+  const pages = read.records();
+  const vaultGit = new VaultGit(read.root);
   const findings: Finding[] = [];
   const cutoffMs = Date.now() - StaleSynthesisDays * 24 * 60 * 60 * 1000;
   for (const [ref, record] of Object.entries(pages)) {
@@ -200,9 +183,9 @@ export async function staleSynthesis(root: string): Promise<Finding[]> {
 
 /** missingVolatilitySourceDate — pages missing volatility or source_date, both of which degrade ranking and temporal filtering. */
 export async function missingVolatilitySourceDate(
-  root: string,
+  read: VaultRead,
 ): Promise<Finding[]> {
-  const pages = new Vault(root).pages({ skipMalformedEdges: true });
+  const pages = read.records();
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (!record.volatility)
@@ -215,10 +198,10 @@ export async function missingVolatilitySourceDate(
 
 // unresolvedSupersession — contradicts with no supersedes and no active callout: a resolved contradiction missing its supersedes record.
 // A page with an active callout is a live contradiction and belongs to contradiction-callouts.
-export async function unresolvedSupersession(root: string): Promise<Finding[]> {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true,
-  });
+export async function unresolvedSupersession(
+  read: VaultRead,
+): Promise<Finding[]> {
+  const pagesWithText = read.pagesWithText();
   const findings: Finding[] = [];
   for (const [ref, { record, text }] of Object.entries(pagesWithText)) {
     const hasContradicts = record.edges.some(
@@ -241,10 +224,10 @@ export async function unresolvedSupersession(root: string): Promise<Finding[]> {
 }
 
 /** contradictionCallouts — pages with an active `> [!warning] Contradiction` callout in the body. */
-export async function contradictionCallouts(root: string): Promise<Finding[]> {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true,
-  });
+export async function contradictionCallouts(
+  read: VaultRead,
+): Promise<Finding[]> {
+  const pagesWithText = read.pagesWithText();
   const findings: Finding[] = [];
   for (const [ref, { text }] of Object.entries(pagesWithText)) {
     const { body } = splitFrontmatter(text);
@@ -255,10 +238,8 @@ export async function contradictionCallouts(root: string): Promise<Finding[]> {
 }
 
 /** orphans — pages with zero inbound links from other wiki pages (body or frontmatter). */
-export async function orphans(root: string): Promise<Finding[]> {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true,
-  });
+export async function orphans(read: VaultRead): Promise<Finding[]> {
+  const pagesWithText = read.pagesWithText();
   const allRefs = new Set(Object.keys(pagesWithText));
   const inbound = new Map<string, number>();
   for (const ref of allRefs) inbound.set(ref, 0);
@@ -448,8 +429,8 @@ function bodySplits(
  * can silently repoint the link. Nothing is reported outside a double-quoted
  * scalar, where raw text cannot tell a fold from content.
  */
-export async function splitLinks(root: string): Promise<Finding[]> {
-  const pages = new Vault(root).loadWikiPages();
+export async function splitLinks(read: VaultRead): Promise<Finding[]> {
+  const pages = read.texts();
   const findings: Finding[] = [];
   for (const [ref, text] of Object.entries(pages)) {
     const { frontmatter, hasFrontmatter, body, bodyOffset } =
@@ -639,12 +620,12 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
  * is read from the working tree, where `KIND.md` lives.
  */
 export async function conceptFragmentation(
-  root: string,
+  read: VaultRead,
   opts: CheckOptions = {},
 ): Promise<Finding[]> {
   const minSimilarity = opts.minSimilarity ?? DefaultMinSimilarity;
-  const scope = new Vault(root).consolidatableKinds();
-  const index = await Index.open(root);
+  const scope = read.consolidatableKinds();
+  const index = await Index.open(read.root);
   try {
     const pages = await index.indexedPages(scope);
     const signals = new Map<string, Signals>();
@@ -751,7 +732,7 @@ export async function conceptFragmentation(
 
     // From HEAD too, so the proposal describes the same committed pages the
     // index scored (ADR-0015).
-    const head = await new VaultGit(root).committedPages("");
+    const head = await new VaultGit(read.root).committedPages("");
     const text = new Map<string, string>();
     for (const change of head.pages) {
       if (!change.deleted) text.set(change.pageRef, change.content);
@@ -910,8 +891,10 @@ function duplicateDetail(analysis: DuplicateAnalysis): string {
 /** duplicateFrontmatter — a page's frontmatter is exactly one leading `---`
  * block; the parser reads the first and stops, so every later block's edges are
  * invisible and its text renders as body. */
-export async function duplicateFrontmatter(root: string): Promise<Finding[]> {
-  const pages = new Vault(root).loadWikiPages();
+export async function duplicateFrontmatter(
+  read: VaultRead,
+): Promise<Finding[]> {
+  const pages = read.texts();
   const findings: Finding[] = [];
   for (const [ref, text] of Object.entries(pages)) {
     const analysis = duplicateAnalysis(text);
@@ -925,7 +908,10 @@ export async function duplicateFrontmatter(root: string): Promise<Finding[]> {
 // Check registry
 // ---------------------------------------------------------------------------
 
-export type CheckFn = (root: string, opts?: CheckOptions) => Promise<Finding[]>;
+export type CheckFn = (
+  read: VaultRead,
+  opts?: CheckOptions,
+) => Promise<Finding[]>;
 
 export const CHECKS: Record<string, CheckFn> = {
   "kind-folder-conformance": kindFolderConformance,
@@ -941,6 +927,21 @@ export const CHECKS: Record<string, CheckFn> = {
   "duplicate-frontmatter": duplicateFrontmatter,
   "concept-fragmentation": conceptFragmentation,
 };
+
+/** Run every check against one shared read, in registry order, each finding
+ * tagged with the check that raised it. */
+export async function runAllChecks(
+  root: string,
+  opts: CheckOptions = {},
+): Promise<TaggedFinding[]> {
+  const read = new VaultRead(root);
+  const rows: TaggedFinding[] = [];
+  for (const [check, fn] of Object.entries(CHECKS)) {
+    const findings = await fn(read, opts);
+    rows.push(...findings.map((f) => ({ ...f, check })));
+  }
+  return rows;
+}
 
 // ---------------------------------------------------------------------------
 // Auto-fix implementations  (`enchiridion fix <name>`)

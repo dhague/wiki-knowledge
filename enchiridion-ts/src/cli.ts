@@ -17,6 +17,7 @@ import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
 import { KindFolders, Kinds, path as placePath } from "./place.js";
 import { Vault, resolveRoot, vaultForFile } from "./vault.js";
+import { VaultRead } from "./vaultread.js";
 import { readKindMeta } from "./kindmeta.js";
 import { VaultGit } from "./vaultgit.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";
@@ -53,12 +54,7 @@ import {
   isListEdgeKey,
   type RefLookup,
 } from "./pageedge.js";
-import {
-  CHECKS,
-  DefaultMinSimilarity,
-  FIXES,
-  type TaggedFinding,
-} from "./check.js";
+import { CHECKS, DefaultMinSimilarity, FIXES, runAllChecks } from "./check.js";
 import { Volatilities } from "./pagerecord.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import {
@@ -754,13 +750,9 @@ export function buildProgram(): Command {
       ) => {
         if (opts.all) {
           const { root } = resolveRoot();
-          const rows: TaggedFinding[] = [];
-          for (const [checkName, fn] of Object.entries(CHECKS)) {
-            const findings = await fn(root, {
-              minSimilarity: opts.minSimilarity,
-            });
-            rows.push(...findings.map((f) => ({ ...f, check: checkName })));
-          }
+          const rows = await runAllChecks(root, {
+            minSimilarity: opts.minSimilarity,
+          });
           if (opts.json) emitRows(rows);
           else
             for (const f of rows)
@@ -777,7 +769,9 @@ export function buildProgram(): Command {
         }
         // One check's findings carry no check name — the caller named it.
         const { root } = resolveRoot();
-        const findings = await fn(root, { minSimilarity: opts.minSimilarity });
+        const findings = await fn(new VaultRead(root), {
+          minSimilarity: opts.minSimilarity,
+        });
         if (opts.json) emitRows(findings);
         else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
       },
