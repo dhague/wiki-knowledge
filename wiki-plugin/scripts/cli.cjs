@@ -111,17 +111,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path28) {
-      const ctrl = callVisitor(key, node, visitor, path28);
+    function visit_(key, node, visitor, path32) {
+      const ctrl = callVisitor(key, node, visitor, path32);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path28, ctrl);
-        return visit_(key, ctrl, visitor, path28);
+        replaceNode(key, path32, ctrl);
+        return visit_(key, ctrl, visitor, path32);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path28 = Object.freeze(path28.concat(node));
+          path32 = Object.freeze(path32.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path28);
+            const ci = visit_(i, node.items[i], visitor, path32);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -132,13 +132,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path28 = Object.freeze(path28.concat(node));
-          const ck = visit_("key", node.key, visitor, path28);
+          path32 = Object.freeze(path32.concat(node));
+          const ck = visit_("key", node.key, visitor, path32);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path28);
+          const cv = visit_("value", node.value, visitor, path32);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -159,17 +159,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path28) {
-      const ctrl = await callVisitor(key, node, visitor, path28);
+    async function visitAsync_(key, node, visitor, path32) {
+      const ctrl = await callVisitor(key, node, visitor, path32);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path28, ctrl);
-        return visitAsync_(key, ctrl, visitor, path28);
+        replaceNode(key, path32, ctrl);
+        return visitAsync_(key, ctrl, visitor, path32);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path28 = Object.freeze(path28.concat(node));
+          path32 = Object.freeze(path32.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path28);
+            const ci = await visitAsync_(i, node.items[i], visitor, path32);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -180,13 +180,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path28 = Object.freeze(path28.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path28);
+          path32 = Object.freeze(path32.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path32);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path28);
+          const cv = await visitAsync_("value", node.value, visitor, path32);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -213,23 +213,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path28) {
+    function callVisitor(key, node, visitor, path32) {
       if (typeof visitor === "function")
-        return visitor(key, node, path28);
+        return visitor(key, node, path32);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path28);
+        return visitor.Map?.(key, node, path32);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path28);
+        return visitor.Seq?.(key, node, path32);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path28);
+        return visitor.Pair?.(key, node, path32);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path28);
+        return visitor.Scalar?.(key, node, path32);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path28);
+        return visitor.Alias?.(key, node, path32);
       return void 0;
     }
-    function replaceNode(key, path28, node) {
-      const parent = path28[path28.length - 1];
+    function replaceNode(key, path32, node) {
+      const parent = path32[path32.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -839,10 +839,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path28, value) {
+    function collectionFromPath(schema, path32, value) {
       let v = value;
-      for (let i = path28.length - 1; i >= 0; --i) {
-        const k = path28[i];
+      for (let i = path32.length - 1; i >= 0; --i) {
+        const k = path32[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -861,7 +861,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path28) => path28 == null || typeof path28 === "object" && !!path28[Symbol.iterator]().next().done;
+    var isEmptyPath = (path32) => path32 == null || typeof path32 === "object" && !!path32[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -891,11 +891,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path28, value) {
-        if (isEmptyPath(path28))
+      addIn(path32, value) {
+        if (isEmptyPath(path32))
           this.add(value);
         else {
-          const [key, ...rest] = path28;
+          const [key, ...rest] = path32;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -909,8 +909,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path28) {
-        const [key, ...rest] = path28;
+      deleteIn(path32) {
+        const [key, ...rest] = path32;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -924,8 +924,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path28, keepScalar) {
-        const [key, ...rest] = path28;
+      getIn(path32, keepScalar) {
+        const [key, ...rest] = path32;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -943,8 +943,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path28) {
-        const [key, ...rest] = path28;
+      hasIn(path32) {
+        const [key, ...rest] = path32;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -954,8 +954,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path28, value) {
-        const [key, ...rest] = path28;
+      setIn(path32, value) {
+        const [key, ...rest] = path32;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -3470,9 +3470,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path28, value) {
+      addIn(path32, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path28, value);
+          this.contents.addIn(path32, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -3547,14 +3547,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path28) {
-        if (Collection.isEmptyPath(path28)) {
+      deleteIn(path32) {
+        if (Collection.isEmptyPath(path32)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path28) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path32) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -3569,10 +3569,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path28, keepScalar) {
-        if (Collection.isEmptyPath(path28))
+      getIn(path32, keepScalar) {
+        if (Collection.isEmptyPath(path32))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path28, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path32, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -3583,10 +3583,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path28) {
-        if (Collection.isEmptyPath(path28))
+      hasIn(path32) {
+        if (Collection.isEmptyPath(path32))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path28) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path32) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -3603,13 +3603,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path28, value) {
-        if (Collection.isEmptyPath(path28)) {
+      setIn(path32, value) {
+        if (Collection.isEmptyPath(path32)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path28), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path32), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path28, value);
+          this.contents.setIn(path32, value);
         }
       }
       /**
@@ -5569,9 +5569,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path28) => {
+    visit.itemAtPath = (cst, path32) => {
       let item = cst;
-      for (const [field, index] of path28) {
+      for (const [field, index] of path32) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -5580,23 +5580,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path28) => {
-      const parent = visit.itemAtPath(cst, path28.slice(0, -1));
-      const field = path28[path28.length - 1][0];
+    visit.parentCollection = (cst, path32) => {
+      const parent = visit.itemAtPath(cst, path32.slice(0, -1));
+      const field = path32[path32.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path28, item, visitor) {
-      let ctrl = visitor(item, path28);
+    function _visit(path32, item, visitor) {
+      let ctrl = visitor(item, path32);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path28.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path32.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -5607,10 +5607,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path28);
+            ctrl = ctrl(item, path32);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path28) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path32) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -6912,14 +6912,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs21 = this.flowScalar(this.type);
+              const fs23 = this.flowScalar(this.type);
               if (atNextItem || it.value) {
-                map.items.push({ start, key: fs21, sep: [] });
+                map.items.push({ start, key: fs23, sep: [] });
                 this.onKeyLine = true;
               } else if (it.sep) {
-                this.stack.push(fs21);
+                this.stack.push(fs23);
               } else {
-                Object.assign(it, { key: fs21, sep: [] });
+                Object.assign(it, { key: fs23, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -7047,13 +7047,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs21 = this.flowScalar(this.type);
+              const fs23 = this.flowScalar(this.type);
               if (!it || it.value)
-                fc.items.push({ start: [], key: fs21, sep: [] });
+                fc.items.push({ start: [], key: fs23, sep: [] });
               else if (it.sep)
-                this.stack.push(fs21);
+                this.stack.push(fs23);
               else
-                Object.assign(it, { key: fs21, sep: [] });
+                Object.assign(it, { key: fs23, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -7609,22 +7609,22 @@ function isPageRef(ref) {
   return ref.split("/")[2] !== KindMetaFilename;
 }
 function enumeratePageRefs(root) {
-  const wikiDir = import_node_path8.default.join(root, "wiki");
+  const wikiDir = import_node_path5.default.join(root, "wiki");
   let entries;
   try {
-    entries = import_node_fs7.default.readdirSync(wikiDir, { withFileTypes: true });
+    entries = import_node_fs4.default.readdirSync(wikiDir, { withFileTypes: true });
   } catch (err) {
-    if (isENOENT2(err)) return [];
+    if (isENOENT(err)) return [];
     throw err;
   }
   const refs = [];
   const walk2 = (dir, dirEntries) => {
     for (const entry of dirEntries) {
-      const abs = import_node_path8.default.join(dir, entry.name);
+      const abs = import_node_path5.default.join(dir, entry.name);
       if (entry.isDirectory()) {
-        walk2(abs, import_node_fs7.default.readdirSync(abs, { withFileTypes: true }));
+        walk2(abs, import_node_fs4.default.readdirSync(abs, { withFileTypes: true }));
       } else if (entry.name.endsWith(".md")) {
-        const rel = toSlash(import_node_path8.default.relative(root, abs));
+        const rel = toSlash(import_node_path5.default.relative(root, abs));
         if (isPageRef(rel)) refs.push(rel);
       }
     }
@@ -7633,19 +7633,1378 @@ function enumeratePageRefs(root) {
   return refs.sort();
 }
 function toSlash(p) {
-  return p.split(import_node_path8.default.sep).join("/");
+  return p.split(import_node_path5.default.sep).join("/");
 }
-function isENOENT2(err) {
+function isENOENT(err) {
   return err.code === "ENOENT";
 }
-var import_node_fs7, import_node_path8, GeneratedIndexRef, KindMetaFilename;
+var import_node_fs4, import_node_path5, GeneratedIndexRef, KindMetaFilename;
 var init_pagepredicate = __esm({
   "src/pagepredicate.ts"() {
     "use strict";
-    import_node_fs7 = __toESM(require("node:fs"), 1);
-    import_node_path8 = __toESM(require("node:path"), 1);
+    import_node_fs4 = __toESM(require("node:fs"), 1);
+    import_node_path5 = __toESM(require("node:path"), 1);
     GeneratedIndexRef = "wiki/_index.md";
     KindMetaFilename = "KIND.md";
+  }
+});
+
+// node_modules/node-sqlite3-wasm/dist/node-sqlite3-wasm.js
+var require_node_sqlite3_wasm = __commonJS({
+  "node_modules/node-sqlite3-wasm/dist/node-sqlite3-wasm.js"(exports2, module2) {
+    var Module = typeof Module != "undefined" ? Module : {};
+    var ENVIRONMENT_IS_NODE = true;
+    var INT32_MIN = -2147483648;
+    var INT32_MAX = 2147483647;
+    var NULL = 0;
+    var SQLITE_OK = 0;
+    var SQLITE_ROW = 100;
+    var SQLITE_DONE = 101;
+    var SQLITE_INTEGER = 1;
+    var SQLITE_FLOAT = 2;
+    var SQLITE_TEXT = 3;
+    var SQLITE_BLOB = 4;
+    var SQLITE_NULL = 5;
+    var SQLITE_UTF8 = 1;
+    var SQLITE_TRANSIENT = -1;
+    var SQLITE_DETERMINISTIC = 2048;
+    var temp;
+    var sqlite3 = {};
+    Module.onRuntimeInitialized = () => {
+      temp = stackAlloc(4);
+      const v = null;
+      const n = "number";
+      const s = "string";
+      const n1 = [n];
+      const n2 = [n, ...n1];
+      const n3 = [n, ...n2];
+      const n4 = [n, ...n3];
+      const n5 = [n, ...n4];
+      const signatures = { open_v2: [n, [s, n, n, s]], exec: [n, n5], errmsg: [s, n1], prepare_v2: [n, n5], close_v2: [n, n1], finalize: [n, n1], reset: [n, n1], clear_bindings: [n, n1], bind_int: [n, n3], bind_int64: [n, n3], bind_double: [n, n3], bind_text: [n, n5], bind_blob: [n, n5], bind_blob64: [n, n5], bind_null: [n, n2], bind_parameter_index: [n, [n, s]], step: [n, n1], column_int64: [n, n2], column_double: [n, n2], column_text: [s, n2], column_blob: [n, n2], column_type: [n, n2], column_name: [s, n2], column_count: [n, n1], column_bytes: [n, n2], last_insert_rowid: [n, n1], changes: [n, n1], create_function_v2: [n, [n, s, n, n, n, n, n, n, n]], value_type: [n, n1], value_text: [s, n1], value_blob: [n, n1], value_int64: [n, n1], value_double: [n, n1], value_bytes: [n, n1], result_double: [v, n2], result_null: [v, n1], result_text: [v, n4], result_blob: [v, n4], result_blob64: [v, n4], result_int: [v, n2], result_int64: [v, n2], result_error: [v, n3], column_table_name: [s, n2], get_autocommit: [n, n1] };
+      for (const [name, sig] of Object.entries(signatures)) {
+        sqlite3[name] = cwrap(`sqlite3_${name}`, sig[0], sig[1]);
+      }
+    };
+    var SQLite3Error = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "SQLite3Error";
+      }
+    };
+    function arrayToHeap(array) {
+      const ptr = _malloc(array.byteLength);
+      HEAPU8.set(array, ptr);
+      return ptr;
+    }
+    function stringToHeap(str) {
+      const size = lengthBytesUTF8(str) + 1;
+      const ptr = _malloc(size);
+      stringToUTF8(str, ptr, size);
+      return ptr;
+    }
+    function toNumberOrNot(bigInt) {
+      if (bigInt >= Number.MIN_SAFE_INTEGER && bigInt <= Number.MAX_SAFE_INTEGER) {
+        return Number(bigInt);
+      }
+      return bigInt;
+    }
+    function parseFunctionArguments(argc, argv) {
+      const args = [];
+      for (let i = 0; i < argc; i++) {
+        const ptr = getValue(argv + 4 * i, "i32");
+        const type = sqlite3.value_type(ptr);
+        let arg;
+        switch (type) {
+          case SQLITE_INTEGER:
+            arg = toNumberOrNot(sqlite3.value_int64(ptr));
+            break;
+          case SQLITE_FLOAT:
+            arg = sqlite3.value_double(ptr);
+            break;
+          case SQLITE_TEXT:
+            arg = sqlite3.value_text(ptr);
+            break;
+          case SQLITE_BLOB:
+            const p = sqlite3.value_blob(ptr);
+            if (p != NULL) {
+              arg = HEAPU8.slice(p, p + sqlite3.value_bytes(ptr));
+            } else {
+              arg = new Uint8Array();
+            }
+            break;
+          case SQLITE_NULL:
+            arg = null;
+            break;
+        }
+        args.push(arg);
+      }
+      return args;
+    }
+    function setFunctionResult(cx, result) {
+      switch (typeof result) {
+        case "boolean":
+          sqlite3.result_int(cx, result ? 1 : 0);
+          break;
+        case "number":
+          if (Number.isSafeInteger(result)) {
+            if (result >= INT32_MIN && result <= INT32_MAX) {
+              sqlite3.result_int(cx, result);
+            } else {
+              sqlite3.result_int64(cx, BigInt(result));
+            }
+          } else {
+            sqlite3.result_double(cx, result);
+          }
+          break;
+        case "bigint":
+          sqlite3.result_int64(cx, result);
+          break;
+        case "string":
+          const tempPtr = stringToHeap(result);
+          sqlite3.result_text(cx, tempPtr, -1, SQLITE_TRANSIENT);
+          _free(tempPtr);
+          break;
+        case "object":
+          if (result === null) {
+            sqlite3.result_null(cx);
+          } else if (result instanceof Uint8Array) {
+            const tempPtr2 = arrayToHeap(result);
+            if (result.byteLength <= INT32_MAX) {
+              sqlite3.result_blob(cx, tempPtr2, result.byteLength, SQLITE_TRANSIENT);
+            } else {
+              sqlite3.result_blob64(cx, tempPtr2, BigInt(result.byteLength), SQLITE_TRANSIENT);
+            }
+            _free(tempPtr2);
+          } else {
+            throw new SQLite3Error(`Unsupported type for function result: "${typeof result}"`);
+          }
+          break;
+        default:
+          throw new SQLite3Error(`Unsupported type for function result: "${typeof result}"`);
+      }
+    }
+    var Database2 = class {
+      constructor(filename, { fileMustExist = false, readOnly = false } = {}) {
+        let flags;
+        if (readOnly) {
+          flags = SQLITE_OPEN_READONLY;
+        } else {
+          flags = SQLITE_OPEN_READWRITE;
+          if (!fileMustExist) flags |= SQLITE_OPEN_CREATE;
+        }
+        const rc = sqlite3.open_v2(filename, temp, flags, NULL);
+        this._ptr = getValue(temp, "i32");
+        if (rc !== SQLITE_OK) {
+          if (this._ptr !== NULL) sqlite3.close_v2(this._ptr);
+          throw new SQLite3Error(`Could not open the database "${filename}"`);
+        }
+        this._functions = /* @__PURE__ */ new Map();
+      }
+      get isOpen() {
+        return this._ptr !== null;
+      }
+      get inTransaction() {
+        this._assertOpen();
+        return sqlite3.get_autocommit(this._ptr) === 0;
+      }
+      close() {
+        this._assertOpen();
+        for (const func of this._functions.values()) removeFunction(func);
+        this._functions.clear();
+        this._handleError(sqlite3.close_v2(this._ptr));
+        this._ptr = null;
+      }
+      function(name, func, { deterministic = false } = {}) {
+        this._assertOpen();
+        function wrappedFunc(cx, argc, argv) {
+          const args = parseFunctionArguments(argc, argv);
+          let result;
+          try {
+            result = func.apply(null, args);
+          } catch (err2) {
+            const tempPtr = stringToHeap(err2.toString());
+            sqlite3.result_error(cx, tempPtr, -1);
+            _free(tempPtr);
+            return;
+          }
+          setFunctionResult(cx, result);
+        }
+        if (this._functions.has(name)) {
+          removeFunction(this._functions.get(name));
+          this._functions.delete(name);
+        }
+        const funcPtr = addFunction(wrappedFunc, "viii");
+        this._functions.set(name, funcPtr);
+        let eTextRep = SQLITE_UTF8;
+        if (deterministic) eTextRep |= SQLITE_DETERMINISTIC;
+        this._handleError(sqlite3.create_function_v2(this._ptr, name, func.length, eTextRep, NULL, funcPtr, NULL, NULL, NULL));
+        return this;
+      }
+      exec(sql) {
+        this._assertOpen();
+        const tempPtr = stringToHeap(sql);
+        try {
+          this._handleError(sqlite3.exec(this._ptr, tempPtr, NULL, NULL, NULL));
+        } finally {
+          _free(tempPtr);
+        }
+      }
+      prepare(sql) {
+        this._assertOpen();
+        return new Statement(this, sql);
+      }
+      run(sql, values) {
+        const stmt = this.prepare(sql);
+        try {
+          return stmt.run(values);
+        } finally {
+          stmt.finalize();
+        }
+      }
+      all(sql, values, { expand = false } = {}) {
+        return this._query(sql, values, false, expand);
+      }
+      get(sql, values, { expand = false } = {}) {
+        return this._query(sql, values, true, expand);
+      }
+      _query(sql, values, single, expand) {
+        const stmt = this.prepare(sql);
+        try {
+          if (single) {
+            return stmt.get(values, { expand });
+          } else {
+            return stmt.all(values, { expand });
+          }
+        } finally {
+          stmt.finalize();
+        }
+      }
+      _assertOpen() {
+        if (!this.isOpen) throw new SQLite3Error("Database already closed");
+      }
+      _handleError(returnCode) {
+        if (returnCode !== SQLITE_OK) throw new SQLite3Error(sqlite3.errmsg(this._ptr));
+      }
+    };
+    var Statement = class {
+      constructor(db, sql) {
+        const tempPtr = stringToHeap(sql);
+        try {
+          db._handleError(sqlite3.prepare_v2(db._ptr, tempPtr, -1, temp, NULL));
+        } finally {
+          _free(tempPtr);
+        }
+        this._ptr = getValue(temp, "i32");
+        if (this._ptr === NULL) throw new SQLite3Error("Nothing to prepare");
+        this._db = db;
+      }
+      get database() {
+        return this._db;
+      }
+      get isFinalized() {
+        return this._ptr === null;
+      }
+      run(values) {
+        this._assertReady();
+        this._bind(values);
+        this._step();
+        return { changes: sqlite3.changes(this._db._ptr), lastInsertRowid: toNumberOrNot(sqlite3.last_insert_rowid(this._db._ptr)) };
+      }
+      iterate(values, { expand = false } = {}) {
+        return this._queryRows(values, expand);
+      }
+      all(values, { expand = false } = {}) {
+        return Array.from(this.iterate(values, { expand }));
+      }
+      get(values, { expand = false } = {}) {
+        const result = this._queryRows(values, expand).next();
+        return result.done ? null : result.value;
+      }
+      finalize() {
+        if (this.isFinalized) throw new SQLite3Error("Statement already finalized");
+        try {
+          this._db._handleError(sqlite3.finalize(this._ptr));
+        } finally {
+          this._ptr = null;
+        }
+      }
+      _reset() {
+        return sqlite3.clear_bindings(this._ptr) === SQLITE_OK && sqlite3.reset(this._ptr) === SQLITE_OK;
+      }
+      *_queryRows(values, expand) {
+        this._assertReady();
+        this._bind(values);
+        const columns = this._getColumnNames();
+        while (this._step()) yield this._getRow(columns, expand);
+      }
+      _bind(values) {
+        if (!this._reset()) {
+          throw new SQLite3Error("Could not reset statement prior to binding new values");
+        }
+        if (Array.isArray(values)) {
+          this._bindArray(values);
+        } else if (values != null && typeof values === "object") {
+          this._bindObject(values);
+        } else if (typeof values !== "undefined") {
+          this._bindValue(values, 1);
+        }
+      }
+      _step() {
+        const ret = sqlite3.step(this._ptr);
+        switch (ret) {
+          case SQLITE_ROW:
+            return true;
+          case SQLITE_DONE:
+            return false;
+          default:
+            this._db._handleError(ret);
+        }
+      }
+      _getRow(columns, expand) {
+        const row = {};
+        for (let i = 0; i < columns.length; i++) {
+          let v;
+          const colType = sqlite3.column_type(this._ptr, i);
+          switch (colType) {
+            case SQLITE_INTEGER:
+              v = toNumberOrNot(sqlite3.column_int64(this._ptr, i));
+              break;
+            case SQLITE_FLOAT:
+              v = sqlite3.column_double(this._ptr, i);
+              break;
+            case SQLITE_TEXT:
+              v = sqlite3.column_text(this._ptr, i);
+              break;
+            case SQLITE_BLOB:
+              const p = sqlite3.column_blob(this._ptr, i);
+              if (p != NULL) {
+                v = HEAPU8.slice(p, p + sqlite3.column_bytes(this._ptr, i));
+              } else {
+                v = new Uint8Array();
+              }
+              break;
+            case SQLITE_NULL:
+              v = null;
+              break;
+          }
+          const column = columns[i];
+          if (expand) {
+            let table2 = sqlite3.column_table_name(this._ptr, i);
+            table2 = table2 === "" ? "$" : table2;
+            if (Object.hasOwn(row, table2)) {
+              row[table2][column] = v;
+            } else {
+              row[table2] = { [column]: v };
+            }
+          } else {
+            row[column] = v;
+          }
+        }
+        return row;
+      }
+      _getColumnNames() {
+        const names = [];
+        const columns = sqlite3.column_count(this._ptr);
+        for (let i = 0; i < columns; i++) names.push(sqlite3.column_name(this._ptr, i));
+        return names;
+      }
+      _bindArray(values) {
+        for (let i = 0; i < values.length; i++) this._bindValue(values[i], i + 1);
+      }
+      _bindObject(values) {
+        for (const [param, value] of Object.entries(values)) {
+          const i = sqlite3.bind_parameter_index(this._ptr, param);
+          if (i === 0) throw new SQLite3Error(`Unknown binding parameter: "${param}"`);
+          this._bindValue(value, i);
+        }
+      }
+      _bindValue(value, position) {
+        let ret;
+        switch (typeof value) {
+          case "string":
+            const tempPtr = stringToHeap(value);
+            ret = sqlite3.bind_text(this._ptr, position, tempPtr, -1, SQLITE_TRANSIENT);
+            _free(tempPtr);
+            break;
+          case "number":
+            if (Number.isSafeInteger(value)) {
+              if (value >= INT32_MIN && value <= INT32_MAX) {
+                ret = sqlite3.bind_int(this._ptr, position, value);
+              } else {
+                ret = sqlite3.bind_int64(this._ptr, position, BigInt(value));
+              }
+            } else {
+              ret = sqlite3.bind_double(this._ptr, position, value);
+            }
+            break;
+          case "bigint":
+            ret = sqlite3.bind_int64(this._ptr, position, value);
+            break;
+          case "boolean":
+            ret = sqlite3.bind_int(this._ptr, position, value ? 1 : 0);
+            break;
+          case "object":
+            if (value === null) {
+              ret = sqlite3.bind_null(this._ptr, position);
+            } else if (value instanceof Uint8Array) {
+              const tempPtr2 = arrayToHeap(value);
+              if (value.byteLength <= INT32_MAX) {
+                ret = sqlite3.bind_blob(this._ptr, position, tempPtr2, value.byteLength, SQLITE_TRANSIENT);
+              } else {
+                ret = sqlite3.bind_blob64(this._ptr, position, tempPtr2, BigInt(value.byteLength), SQLITE_TRANSIENT);
+              }
+              _free(tempPtr2);
+            } else {
+              throw new SQLite3Error(`Unsupported type for binding: "${typeof value}"`);
+            }
+            break;
+          default:
+            throw new SQLite3Error(`Unsupported type for binding: "${typeof value}"`);
+        }
+        if (ret !== SQLITE_OK) this._db._handleError(ret);
+      }
+      _assertReady() {
+        if (this.isFinalized) throw new SQLite3Error("Statement already finalized");
+        if (!this._db.isOpen) throw new SQLite3Error("Database is closed");
+      }
+    };
+    Module.Database = Database2;
+    Module.SQLite3Error = SQLite3Error;
+    var path32 = require("node:path");
+    var crypto2 = require("node:crypto");
+    var SQLITE_CANTOPEN = 14;
+    var SQLITE_IOERR_READ = 266;
+    var SQLITE_IOERR_SHORT_READ = 522;
+    var SQLITE_IOERR_FSYNC = 1034;
+    var SQLITE_IOERR_WRITE = 778;
+    var SQLITE_IOERR_DELETE = 2570;
+    var SQLITE_IOERR_CLOSE = 4106;
+    var SQLITE_IOERR_TRUNCATE = 1546;
+    var SQLITE_IOERR_FSTAT = 1802;
+    var SQLITE_IOERR_LOCK = 3850;
+    var SQLITE_IOERR_UNLOCK = 2058;
+    var SQLITE_OPEN_READONLY = 1;
+    var SQLITE_OPEN_READWRITE = 2;
+    var SQLITE_OPEN_CREATE = 4;
+    var SQLITE_OPEN_EXCLUSIVE = 16;
+    var SQLITE_ACCESS_READWRITE = 1;
+    var SQLITE_ACCESS_READ = 2;
+    var SQLITE_LOCK_NONE = 0;
+    var SQLITE_BUSY = 5;
+    function _fd(fileInfo) {
+      return getValue(fileInfo + 4, "i32");
+    }
+    function _isLocked(fileInfo) {
+      return getValue(fileInfo + 8, "i32") != 0;
+    }
+    function _setLocked(fileInfo, locked) {
+      setValue(fileInfo + 8, locked ? 1 : 0, "i32");
+    }
+    function _path(fileInfo) {
+      return UTF8ToString(getValue(fileInfo + 12, "i32"));
+    }
+    function _safeInt(bigInt) {
+      if (bigInt < Number.MIN_SAFE_INTEGER || bigInt > Number.MAX_SAFE_INTEGER) throw 0;
+      return Number(bigInt);
+    }
+    var programArgs = [];
+    var thisProgram = "./this.program";
+    var quit_ = (status, toThrow) => {
+      throw toThrow;
+    };
+    var _scriptName;
+    if (typeof __filename != "undefined") {
+      _scriptName = __filename;
+    } else {
+    }
+    var scriptDirectory = "";
+    function locateFile(path33) {
+      if (Module["locateFile"]) {
+        return Module["locateFile"](path33, scriptDirectory);
+      }
+      return scriptDirectory + path33;
+    }
+    var readAsync;
+    var readBinary;
+    if (ENVIRONMENT_IS_NODE) {
+      fs23 = require("node:fs");
+      scriptDirectory = __dirname + "/";
+      readBinary = (filename) => {
+        filename = isFileURI(filename) ? new URL(filename) : filename;
+        var ret = fs23.readFileSync(filename);
+        return ret;
+      };
+      readAsync = async (filename, binary = true) => {
+        filename = isFileURI(filename) ? new URL(filename) : filename;
+        var ret = fs23.readFileSync(filename, binary ? void 0 : "utf8");
+        return ret;
+      };
+      if (process.argv.length > 1) {
+        thisProgram = process.argv[1].replace(/\\/g, "/");
+      }
+      programArgs = process.argv.slice(2);
+      if (typeof module2 != "undefined") {
+        module2["exports"] = Module;
+      }
+      quit_ = (status, toThrow) => {
+        process.exitCode = status;
+        throw toThrow;
+      };
+    } else {
+    }
+    var fs23;
+    var out = console.log.bind(console);
+    var err = console.error.bind(console);
+    var wasmBinary;
+    var ABORT = false;
+    var EXITSTATUS;
+    var isFileURI = (filename) => filename.startsWith("file://");
+    var runtimeInitialized = false;
+    function getMemoryBuffer() {
+      return wasmMemory.buffer;
+    }
+    function updateMemoryViews() {
+      if (HEAP8?.buffer?.resizable) return;
+      var b = getMemoryBuffer();
+      HEAP8 = new Int8Array(b);
+      HEAP16 = new Int16Array(b);
+      HEAPU8 = new Uint8Array(b);
+      HEAP32 = new Int32Array(b);
+      HEAPU32 = new Uint32Array(b);
+      HEAPF32 = new Float32Array(b);
+      HEAPF64 = new Float64Array(b);
+      HEAP64 = new BigInt64Array(b);
+    }
+    function preRun() {
+      var preRun2 = Module["preRun"];
+      if (preRun2) {
+        if (typeof preRun2 == "function") preRun2 = [preRun2];
+        onPreRuns.push(...preRun2);
+      }
+      callRuntimeCallbacks(onPreRuns);
+    }
+    function initRuntime() {
+      runtimeInitialized = true;
+      wasmExports["z"]();
+    }
+    function postRun() {
+      var postRun2 = Module["postRun"];
+      if (postRun2) {
+        if (typeof postRun2 == "function") postRun2 = [postRun2];
+        onPostRuns.push(...postRun2);
+      }
+      callRuntimeCallbacks(onPostRuns);
+    }
+    function abort(what) {
+      Module["onAbort"]?.(what);
+      what = `Aborted(${what})`;
+      err(what);
+      ABORT = true;
+      what += ". Build with -sASSERTIONS for more info.";
+      var e = new WebAssembly.RuntimeError(what);
+      throw e;
+    }
+    var wasmBinaryFile;
+    function findWasmBinary() {
+      return locateFile("node-sqlite3-wasm.wasm");
+    }
+    function getBinarySync(file) {
+      if (file == wasmBinaryFile && wasmBinary) {
+        return new Uint8Array(wasmBinary);
+      }
+      if (readBinary) {
+        return readBinary(file);
+      }
+      throw 'sync fetching of the wasm failed: you can preload it to Module["wasmBinary"] manually, or emcc.py will do that for you when generating HTML (but not JS)';
+    }
+    function instantiateSync(file, info) {
+      var module3;
+      var binary = getBinarySync(file);
+      module3 = new WebAssembly.Module(binary);
+      var instance = new WebAssembly.Instance(module3, info);
+      return [instance, module3];
+    }
+    function getWasmImports() {
+      var imports = { a: wasmImports };
+      return imports;
+    }
+    function createWasm() {
+      function receiveInstance(instance) {
+        wasmExports = instance.exports;
+        assignWasmExports(wasmExports);
+        updateMemoryViews();
+        return wasmExports;
+      }
+      var info = getWasmImports();
+      var instantiateWasm = Module["instantiateWasm"];
+      if (instantiateWasm) {
+        return new Promise((resolve6) => {
+          instantiateWasm(info, (inst) => resolve6(receiveInstance(inst)));
+        });
+      }
+      wasmBinaryFile ??= findWasmBinary();
+      var result = instantiateSync(wasmBinaryFile, info);
+      return receiveInstance(result[0]);
+    }
+    var ExitStatus = class {
+      name = "ExitStatus";
+      constructor(status) {
+        this.message = `Program terminated with exit(${status})`;
+        this.status = status;
+      }
+    };
+    var HEAP8;
+    var callRuntimeCallbacks = (callbacks) => {
+      while (callbacks.length > 0) {
+        callbacks.shift()(Module);
+      }
+    };
+    var onPostRuns = [];
+    var onPreRuns = [];
+    var noExitRuntime = true;
+    var stackRestore = (val) => __emscripten_stack_restore(val);
+    var stackSave = () => _emscripten_stack_get_current();
+    var __abort_js = () => abort("");
+    var runtimeKeepaliveCounter = 0;
+    var __emscripten_runtime_keepalive_clear = () => {
+      noExitRuntime = false;
+      runtimeKeepaliveCounter = 0;
+    };
+    var isLeapYear = (year) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    var MONTH_DAYS_LEAP_CUMULATIVE = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+    var MONTH_DAYS_REGULAR_CUMULATIVE = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    var ydayFromDate = (date) => {
+      var leap = isLeapYear(date.getFullYear());
+      var monthDaysCumulative = leap ? MONTH_DAYS_LEAP_CUMULATIVE : MONTH_DAYS_REGULAR_CUMULATIVE;
+      var yday = monthDaysCumulative[date.getMonth()] + date.getDate() - 1;
+      return yday;
+    };
+    var INT53_MAX = 9007199254740992;
+    var INT53_MIN = -9007199254740992;
+    var bigintToI53Checked = (num) => num < INT53_MIN || num > INT53_MAX ? NaN : Number(num);
+    var HEAP32;
+    function __localtime_js(time, tmPtr) {
+      time = bigintToI53Checked(time);
+      var date = new Date(time * 1e3);
+      if (isNaN(date.getTime())) {
+        return 1;
+      }
+      HEAP32[tmPtr >> 2] = date.getSeconds();
+      HEAP32[tmPtr + 4 >> 2] = date.getMinutes();
+      HEAP32[tmPtr + 8 >> 2] = date.getHours();
+      HEAP32[tmPtr + 12 >> 2] = date.getDate();
+      HEAP32[tmPtr + 16 >> 2] = date.getMonth();
+      HEAP32[tmPtr + 20 >> 2] = date.getFullYear() - 1900;
+      HEAP32[tmPtr + 24 >> 2] = date.getDay();
+      var yday = ydayFromDate(date) | 0;
+      HEAP32[tmPtr + 28 >> 2] = yday;
+      HEAP32[tmPtr + 36 >> 2] = -(date.getTimezoneOffset() * 60);
+      var start = new Date(date.getFullYear(), 0, 1);
+      var summerOffset = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
+      var winterOffset = start.getTimezoneOffset();
+      var dst = (summerOffset != winterOffset && date.getTimezoneOffset() == Math.min(winterOffset, summerOffset)) | 0;
+      HEAP32[tmPtr + 32 >> 2] = dst;
+      return 0;
+    }
+    var timers = {};
+    var handleException = (e) => {
+      if (e instanceof ExitStatus || e == "unwind") {
+        return EXITSTATUS;
+      }
+      quit_(1, e);
+    };
+    var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
+    var _proc_exit = (code2) => {
+      EXITSTATUS = code2;
+      if (!keepRuntimeAlive()) {
+        Module["onExit"]?.(code2);
+        ABORT = true;
+      }
+      quit_(code2, new ExitStatus(code2));
+    };
+    var exitJS = (status, implicit) => {
+      EXITSTATUS = status;
+      _proc_exit(status);
+    };
+    var _exit = exitJS;
+    var maybeExit = () => {
+      if (!keepRuntimeAlive()) {
+        try {
+          _exit(EXITSTATUS);
+        } catch (e) {
+          handleException(e);
+        }
+      }
+    };
+    var callUserCallback = (func) => {
+      if (ABORT) {
+        return;
+      }
+      try {
+        return func();
+      } catch (e) {
+        handleException(e);
+      } finally {
+        maybeExit();
+      }
+    };
+    var _emscripten_get_now = () => performance.now();
+    var __setitimer_js = (which, timeout_ms) => {
+      if (timers[which]) {
+        clearTimeout(timers[which].id);
+        delete timers[which];
+      }
+      if (!timeout_ms) return 0;
+      var id = setTimeout(() => {
+        delete timers[which];
+        callUserCallback(() => __emscripten_timeout(which, _emscripten_get_now()));
+      }, timeout_ms);
+      timers[which] = { id, timeout_ms };
+      return 0;
+    };
+    var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
+      if (!(maxBytesToWrite > 0)) return 0;
+      var startIdx = outIdx;
+      var endIdx = outIdx + maxBytesToWrite - 1;
+      for (var i = 0; i < str.length; ++i) {
+        var u = str.codePointAt(i);
+        if (u <= 127) {
+          if (outIdx >= endIdx) break;
+          heap[outIdx++] = u;
+        } else if (u <= 2047) {
+          if (outIdx + 1 >= endIdx) break;
+          heap[outIdx++] = 192 | u >> 6;
+          heap[outIdx++] = 128 | u & 63;
+        } else if (u <= 65535) {
+          if (outIdx + 2 >= endIdx) break;
+          heap[outIdx++] = 224 | u >> 12;
+          heap[outIdx++] = 128 | u >> 6 & 63;
+          heap[outIdx++] = 128 | u & 63;
+        } else {
+          if (outIdx + 3 >= endIdx) break;
+          heap[outIdx++] = 240 | u >> 18;
+          heap[outIdx++] = 128 | u >> 12 & 63;
+          heap[outIdx++] = 128 | u >> 6 & 63;
+          heap[outIdx++] = 128 | u & 63;
+          i++;
+        }
+      }
+      heap[outIdx] = 0;
+      return outIdx - startIdx;
+    };
+    var HEAPU8;
+    var stringToUTF8 = (str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, HEAPU8, outPtr, maxBytesToWrite);
+    var HEAPU32;
+    var __tzset_js = (timezone, daylight, std_name, dst_name) => {
+      var currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+      var winter = new Date(currentYear, 0, 1);
+      var summer = new Date(currentYear, 6, 1);
+      var winterOffset = winter.getTimezoneOffset();
+      var summerOffset = summer.getTimezoneOffset();
+      var stdTimezoneOffset = Math.max(winterOffset, summerOffset);
+      HEAPU32[timezone >> 2] = stdTimezoneOffset * 60;
+      HEAP32[daylight >> 2] = Number(winterOffset != summerOffset);
+      var extractZone = (timezoneOffset) => {
+        var sign = timezoneOffset >= 0 ? "-" : "+";
+        var absOffset = Math.abs(timezoneOffset);
+        var hours = String(Math.floor(absOffset / 60)).padStart(2, "0");
+        var minutes = String(absOffset % 60).padStart(2, "0");
+        return `UTC${sign}${hours}${minutes}`;
+      };
+      var winterName = extractZone(winterOffset);
+      var summerName = extractZone(summerOffset);
+      if (summerOffset < winterOffset) {
+        stringToUTF8(winterName, std_name, 17);
+        stringToUTF8(summerName, dst_name, 17);
+      } else {
+        stringToUTF8(winterName, dst_name, 17);
+        stringToUTF8(summerName, std_name, 17);
+      }
+    };
+    var _emscripten_date_now = () => Date.now();
+    var getHeapMax = () => 2147483648;
+    var alignMemory = (size, alignment) => Math.ceil(size / alignment) * alignment;
+    var growMemory = (size) => {
+      var oldHeapSize = wasmMemory.buffer.byteLength;
+      var pages = (size - oldHeapSize + 65535) / 65536 | 0;
+      try {
+        wasmMemory.grow(pages);
+        updateMemoryViews();
+        return 1;
+      } catch (e) {
+      }
+    };
+    var _emscripten_resize_heap = (requestedSize) => {
+      var oldSize = HEAPU8.length;
+      requestedSize >>>= 0;
+      var maxHeapSize = getHeapMax();
+      if (requestedSize > maxHeapSize) {
+        return false;
+      }
+      for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
+        var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown);
+        overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296);
+        var newSize = Math.min(maxHeapSize, alignMemory(Math.max(requestedSize, overGrownHeapSize), 65536));
+        var replacement = growMemory(newSize);
+        if (replacement) {
+          return true;
+        }
+      }
+      return false;
+    };
+    var UTF8Decoder = globalThis.TextDecoder && new TextDecoder();
+    var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
+      var maxIdx = idx + maxBytesToRead;
+      if (ignoreNul) return maxIdx;
+      while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
+      return idx;
+    };
+    var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
+      var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
+      if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
+        return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
+      }
+      var str = "";
+      while (idx < endPtr) {
+        var u0 = heapOrArray[idx++];
+        if (!(u0 & 128)) {
+          str += String.fromCharCode(u0);
+          continue;
+        }
+        var u1 = heapOrArray[idx++] & 63;
+        if ((u0 & 224) == 192) {
+          str += String.fromCharCode((u0 & 31) << 6 | u1);
+          continue;
+        }
+        var u2 = heapOrArray[idx++] & 63;
+        if ((u0 & 240) == 224) {
+          u0 = (u0 & 15) << 12 | u1 << 6 | u2;
+        } else {
+          u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | heapOrArray[idx++] & 63;
+        }
+        if (u0 < 65536) {
+          str += String.fromCharCode(u0);
+        } else {
+          var ch = u0 - 65536;
+          str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
+        }
+      }
+      return str;
+    };
+    var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) => ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "";
+    var HEAP16;
+    var HEAPF32;
+    var HEAPF64;
+    var HEAP64;
+    function setValue(ptr, value, type = "i8") {
+      if (type.endsWith("*")) type = "*";
+      switch (type) {
+        case "i1":
+          HEAP8[ptr] = value;
+          break;
+        case "i8":
+          HEAP8[ptr] = value;
+          break;
+        case "i16":
+          HEAP16[ptr >> 1] = value;
+          break;
+        case "i32":
+          HEAP32[ptr >> 2] = value;
+          break;
+        case "i64":
+          HEAP64[ptr >> 3] = BigInt(value);
+          break;
+        case "float":
+          HEAPF32[ptr >> 2] = value;
+          break;
+        case "double":
+          HEAPF64[ptr >> 3] = value;
+          break;
+        case "*":
+          HEAPU32[ptr >> 2] = value;
+          break;
+        default:
+          abort(`invalid type for setValue: ${type}`);
+      }
+    }
+    function _nodejsAccess(vfs, filePath, flags, outResult) {
+      let aflags = fs23.constants.F_OK;
+      if (flags == SQLITE_ACCESS_READWRITE) aflags = fs23.constants.R_OK | fs23.constants.W_OK;
+      if (flags == SQLITE_ACCESS_READ) aflags = fs23.constants.R_OK;
+      try {
+        fs23.accessSync(UTF8ToString(filePath), aflags);
+        setValue(outResult, 1, "i32");
+      } catch {
+        setValue(outResult, 0, "i32");
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsCheckReservedLock(fi, outResult) {
+      try {
+        fs23.accessSync(`${_path(fi)}.lock`, fs23.constants.F_OK);
+        setValue(outResult, 1, "i32");
+      } catch {
+        setValue(outResult, 0, "i32");
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsClose(fi) {
+      _nodejsUnlock(fi, SQLITE_LOCK_NONE);
+      try {
+        fs23.closeSync(_fd(fi));
+      } catch {
+        return SQLITE_IOERR_CLOSE;
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsDelete(vfs, filePath, dirSync) {
+      const pathStr = UTF8ToString(filePath);
+      try {
+        fs23.unlinkSync(pathStr);
+      } catch (err2) {
+        if (err2.code != "ENOENT") return SQLITE_IOERR_DELETE;
+      }
+      if (dirSync) {
+        let fd = -1;
+        try {
+          fd = fs23.openSync(path32.dirname(pathStr), "r");
+          fs23.fsyncSync(fd);
+        } catch {
+          return SQLITE_IOERR_FSYNC;
+        } finally {
+          try {
+            fs23.closeSync(fd);
+          } catch {
+            return SQLITE_IOERR_FSYNC;
+          }
+        }
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsFileSize(fi, outSize) {
+      try {
+        setValue(outSize, fs23.fstatSync(_fd(fi)).size, "i64");
+      } catch {
+        return SQLITE_IOERR_FSTAT;
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsFullPathname(vfs, relPath2, sizeFullPath, outFullPath) {
+      const full = path32.resolve(UTF8ToString(relPath2));
+      stringToUTF8(full, outFullPath, sizeFullPath);
+      return full.length < sizeFullPath ? SQLITE_OK : SQLITE_CANTOPEN;
+    }
+    function _nodejsLock(fi, level) {
+      if (!_isLocked(fi)) {
+        try {
+          fs23.mkdirSync(`${_path(fi)}.lock`);
+        } catch (err2) {
+          return err2.code == "EEXIST" ? SQLITE_BUSY : SQLITE_IOERR_LOCK;
+        }
+        _setLocked(fi, true);
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsRandomness(vfs, bytes, outBuffer) {
+      const buf = HEAPU8.subarray(outBuffer, outBuffer + bytes);
+      crypto2.randomFillSync(buf);
+      return bytes;
+    }
+    function _nodejsRead(fi, outBuffer, bytes, offset) {
+      const buf = HEAPU8.subarray(outBuffer, outBuffer + bytes);
+      let bytesRead;
+      try {
+        bytesRead = fs23.readSync(_fd(fi), buf, 0, bytes, offset);
+      } catch {
+        return SQLITE_IOERR_READ;
+      }
+      if (bytesRead == bytes) {
+        return SQLITE_OK;
+      } else if (bytesRead >= 0) {
+        if (bytesRead < bytes) {
+          try {
+            buf.fill(0, bytesRead);
+          } catch {
+            return SQLITE_IOERR_READ;
+          }
+        }
+        return SQLITE_IOERR_SHORT_READ;
+      }
+      return SQLITE_IOERR_READ;
+    }
+    function _nodejsSync(fi, flags) {
+      try {
+        fs23.fsyncSync(_fd(fi));
+      } catch {
+        return SQLITE_IOERR_FSYNC;
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsTruncate(fi, size) {
+      try {
+        fs23.ftruncateSync(_fd(fi), _safeInt(size));
+      } catch {
+        return SQLITE_IOERR_TRUNCATE;
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsUnlock(fi, level) {
+      if (level == SQLITE_LOCK_NONE && _isLocked(fi)) {
+        try {
+          fs23.rmdirSync(`${_path(fi)}.lock`);
+        } catch (err2) {
+          if (err2.code != "ENOENT") return SQLITE_IOERR_UNLOCK;
+        }
+        _setLocked(fi, false);
+      }
+      return SQLITE_OK;
+    }
+    function _nodejsWrite(fi, buffer, bytes, offset) {
+      try {
+        const bytesWritten = fs23.writeSync(_fd(fi), HEAPU8.subarray(buffer, buffer + bytes), 0, bytes, _safeInt(offset));
+        return bytesWritten != bytes ? SQLITE_IOERR_WRITE : SQLITE_OK;
+      } catch {
+        return SQLITE_IOERR_WRITE;
+      }
+    }
+    function _nodejs_max_path_length() {
+      return process.platform == "win32" ? 260 : 4096;
+    }
+    function _nodejs_open(filePath, flags, mode) {
+      let oflags = 0;
+      if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= fs23.constants.O_EXCL;
+      if (flags & SQLITE_OPEN_CREATE) oflags |= fs23.constants.O_CREAT;
+      if (flags & SQLITE_OPEN_READONLY) oflags |= fs23.constants.O_RDONLY;
+      if (flags & SQLITE_OPEN_READWRITE) oflags |= fs23.constants.O_RDWR;
+      try {
+        return fs23.openSync(UTF8ToString(filePath), oflags, mode);
+      } catch {
+        return -1;
+      }
+    }
+    function getValue(ptr, type = "i8") {
+      if (type.endsWith("*")) type = "*";
+      switch (type) {
+        case "i1":
+          return HEAP8[ptr];
+        case "i8":
+          return HEAP8[ptr];
+        case "i16":
+          return HEAP16[ptr >> 1];
+        case "i32":
+          return HEAP32[ptr >> 2];
+        case "i64":
+          return HEAP64[ptr >> 3];
+        case "float":
+          return HEAPF32[ptr >> 2];
+        case "double":
+          return HEAPF64[ptr >> 3];
+        case "*":
+          return HEAPU32[ptr >> 2];
+        default:
+          abort(`invalid type for getValue: ${type}`);
+      }
+    }
+    var getCFunc = (ident) => {
+      var func = Module["_" + ident];
+      return func;
+    };
+    var writeArrayToMemory = (array, buffer) => {
+      HEAP8.set(array, buffer);
+    };
+    var lengthBytesUTF8 = (str) => {
+      var len = 0;
+      for (var i = 0; i < str.length; ++i) {
+        var c = str.charCodeAt(i);
+        if (c <= 127) {
+          len++;
+        } else if (c <= 2047) {
+          len += 2;
+        } else if (c >= 55296 && c <= 57343) {
+          len += 4;
+          ++i;
+        } else {
+          len += 3;
+        }
+      }
+      return len;
+    };
+    var stackAlloc = (sz) => __emscripten_stack_alloc(sz);
+    var stringToUTF8OnStack = (str) => {
+      var size = lengthBytesUTF8(str) + 1;
+      var ret = stackAlloc(size);
+      stringToUTF8(str, ret, size);
+      return ret;
+    };
+    var ccall = (ident, returnType, argTypes, args, opts) => {
+      var toC = { string: (str) => {
+        var ret2 = 0;
+        if (str !== null && str !== void 0 && str !== 0) {
+          ret2 = stringToUTF8OnStack(str);
+        }
+        return ret2;
+      }, array: (arr) => {
+        var ret2 = stackAlloc(arr.length);
+        writeArrayToMemory(arr, ret2);
+        return ret2;
+      } };
+      function convertReturnValue(ret2) {
+        if (returnType === "string") {
+          return UTF8ToString(ret2);
+        }
+        if (returnType === "boolean") return Boolean(ret2);
+        return ret2;
+      }
+      var func = getCFunc(ident);
+      var cArgs = [];
+      var stack = 0;
+      if (args) {
+        for (var i = 0; i < args.length; i++) {
+          var converter = toC[argTypes[i]];
+          if (converter) {
+            if (stack === 0) stack = stackSave();
+            cArgs[i] = converter(args[i]);
+          } else {
+            cArgs[i] = args[i];
+          }
+        }
+      }
+      var ret = func(...cArgs);
+      function onDone(ret2) {
+        if (stack !== 0) stackRestore(stack);
+        return convertReturnValue(ret2);
+      }
+      ret = onDone(ret);
+      return ret;
+    };
+    var cwrap = (ident, returnType, argTypes, opts) => {
+      var numericArgs = !argTypes || argTypes.every((type) => type === "number" || type === "boolean");
+      var numericRet = returnType !== "string";
+      if (numericRet && numericArgs && !opts) {
+        return getCFunc(ident);
+      }
+      return (...args) => ccall(ident, returnType, argTypes, args, opts);
+    };
+    var wasmTableMirror = [];
+    var getWasmTableEntry = (funcPtr) => {
+      var func = wasmTableMirror[funcPtr];
+      if (!func) {
+        wasmTableMirror[funcPtr] = func = wasmTable.get(funcPtr);
+      }
+      return func;
+    };
+    var updateTableMap = (offset, count) => {
+      if (functionsInTableMap) {
+        for (var i = offset; i < offset + count; i++) {
+          var item = getWasmTableEntry(i);
+          if (item) {
+            functionsInTableMap.set(item, i);
+          }
+        }
+      }
+    };
+    var functionsInTableMap;
+    var getFunctionAddress = (func) => {
+      if (!functionsInTableMap) {
+        functionsInTableMap = /* @__PURE__ */ new WeakMap();
+        updateTableMap(0, wasmTable.length);
+      }
+      return functionsInTableMap.get(func) || 0;
+    };
+    var freeTableIndexes = [];
+    var getEmptyTableSlot = () => {
+      if (freeTableIndexes.length) {
+        return freeTableIndexes.pop();
+      }
+      return wasmTable["grow"](1);
+    };
+    var setWasmTableEntry = (idx, func) => {
+      wasmTable.set(idx, func);
+      wasmTableMirror[idx] = wasmTable.get(idx);
+    };
+    var uleb128EncodeWithLen = (arr) => {
+      const n = arr.length;
+      return [n % 128 | 128, n >> 7, ...arr];
+    };
+    var wasmTypeCodes = { i: 127, p: 127, j: 126, f: 125, d: 124, e: 111 };
+    var generateTypePack = (types) => uleb128EncodeWithLen(Array.from(types, (type) => {
+      var code2 = wasmTypeCodes[type];
+      return code2;
+    }));
+    var convertJsFunctionToWasm = (func, sig) => {
+      var bytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 1, ...uleb128EncodeWithLen([1, 96, ...generateTypePack(sig.slice(1)), ...generateTypePack(sig[0] === "v" ? "" : sig[0])]), 2, 7, 1, 1, 101, 1, 102, 0, 0, 7, 5, 1, 1, 102, 0, 0);
+      var module3 = new WebAssembly.Module(bytes);
+      var instance = new WebAssembly.Instance(module3, { e: { f: func } });
+      var wrappedFunc = instance.exports["f"];
+      return wrappedFunc;
+    };
+    var addFunction = (func, sig) => {
+      var rtn = getFunctionAddress(func);
+      if (rtn) {
+        return rtn;
+      }
+      var ret = getEmptyTableSlot();
+      try {
+        setWasmTableEntry(ret, func);
+      } catch (err2) {
+        if (!(err2 instanceof TypeError)) {
+          throw err2;
+        }
+        var wrapped = convertJsFunctionToWasm(func, sig);
+        setWasmTableEntry(ret, wrapped);
+      }
+      functionsInTableMap.set(func, ret);
+      return ret;
+    };
+    var removeFunction = (index) => {
+      functionsInTableMap.delete(getWasmTableEntry(index));
+      setWasmTableEntry(index, null);
+      freeTableIndexes.push(index);
+    };
+    {
+      if (Module["noExitRuntime"]) noExitRuntime = Module["noExitRuntime"];
+      if (Module["print"]) out = Module["print"];
+      if (Module["printErr"]) err = Module["printErr"];
+      if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
+      if (Module["arguments"]) programArgs = Module["arguments"];
+      if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
+      preInit = Module["preInit"];
+      if (preInit) {
+        if (typeof preInit == "function") Module["preInit"] = preInit = [preInit];
+        while (preInit.length > 0) {
+          preInit.shift()();
+        }
+      }
+    }
+    var preInit;
+    Module["cwrap"] = cwrap;
+    Module["addFunction"] = addFunction;
+    Module["removeFunction"] = removeFunction;
+    var _sqlite3_finalize;
+    var _sqlite3_reset;
+    var _sqlite3_clear_bindings;
+    var _sqlite3_value_blob;
+    var _sqlite3_value_text;
+    var _sqlite3_value_bytes;
+    var _sqlite3_value_double;
+    var _sqlite3_value_int64;
+    var _sqlite3_value_type;
+    var _sqlite3_result_blob;
+    var _sqlite3_result_blob64;
+    var _sqlite3_result_double;
+    var _sqlite3_result_error;
+    var _sqlite3_result_int;
+    var _sqlite3_result_int64;
+    var _sqlite3_result_null;
+    var _sqlite3_result_text;
+    var _sqlite3_step;
+    var _sqlite3_column_count;
+    var _sqlite3_column_blob;
+    var _sqlite3_column_bytes;
+    var _sqlite3_column_double;
+    var _sqlite3_column_int64;
+    var _sqlite3_column_text;
+    var _sqlite3_column_type;
+    var _sqlite3_column_name;
+    var _sqlite3_column_table_name;
+    var _sqlite3_bind_blob;
+    var _sqlite3_bind_blob64;
+    var _sqlite3_bind_double;
+    var _sqlite3_bind_int;
+    var _sqlite3_bind_int64;
+    var _sqlite3_bind_null;
+    var _sqlite3_bind_text;
+    var _sqlite3_bind_parameter_index;
+    var _sqlite3_exec;
+    var _sqlite3_prepare_v2;
+    var _sqlite3_errmsg;
+    var _sqlite3_last_insert_rowid;
+    var _sqlite3_changes;
+    var _sqlite3_close_v2;
+    var _sqlite3_create_function_v2;
+    var _sqlite3_open_v2;
+    var _sqlite3_get_autocommit;
+    var _malloc;
+    var _free;
+    var __emscripten_timeout;
+    var __emscripten_stack_restore;
+    var __emscripten_stack_alloc;
+    var _emscripten_stack_get_current;
+    var memory;
+    var __indirect_function_table;
+    var wasmMemory;
+    var wasmTable;
+    function assignWasmExports(wasmExports2) {
+      _sqlite3_finalize = Module["_sqlite3_finalize"] = wasmExports2["A"];
+      _sqlite3_reset = Module["_sqlite3_reset"] = wasmExports2["B"];
+      _sqlite3_clear_bindings = Module["_sqlite3_clear_bindings"] = wasmExports2["C"];
+      _sqlite3_value_blob = Module["_sqlite3_value_blob"] = wasmExports2["D"];
+      _sqlite3_value_text = Module["_sqlite3_value_text"] = wasmExports2["E"];
+      _sqlite3_value_bytes = Module["_sqlite3_value_bytes"] = wasmExports2["F"];
+      _sqlite3_value_double = Module["_sqlite3_value_double"] = wasmExports2["G"];
+      _sqlite3_value_int64 = Module["_sqlite3_value_int64"] = wasmExports2["H"];
+      _sqlite3_value_type = Module["_sqlite3_value_type"] = wasmExports2["I"];
+      _sqlite3_result_blob = Module["_sqlite3_result_blob"] = wasmExports2["J"];
+      _sqlite3_result_blob64 = Module["_sqlite3_result_blob64"] = wasmExports2["K"];
+      _sqlite3_result_double = Module["_sqlite3_result_double"] = wasmExports2["L"];
+      _sqlite3_result_error = Module["_sqlite3_result_error"] = wasmExports2["M"];
+      _sqlite3_result_int = Module["_sqlite3_result_int"] = wasmExports2["N"];
+      _sqlite3_result_int64 = Module["_sqlite3_result_int64"] = wasmExports2["O"];
+      _sqlite3_result_null = Module["_sqlite3_result_null"] = wasmExports2["P"];
+      _sqlite3_result_text = Module["_sqlite3_result_text"] = wasmExports2["Q"];
+      _sqlite3_step = Module["_sqlite3_step"] = wasmExports2["R"];
+      _sqlite3_column_count = Module["_sqlite3_column_count"] = wasmExports2["S"];
+      _sqlite3_column_blob = Module["_sqlite3_column_blob"] = wasmExports2["T"];
+      _sqlite3_column_bytes = Module["_sqlite3_column_bytes"] = wasmExports2["U"];
+      _sqlite3_column_double = Module["_sqlite3_column_double"] = wasmExports2["V"];
+      _sqlite3_column_int64 = Module["_sqlite3_column_int64"] = wasmExports2["W"];
+      _sqlite3_column_text = Module["_sqlite3_column_text"] = wasmExports2["X"];
+      _sqlite3_column_type = Module["_sqlite3_column_type"] = wasmExports2["Y"];
+      _sqlite3_column_name = Module["_sqlite3_column_name"] = wasmExports2["Z"];
+      _sqlite3_column_table_name = Module["_sqlite3_column_table_name"] = wasmExports2["_"];
+      _sqlite3_bind_blob = Module["_sqlite3_bind_blob"] = wasmExports2["$"];
+      _sqlite3_bind_blob64 = Module["_sqlite3_bind_blob64"] = wasmExports2["aa"];
+      _sqlite3_bind_double = Module["_sqlite3_bind_double"] = wasmExports2["ba"];
+      _sqlite3_bind_int = Module["_sqlite3_bind_int"] = wasmExports2["ca"];
+      _sqlite3_bind_int64 = Module["_sqlite3_bind_int64"] = wasmExports2["da"];
+      _sqlite3_bind_null = Module["_sqlite3_bind_null"] = wasmExports2["ea"];
+      _sqlite3_bind_text = Module["_sqlite3_bind_text"] = wasmExports2["fa"];
+      _sqlite3_bind_parameter_index = Module["_sqlite3_bind_parameter_index"] = wasmExports2["ga"];
+      _sqlite3_exec = Module["_sqlite3_exec"] = wasmExports2["ha"];
+      _sqlite3_prepare_v2 = Module["_sqlite3_prepare_v2"] = wasmExports2["ia"];
+      _sqlite3_errmsg = Module["_sqlite3_errmsg"] = wasmExports2["ja"];
+      _sqlite3_last_insert_rowid = Module["_sqlite3_last_insert_rowid"] = wasmExports2["ka"];
+      _sqlite3_changes = Module["_sqlite3_changes"] = wasmExports2["la"];
+      _sqlite3_close_v2 = Module["_sqlite3_close_v2"] = wasmExports2["ma"];
+      _sqlite3_create_function_v2 = Module["_sqlite3_create_function_v2"] = wasmExports2["na"];
+      _sqlite3_open_v2 = Module["_sqlite3_open_v2"] = wasmExports2["oa"];
+      _sqlite3_get_autocommit = Module["_sqlite3_get_autocommit"] = wasmExports2["pa"];
+      _malloc = Module["_malloc"] = wasmExports2["qa"];
+      _free = Module["_free"] = wasmExports2["ra"];
+      __emscripten_timeout = wasmExports2["ta"];
+      __emscripten_stack_restore = wasmExports2["ua"];
+      __emscripten_stack_alloc = wasmExports2["va"];
+      _emscripten_stack_get_current = wasmExports2["wa"];
+      memory = wasmMemory = wasmExports2["y"];
+      __indirect_function_table = wasmTable = wasmExports2["sa"];
+    }
+    var wasmImports = { n: __abort_js, l: __emscripten_runtime_keepalive_clear, o: __localtime_js, i: __setitimer_js, p: __tzset_js, q: _emscripten_date_now, a: _emscripten_get_now, j: _emscripten_resize_heap, w: _nodejsAccess, s: _nodejsCheckReservedLock, f: _nodejsClose, x: _nodejsDelete, v: _nodejsFileSize, m: _nodejsFullPathname, u: _nodejsLock, h: _nodejsRandomness, e: _nodejsRead, b: _nodejsSync, c: _nodejsTruncate, t: _nodejsUnlock, d: _nodejsWrite, g: _nodejs_max_path_length, r: _nodejs_open, k: _proc_exit };
+    async function run2() {
+      preRun();
+      var setStatus = Module["setStatus"];
+      if (setStatus) {
+        setStatus("Running...");
+        await new Promise((resolve6) => setTimeout(resolve6, 1));
+        setTimeout(setStatus, 1, "");
+      }
+      if (ABORT) return;
+      initRuntime();
+      Module["onRuntimeInitialized"]?.();
+      postRun();
+    }
+    var wasmExports;
+    wasmExports = createWasm();
+    run2();
   }
 });
 
@@ -14191,17 +15550,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path28, originalPath, doThrow) => {
-      if (!isString(path28)) {
+    var checkPath = (path32, originalPath, doThrow) => {
+      if (!isString(path32)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path28) {
+      if (!path32) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path28)) {
+      if (checkPath.isNotRelative(path32)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -14210,7 +15569,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path28) => REGEX_TEST_INVALID_PATH.test(path28);
+    var isNotRelative = (path32) => REGEX_TEST_INVALID_PATH.test(path32);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore = class {
@@ -14269,7 +15628,7 @@ var require_ignore = __commonJS({
       //   setting `checkUnignored` to `false` could reduce additional
       //   path matching.
       // @returns {TestResult} true if a file is ignored
-      _testOne(path28, checkUnignored) {
+      _testOne(path32, checkUnignored) {
         let ignored = false;
         let unignored = false;
         this._rules.forEach((rule) => {
@@ -14277,7 +15636,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule.regex.test(path28);
+          const matched = rule.regex.test(path32);
           if (matched) {
             ignored = !negative;
             unignored = negative;
@@ -14290,24 +15649,24 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path28 = originalPath && checkPath.convert(originalPath);
+        const path32 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path28,
+          path32,
           originalPath,
           this._allowRelativePaths ? RETURN_FALSE : throwError
         );
-        return this._t(path28, cache, checkUnignored, slices);
+        return this._t(path32, cache, checkUnignored, slices);
       }
-      _t(path28, cache, checkUnignored, slices) {
-        if (path28 in cache) {
-          return cache[path28];
+      _t(path32, cache, checkUnignored, slices) {
+        if (path32 in cache) {
+          return cache[path32];
         }
         if (!slices) {
-          slices = path28.split(SLASH2);
+          slices = path32.split(SLASH2);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path28] = this._testOne(path28, checkUnignored);
+          return cache[path32] = this._testOne(path32, checkUnignored);
         }
         const parent = this._t(
           slices.join(SLASH2) + SLASH2,
@@ -14315,24 +15674,24 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path28] = parent.ignored ? parent : this._testOne(path28, checkUnignored);
+        return cache[path32] = parent.ignored ? parent : this._testOne(path32, checkUnignored);
       }
-      ignores(path28) {
-        return this._test(path28, this._ignoreCache, false).ignored;
+      ignores(path32) {
+        return this._test(path32, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path28) => !this.ignores(path28);
+        return (path32) => !this.ignores(path32);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path28) {
-        return this._test(path28, this._testCache, true);
+      test(path32) {
+        return this._test(path32, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore(options);
-    var isPathValid = (path28) => checkPath(path28 && checkPath.convert(path28), path28, RETURN_FALSE);
+    var isPathValid = (path32) => checkPath(path32 && checkPath.convert(path32), path32, RETURN_FALSE);
     factory.isPathValid = isPathValid;
     factory.default = factory;
     module2.exports = factory;
@@ -14343,7 +15702,7 @@ var require_ignore = __commonJS({
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGIX_IS_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path28) => REGIX_IS_WINDOWS_PATH_ABSOLUTE.test(path28) || isNotRelative(path28);
+      checkPath.isNotRelative = (path32) => REGIX_IS_WINDOWS_PATH_ABSOLUTE.test(path32) || isNotRelative(path32);
     }
   }
 });
@@ -14385,7 +15744,7 @@ var require_lib2 = __commonJS({
 var require_onp = __commonJS({
   "node_modules/diff3/onp.js"(exports2, module2) {
     module2.exports = function(a_, b_) {
-      var a = a_, b = b_, m = a.length, n = b.length, reverse = false, ed = null, offset = m + 1, path28 = [], pathposi = [], ses = [], lcs = "", SES_DELETE = -1, SES_COMMON = 0, SES_ADD = 1;
+      var a = a_, b = b_, m = a.length, n = b.length, reverse = false, ed = null, offset = m + 1, path32 = [], pathposi = [], ses = [], lcs = "", SES_DELETE = -1, SES_COMMON = 0, SES_ADD = 1;
       var tmp1, tmp2;
       var init3 = function() {
         if (m >= n) {
@@ -14415,9 +15774,9 @@ var require_onp = __commonJS({
       var snake = function(k, p, pp) {
         var r, x, y;
         if (p > pp) {
-          r = path28[k - 1 + offset];
+          r = path32[k - 1 + offset];
         } else {
-          r = path28[k + 1 + offset];
+          r = path32[k + 1 + offset];
         }
         y = Math.max(p, pp);
         x = y - k;
@@ -14425,7 +15784,7 @@ var require_onp = __commonJS({
           ++x;
           ++y;
         }
-        path28[k + offset] = pathposi.length;
+        path32[k + offset] = pathposi.length;
         pathposi[pathposi.length] = new P2(x, y, r);
         return y;
       };
@@ -14483,7 +15842,7 @@ var require_onp = __commonJS({
           fp = {};
           for (i = 0; i < size; ++i) {
             fp[i] = -1;
-            path28[i] = -1;
+            path32[i] = -1;
           }
           p = -1;
           do {
@@ -14497,7 +15856,7 @@ var require_onp = __commonJS({
             fp[delta + offset] = snake(delta, fp[delta - 1 + offset] + 1, fp[delta + 1 + offset]);
           } while (fp[delta + offset] !== n);
           ed = delta + 2 * p;
-          r = path28[delta + offset];
+          r = path32[delta + offset];
           epc = [];
           while (r !== -1) {
             epc[epc.length] = new P2(pathposi[r].x, pathposi[r].y, null);
@@ -15217,20 +16576,20 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         stats: /* @__PURE__ */ new Map()
       };
     }
-    async function updateCachedIndexFile(fs21, filepath, cache) {
+    async function updateCachedIndexFile(fs23, filepath, cache) {
       const [stat4, rawIndexFile] = await Promise.all([
-        fs21.lstat(filepath),
-        fs21.read(filepath)
+        fs23.lstat(filepath),
+        fs23.read(filepath)
       ]);
       const index2 = await GitIndex.from(rawIndexFile);
       cache.map.set(filepath, index2);
       cache.stats.set(filepath, stat4);
     }
-    async function isIndexStale(fs21, filepath, cache) {
+    async function isIndexStale(fs23, filepath, cache) {
       const savedStats = cache.stats.get(filepath);
       if (savedStats === void 0) return true;
       if (savedStats === null) return false;
-      const currStats = await fs21.lstat(filepath);
+      const currStats = await fs23.lstat(filepath);
       if (currStats === null) return false;
       return compareStats(savedStats, currStats);
     }
@@ -15247,7 +16606,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<any>} The result of the closure function.
        * @throws {UnmergedPathsError} If unmerged paths exist and `allowUnmerged` is `false`.
        */
-      static async acquire({ fs: fs21, gitdir, cache, allowUnmerged = true }, closure) {
+      static async acquire({ fs: fs23, gitdir, cache, allowUnmerged = true }, closure) {
         if (!cache[IndexCache]) {
           cache[IndexCache] = createCache();
         }
@@ -15256,8 +16615,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         let unmergedPaths = [];
         await acquireLock2(filepath, async () => {
           const theIndexCache = cache[IndexCache];
-          if (await isIndexStale(fs21, filepath, theIndexCache)) {
-            await updateCachedIndexFile(fs21, filepath, theIndexCache);
+          if (await isIndexStale(fs23, filepath, theIndexCache)) {
+            await updateCachedIndexFile(fs23, filepath, theIndexCache);
           }
           const index2 = theIndexCache.map.get(filepath);
           unmergedPaths = index2.unmergedPaths;
@@ -15266,26 +16625,26 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           result = await closure(index2);
           if (index2._dirty) {
             const buffer = await index2.toObject();
-            await fs21.write(filepath, buffer);
-            theIndexCache.stats.set(filepath, await fs21.lstat(filepath));
+            await fs23.write(filepath, buffer);
+            theIndexCache.stats.set(filepath, await fs23.lstat(filepath));
             index2._dirty = false;
           }
         });
         return result;
       }
     };
-    function basename3(path28) {
-      const last = Math.max(path28.lastIndexOf("/"), path28.lastIndexOf("\\"));
+    function basename3(path32) {
+      const last = Math.max(path32.lastIndexOf("/"), path32.lastIndexOf("\\"));
       if (last > -1) {
-        path28 = path28.slice(last + 1);
+        path32 = path32.slice(last + 1);
       }
-      return path28;
+      return path32;
     }
-    function dirname3(path28) {
-      const last = Math.max(path28.lastIndexOf("/"), path28.lastIndexOf("\\"));
+    function dirname3(path32) {
+      const last = Math.max(path32.lastIndexOf("/"), path32.lastIndexOf("\\"));
       if (last === -1) return ".";
       if (last === 0) return "/";
-      return path28.slice(0, last);
+      return path32.slice(0, last);
     }
     function flatFileListToDirectoryStructure(files) {
       const inodes = /* @__PURE__ */ new Map();
@@ -15342,9 +16701,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       throw new InternalError(`Unexpected GitTree entry mode: ${mode.toString(8)}`);
     }
     var GitWalkerIndex = class {
-      constructor({ fs: fs21, gitdir, cache }) {
+      constructor({ fs: fs23, gitdir, cache }) {
         this.treePromise = GitIndexManager.acquire(
-          { fs: fs21, gitdir, cache },
+          { fs: fs23, gitdir, cache },
           async function(index2) {
             return flatFileListToDirectoryStructure(index2.entries);
           }
@@ -15435,8 +16794,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     function STAGE2() {
       const o = /* @__PURE__ */ Object.create(null);
       Object.defineProperty(o, GitWalkSymbol, {
-        value: function({ fs: fs21, gitdir, cache }) {
-          return new GitWalkerIndex({ fs: fs21, gitdir, cache });
+        value: function({ fs: fs23, gitdir, cache }) {
+          return new GitWalkerIndex({ fs: fs23, gitdir, cache });
         }
       });
       Object.freeze(o);
@@ -15640,14 +16999,14 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       }
       return tmp;
     }
-    function normalizeString(path28, aar) {
+    function normalizeString(path32, aar) {
       let res = "";
       let lastSegmentLength = 0;
       let lastSlash = -1;
       let dots = 0;
       let char = "\0";
-      for (let i = 0; i <= path28.length; ++i) {
-        if (i < path28.length) char = path28[i];
+      for (let i = 0; i <= path32.length; ++i) {
+        if (i < path32.length) char = path32[i];
         else if (char === "/") break;
         else char = "/";
         if (char === "/") {
@@ -15679,8 +17038,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
               lastSegmentLength = 2;
             }
           } else {
-            if (res.length > 0) res += "/" + path28.slice(lastSlash + 1, i);
-            else res = path28.slice(lastSlash + 1, i);
+            if (res.length > 0) res += "/" + path32.slice(lastSlash + 1, i);
+            else res = path32.slice(lastSlash + 1, i);
             lastSegmentLength = i - lastSlash - 1;
           }
           lastSlash = i;
@@ -15693,19 +17052,19 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       }
       return res;
     }
-    function getWindowsDrivePrefix(path28) {
-      if (path28.length >= 2 && /^[a-zA-Z]:/.test(path28)) {
-        return path28.slice(0, 2);
+    function getWindowsDrivePrefix(path32) {
+      if (path32.length >= 2 && /^[a-zA-Z]:/.test(path32)) {
+        return path32.slice(0, 2);
       }
       return null;
     }
-    function normalize3(path28) {
-      if (!path28.length) return ".";
-      path28 = path28.replace(/\\/g, "/");
-      const drivePrefix = getWindowsDrivePrefix(path28);
-      const isAbsolute3 = path28[0] === "/" || drivePrefix !== null && path28[2] === "/";
-      const trailingSeparator = path28.at(-1) === "/";
-      const pathBody = drivePrefix ? path28.slice(2) : path28;
+    function normalize3(path32) {
+      if (!path32.length) return ".";
+      path32 = path32.replace(/\\/g, "/");
+      const drivePrefix = getWindowsDrivePrefix(path32);
+      const isAbsolute3 = path32[0] === "/" || drivePrefix !== null && path32[2] === "/";
+      const trailingSeparator = path32.at(-1) === "/";
+      const pathBody = drivePrefix ? path32.slice(2) : path32;
       let normalized = normalizeString(pathBody, !isAbsolute3);
       if (!normalized.length) {
         const root = drivePrefix ? isAbsolute3 ? drivePrefix + "/" : drivePrefix : isAbsolute3 ? "/" : ".";
@@ -15819,8 +17178,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     var getPath = (section, subsection, name) => {
       return [lower(section), subsection, lower(name)].filter((a) => a != null).join(".");
     };
-    var normalizePath2 = (path28) => {
-      const pathSegments = path28.split(".");
+    var normalizePath2 = (path32) => {
+      const pathSegments = path32.split(".");
       const section = pathSegments.shift();
       const name = pathSegments.pop();
       const subsection = pathSegments.length ? pathSegments.join(".") : void 0;
@@ -15859,23 +17218,23 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
               [name, value] = extractedVariable;
             }
           }
-          const path28 = getPath(section, subsection, name);
-          return { line, isSection, section, subsection, name, value, path: path28 };
+          const path32 = getPath(section, subsection, name);
+          return { line, isSection, section, subsection, name, value, path: path32 };
         }) : [];
       }
       static from(text2) {
         return new _GitConfig(text2);
       }
-      async get(path28, getall = false) {
-        const normalizedPath = normalizePath2(path28).path;
+      async get(path32, getall = false) {
+        const normalizedPath = normalizePath2(path32).path;
         const allValues = this.parsedConfig.filter((config2) => config2.path === normalizedPath).map(({ section, name, value }) => {
           const fn = schema[section] && schema[section][name];
           return fn ? fn(value) : value;
         });
         return getall ? allValues : allValues.pop();
       }
-      async getall(path28) {
-        return this.get(path28, true);
+      async getall(path32) {
+        return this.get(path32, true);
       }
       async getSubsections(section) {
         return this.parsedConfig.filter((config2) => config2.isSection && config2.section === section).map((config2) => config2.subsection);
@@ -15885,10 +17244,10 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           (config2) => !(config2.section === section && config2.subsection === subsection)
         );
       }
-      async append(path28, value) {
-        return this.set(path28, value, true);
+      async append(path32, value) {
+        return this.set(path32, value, true);
       }
-      async set(path28, value, append2 = false) {
+      async set(path32, value, append2 = false) {
         const {
           section,
           subsection,
@@ -15896,7 +17255,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           path: normalizedPath,
           sectionPath,
           isSection
-        } = normalizePath2(path28);
+        } = normalizePath2(path32);
         const configIndex = findLastIndex(
           this.parsedConfig,
           (config2) => config2.path === normalizedPath
@@ -15974,8 +17333,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} opts.gitdir - The path to the `.git` directory.
        * @returns {Promise<GitConfig>} A `GitConfig` object representing the parsed configuration.
        */
-      static async get({ fs: fs21, gitdir }) {
-        const text2 = await fs21.read(`${gitdir}/config`, { encoding: "utf8" });
+      static async get({ fs: fs23, gitdir }) {
+        const text2 = await fs23.read(`${gitdir}/config`, { encoding: "utf8" });
         return GitConfig.from(text2);
       }
       /**
@@ -15987,8 +17346,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {GitConfig} opts.config - The `GitConfig` object to save.
        * @returns {Promise<void>} Resolves when the configuration has been successfully saved.
        */
-      static async save({ fs: fs21, gitdir, config: config2 }) {
-        await fs21.write(`${gitdir}/config`, config2.toString(), {
+      static async save({ fs: fs23, gitdir, config: config2 }) {
+        await fs23.write(`${gitdir}/config`, config2.toString(), {
           encoding: "utf8"
         });
       }
@@ -16024,7 +17383,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<Object>} - An object containing pruned refs.
        */
       static async updateRemoteRefs({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         remote,
         refs,
@@ -16039,7 +17398,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
             throw new InvalidOidError(value);
           }
         }
-        const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+        const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
         if (!refspecs) {
           refspecs = await config2.getall(`remote.${remote}.fetch`);
           if (refspecs.length === 0) {
@@ -16067,12 +17426,12 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         }
         if (pruneTags) {
           const tags2 = await _GitRefManager.listRefs({
-            fs: fs21,
+            fs: fs23,
             gitdir,
             filepath: "refs/tags"
           });
           await _GitRefManager.deleteRefs({
-            fs: fs21,
+            fs: fs23,
             gitdir,
             refs: tags2.map((tag2) => `refs/tags/${tag2}`)
           });
@@ -16080,7 +17439,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         if (tags) {
           for (const serverRef of refs.keys()) {
             if (serverRef.startsWith("refs/tags") && !serverRef.endsWith("^{}")) {
-              if (!await _GitRefManager.exists({ fs: fs21, gitdir, ref: serverRef })) {
+              if (!await _GitRefManager.exists({ fs: fs23, gitdir, ref: serverRef })) {
                 const oid = refs.get(serverRef);
                 actualRefsToWrite.set(serverRef, oid);
               }
@@ -16098,7 +17457,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         if (prune) {
           for (const filepath of refspec.localNamespaces()) {
             const refs2 = (await _GitRefManager.listRefs({
-              fs: fs21,
+              fs: fs23,
               gitdir,
               filepath
             })).map((file) => `${filepath}/${file}`);
@@ -16109,13 +17468,13 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
             }
           }
           if (pruned.length > 0) {
-            await _GitRefManager.deleteRefs({ fs: fs21, gitdir, refs: pruned });
+            await _GitRefManager.deleteRefs({ fs: fs23, gitdir, refs: pruned });
           }
         }
         for (const [key, value] of actualRefsToWrite) {
           await acquireLock2(
             key,
-            async () => fs21.write(join3(gitdir, key), `${value.trim()}
+            async () => fs23.write(join3(gitdir, key), `${value.trim()}
 `, "utf8")
           );
         }
@@ -16132,14 +17491,14 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<void>}
        */
       // TODO: make this less crude?
-      static async writeRef({ fs: fs21, gitdir, ref, value }) {
+      static async writeRef({ fs: fs23, gitdir, ref, value }) {
         assertWritableRef(ref);
         if (!value.match(/[0-9a-f]{40}/)) {
           throw new InvalidOidError(value);
         }
         await acquireLock2(
           ref,
-          async () => fs21.write(join3(gitdir, ref), `${value.trim()}
+          async () => fs23.write(join3(gitdir, ref), `${value.trim()}
 `, "utf8")
         );
       }
@@ -16153,11 +17512,11 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.value - The target ref.
        * @returns {Promise<void>}
        */
-      static async writeSymbolicRef({ fs: fs21, gitdir, ref, value }) {
+      static async writeSymbolicRef({ fs: fs23, gitdir, ref, value }) {
         assertWritableRef(ref);
         await acquireLock2(
           ref,
-          async () => fs21.write(join3(gitdir, ref), `ref: ${value.trim()}
+          async () => fs23.write(join3(gitdir, ref), `ref: ${value.trim()}
 `, "utf8")
         );
       }
@@ -16170,8 +17529,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.ref - The ref to delete.
        * @returns {Promise<void>}
        */
-      static async deleteRef({ fs: fs21, gitdir, ref }) {
-        return _GitRefManager.deleteRefs({ fs: fs21, gitdir, refs: [ref] });
+      static async deleteRef({ fs: fs23, gitdir, ref }) {
+        return _GitRefManager.deleteRefs({ fs: fs23, gitdir, refs: [ref] });
       }
       /**
        * Deletes multiple refs.
@@ -16182,12 +17541,12 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string[]} args.refs - The refs to delete.
        * @returns {Promise<void>}
        */
-      static async deleteRefs({ fs: fs21, gitdir, refs }) {
+      static async deleteRefs({ fs: fs23, gitdir, refs }) {
         refs.forEach(assertWritableRef);
-        await Promise.all(refs.map((ref) => fs21.rm(join3(gitdir, ref))));
+        await Promise.all(refs.map((ref) => fs23.rm(join3(gitdir, ref))));
         let text2 = await acquireLock2(
           "packed-refs",
-          async () => fs21.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
+          async () => fs23.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
         );
         const packed = GitPackedRefs.from(text2);
         const beforeSize = packed.refs.size;
@@ -16200,7 +17559,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           text2 = packed.toString();
           await acquireLock2(
             "packed-refs",
-            async () => fs21.write(`${gitdir}/packed-refs`, text2, { encoding: "utf8" })
+            async () => fs23.write(`${gitdir}/packed-refs`, text2, { encoding: "utf8" })
           );
         }
       }
@@ -16215,7 +17574,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<string>} - The resolved object ID.
        */
       static async resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref,
         depth = void 0,
@@ -16229,17 +17588,17 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         }
         if (ref.startsWith("ref: ")) {
           ref = ref.slice("ref: ".length);
-          return _GitRefManager.resolve({ fs: fs21, gitdir, ref, depth, visited });
+          return _GitRefManager.resolve({ fs: fs23, gitdir, ref, depth, visited });
         }
         if (ref.length === 40 && /[0-9a-f]{40}/.test(ref)) {
           return ref;
         }
-        const packedMap = await _GitRefManager.packedRefs({ fs: fs21, gitdir });
+        const packedMap = await _GitRefManager.packedRefs({ fs: fs23, gitdir });
         const allpaths = refpaths(ref).filter((p) => !GIT_FILES.includes(p));
         for (const ref2 of allpaths) {
           const sha = await acquireLock2(
             ref2,
-            async () => await fs21.read(`${gitdir}/${ref2}`, { encoding: "utf8" }) || packedMap.get(ref2)
+            async () => await fs23.read(`${gitdir}/${ref2}`, { encoding: "utf8" }) || packedMap.get(ref2)
           );
           if (sha) {
             if (visited.has(ref2)) {
@@ -16249,7 +17608,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
             }
             visited.add(ref2);
             return _GitRefManager.resolve({
-              fs: fs21,
+              fs: fs23,
               gitdir,
               ref: sha.trim(),
               depth,
@@ -16268,9 +17627,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.ref - The ref to check.
        * @returns {Promise<boolean>} - True if the ref exists, false otherwise.
        */
-      static async exists({ fs: fs21, gitdir, ref }) {
+      static async exists({ fs: fs23, gitdir, ref }) {
         try {
-          await _GitRefManager.expand({ fs: fs21, gitdir, ref });
+          await _GitRefManager.expand({ fs: fs23, gitdir, ref });
           return true;
         } catch (err) {
           return false;
@@ -16285,16 +17644,16 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.ref - The ref to expand.
        * @returns {Promise<string>} - The full ref name.
        */
-      static async expand({ fs: fs21, gitdir, ref }) {
+      static async expand({ fs: fs23, gitdir, ref }) {
         if (ref.length === 40 && /[0-9a-f]{40}/.test(ref)) {
           return ref;
         }
-        const packedMap = await _GitRefManager.packedRefs({ fs: fs21, gitdir });
+        const packedMap = await _GitRefManager.packedRefs({ fs: fs23, gitdir });
         const allpaths = refpaths(ref).filter((p) => !GIT_FILES.includes(p));
         for (const ref2 of allpaths) {
           const refExists = await acquireLock2(
             ref2,
-            async () => fs21.exists(`${gitdir}/${ref2}`)
+            async () => fs23.exists(`${gitdir}/${ref2}`)
           );
           if (refExists) return ref2;
           if (packedMap.has(ref2)) return ref2;
@@ -16362,10 +17721,10 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        * @returns {Promise<Map<string, string>>} - A map of packed refs.
        */
-      static async packedRefs({ fs: fs21, gitdir }) {
+      static async packedRefs({ fs: fs23, gitdir }) {
         const text2 = await acquireLock2(
           "packed-refs",
-          async () => fs21.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
+          async () => fs23.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
         );
         const packed = GitPackedRefs.from(text2);
         return packed.refs;
@@ -16379,11 +17738,11 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.filepath - The filepath prefix to match.
        * @returns {Promise<string[]>} - A sorted list of refs.
        */
-      static async listRefs({ fs: fs21, gitdir, filepath }) {
-        const packedMap = _GitRefManager.packedRefs({ fs: fs21, gitdir });
+      static async listRefs({ fs: fs23, gitdir, filepath }) {
+        const packedMap = _GitRefManager.packedRefs({ fs: fs23, gitdir });
         let files = null;
         try {
-          files = await fs21.readdirDeep(`${gitdir}/${filepath}`);
+          files = await fs23.readdirDeep(`${gitdir}/${filepath}`);
           files = files.map((x) => x.replace(`${gitdir}/${filepath}/`, ""));
         } catch (err) {
           files = [];
@@ -16408,15 +17767,15 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} [args.remote] - The remote to filter branches by.
        * @returns {Promise<string[]>} - A list of branch names.
        */
-      static async listBranches({ fs: fs21, gitdir, remote }) {
+      static async listBranches({ fs: fs23, gitdir, remote }) {
         if (remote) {
           return _GitRefManager.listRefs({
-            fs: fs21,
+            fs: fs23,
             gitdir,
             filepath: `refs/remotes/${remote}`
           });
         } else {
-          return _GitRefManager.listRefs({ fs: fs21, gitdir, filepath: `refs/heads` });
+          return _GitRefManager.listRefs({ fs: fs23, gitdir, filepath: `refs/heads` });
         }
       }
       /**
@@ -16427,9 +17786,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        * @returns {Promise<string[]>} - A list of tag names.
        */
-      static async listTags({ fs: fs21, gitdir }) {
+      static async listTags({ fs: fs23, gitdir }) {
         const tags = await _GitRefManager.listRefs({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           filepath: `refs/tags`
         });
@@ -16476,19 +17835,19 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         let mode = buffer.slice(cursor, space).toString("utf8");
         if (mode === "40000") mode = "040000";
         const type = mode2type$1(mode);
-        const path28 = buffer.slice(space + 1, nullchar).toString("utf8");
-        const hfsClean = path28.replace(
+        const path32 = buffer.slice(space + 1, nullchar).toString("utf8");
+        const hfsClean = path32.replace(
           /[\u200C-\u200F\u202A-\u202E\u206A-\u206F\uFEFF]/g,
           ""
         );
         const ntfsClean = hfsClean.split(":")[0];
         const normalized = ntfsClean.toLowerCase().replace(/[. ]+$/, "");
-        if (path28.includes("\\") || path28.includes("/") || hfsClean === "." || hfsClean === ".." || normalized === ".git" || /^\.?git~[1-9]$/.test(normalized)) {
-          throw new UnsafeFilepathError(path28);
+        if (path32.includes("\\") || path32.includes("/") || hfsClean === "." || hfsClean === ".." || normalized === ".git" || /^\.?git~[1-9]$/.test(normalized)) {
+          throw new UnsafeFilepathError(path32);
         }
         const oid = buffer.slice(nullchar + 1, nullchar + 21).toString("hex");
         cursor = nullchar + 21;
-        _entries.push({ mode, path: path28, oid, type });
+        _entries.push({ mode, path: path32, oid, type });
       }
       return _entries;
     }
@@ -16537,10 +17896,10 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           entries.map((entry) => {
             const mode = Buffer.from(entry.mode.replace(/^0/, ""));
             const space = Buffer.from(" ");
-            const path28 = Buffer.from(entry.path, "utf8");
+            const path32 = Buffer.from(entry.path, "utf8");
             const nullchar = Buffer.from([0]);
             const oid = Buffer.from(entry.oid, "hex");
-            return Buffer.concat([mode, space, path28, nullchar, oid]);
+            return Buffer.concat([mode, space, path32, nullchar, oid]);
           })
         );
       }
@@ -16600,9 +17959,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         };
       }
     };
-    async function readObjectLoose({ fs: fs21, gitdir, oid }) {
+    async function readObjectLoose({ fs: fs23, gitdir, oid }) {
       const source = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
-      const file = await fs21.read(`${gitdir}/${source}`);
+      const file = await fs23.read(`${gitdir}/${source}`);
       if (!file) {
         return null;
       }
@@ -17194,17 +18553,17 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     };
     var PackfileCache = Symbol("PackfileCache");
     async function loadPackIndex({
-      fs: fs21,
+      fs: fs23,
       filename,
       getExternalRefDelta,
       emitter,
       emitterPrefix
     }) {
-      const idx = await fs21.read(filename);
+      const idx = await fs23.read(filename);
       return GitPackIndex.fromIdx({ idx, getExternalRefDelta });
     }
     function readPackIndex({
-      fs: fs21,
+      fs: fs23,
       cache,
       filename,
       getExternalRefDelta,
@@ -17215,7 +18574,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       let p = cache[PackfileCache].get(filename);
       if (!p) {
         p = loadPackIndex({
-          fs: fs21,
+          fs: fs23,
           filename,
           getExternalRefDelta,
           emitter,
@@ -17234,19 +18593,19 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       return hash.digest("hex");
     }
     async function readObjectPacked({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       format: format2 = "content",
       getExternalRefDelta
     }) {
-      let list2 = await fs21.readdir(join3(gitdir, "objects/pack"));
+      let list2 = await fs23.readdir(join3(gitdir, "objects/pack"));
       list2 = list2.filter((x) => x.endsWith(".idx"));
       for (const filename of list2) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
         const p = await readPackIndex({
-          fs: fs21,
+          fs: fs23,
           cache,
           filename: indexFile,
           getExternalRefDelta
@@ -17255,7 +18614,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         if (p.offsets.has(oid)) {
           const packFile = indexFile.replace(/idx$/, "pack");
           if (!p.pack) {
-            p.pack = fs21.read(packFile);
+            p.pack = fs23.read(packFile);
           }
           const pack = await p.pack;
           if (!pack) {
@@ -17293,7 +18652,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       return null;
     }
     async function _readObject({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
@@ -17302,17 +18661,17 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       if (!["deflated", "wrapped", "content"].includes(format2)) {
         throw new InternalError(`invalid requested format "${format2}"`);
       }
-      const getExternalRefDelta = (oid2) => _readObject({ fs: fs21, cache, gitdir, oid: oid2 });
+      const getExternalRefDelta = (oid2) => _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
       let result;
       if (oid === "4b825dc642cb6eb9a060e54bf8d69288fbee4904") {
         result = { format: "wrapped", object: Buffer.from(`tree 0\0`) };
       }
       if (!result) {
-        result = await readObjectLoose({ fs: fs21, gitdir, oid });
+        result = await readObjectLoose({ fs: fs23, gitdir, oid });
       }
       if (!result) {
         result = await readObjectPacked({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           oid,
@@ -18013,18 +19372,18 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return _GitCommit.from(signedCommit);
       }
     };
-    async function resolveTree({ fs: fs21, cache, gitdir, oid }) {
+    async function resolveTree({ fs: fs23, cache, gitdir, oid }) {
       if (oid === "4b825dc642cb6eb9a060e54bf8d69288fbee4904") {
         return { tree: GitTree.from([]), oid };
       }
-      const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+      const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
       if (type === "tag") {
         oid = GitAnnotatedTag.from(object).parse().object;
-        return resolveTree({ fs: fs21, cache, gitdir, oid });
+        return resolveTree({ fs: fs23, cache, gitdir, oid });
       }
       if (type === "commit") {
         oid = GitCommit.from(object).parse().tree;
-        return resolveTree({ fs: fs21, cache, gitdir, oid });
+        return resolveTree({ fs: fs23, cache, gitdir, oid });
       }
       if (type !== "tree") {
         throw new ObjectTypeError(oid, type, "tree");
@@ -18032,21 +19391,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return { tree: GitTree.from(object), oid };
     }
     var GitWalkerRepo = class {
-      constructor({ fs: fs21, gitdir, ref, cache }) {
-        this.fs = fs21;
+      constructor({ fs: fs23, gitdir, ref, cache }) {
+        this.fs = fs23;
         this.cache = cache;
         this.gitdir = gitdir;
         this.mapPromise = (async () => {
           const map = /* @__PURE__ */ new Map();
           let oid;
           try {
-            oid = await GitRefManager.resolve({ fs: fs21, gitdir, ref });
+            oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
           } catch (e) {
             if (e instanceof NotFoundError) {
               oid = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
             }
           }
-          const tree = await resolveTree({ fs: fs21, cache: this.cache, gitdir, oid });
+          const tree = await resolveTree({ fs: fs23, cache: this.cache, gitdir, oid });
           tree.type = "tree";
           tree.mode = "40000";
           map.set(".", tree);
@@ -18081,7 +19440,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       async readdir(entry) {
         const filepath = entry._fullpath;
-        const { fs: fs21, cache, gitdir } = this;
+        const { fs: fs23, cache, gitdir } = this;
         const map = await this.mapPromise;
         const obj = map.get(filepath);
         if (!obj) throw new Error(`No obj for ${filepath}`);
@@ -18090,7 +19449,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (obj.type !== "tree") {
           return null;
         }
-        const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
         if (type !== obj.type) {
           throw new ObjectTypeError(oid, type, obj.type);
         }
@@ -18121,10 +19480,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async content(entry) {
         if (entry._content === false) {
           const map = await this.mapPromise;
-          const { fs: fs21, cache, gitdir } = this;
+          const { fs: fs23, cache, gitdir } = this;
           const obj = map.get(entry._fullpath);
           const oid = obj.oid;
-          const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+          const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
           if (type !== "blob") {
             entry._content = void 0;
           } else {
@@ -18145,16 +19504,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     function TREE2({ ref = "HEAD" } = {}) {
       const o = /* @__PURE__ */ Object.create(null);
       Object.defineProperty(o, GitWalkSymbol, {
-        value: function({ fs: fs21, gitdir, cache }) {
-          return new GitWalkerRepo({ fs: fs21, gitdir, ref, cache });
+        value: function({ fs: fs23, gitdir, cache }) {
+          return new GitWalkerRepo({ fs: fs23, gitdir, ref, cache });
         }
       });
       Object.freeze(o);
       return o;
     }
     var GitWalkerFs = class {
-      constructor({ fs: fs21, dir, gitdir, cache, refresh = true }) {
-        this.fs = fs21;
+      constructor({ fs: fs23, dir, gitdir, cache, refresh = true }) {
+        this.fs = fs23;
         this.cache = cache;
         this.dir = dir;
         this.gitdir = gitdir;
@@ -18190,8 +19549,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async readdir(entry) {
         if (await entry.type() !== "tree") return null;
         const filepath = entry._fullpath;
-        const { fs: fs21, dir } = this;
-        const names = await fs21.readdir(join3(dir, filepath));
+        const { fs: fs23, dir } = this;
+        const names = await fs23.readdir(join3(dir, filepath));
         if (names === null) return null;
         return names.map((name) => join3(filepath, name));
       }
@@ -18209,8 +19568,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       async stat(entry) {
         if (entry._stat === false) {
-          const { fs: fs21, dir } = this;
-          let stat4 = await fs21.lstat(`${dir}/${entry._fullpath}`);
+          const { fs: fs23, dir } = this;
+          let stat4 = await fs23.lstat(`${dir}/${entry._fullpath}`);
           if (!stat4) {
             throw new Error(
               `ENOENT: no such file or directory, lstat '${entry._fullpath}'`
@@ -18232,17 +19591,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       async content(entry) {
         if (entry._content === false) {
-          const { fs: fs21, dir, gitdir } = this;
+          const { fs: fs23, dir, gitdir } = this;
           if (await entry.type() === "tree") {
             entry._content = void 0;
           } else {
             let content;
             if (await entry.mode() >> 12 === 10) {
-              content = await fs21.readlink(`${dir}/${entry._fullpath}`);
+              content = await fs23.readlink(`${dir}/${entry._fullpath}`);
             } else {
-              const config2 = await this._getGitConfig(fs21, gitdir);
+              const config2 = await this._getGitConfig(fs23, gitdir);
               const autocrlf = await config2.get("core.autocrlf");
-              content = await fs21.read(`${dir}/${entry._fullpath}`, { autocrlf });
+              content = await fs23.read(`${dir}/${entry._fullpath}`, { autocrlf });
             }
             entry._actualSize = content.length;
             if (entry._stat && entry._stat.size === -1) {
@@ -18256,14 +19615,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async oid(entry) {
         if (entry._oid === false) {
           const self = this;
-          const { fs: fs21, gitdir, cache } = this;
+          const { fs: fs23, gitdir, cache } = this;
           let oid;
           await GitIndexManager.acquire(
-            { fs: fs21, gitdir, cache },
+            { fs: fs23, gitdir, cache },
             async function(index2) {
               const stage = index2.entriesMap.get(entry._fullpath);
               const stats = await entry.stat();
-              const config2 = await self._getGitConfig(fs21, gitdir);
+              const config2 = await self._getGitConfig(fs23, gitdir);
               const filemode = await config2.get("core.filemode");
               const trustino = typeof process !== "undefined" ? !(process.platform === "win32") : true;
               if (!stage || compareStats(stats, stage, filemode, trustino)) {
@@ -18291,19 +19650,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         return entry._oid;
       }
-      async _getGitConfig(fs21, gitdir) {
+      async _getGitConfig(fs23, gitdir) {
         if (this.config) {
           return this.config;
         }
-        this.config = await GitConfigManager.get({ fs: fs21, gitdir });
+        this.config = await GitConfigManager.get({ fs: fs23, gitdir });
         return this.config;
       }
     };
     function WORKDIR({ refresh = true } = {}) {
       const o = /* @__PURE__ */ Object.create(null);
       Object.defineProperty(o, GitWalkSymbol, {
-        value: function({ fs: fs21, dir, gitdir, cache }) {
-          return new GitWalkerFs({ fs: fs21, dir, gitdir, cache, refresh });
+        value: function({ fs: fs23, dir, gitdir, cache }) {
+          return new GitWalkerFs({ fs: fs23, dir, gitdir, cache, refresh });
         }
       });
       Object.freeze(o);
@@ -18362,7 +19721,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _walk({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir,
@@ -18379,7 +19738,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       iterate = (walk3, children) => Promise.all([...children].map(walk3))
     }) {
       const walkers = trees.map(
-        (proxy) => proxy[GitWalkSymbol]({ fs: fs21, dir, gitdir, cache })
+        (proxy) => proxy[GitWalkSymbol]({ fs: fs23, dir, gitdir, cache })
       );
       const root = new Array(walkers.length).fill(".");
       const range = arrayRange(0, walkers.length);
@@ -18439,22 +19798,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       }
     }
-    async function rmRecursive(fs21, filepath) {
-      const entries = await fs21.readdir(filepath);
+    async function rmRecursive(fs23, filepath) {
+      const entries = await fs23.readdir(filepath);
       if (entries == null) {
-        await fs21.rm(filepath);
+        await fs23.rm(filepath);
       } else if (entries.length) {
         await Promise.all(
           entries.map((entry) => {
             const subpath = join3(filepath, entry);
-            return fs21.lstat(subpath).then((stat4) => {
+            return fs23.lstat(subpath).then((stat4) => {
               if (!stat4) return;
-              return stat4.isDirectory() ? rmRecursive(fs21, subpath) : fs21.rm(subpath);
+              return stat4.isDirectory() ? rmRecursive(fs23, subpath) : fs23.rm(subpath);
             });
           })
-        ).then(() => fs21.rmdir(filepath));
+        ).then(() => fs23.rmdir(filepath));
       } else {
-        await fs21.rmdir(filepath);
+        await fs23.rmdir(filepath);
       }
     }
     function isPromiseLike(obj) {
@@ -18466,7 +19825,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     function isFunction(obj) {
       return typeof obj === "function";
     }
-    function isPromiseFs(fs21) {
+    function isPromiseFs(fs23) {
       const test = (targetFs) => {
         try {
           return targetFs.readFile().catch((e) => e);
@@ -18474,7 +19833,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           return e;
         }
       };
-      return isPromiseLike(test(fs21));
+      return isPromiseLike(test(fs23));
     }
     var commands = [
       "readFile",
@@ -18488,25 +19847,25 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       "readlink",
       "symlink"
     ];
-    function bindFs(target, fs21) {
-      if (isPromiseFs(fs21)) {
+    function bindFs(target, fs23) {
+      if (isPromiseFs(fs23)) {
         for (const command of commands) {
-          target[`_${command}`] = fs21[command].bind(fs21);
+          target[`_${command}`] = fs23[command].bind(fs23);
         }
       } else {
         for (const command of commands) {
-          target[`_${command}`] = pify(fs21[command].bind(fs21));
+          target[`_${command}`] = pify(fs23[command].bind(fs23));
         }
       }
-      if (isPromiseFs(fs21)) {
-        if (fs21.cp) target._cp = fs21.cp.bind(fs21);
-        if (fs21.rm) target._rm = fs21.rm.bind(fs21);
-        else if (fs21.rmdir.length > 1) target._rm = fs21.rmdir.bind(fs21);
+      if (isPromiseFs(fs23)) {
+        if (fs23.cp) target._cp = fs23.cp.bind(fs23);
+        if (fs23.rm) target._rm = fs23.rm.bind(fs23);
+        else if (fs23.rmdir.length > 1) target._rm = fs23.rmdir.bind(fs23);
         else target._rm = rmRecursive.bind(null, target);
       } else {
-        if (fs21.cp) target._cp = pify(fs21.cp.bind(fs21));
-        if (fs21.rm) target._rm = pify(fs21.rm.bind(fs21));
-        else if (fs21.rmdir.length > 2) target._rm = pify(fs21.rmdir.bind(fs21));
+        if (fs23.cp) target._cp = pify(fs23.cp.bind(fs23));
+        if (fs23.rm) target._rm = pify(fs23.rm.bind(fs23));
+        else if (fs23.rmdir.length > 2) target._rm = pify(fs23.rmdir.bind(fs23));
         else target._rm = rmRecursive.bind(null, target);
       }
     }
@@ -18516,15 +19875,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        *
        * @param {Object} fs - A file system implementation to wrap.
        */
-      constructor(fs21) {
-        if (typeof fs21._original_unwrapped_fs !== "undefined") return fs21;
-        const promises = Object.getOwnPropertyDescriptor(fs21, "promises");
+      constructor(fs23) {
+        if (typeof fs23._original_unwrapped_fs !== "undefined") return fs23;
+        const promises = Object.getOwnPropertyDescriptor(fs23, "promises");
         if (promises && promises.enumerable) {
-          bindFs(this, fs21.promises);
+          bindFs(this, fs23.promises);
         } else {
-          bindFs(this, fs21);
+          bindFs(this, fs23);
         }
-        this._original_unwrapped_fs = fs21;
+        this._original_unwrapped_fs = fs23;
       }
       /**
        * Return true if a file exists, false if it doesn't exist.
@@ -18761,29 +20120,29 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
-        const fs21 = new FileSystem(_fs);
+        const fs23 = new FileSystem(_fs);
         const trees = [TREE2({ ref: commit4 }), WORKDIR(), STAGE2()];
         let unmergedPaths = [];
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         await GitIndexManager.acquire(
-          { fs: fs21, gitdir: updatedGitdir, cache },
+          { fs: fs23, gitdir: updatedGitdir, cache },
           async function(index2) {
             unmergedPaths = index2.unmergedPaths;
           }
         );
         const results = await _walk({
-          fs: fs21,
+          fs: fs23,
           cache,
           dir,
           gitdir: updatedGitdir,
           trees,
-          map: async function(path28, [head, workdir, index2]) {
+          map: async function(path32, [head, workdir, index2]) {
             const staged = !await modified(workdir, index2);
-            const unmerged = unmergedPaths.includes(path28);
+            const unmerged = unmergedPaths.includes(path32);
             const unmodified = !await modified(index2, head);
             if (staged || unmerged) {
               return head ? {
-                path: path28,
+                path: path32,
                 mode: await head.mode(),
                 oid: await head.oid(),
                 type: await head.type(),
@@ -18791,22 +20150,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               } : void 0;
             }
             if (unmodified) return false;
-            else throw new IndexResetError(path28);
+            else throw new IndexResetError(path32);
           }
         });
         await GitIndexManager.acquire(
-          { fs: fs21, gitdir: updatedGitdir, cache },
+          { fs: fs23, gitdir: updatedGitdir, cache },
           async function(index2) {
             for (const entry of results) {
               if (entry === false) continue;
               if (!entry) {
-                await fs21.rmdir(`${dir}/${entry.path}`, { recursive: true });
+                await fs23.rmdir(`${dir}/${entry.path}`, { recursive: true });
                 index2.delete({ filepath: entry.path });
                 continue;
               }
               if (entry.type === "blob") {
                 const content = new TextDecoder().decode(entry.content);
-                await fs21.write(`${dir}/${entry.path}`, content, {
+                await fs23.write(`${dir}/${entry.path}`, content, {
                   mode: entry.mode
                 });
                 index2.insert({
@@ -18834,13 +20193,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.filepath - The path of the file to check.
        * @returns {Promise<boolean>} - `true` if the file is ignored, `false` otherwise.
        */
-      static async isIgnored({ fs: fs21, dir, gitdir = join3(dir, ".git"), filepath }) {
+      static async isIgnored({ fs: fs23, dir, gitdir = join3(dir, ".git"), filepath }) {
         if (basename3(filepath) === ".git") return true;
         if (filepath === ".") return false;
         let excludes = "";
         const excludesFile = join3(gitdir, "info", "exclude");
-        if (await fs21.exists(excludesFile)) {
-          excludes = await fs21.read(excludesFile, "utf8");
+        if (await fs23.exists(excludesFile)) {
+          excludes = await fs23.read(excludesFile, "utf8");
         }
         const pairs = [
           {
@@ -18861,7 +20220,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         for (const p of pairs) {
           let file;
           try {
-            file = await fs21.read(p.gitignore, "utf8");
+            file = await fs23.read(p.gitignore, "utf8");
           } catch (err) {
             if (err.code === "NOENT") continue;
           }
@@ -18878,7 +20237,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return ignoredStatus;
       }
     };
-    async function writeObjectLoose({ fs: fs21, gitdir, object, format: format2, oid }) {
+    async function writeObjectLoose({ fs: fs23, gitdir, object, format: format2, oid }) {
       if (format2 !== "deflated") {
         throw new InternalError(
           "GitObjectStoreLoose expects objects to write to be in deflated format"
@@ -18886,7 +20245,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       const source = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
       const filepath = `${gitdir}/${source}`;
-      if (!await fs21.exists(filepath)) await fs21.write(filepath, object);
+      if (!await fs23.exists(filepath)) await fs23.write(filepath, object);
     }
     var supportsCompressionStream = null;
     async function deflate(buffer) {
@@ -18912,7 +20271,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _writeObject({
-      fs: fs21,
+      fs: fs23,
       gitdir,
       type,
       object,
@@ -18928,7 +20287,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         object = Buffer.from(await deflate(object));
       }
       if (!dryRun) {
-        await writeObjectLoose({ fs: fs21, gitdir, object, format: "deflated", oid });
+        await writeObjectLoose({ fs: fs23, gitdir, object, format: "deflated", oid });
       }
       return oid;
     }
@@ -18951,17 +20310,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         await GitIndexManager.acquire(
-          { fs: fs21, gitdir: updatedGitdir, cache },
+          { fs: fs23, gitdir: updatedGitdir, cache },
           async (index2) => {
-            const config2 = await GitConfigManager.get({ fs: fs21, gitdir: updatedGitdir });
+            const config2 = await GitConfigManager.get({ fs: fs23, gitdir: updatedGitdir });
             const autocrlf = await config2.get("core.autocrlf");
             return addToIndex({
               dir,
               gitdir: updatedGitdir,
-              fs: fs21,
+              fs: fs23,
               filepath,
               index: index2,
               force,
@@ -18986,7 +20345,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function addToIndex({
       dir,
       gitdir,
-      fs: fs21,
+      fs: fs23,
       filepath,
       index: index2,
       force,
@@ -18997,23 +20356,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const promises = filepath.map(async (currentFilepath) => {
         if (!force && !isTracked(index2, currentFilepath)) {
           const ignored = await GitIgnoreManager.isIgnored({
-            fs: fs21,
+            fs: fs23,
             dir,
             gitdir,
             filepath: currentFilepath
           });
           if (ignored) return;
         }
-        const stats = await fs21.lstat(join3(dir, currentFilepath));
+        const stats = await fs23.lstat(join3(dir, currentFilepath));
         if (!stats) throw new NotFoundError(currentFilepath);
         if (stats.isDirectory()) {
-          const children = await fs21.readdir(join3(dir, currentFilepath));
+          const children = await fs23.readdir(join3(dir, currentFilepath));
           if (parallel) {
             const promises2 = children.map(
               (child) => addToIndex({
                 dir,
                 gitdir,
-                fs: fs21,
+                fs: fs23,
                 filepath: [join3(currentFilepath, child)],
                 index: index2,
                 force,
@@ -19027,7 +20386,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               await addToIndex({
                 dir,
                 gitdir,
-                fs: fs21,
+                fs: fs23,
                 filepath: [join3(currentFilepath, child)],
                 index: index2,
                 force,
@@ -19037,9 +20396,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             }
           }
         } else {
-          const object = stats.isSymbolicLink() ? await fs21.readlink(join3(dir, currentFilepath)).then(posixifyPathBuffer) : await fs21.read(join3(dir, currentFilepath), { autocrlf });
+          const object = stats.isSymbolicLink() ? await fs23.readlink(join3(dir, currentFilepath)).then(posixifyPathBuffer) : await fs23.read(join3(dir, currentFilepath), { autocrlf });
           if (object === null) throw new NotFoundError(currentFilepath);
-          const oid = await _writeObject({ fs: fs21, gitdir, type: "blob", object });
+          const oid = await _writeObject({ fs: fs23, gitdir, type: "blob", object });
           index2.insert({ filepath: currentFilepath, stats, oid });
         }
       });
@@ -19054,9 +20413,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const fulfilledPromises = settledPromises.filter((settle) => settle.status === "fulfilled" && settle.value).map((settle) => settle.value);
       return fulfilledPromises;
     }
-    async function _getConfig({ fs: fs21, gitdir, path: path28 }) {
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
-      return config2.get(path28);
+    async function _getConfig({ fs: fs23, gitdir, path: path32 }) {
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+      return config2.get(path32);
     }
     function assignDefined(target, ...sources) {
       for (const source of sources) {
@@ -19071,11 +20430,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return target;
     }
-    async function normalizeAuthorObject({ fs: fs21, gitdir, author, commit: commit4 }) {
+    async function normalizeAuthorObject({ fs: fs23, gitdir, author, commit: commit4 }) {
       const timestamp = Math.floor(Date.now() / 1e3);
       const defaultAuthor = {
-        name: await _getConfig({ fs: fs21, gitdir, path: "user.name" }),
-        email: await _getConfig({ fs: fs21, gitdir, path: "user.email" }) || "",
+        name: await _getConfig({ fs: fs23, gitdir, path: "user.name" }),
+        email: await _getConfig({ fs: fs23, gitdir, path: "user.email" }) || "",
         // author.email is allowed to be empty string
         timestamp,
         timezoneOffset: new Date(timestamp * 1e3).getTimezoneOffset()
@@ -19092,7 +20451,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return normalizedAuthor;
     }
     async function normalizeCommitterObject({
-      fs: fs21,
+      fs: fs23,
       gitdir,
       author,
       committer,
@@ -19100,8 +20459,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       const timestamp = Math.floor(Date.now() / 1e3);
       const defaultCommitter = {
-        name: await _getConfig({ fs: fs21, gitdir, path: "user.name" }),
-        email: await _getConfig({ fs: fs21, gitdir, path: "user.email" }) || "",
+        name: await _getConfig({ fs: fs23, gitdir, path: "user.name" }),
+        email: await _getConfig({ fs: fs23, gitdir, path: "user.email" }) || "",
         // committer.email is allowed to be empty string
         timestamp,
         timezoneOffset: new Date(timestamp * 1e3).getTimezoneOffset()
@@ -19118,20 +20477,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return normalizedCommitter;
     }
-    async function resolveCommit({ fs: fs21, cache, gitdir, oid }) {
-      const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+    async function resolveCommit({ fs: fs23, cache, gitdir, oid }) {
+      const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
       if (type === "tag") {
         oid = GitAnnotatedTag.from(object).parse().object;
-        return resolveCommit({ fs: fs21, cache, gitdir, oid });
+        return resolveCommit({ fs: fs23, cache, gitdir, oid });
       }
       if (type !== "commit") {
         throw new ObjectTypeError(oid, type, "commit");
       }
       return { commit: GitCommit.from(object), oid };
     }
-    async function _readCommit({ fs: fs21, cache, gitdir, oid }) {
+    async function _readCommit({ fs: fs23, cache, gitdir, oid }) {
       const { commit: commit4, oid: commitOid } = await resolveCommit({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid
@@ -19145,7 +20504,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }
     var EMPTY_TREE_OID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
     async function _commit({
-      fs: fs21,
+      fs: fs23,
       cache,
       onSign,
       gitdir,
@@ -19164,10 +20523,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let initialCommit = false;
       let detachedHead = false;
       if (!ref) {
-        const headContent = await fs21.read(`${gitdir}/HEAD`, { encoding: "utf8" });
+        const headContent = await fs23.read(`${gitdir}/HEAD`, { encoding: "utf8" });
         detachedHead = !headContent.startsWith("ref:");
         ref = await GitRefManager.resolve({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           ref: "HEAD",
           depth: 2
@@ -19176,31 +20535,31 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let refOid, refCommit;
       try {
         refOid = await GitRefManager.resolve({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           ref
         });
-        refCommit = await _readCommit({ fs: fs21, gitdir, oid: refOid, cache: {} });
+        refCommit = await _readCommit({ fs: fs23, gitdir, oid: refOid, cache: {} });
       } catch {
         initialCommit = true;
       }
       if (amend && initialCommit) {
         throw new NoCommitError(ref);
       }
-      const author = !amend ? await normalizeAuthorObject({ fs: fs21, gitdir, author: _author }) : await normalizeAuthorObject({
-        fs: fs21,
+      const author = !amend ? await normalizeAuthorObject({ fs: fs23, gitdir, author: _author }) : await normalizeAuthorObject({
+        fs: fs23,
         gitdir,
         author: _author,
         commit: refCommit.commit
       });
       if (!author) throw new MissingNameError("author");
       const committer = !amend ? await normalizeCommitterObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         author,
         committer: _committer
       }) : await normalizeCommitterObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         author,
         committer: _committer,
@@ -19208,12 +20567,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       if (!committer) throw new MissingNameError("committer");
       return GitIndexManager.acquire(
-        { fs: fs21, gitdir, cache, allowUnmerged: false },
+        { fs: fs23, gitdir, cache, allowUnmerged: false },
         async function(index2) {
           const inodes = flatFileListToDirectoryStructure(index2.entries);
           const inode = inodes.get(".");
           if (!tree) {
-            tree = await constructTree({ fs: fs21, gitdir, inode, dryRun });
+            tree = await constructTree({ fs: fs23, gitdir, inode, dryRun });
           }
           if (!parent) {
             if (!amend) {
@@ -19224,7 +20583,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           } else {
             parent = await Promise.all(
               parent.map((p) => {
-                return GitRefManager.resolve({ fs: fs21, gitdir, ref: p });
+                return GitRefManager.resolve({ fs: fs23, gitdir, ref: p });
               })
             );
           }
@@ -19249,7 +20608,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             comm = await GitCommit.sign(comm, onSign, signingKey);
           }
           const oid = await _writeObject({
-            fs: fs21,
+            fs: fs23,
             gitdir,
             type: "commit",
             object: comm.toObject(),
@@ -19257,7 +20616,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           });
           if (!noUpdateBranch && !dryRun) {
             await GitRefManager.writeRef({
-              fs: fs21,
+              fs: fs23,
               gitdir,
               ref: detachedHead ? "HEAD" : ref,
               value: oid
@@ -19267,12 +20626,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       );
     }
-    async function constructTree({ fs: fs21, gitdir, inode, dryRun }) {
+    async function constructTree({ fs: fs23, gitdir, inode, dryRun }) {
       const children = inode.children;
       for (const inode2 of children) {
         if (inode2.type === "tree") {
           inode2.metadata.mode = "040000";
-          inode2.metadata.oid = await constructTree({ fs: fs21, gitdir, inode: inode2, dryRun });
+          inode2.metadata.oid = await constructTree({ fs: fs23, gitdir, inode: inode2, dryRun });
         }
       }
       const entries = children.map((inode2) => ({
@@ -19283,7 +20642,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }));
       const tree = GitTree.from(entries);
       const oid = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "tree",
         object: tree.toObject(),
@@ -19291,9 +20650,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return oid;
     }
-    async function resolveFilepath({ fs: fs21, cache, gitdir, oid, filepath }) {
+    async function resolveFilepath({ fs: fs23, cache, gitdir, oid, filepath }) {
       const entry = await resolveFilepathEntry({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid,
@@ -19302,7 +20661,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return entry.oid;
     }
     async function resolveFilepathEntry({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
@@ -19314,14 +20673,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw new InvalidFilepathError("trailing-slash");
       }
       const _oid = oid;
-      const result = await resolveTree({ fs: fs21, cache, gitdir, oid });
+      const result = await resolveTree({ fs: fs23, cache, gitdir, oid });
       const tree = result.tree;
       if (filepath === "") {
         return { mode: "040000", oid: result.oid, path: "", type: "tree" };
       } else {
         const pathArray = filepath.split("/");
         return _resolveFilepath({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           tree,
@@ -19332,7 +20691,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _resolveFilepath({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       tree,
@@ -19347,7 +20706,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             return entry;
           } else {
             const { type, object } = await _readObject({
-              fs: fs21,
+              fs: fs23,
               cache,
               gitdir,
               oid: entry.oid
@@ -19357,7 +20716,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             }
             tree = GitTree.from(object);
             return _resolveFilepath({
-              fs: fs21,
+              fs: fs23,
               cache,
               gitdir,
               tree,
@@ -19371,26 +20730,26 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       throw new NotFoundError(`file or directory found at "${oid}:${filepath}"`);
     }
     async function _readTree({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       filepath = void 0
     }) {
       if (filepath !== void 0) {
-        oid = await resolveFilepath({ fs: fs21, cache, gitdir, oid, filepath });
+        oid = await resolveFilepath({ fs: fs23, cache, gitdir, oid, filepath });
       }
-      const { tree, oid: treeOid } = await resolveTree({ fs: fs21, cache, gitdir, oid });
+      const { tree, oid: treeOid } = await resolveTree({ fs: fs23, cache, gitdir, oid });
       const result = {
         oid: treeOid,
         tree: tree.entries()
       };
       return result;
     }
-    async function _writeTree({ fs: fs21, gitdir, tree }) {
+    async function _writeTree({ fs: fs23, gitdir, tree }) {
       const object = GitTree.from(tree).toObject();
       const oid = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "tree",
         object,
@@ -19399,7 +20758,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return oid;
     }
     async function _addNote({
-      fs: fs21,
+      fs: fs23,
       cache,
       onSign,
       gitdir,
@@ -19413,14 +20772,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       let parent;
       try {
-        parent = await GitRefManager.resolve({ gitdir, fs: fs21, ref });
+        parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
       } catch (err) {
         if (!(err instanceof NotFoundError)) {
           throw err;
         }
       }
       const result = await _readTree({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: parent || "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -19439,7 +20798,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         note = Buffer.from(note, "utf8");
       }
       const noteOid = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "blob",
         object: note,
@@ -19447,12 +20806,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       tree.push({ mode: "100644", path: oid, oid: noteOid, type: "blob" });
       const treeOid = await _writeTree({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         tree
       });
       const commitOid = await _commit({
-        fs: fs21,
+        fs: fs23,
         cache,
         onSign,
         gitdir,
@@ -19489,19 +20848,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs21 = new FileSystem(_fs);
-        const author = await normalizeAuthorObject({ fs: fs21, gitdir, author: _author });
+        const fs23 = new FileSystem(_fs);
+        const author = await normalizeAuthorObject({ fs: fs23, gitdir, author: _author });
         if (!author) throw new MissingNameError("author");
         const committer = await normalizeCommitterObject({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           author,
           committer: _committer
         });
         if (!committer) throw new MissingNameError("committer");
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         return await _addNote({
-          fs: fs21,
+          fs: fs23,
           cache,
           onSign,
           gitdir: updatedGitdir,
@@ -19524,11 +20883,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw new TypeError("Reference name must be a string");
       return !bad.test(name) && (!!onelevel || name.includes("/"));
     }
-    async function _addRemote({ fs: fs21, gitdir, remote, url, force }) {
+    async function _addRemote({ fs: fs23, gitdir, remote, url, force }) {
       if (!isValidRef(remote, true)) {
         throw new InvalidRefNameError(remote, cleanGitRef.clean(remote));
       }
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
       if (!force) {
         const remoteNames = await config2.getSubsections("remote");
         if (remoteNames.includes(remote)) {
@@ -19542,10 +20901,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         `remote.${remote}.fetch`,
         `+refs/heads/*:refs/remotes/${remote}/*`
       );
-      await GitConfigManager.save({ fs: fs21, gitdir, config: config2 });
+      await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
     }
     async function addRemote({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       remote,
@@ -19553,11 +20912,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       force = false
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("remote", remote);
         assertParameter("url", url);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _addRemote({
           fs: fsp,
@@ -19572,7 +20931,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _annotatedTag({
-      fs: fs21,
+      fs: fs23,
       cache,
       onSign,
       gitdir,
@@ -19585,15 +20944,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       force = false
     }) {
       ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
-      if (!force && await GitRefManager.exists({ fs: fs21, gitdir, ref })) {
+      if (!force && await GitRefManager.exists({ fs: fs23, gitdir, ref })) {
         throw new AlreadyExistsError("tag", ref);
       }
       const oid = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: object || "HEAD"
       });
-      const { type } = await _readObject({ fs: fs21, cache, gitdir, oid });
+      const { type } = await _readObject({ fs: fs23, cache, gitdir, oid });
       let tagObject = GitAnnotatedTag.from({
         object: oid,
         type,
@@ -19606,12 +20965,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         tagObject = await GitAnnotatedTag.sign(tagObject, onSign, signingKey);
       }
       const value = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "tag",
         object: tagObject.toObject()
       });
-      await GitRefManager.writeRef({ fs: fs21, gitdir, ref, value });
+      await GitRefManager.writeRef({ fs: fs23, gitdir, ref, value });
     }
     async function annotatedTag({
       fs: _fs,
@@ -19634,16 +20993,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         const tagger = await normalizeAuthorObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author: _tagger
         });
         if (!tagger) throw new MissingNameError("tagger");
         return await _annotatedTag({
-          fs: fs21,
+          fs: fs23,
           cache,
           onSign,
           gitdir: updatedGitdir,
@@ -19661,7 +21020,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _branch({
-      fs: fs21,
+      fs: fs23,
       gitdir,
       ref,
       object,
@@ -19673,22 +21032,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       const fullref = `refs/heads/${ref}`;
       if (!force) {
-        const exist = await GitRefManager.exists({ fs: fs21, gitdir, ref: fullref });
+        const exist = await GitRefManager.exists({ fs: fs23, gitdir, ref: fullref });
         if (exist) {
           throw new AlreadyExistsError("branch", ref, false);
         }
       }
       let oid;
       try {
-        oid = await GitRefManager.resolve({ fs: fs21, gitdir, ref: object || "HEAD" });
+        oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref: object || "HEAD" });
       } catch (e) {
       }
       if (oid) {
-        await GitRefManager.writeRef({ fs: fs21, gitdir, ref: fullref, value: oid });
+        await GitRefManager.writeRef({ fs: fs23, gitdir, ref: fullref, value: oid });
       }
       if (checkout2) {
         await GitRefManager.writeSymbolicRef({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           ref: "HEAD",
           value: fullref
@@ -19696,7 +21055,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function branch({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
@@ -19705,10 +21064,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       force = false
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _branch({
           fs: fsp,
@@ -19723,14 +21082,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function assertNoSymlinkInLeadingPath(fs21, dir, fullpath) {
+    async function assertNoSymlinkInLeadingPath(fs23, dir, fullpath) {
       const parts = fullpath.split("/");
       parts.pop();
       let current = dir;
       for (const part of parts) {
         if (part === "" || part === ".") continue;
         current = `${current}/${part}`;
-        const stats = await fs21.lstat(current);
+        const stats = await fs23.lstat(current);
         if (stats && stats.isSymbolicLink()) {
           throw new UnsafeFilepathError(fullpath);
         }
@@ -19747,7 +21106,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     };
     async function _checkout({
-      fs: fs21,
+      fs: fs23,
       cache,
       onProgress,
       onPostCheckout,
@@ -19768,30 +21127,30 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let oldOid;
       if (onPostCheckout) {
         try {
-          oldOid = await GitRefManager.resolve({ fs: fs21, gitdir, ref: "HEAD" });
+          oldOid = await GitRefManager.resolve({ fs: fs23, gitdir, ref: "HEAD" });
         } catch (err) {
           oldOid = "0000000000000000000000000000000000000000";
         }
       }
       let oid;
       try {
-        oid = await GitRefManager.resolve({ fs: fs21, gitdir, ref });
+        oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
       } catch (err) {
         if (ref === "HEAD") throw err;
         const remoteRef = `${remote}/${ref}`;
         oid = await GitRefManager.resolve({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           ref: remoteRef
         });
         if (track) {
-          const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+          const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
           await config2.set(`branch.${ref}.remote`, remote);
           await config2.set(`branch.${ref}.merge`, `refs/heads/${ref}`);
-          await GitConfigManager.save({ fs: fs21, gitdir, config: config2 });
+          await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
         }
         await GitRefManager.writeRef({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           ref: `refs/heads/${ref}`,
           value: oid
@@ -19801,7 +21160,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         let ops;
         try {
           ops = await analyze({
-            fs: fs21,
+            fs: fs23,
             cache,
             onProgress,
             dir,
@@ -19839,7 +21198,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         let count = 0;
         const total = ops.length;
         await GitIndexManager.acquire(
-          { fs: fs21, gitdir, cache },
+          { fs: fs23, gitdir, cache },
           async function(index2) {
             await Promise.all(
               ops.filter(
@@ -19847,7 +21206,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               ).map(async function([method, fullpath]) {
                 const filepath = `${dir}/${fullpath}`;
                 if (method === "delete") {
-                  await fs21.rm(filepath);
+                  await fs23.rm(filepath);
                 }
                 index2.delete({ filepath: fullpath });
                 if (onProgress) {
@@ -19862,14 +21221,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         );
         await GitIndexManager.acquire(
-          { fs: fs21, gitdir, cache },
+          { fs: fs23, gitdir, cache },
           async function(index2) {
             for (const [method, fullpath] of ops) {
               if (method === "rmdir" || method === "rmdir-index") {
                 const filepath = `${dir}/${fullpath}`;
                 try {
                   if (method === "rmdir") {
-                    await fs21.rmdir(filepath);
+                    await fs23.rmdir(filepath);
                   }
                   index2.delete({ filepath: fullpath });
                   if (onProgress) {
@@ -19895,8 +21254,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         await Promise.all(
           ops.filter(([method]) => method === "mkdir" || method === "mkdir-index").map(async function([_, fullpath]) {
             const filepath = `${dir}/${fullpath}`;
-            await assertNoSymlinkInLeadingPath(fs21, dir, fullpath);
-            await fs21.mkdir(filepath);
+            await assertNoSymlinkInLeadingPath(fs23, dir, fullpath);
+            await fs23.mkdir(filepath);
             if (onProgress) {
               await onProgress({
                 phase: "Updating workdir",
@@ -19913,7 +21272,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const updateWorkingDirResults = await batchAllSettled(
             "Update Working Dir",
             eligibleOps.map(
-              ([method, fullpath, oid2, mode, chmod]) => () => updateWorkingDir({ fs: fs21, cache, gitdir, dir }, [
+              ([method, fullpath, oid2, mode, chmod]) => () => updateWorkingDir({ fs: fs23, cache, gitdir, dir }, [
                 method,
                 fullpath,
                 oid2,
@@ -19925,7 +21284,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             batchSize
           );
           await GitIndexManager.acquire(
-            { fs: fs21, gitdir, cache, allowUnmerged: true },
+            { fs: fs23, gitdir, cache, allowUnmerged: true },
             async function(index2) {
               await batchAllSettled(
                 "Update Index",
@@ -19939,7 +21298,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           );
         } else {
           await GitIndexManager.acquire(
-            { fs: fs21, gitdir, cache, allowUnmerged: true },
+            { fs: fs23, gitdir, cache, allowUnmerged: true },
             async function(index2) {
               const settled = await Promise.allSettled(
                 ops.filter(
@@ -19947,22 +21306,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                 ).map(async function([method, fullpath, oid2, mode, chmod]) {
                   const filepath = `${dir}/${fullpath}`;
                   if (method !== "create-index" && method !== "mkdir-index") {
-                    await assertNoSymlinkInLeadingPath(fs21, dir, fullpath);
+                    await assertNoSymlinkInLeadingPath(fs23, dir, fullpath);
                     const { object } = await _readObject({
-                      fs: fs21,
+                      fs: fs23,
                       cache,
                       gitdir,
                       oid: oid2
                     });
                     if (chmod) {
-                      await fs21.rm(filepath);
+                      await fs23.rm(filepath);
                     }
                     if (mode === 33188) {
-                      await fs21.write(filepath, object);
+                      await fs23.write(filepath, object);
                     } else if (mode === 33261) {
-                      await fs21.write(filepath, object, { mode: 511 });
+                      await fs23.write(filepath, object, { mode: 511 });
                     } else if (mode === 40960) {
-                      await fs21.writelink(filepath, object);
+                      await fs23.writelink(filepath, object);
                     } else {
                       throw new InternalError(
                         `Invalid mode 0o${mode.toString(
@@ -19971,7 +21330,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                       );
                     }
                   }
-                  const stats = await fs21.lstat(filepath);
+                  const stats = await fs23.lstat(filepath);
                   if (mode === 33261) {
                     stats.mode = 493;
                   }
@@ -20017,21 +21376,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       }
       if (!noUpdateHead) {
-        const fullRef = await GitRefManager.expand({ fs: fs21, gitdir, ref });
+        const fullRef = await GitRefManager.expand({ fs: fs23, gitdir, ref });
         if (fullRef.startsWith("refs/heads")) {
           await GitRefManager.writeSymbolicRef({
-            fs: fs21,
+            fs: fs23,
             gitdir,
             ref: "HEAD",
             value: fullRef
           });
         } else {
-          await GitRefManager.writeRef({ fs: fs21, gitdir, ref: "HEAD", value: oid });
+          await GitRefManager.writeRef({ fs: fs23, gitdir, ref: "HEAD", value: oid });
         }
       }
     }
     async function analyze({
-      fs: fs21,
+      fs: fs23,
       cache,
       onProgress,
       dir,
@@ -20043,7 +21402,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       let count = 0;
       return _walk({
-        fs: fs21,
+        fs: fs23,
         cache,
         dir,
         gitdir,
@@ -20295,27 +21654,27 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         console.warn(`Error inserting ${fullpath} into index:`, e);
       }
     }
-    async function updateWorkingDir({ fs: fs21, cache, gitdir, dir }, [method, fullpath, oid, mode, chmod]) {
+    async function updateWorkingDir({ fs: fs23, cache, gitdir, dir }, [method, fullpath, oid, mode, chmod]) {
       const filepath = `${dir}/${fullpath}`;
       if (method !== "create-index" && method !== "mkdir-index") {
-        await assertNoSymlinkInLeadingPath(fs21, dir, fullpath);
-        const { object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+        await assertNoSymlinkInLeadingPath(fs23, dir, fullpath);
+        const { object } = await _readObject({ fs: fs23, cache, gitdir, oid });
         if (chmod) {
-          await fs21.rm(filepath);
+          await fs23.rm(filepath);
         }
         if (mode === 33188) {
-          await fs21.write(filepath, object);
+          await fs23.write(filepath, object);
         } else if (mode === 33261) {
-          await fs21.write(filepath, object, { mode: 511 });
+          await fs23.write(filepath, object, { mode: 511 });
         } else if (mode === 40960) {
-          await fs21.writelink(filepath, object);
+          await fs23.writelink(filepath, object);
         } else {
           throw new InternalError(
             `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
           );
         }
       }
-      const stats = await fs21.lstat(filepath);
+      const stats = await fs23.lstat(filepath);
       if (mode === 33261) {
         stats.mode = 493;
       }
@@ -20355,7 +21714,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return results;
     }
     async function checkout({
-      fs: fs21,
+      fs: fs23,
       onProgress,
       onPostCheckout,
       dir,
@@ -20373,12 +21732,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       batchSize = 100
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
         const ref = _ref || "HEAD";
         const restoreFromIndex = _ref === void 0 && filepaths != null && filepaths.length > 0;
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _checkout({
           fs: fsp,
@@ -20437,7 +21796,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return { cleanMerge, mergedText };
     }
     async function mergeTree({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
@@ -20460,20 +21819,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const deleteByUs = [];
       const deleteByTheirs = [];
       const results = await _walk({
-        fs: fs21,
+        fs: fs23,
         cache,
         dir,
         gitdir,
         trees: [ourTree, baseTree, theirTree],
         map: async function(filepath, [ours, base, theirs]) {
-          const path28 = basename3(filepath);
+          const path32 = basename3(filepath);
           const ourChange = await modified(ours, base);
           const theirChange = await modified(theirs, base);
           switch (`${ourChange}-${theirChange}`) {
             case "false-false": {
               return {
                 mode: await base.mode(),
-                path: path28,
+                path: path32,
                 oid: await base.oid(),
                 type: await base.type()
               };
@@ -20482,14 +21841,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               if (!theirs && await ours.type() === "tree") {
                 return {
                   mode: await ours.mode(),
-                  path: path28,
+                  path: path32,
                   oid: await ours.oid(),
                   type: await ours.type()
                 };
               }
               return theirs ? {
                 mode: await theirs.mode(),
-                path: path28,
+                path: path32,
                 oid: await theirs.oid(),
                 type: await theirs.type()
               } : void 0;
@@ -20498,14 +21857,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               if (!ours && await theirs.type() === "tree") {
                 return {
                   mode: await theirs.mode(),
-                  path: path28,
+                  path: path32,
                   oid: await theirs.oid(),
                   type: await theirs.type()
                 };
               }
               return ours ? {
                 mode: await ours.mode(),
-                path: path28,
+                path: path32,
                 oid: await ours.oid(),
                 type: await ours.type()
               } : void 0;
@@ -20514,16 +21873,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               if (ours && theirs && await ours.type() === "tree" && await theirs.type() === "tree") {
                 return {
                   mode: await ours.mode(),
-                  path: path28,
+                  path: path32,
                   oid: await ours.oid(),
                   type: "tree"
                 };
               }
               if (ours && theirs && await ours.type() === "blob" && await theirs.type() === "blob") {
                 return mergeBlobs({
-                  fs: fs21,
+                  fs: fs23,
                   gitdir,
-                  path: path28,
+                  path: path32,
                   ours,
                   base,
                   theirs,
@@ -20569,7 +21928,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                   mode: await theirs.mode(),
                   oid: await theirs.oid(),
                   type: "blob",
-                  path: path28
+                  path: path32
                 };
               }
               if (base && ours && !theirs && await base.type() === "blob" && await ours.type() === "blob") {
@@ -20586,7 +21945,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                   mode: await ours.mode(),
                   oid: await ours.oid(),
                   type: "blob",
-                  path: path28
+                  path: path32
                 };
               }
               if (base && !ours && !theirs && (await base.type() === "blob" || await base.type() === "tree")) {
@@ -20609,7 +21968,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             const tree = new GitTree(entries);
             const object = tree.toObject();
             const oid = await _writeObject({
-              fs: fs21,
+              fs: fs23,
               gitdir,
               type: "tree",
               object,
@@ -20623,17 +21982,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (unmergedFiles.length !== 0) {
         if (dir && !abortOnConflict) {
           await _walk({
-            fs: fs21,
+            fs: fs23,
             cache,
             dir,
             gitdir,
             trees: [TREE2({ ref: results.oid })],
             map: async function(filepath, [entry]) {
-              const path28 = `${dir}/${filepath}`;
+              const path32 = `${dir}/${filepath}`;
               if (await entry.type() === "blob") {
                 const mode = await entry.mode();
                 const content = await entry.content();
-                await fs21.write(path28, content, { mode });
+                await fs23.write(path32, content, { mode });
               }
               return true;
             }
@@ -20649,9 +22008,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return results.oid;
     }
     async function mergeBlobs({
-      fs: fs21,
+      fs: fs23,
       gitdir,
-      path: path28,
+      path: path32,
       ours,
       base,
       theirs,
@@ -20674,19 +22033,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (await ours.oid() === await theirs.oid()) {
         return {
           cleanMerge: true,
-          mergeResult: { mode, path: path28, oid: await ours.oid(), type }
+          mergeResult: { mode, path: path32, oid: await ours.oid(), type }
         };
       }
       if (await ours.oid() === baseOid) {
         return {
           cleanMerge: true,
-          mergeResult: { mode, path: path28, oid: await theirs.oid(), type }
+          mergeResult: { mode, path: path32, oid: await theirs.oid(), type }
         };
       }
       if (await theirs.oid() === baseOid) {
         return {
           cleanMerge: true,
-          mergeResult: { mode, path: path28, oid: await ours.oid(), type }
+          mergeResult: { mode, path: path32, oid: await ours.oid(), type }
         };
       }
       const ourContent = Buffer.from(await ours.content()).toString("utf8");
@@ -20694,47 +22053,47 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const { mergedText, cleanMerge } = await mergeDriver({
         branches: [baseName, ourName, theirName],
         contents: [baseContent, ourContent, theirContent],
-        path: path28
+        path: path32
       });
       const oid = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "blob",
         object: Buffer.from(mergedText, "utf8"),
         dryRun
       });
-      return { cleanMerge, mergeResult: { mode, path: path28, oid, type } };
+      return { cleanMerge, mergeResult: { mode, path: path32, oid, type } };
     }
     var _TreeMap = {
       stage: STAGE2,
       workdir: WORKDIR
     };
-    async function checkAndWriteBlob(fs21, gitdir, dir, filepath, oid = null) {
+    async function checkAndWriteBlob(fs23, gitdir, dir, filepath, oid = null) {
       const currentFilepath = join3(dir, filepath);
-      const stats = await fs21.lstat(currentFilepath);
+      const stats = await fs23.lstat(currentFilepath);
       if (!stats) throw new NotFoundError(currentFilepath);
       if (stats.isDirectory())
         throw new InternalError(
           `${currentFilepath}: file expected, but found directory`
         );
-      const objContent = oid ? await readObjectLoose({ fs: fs21, gitdir, oid }) : void 0;
+      const objContent = oid ? await readObjectLoose({ fs: fs23, gitdir, oid }) : void 0;
       let retOid = objContent ? oid : void 0;
       if (!objContent) {
         await acquireLock2(currentFilepath, async () => {
-          const object = stats.isSymbolicLink() ? await fs21.readlink(currentFilepath).then(posixifyPathBuffer) : await fs21.read(currentFilepath);
+          const object = stats.isSymbolicLink() ? await fs23.readlink(currentFilepath).then(posixifyPathBuffer) : await fs23.read(currentFilepath);
           if (object === null) throw new NotFoundError(currentFilepath);
-          retOid = await _writeObject({ fs: fs21, gitdir, type: "blob", object });
+          retOid = await _writeObject({ fs: fs23, gitdir, type: "blob", object });
         });
       }
       return retOid;
     }
-    async function processTreeEntries({ fs: fs21, dir, gitdir, entries }) {
+    async function processTreeEntries({ fs: fs23, dir, gitdir, entries }) {
       async function processTreeEntry(entry) {
         if (entry.type === "tree") {
           if (!entry.oid) {
             const children = await Promise.all(entry.children.map(processTreeEntry));
             entry.oid = await _writeTree({
-              fs: fs21,
+              fs: fs23,
               gitdir,
               tree: children
             });
@@ -20742,7 +22101,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         } else if (entry.type === "blob") {
           entry.oid = await checkAndWriteBlob(
-            fs21,
+            fs23,
             gitdir,
             dir,
             entry.path,
@@ -20756,7 +22115,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return Promise.all(entries.map(processTreeEntry));
     }
     async function writeTreeChanges({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir,
       treePair
@@ -20766,7 +22125,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const trees = treePair.map((t) => typeof t === "string" ? _TreeMap[t]() : t);
       const changedEntries = [];
       const map = async (filepath, [head, stage]) => {
-        if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs21, dir, gitdir, filepath })) {
+        if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs23, dir, gitdir, filepath })) {
           return;
         }
         if (stage) {
@@ -20796,7 +22155,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const [head, stage] = child;
           if (isStage) {
             if (stage) {
-              if (await fs21.exists(`${dir}/${stage.toString()}`)) {
+              if (await fs23.exists(`${dir}/${stage.toString()}`)) {
                 filtered.push(child);
               } else {
                 changedEntries.push([null, stage]);
@@ -20813,7 +22172,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return filtered.length ? Promise.all(filtered.map(walk3)) : [];
       };
       const entries = await _walk({
-        fs: fs21,
+        fs: fs23,
         cache: {},
         dir,
         gitdir,
@@ -20826,7 +22185,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return null;
       }
       const processedEntries = await processTreeEntries({
-        fs: fs21,
+        fs: fs23,
         dir,
         gitdir,
         entries
@@ -20837,10 +22196,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         oid: entry.oid,
         type: entry.type
       }));
-      return _writeTree({ fs: fs21, gitdir, tree: treeEntries });
+      return _writeTree({ fs: fs23, gitdir, tree: treeEntries });
     }
     async function applyTreeChanges({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir,
       stashCommit,
@@ -20850,13 +22209,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const dirRemoved = [];
       const stageUpdated = [];
       const ops = await _walk({
-        fs: fs21,
+        fs: fs23,
         cache: {},
         dir,
         gitdir,
         trees: [TREE2({ ref: parentCommit }), TREE2({ ref: stashCommit })],
         map: async (filepath, [parent, stash2]) => {
-          if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs21, dir, gitdir, filepath })) {
+          if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs23, dir, gitdir, filepath })) {
             return;
           }
           const type = stash2 ? await stash2.type() : await parent.type();
@@ -20879,7 +22238,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                 stageUpdated.push({
                   filepath,
                   oid,
-                  stats: await fs21.lstat(join3(dir, filepath))
+                  stats: await fs23.lstat(join3(dir, filepath))
                 });
               return {
                 method: "write",
@@ -20895,43 +22254,43 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const currentFilepath = join3(dir, op.filepath);
           switch (op.method) {
             case "rmdir":
-              await fs21.rmdir(currentFilepath);
+              await fs23.rmdir(currentFilepath);
               break;
             case "mkdir":
-              await assertNoSymlinkInLeadingPath(fs21, dir, op.filepath);
-              await fs21.mkdir(currentFilepath);
+              await assertNoSymlinkInLeadingPath(fs23, dir, op.filepath);
+              await fs23.mkdir(currentFilepath);
               break;
             case "rm":
-              await fs21.rm(currentFilepath);
+              await fs23.rm(currentFilepath);
               break;
             case "write":
               if (!dirRemoved.some(
                 (removedDir) => currentFilepath.startsWith(removedDir)
               )) {
-                await assertNoSymlinkInLeadingPath(fs21, dir, op.filepath);
+                await assertNoSymlinkInLeadingPath(fs23, dir, op.filepath);
                 const { object } = await _readObject({
-                  fs: fs21,
+                  fs: fs23,
                   cache: {},
                   gitdir,
                   oid: op.oid
                 });
-                if (await fs21.exists(currentFilepath)) {
-                  await fs21.rm(currentFilepath);
+                if (await fs23.exists(currentFilepath)) {
+                  await fs23.rm(currentFilepath);
                 }
-                await fs21.write(currentFilepath, object);
+                await fs23.write(currentFilepath, object);
               }
               break;
           }
         }
       });
-      await GitIndexManager.acquire({ fs: fs21, gitdir, cache: {} }, async (index2) => {
+      await GitIndexManager.acquire({ fs: fs23, gitdir, cache: {} }, async (index2) => {
         stageUpdated.forEach(({ filepath, stats, oid }) => {
           index2.insert({ filepath, stats, oid });
         });
       });
     }
     async function _cherryPick({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir,
@@ -20943,7 +22302,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       mergeDriver
     }) {
       const { commit: cherryCommit, oid: cherryOid } = await _readCommit({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid
@@ -20955,28 +22314,28 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw new CherryPickRootCommitError(cherryOid);
       }
       const currentOid = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: "HEAD"
       });
       const { commit: currentCommit } = await _readCommit({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: currentOid
       });
       const cherryParentOid = cherryCommit.parent[0];
       const { commit: cherryParent } = await _readCommit({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: cherryParentOid
       });
       const mergedTreeOid = await GitIndexManager.acquire(
-        { fs: fs21, gitdir, cache, allowUnmerged: false },
+        { fs: fs23, gitdir, cache, allowUnmerged: false },
         async (index2) => {
           return mergeTree({
-            fs: fs21,
+            fs: fs23,
             cache,
             dir,
             gitdir,
@@ -20997,7 +22356,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw mergedTreeOid;
       }
       const newOid = await _commit({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         message: cherryCommit.message,
@@ -21013,7 +22372,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       if (dir && !dryRun && !noUpdateBranch) {
         await applyTreeChanges({
-          fs: fs21,
+          fs: fs23,
           dir,
           gitdir,
           stashCommit: newOid,
@@ -21039,17 +22398,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         const { commit: cherryCommit } = await _readCommit({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir: updatedGitdir,
           oid
         });
         if (cherryCommit.parent && cherryCommit.parent.length > 1) {
           return await _cherryPick({
-            fs: fs21,
+            fs: fs23,
             cache,
             dir,
             gitdir: updatedGitdir,
@@ -21062,7 +22421,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           });
         }
         const normalizedCommitter = await normalizeCommitterObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           committer
         });
@@ -21070,7 +22429,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new MissingNameError("committer");
         }
         return await _cherryPick({
-          fs: fs21,
+          fs: fs23,
           cache,
           dir,
           gitdir: updatedGitdir,
@@ -21099,20 +22458,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return ref;
     }
     async function _currentBranch({
-      fs: fs21,
+      fs: fs23,
       gitdir,
       fullname = false,
       test = false
     }) {
       const ref = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: "HEAD",
         depth: 2
       });
       if (test) {
         try {
-          await GitRefManager.resolve({ fs: fs21, gitdir, ref });
+          await GitRefManager.resolve({ fs: fs23, gitdir, ref });
         } catch (_) {
           return;
         }
@@ -21524,11 +22883,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} [args.gitdir] - [required] The [git directory](dir-vs-gitdir.md) path
        * @returns {Promise<Set<string>>} - A set of shallow object IDs.
        */
-      static async read({ fs: fs21, gitdir }) {
+      static async read({ fs: fs23, gitdir }) {
         const filepath = join3(gitdir, "shallow");
         const oids = /* @__PURE__ */ new Set();
         await acquireLock2(filepath, async function() {
-          const text2 = await fs21.read(filepath, { encoding: "utf8" });
+          const text2 = await fs23.read(filepath, { encoding: "utf8" });
           if (text2 === null) return oids;
           if (text2.trim() === "") return oids;
           text2.trim().split("\n").map((oid) => oids.add(oid));
@@ -21545,39 +22904,39 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {Set<string>} args.oids - A set of shallow object IDs to write.
        * @returns {Promise<void>}
        */
-      static async write({ fs: fs21, gitdir, oids }) {
+      static async write({ fs: fs23, gitdir, oids }) {
         const filepath = join3(gitdir, "shallow");
         if (oids.size > 0) {
           const text2 = [...oids].join("\n") + "\n";
           await acquireLock2(filepath, async function() {
-            await fs21.write(filepath, text2, {
+            await fs23.write(filepath, text2, {
               encoding: "utf8"
             });
           });
         } else {
           await acquireLock2(filepath, async function() {
-            await fs21.rm(filepath);
+            await fs23.rm(filepath);
           });
         }
       }
     };
-    async function hasObjectLoose({ fs: fs21, gitdir, oid }) {
+    async function hasObjectLoose({ fs: fs23, gitdir, oid }) {
       const source = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
-      return fs21.exists(`${gitdir}/${source}`);
+      return fs23.exists(`${gitdir}/${source}`);
     }
     async function hasObjectPacked({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       getExternalRefDelta
     }) {
-      let list2 = await fs21.readdir(join3(gitdir, "objects/pack"));
+      let list2 = await fs23.readdir(join3(gitdir, "objects/pack"));
       list2 = list2.filter((x) => x.endsWith(".idx"));
       for (const filename of list2) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
         const p = await readPackIndex({
-          fs: fs21,
+          fs: fs23,
           cache,
           filename: indexFile,
           getExternalRefDelta
@@ -21590,17 +22949,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return false;
     }
     async function hasObject({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       format: format2 = "content"
     }) {
-      const getExternalRefDelta = (oid2) => _readObject({ fs: fs21, cache, gitdir, oid: oid2 });
-      let result = await hasObjectLoose({ fs: fs21, gitdir, oid });
+      const getExternalRefDelta = (oid2) => _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
+      let result = await hasObjectLoose({ fs: fs23, gitdir, oid });
       if (!result) {
         result = await hasObjectPacked({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           oid,
@@ -21912,7 +23271,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return packstream;
     }
     async function _fetch({
-      fs: fs21,
+      fs: fs23,
       cache,
       http,
       onProgress,
@@ -21936,8 +23295,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       prune = false,
       pruneTags = false
     }) {
-      const ref = _ref || await _currentBranch({ fs: fs21, gitdir, test: true });
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+      const ref = _ref || await _currentBranch({ fs: fs23, gitdir, test: true });
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
       const remote = _remote || ref && await config2.get(`branch.${ref}.remote`) || "origin";
       const url = _url || await config2.get(`remote.${remote}.url`);
       if (typeof url === "undefined") {
@@ -22008,23 +23367,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (relative3) capabilities.push("deepen-relative");
       const wants = singleBranch ? [oid] : remoteRefs.values();
       const haveRefs = singleBranch ? [ref] : await GitRefManager.listRefs({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         filepath: `refs`
       });
       let haves = [];
       for (let ref2 of haveRefs) {
         try {
-          ref2 = await GitRefManager.expand({ fs: fs21, gitdir, ref: ref2 });
-          const oid2 = await GitRefManager.resolve({ fs: fs21, gitdir, ref: ref2 });
-          if (await hasObject({ fs: fs21, cache, gitdir, oid: oid2 })) {
+          ref2 = await GitRefManager.expand({ fs: fs23, gitdir, ref: ref2 });
+          const oid2 = await GitRefManager.resolve({ fs: fs23, gitdir, ref: ref2 });
+          if (await hasObject({ fs: fs23, cache, gitdir, oid: oid2 })) {
             haves.push(oid2);
           }
         } catch (err) {
         }
       }
       haves = [...new Set(haves)];
-      const oids = await GitShallowManager.read({ fs: fs21, gitdir });
+      const oids = await GitShallowManager.read({ fs: fs23, gitdir });
       const shallows = remoteHTTP.capabilities.has("shallow") ? [...oids] : [];
       const packstream = writeUploadPackRequest({
         capabilities,
@@ -22053,10 +23412,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       for (const oid2 of response.shallows) {
         if (!oids.has(oid2)) {
           try {
-            const { object } = await _readObject({ fs: fs21, cache, gitdir, oid: oid2 });
+            const { object } = await _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
             const commit4 = new GitCommit(object);
             const hasParents = await Promise.all(
-              commit4.headers().parent.map((oid3) => hasObject({ fs: fs21, cache, gitdir, oid: oid3 }))
+              commit4.headers().parent.map((oid3) => hasObject({ fs: fs23, cache, gitdir, oid: oid3 }))
             );
             const haveAllParents = hasParents.length === 0 || hasParents.every((has) => has);
             if (!haveAllParents) {
@@ -22070,7 +23429,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       for (const oid2 of response.unshallows) {
         oids.delete(oid2);
       }
-      await GitShallowManager.write({ fs: fs21, gitdir, oids });
+      await GitShallowManager.write({ fs: fs23, gitdir, oids });
       if (singleBranch) {
         const refs = /* @__PURE__ */ new Map([[fullref, oid]]);
         const symrefs = /* @__PURE__ */ new Map();
@@ -22087,7 +23446,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           refs.set(key, realRef);
         }
         const { pruned } = await GitRefManager.updateRemoteRefs({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           remote,
           refs,
@@ -22100,7 +23459,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       } else {
         const { pruned } = await GitRefManager.updateRemoteRefs({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           remote,
           refs: remoteRefs,
@@ -22164,25 +23523,25 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (packfileSha !== "" && !emptyPackfile(packfile)) {
         res.packfile = `objects/pack/pack-${packfileSha}.pack`;
         const fullpath = join3(gitdir, res.packfile);
-        await fs21.write(fullpath, packfile);
-        const getExternalRefDelta = (oid2) => _readObject({ fs: fs21, cache, gitdir, oid: oid2 });
+        await fs23.write(fullpath, packfile);
+        const getExternalRefDelta = (oid2) => _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
         const idx = await GitPackIndex.fromPack({
           pack: packfile,
           getExternalRefDelta,
           onProgress
         });
-        await fs21.write(fullpath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
+        await fs23.write(fullpath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
       }
       return res;
     }
     async function _init({
-      fs: fs21,
+      fs: fs23,
       bare = false,
       dir,
       gitdir = bare ? dir : join3(dir, ".git"),
       defaultBranch = "master"
     }) {
-      if (await fs21.exists(gitdir + "/config")) return;
+      if (await fs23.exists(gitdir + "/config")) return;
       let folders = [
         "hooks",
         "info",
@@ -22193,9 +23552,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       ];
       folders = folders.map((dir2) => gitdir + "/" + dir2);
       for (const folder of folders) {
-        await fs21.mkdir(folder);
+        await fs23.mkdir(folder);
       }
-      await fs21.write(
+      await fs23.write(
         gitdir + "/config",
         `[core]
 	repositoryformatversion = 0
@@ -22203,11 +23562,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
 	bare = ${bare}
 ` + (bare ? "" : "	logallrefupdates = true\n") + "	symlinks = false\n	ignorecase = true\n"
       );
-      await fs21.write(gitdir + "/HEAD", `ref: refs/heads/${defaultBranch}
+      await fs23.write(gitdir + "/HEAD", `ref: refs/heads/${defaultBranch}
 `);
     }
     async function _clone({
-      fs: fs21,
+      fs: fs23,
       cache,
       http,
       onProgress,
@@ -22234,15 +23593,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       batchSize = 100
     }) {
       try {
-        await _init({ fs: fs21, gitdir });
-        await _addRemote({ fs: fs21, gitdir, remote, url, force: false });
+        await _init({ fs: fs23, gitdir });
+        await _addRemote({ fs: fs23, gitdir, remote, url, force: false });
         if (corsProxy) {
-          const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+          const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
           await config2.set(`http.corsProxy`, corsProxy);
-          await GitConfigManager.save({ fs: fs21, gitdir, config: config2 });
+          await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
         }
         const { defaultBranch, fetchHead } = await _fetch({
-          fs: fs21,
+          fs: fs23,
           cache,
           http,
           onProgress,
@@ -22266,7 +23625,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         ref = ref || defaultBranch;
         ref = ref.replace("refs/heads/", "");
         await _checkout({
-          fs: fs21,
+          fs: fs23,
           cache,
           onProgress,
           onPostCheckout,
@@ -22279,12 +23638,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           batchSize
         });
       } catch (err) {
-        await fs21.rmdir(gitdir, { recursive: true, maxRetries: 10 }).catch(() => void 0);
+        await fs23.rmdir(gitdir, { recursive: true, maxRetries: 10 }).catch(() => void 0);
         throw err;
       }
     }
     async function clone({
-      fs: fs21,
+      fs: fs23,
       http,
       onProgress,
       onMessage,
@@ -22311,14 +23670,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       batchSize = 100
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
         if (!noCheckout) {
           assertParameter("dir", dir);
         }
         assertParameter("url", url);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _clone({
           fs: fsp,
@@ -22378,10 +23737,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         return await _commit({
-          fs: fs21,
+          fs: fs23,
           cache,
           onSign,
           gitdir: updatedGitdir,
@@ -22403,16 +23762,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function currentBranch({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       fullname = false,
       test = false
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _currentBranch({
           fs: fsp,
@@ -22425,34 +23784,34 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _deleteBranch({ fs: fs21, gitdir, ref }) {
+    async function _deleteBranch({ fs: fs23, gitdir, ref }) {
       ref = ref.startsWith("refs/heads/") ? ref : `refs/heads/${ref}`;
-      const exist = await GitRefManager.exists({ fs: fs21, gitdir, ref });
+      const exist = await GitRefManager.exists({ fs: fs23, gitdir, ref });
       if (!exist) {
         throw new NotFoundError(ref);
       }
-      const fullRef = await GitRefManager.expand({ fs: fs21, gitdir, ref });
-      const currentRef = await _currentBranch({ fs: fs21, gitdir, fullname: true });
+      const fullRef = await GitRefManager.expand({ fs: fs23, gitdir, ref });
+      const currentRef = await _currentBranch({ fs: fs23, gitdir, fullname: true });
       if (fullRef === currentRef) {
-        const value = await GitRefManager.resolve({ fs: fs21, gitdir, ref: fullRef });
-        await GitRefManager.writeRef({ fs: fs21, gitdir, ref: "HEAD", value });
+        const value = await GitRefManager.resolve({ fs: fs23, gitdir, ref: fullRef });
+        await GitRefManager.writeRef({ fs: fs23, gitdir, ref: "HEAD", value });
       }
-      await GitRefManager.deleteRef({ fs: fs21, gitdir, ref: fullRef });
+      await GitRefManager.deleteRef({ fs: fs23, gitdir, ref: fullRef });
       const abbrevRef = abbreviateRef(ref);
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
       await config2.deleteSection("branch", abbrevRef);
-      await GitConfigManager.save({ fs: fs21, gitdir, config: config2 });
+      await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
     }
     async function deleteBranch({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _deleteBranch({
           fs: fsp,
@@ -22464,11 +23823,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function deleteRef({ fs: fs21, dir, gitdir = join3(dir, ".git"), ref }) {
+    async function deleteRef({ fs: fs23, dir, gitdir = join3(dir, ".git"), ref }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         await GitRefManager.deleteRef({ fs: fsp, gitdir: updatedGitdir, ref });
       } catch (err) {
@@ -22476,21 +23835,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _deleteRemote({ fs: fs21, gitdir, remote }) {
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+    async function _deleteRemote({ fs: fs23, gitdir, remote }) {
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
       await config2.deleteSection("remote", remote);
-      await GitConfigManager.save({ fs: fs21, gitdir, config: config2 });
+      await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
     }
     async function deleteRemote({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       remote
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("remote", remote);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _deleteRemote({
           fs: fsp,
@@ -22502,15 +23861,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _deleteTag({ fs: fs21, gitdir, ref }) {
+    async function _deleteTag({ fs: fs23, gitdir, ref }) {
       ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
-      await GitRefManager.deleteRef({ fs: fs21, gitdir, ref });
+      await GitRefManager.deleteRef({ fs: fs23, gitdir, ref });
     }
-    async function deleteTag({ fs: fs21, dir, gitdir = join3(dir, ".git"), ref }) {
+    async function deleteTag({ fs: fs23, dir, gitdir = join3(dir, ".git"), ref }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _deleteTag({
           fs: fsp,
@@ -22522,25 +23881,25 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function expandOidLoose({ fs: fs21, gitdir, oid: short }) {
+    async function expandOidLoose({ fs: fs23, gitdir, oid: short }) {
       const prefix = short.slice(0, 2);
-      const objectsSuffixes = await fs21.readdir(`${gitdir}/objects/${prefix}`);
+      const objectsSuffixes = await fs23.readdir(`${gitdir}/objects/${prefix}`);
       return objectsSuffixes.map((suffix) => `${prefix}${suffix}`).filter((_oid) => _oid.startsWith(short));
     }
     async function expandOidPacked({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid: short,
       getExternalRefDelta
     }) {
       const results = [];
-      let list2 = await fs21.readdir(join3(gitdir, "objects/pack"));
+      let list2 = await fs23.readdir(join3(gitdir, "objects/pack"));
       list2 = list2.filter((x) => x.endsWith(".idx"));
       for (const filename of list2) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
         const p = await readPackIndex({
-          fs: fs21,
+          fs: fs23,
           cache,
           filename: indexFile,
           getExternalRefDelta
@@ -22552,11 +23911,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return results;
     }
-    async function _expandOid({ fs: fs21, cache, gitdir, oid: short }) {
-      const getExternalRefDelta = (oid) => _readObject({ fs: fs21, cache, gitdir, oid });
-      const results = await expandOidLoose({ fs: fs21, gitdir, oid: short });
+    async function _expandOid({ fs: fs23, cache, gitdir, oid: short }) {
+      const getExternalRefDelta = (oid) => _readObject({ fs: fs23, cache, gitdir, oid });
+      const results = await expandOidLoose({ fs: fs23, gitdir, oid: short });
       const packedOids = await expandOidPacked({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: short,
@@ -22576,17 +23935,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       throw new NotFoundError(`an object matching "${short}"`);
     }
     async function expandOid({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _expandOid({
           fs: fsp,
@@ -22599,12 +23958,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function expandRef({ fs: fs21, dir, gitdir = join3(dir, ".git"), ref }) {
+    async function expandRef({ fs: fs23, dir, gitdir = join3(dir, ".git"), ref }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await GitRefManager.expand({
           fs: fsp,
@@ -22616,15 +23975,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _findMergeBase({ fs: fs21, cache, gitdir, oids }) {
+    async function _findMergeBase({ fs: fs23, cache, gitdir, oids }) {
       const visits = {};
       const passes = oids.length;
       const common = /* @__PURE__ */ new Set();
       const parents = /* @__PURE__ */ new Map();
-      const shallows = await GitShallowManager.read({ fs: fs21, gitdir });
+      const shallows = await GitShallowManager.read({ fs: fs23, gitdir });
       const readParents = async (oid) => {
         if (parents.has(oid)) return parents.get(oid);
-        const { object, type } = await _readObject({ fs: fs21, cache, gitdir, oid });
+        const { object, type } = await _readObject({ fs: fs23, cache, gitdir, oid });
         if (type !== "commit") {
           throw new ObjectTypeError(oid, type, "commit");
         }
@@ -22674,7 +24033,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return [...common].filter((oid) => !redundant.has(oid));
     }
     async function _merge({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir,
@@ -22694,30 +24053,30 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       allowUnrelatedHistories = false
     }) {
       if (ours === void 0) {
-        ours = await _currentBranch({ fs: fs21, gitdir, fullname: true });
+        ours = await _currentBranch({ fs: fs23, gitdir, fullname: true });
       }
       ours = await GitRefManager.expand({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: ours
       });
       theirs = await GitRefManager.expand({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: theirs
       });
       const ourOid = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: ours
       });
       const theirOid = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: theirs
       });
       const baseOids = await _findMergeBase({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oids: [ourOid, theirOid]
@@ -22738,7 +24097,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       if (fastForward2 && baseOid === ourOid) {
         if (!dryRun && !noUpdateBranch) {
-          await GitRefManager.writeRef({ fs: fs21, gitdir, ref: ours, value: theirOid });
+          await GitRefManager.writeRef({ fs: fs23, gitdir, ref: ours, value: theirOid });
         }
         return {
           oid: theirOid,
@@ -22749,10 +24108,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new FastForwardError();
         }
         const tree = await GitIndexManager.acquire(
-          { fs: fs21, gitdir, cache, allowUnmerged: false },
+          { fs: fs23, gitdir, cache, allowUnmerged: false },
           async (index2) => {
             return mergeTree({
-              fs: fs21,
+              fs: fs23,
               cache,
               dir,
               gitdir,
@@ -22776,7 +24135,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           )}`;
         }
         const oid = await _commit({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           message,
@@ -22798,7 +24157,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _pull({
-      fs: fs21,
+      fs: fs23,
       cache,
       http,
       onProgress,
@@ -22825,14 +24184,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       try {
         if (!ref) {
-          const head = await _currentBranch({ fs: fs21, gitdir });
+          const head = await _currentBranch({ fs: fs23, gitdir });
           if (!head) {
             throw new MissingParameterError("ref");
           }
           ref = head;
         }
         const { fetchHead, fetchHeadDescription } = await _fetch({
-          fs: fs21,
+          fs: fs23,
           cache,
           http,
           onProgress,
@@ -22852,7 +24211,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           pruneTags
         });
         await _merge({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           ours: ref,
@@ -22867,7 +24226,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           noUpdateBranch: false
         });
         await _checkout({
-          fs: fs21,
+          fs: fs23,
           cache,
           onProgress,
           dir,
@@ -22882,7 +24241,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function fastForward({
-      fs: fs21,
+      fs: fs23,
       http,
       onProgress,
       onMessage,
@@ -22901,7 +24260,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
         const thisWillNotBeUsed = {
@@ -22910,7 +24269,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           timestamp: Date.now(),
           timezoneOffset: 0
         };
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _pull({
           fs: fsp,
@@ -22940,7 +24299,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function fetch({
-      fs: fs21,
+      fs: fs23,
       http,
       onProgress,
       onMessage,
@@ -22966,10 +24325,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _fetch({
           fs: fsp,
@@ -23002,17 +24361,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function findMergeBase({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oids,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oids", oids);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _findMergeBase({
           fs: fsp,
@@ -23025,64 +24384,64 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _findRoot({ fs: fs21, filepath }) {
-      if (await fs21.exists(join3(filepath, ".git"))) {
+    async function _findRoot({ fs: fs23, filepath }) {
+      if (await fs23.exists(join3(filepath, ".git"))) {
         return filepath;
       } else {
         const parent = dirname3(filepath);
         if (parent === filepath) {
           throw new NotFoundError(`git root for ${filepath}`);
         }
-        return _findRoot({ fs: fs21, filepath: parent });
+        return _findRoot({ fs: fs23, filepath: parent });
       }
     }
-    async function findRoot2({ fs: fs21, filepath }) {
+    async function findRoot2({ fs: fs23, filepath }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("filepath", filepath);
-        return await _findRoot({ fs: new FileSystem(fs21), filepath });
+        return await _findRoot({ fs: new FileSystem(fs23), filepath });
       } catch (err) {
         err.caller = "git.findRoot";
         throw err;
       }
     }
-    async function getConfig2({ fs: fs21, dir, gitdir = join3(dir, ".git"), path: path28 }) {
+    async function getConfig2({ fs: fs23, dir, gitdir = join3(dir, ".git"), path: path32 }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        assertParameter("path", path28);
-        const fsp = new FileSystem(fs21);
+        assertParameter("path", path32);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _getConfig({
           fs: fsp,
           gitdir: updatedGitdir,
-          path: path28
+          path: path32
         });
       } catch (err) {
         err.caller = "git.getConfig";
         throw err;
       }
     }
-    async function _getConfigAll({ fs: fs21, gitdir, path: path28 }) {
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
-      return config2.getall(path28);
+    async function _getConfigAll({ fs: fs23, gitdir, path: path32 }) {
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+      return config2.getall(path32);
     }
     async function getConfigAll({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
-      path: path28
+      path: path32
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        assertParameter("path", path28);
-        const fsp = new FileSystem(fs21);
+        assertParameter("path", path32);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _getConfigAll({
           fs: fsp,
           gitdir: updatedGitdir,
-          path: path28
+          path: path32
         });
       } catch (err) {
         err.caller = "git.getConfigAll";
@@ -23254,7 +24613,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _indexPack({
-      fs: fs21,
+      fs: fs23,
       cache,
       onProgress,
       dir,
@@ -23263,14 +24622,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       try {
         filepath = join3(dir, filepath);
-        const pack = await fs21.read(filepath);
-        const getExternalRefDelta = (oid) => _readObject({ fs: fs21, cache, gitdir, oid });
+        const pack = await fs23.read(filepath);
+        const getExternalRefDelta = (oid) => _readObject({ fs: fs23, cache, gitdir, oid });
         const idx = await GitPackIndex.fromPack({
           pack,
           getExternalRefDelta,
           onProgress
         });
-        await fs21.write(filepath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
+        await fs23.write(filepath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
         return {
           oids: [...idx.hashes]
         };
@@ -23280,7 +24639,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function indexPack({
-      fs: fs21,
+      fs: fs23,
       onProgress,
       dir,
       gitdir = join3(dir, ".git"),
@@ -23288,11 +24647,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("dir", dir);
         assertParameter("gitdir", dir);
         assertParameter("filepath", filepath);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _indexPack({
           fs: fsp,
@@ -23308,19 +24667,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function init3({
-      fs: fs21,
+      fs: fs23,
       bare = false,
       dir,
       gitdir = bare ? dir : join3(dir, ".git"),
       defaultBranch = "master"
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         if (!bare) {
           assertParameter("dir", dir);
         }
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _init({
           fs: fsp,
@@ -23335,14 +24694,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _isDescendent({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       ancestor,
       depth
     }) {
-      const shallows = await GitShallowManager.read({ fs: fs21, gitdir });
+      const shallows = await GitShallowManager.read({ fs: fs23, gitdir });
       if (!oid) {
         throw new MissingParameterError("oid");
       }
@@ -23359,7 +24718,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         const oid2 = queue.shift();
         const { type, object } = await _readObject({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           oid: oid2
@@ -23383,7 +24742,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return false;
     }
     async function isDescendent({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
@@ -23392,11 +24751,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
         assertParameter("ancestor", ancestor);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _isDescendent({
           fs: fsp,
@@ -23412,17 +24771,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function isIgnored({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       filepath
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitIgnoreManager.isIgnored({
           fs: fsp,
@@ -23436,15 +24795,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listBranches({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       remote
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitRefManager.listBranches({
           fs: fsp,
@@ -23456,12 +24815,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _listFiles({ fs: fs21, gitdir, ref, cache }) {
+    async function _listFiles({ fs: fs23, gitdir, ref, cache }) {
       if (ref) {
-        const oid = await GitRefManager.resolve({ gitdir, fs: fs21, ref });
+        const oid = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
         const filenames = [];
         await accumulateFilesFromOid({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           oid,
@@ -23471,7 +24830,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return filenames;
       } else {
         return GitIndexManager.acquire(
-          { fs: fs21, gitdir, cache },
+          { fs: fs23, gitdir, cache },
           async function(index2) {
             return index2.entries.map((x) => x.path);
           }
@@ -23479,18 +24838,18 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function accumulateFilesFromOid({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       filenames,
       prefix
     }) {
-      const { tree } = await _readTree({ fs: fs21, cache, gitdir, oid });
+      const { tree } = await _readTree({ fs: fs23, cache, gitdir, oid });
       for (const entry of tree) {
         if (entry.type === "tree") {
           await accumulateFilesFromOid({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir,
             oid: entry.oid,
@@ -23503,16 +24862,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listFiles2({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _listFiles({
           fs: fsp,
@@ -23525,17 +24884,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _listNotes({ fs: fs21, cache, gitdir, ref }) {
+    async function _listNotes({ fs: fs23, cache, gitdir, ref }) {
       let parent;
       try {
-        parent = await GitRefManager.resolve({ gitdir, fs: fs21, ref });
+        parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
       } catch (err) {
         if (err instanceof NotFoundError) {
           return [];
         }
       }
       const result = await _readTree({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: parent
@@ -23547,17 +24906,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return notes;
     }
     async function listNotes({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref = "refs/notes/commits",
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _listNotes({
           fs: fsp,
@@ -23571,15 +24930,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listRefs({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       filepath
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitRefManager.listRefs({ fs: fsp, gitdir: updatedGitdir, filepath });
       } catch (err) {
@@ -23587,8 +24946,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _listRemotes({ fs: fs21, gitdir }) {
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+    async function _listRemotes({ fs: fs23, gitdir }) {
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
       const remoteNames = await config2.getSubsections("remote");
       const remotes = Promise.all(
         remoteNames.map(async (remote) => {
@@ -23598,11 +24957,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       );
       return remotes;
     }
-    async function listRemotes({ fs: fs21, dir, gitdir = join3(dir, ".git") }) {
+    async function listRemotes({ fs: fs23, dir, gitdir = join3(dir, ".git") }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _listRemotes({
           fs: fsp,
@@ -23697,11 +25056,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function listTags({ fs: fs21, dir, gitdir = join3(dir, ".git") }) {
+    async function listTags({ fs: fs23, dir, gitdir = join3(dir, ".git") }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitRefManager.listTags({ fs: fsp, gitdir: updatedGitdir });
       } catch (err) {
@@ -23713,17 +25072,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return a.committer.timestamp - b.committer.timestamp;
     }
     var EMPTY_OID = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
-    async function resolveFileIdInTree({ fs: fs21, cache, gitdir, oid, fileId }) {
+    async function resolveFileIdInTree({ fs: fs23, cache, gitdir, oid, fileId }) {
       if (fileId === EMPTY_OID) return;
       const _oid = oid;
       let filepath;
-      const result = await resolveTree({ fs: fs21, cache, gitdir, oid });
+      const result = await resolveTree({ fs: fs23, cache, gitdir, oid });
       const tree = result.tree;
       if (fileId === result.oid) {
         filepath = result.path;
       } else {
         filepath = await _resolveFileId({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir,
           tree,
@@ -23738,7 +25097,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return filepath;
     }
     async function _resolveFileId({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       tree,
@@ -23754,13 +25113,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           filepaths.push(result);
         } else if (entry.type === "tree") {
           result = _readObject({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir,
             oid: entry.oid
           }).then(function({ object }) {
             return _resolveFileId({
-              fs: fs21,
+              fs: fs23,
               cache,
               gitdir,
               tree: GitTree.from(object),
@@ -23777,7 +25136,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return filepaths;
     }
     async function _log({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       filepath,
@@ -23790,9 +25149,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       const sinceTimestamp = typeof since === "undefined" ? void 0 : Math.floor(since.valueOf() / 1e3);
       const commits = [];
-      const shallowCommits = await GitShallowManager.read({ fs: fs21, gitdir });
-      const oid = await GitRefManager.resolve({ fs: fs21, gitdir, ref });
-      const tips = [await _readCommit({ fs: fs21, cache, gitdir, oid })];
+      const shallowCommits = await GitShallowManager.read({ fs: fs23, gitdir });
+      const oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
+      const tips = [await _readCommit({ fs: fs23, cache, gitdir, oid })];
       let lastFileOid;
       let lastFileMode;
       let lastCommit;
@@ -23809,7 +25168,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           let vFileEntry;
           try {
             vFileEntry = await resolveFilepathEntry({
-              fs: fs21,
+              fs: fs23,
               cache,
               gitdir,
               oid: commit4.commit.tree,
@@ -23827,7 +25186,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               let found = follow && lastFileOid;
               if (found) {
                 found = await resolveFileIdInTree({
-                  fs: fs21,
+                  fs: fs23,
                   cache,
                   gitdir,
                   oid: commit4.commit.tree,
@@ -23837,7 +25196,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                   if (Array.isArray(found)) {
                     if (lastCommit) {
                       const lastFound = await resolveFileIdInTree({
-                        fs: fs21,
+                        fs: fs23,
                         cache,
                         gitdir,
                         oid: lastCommit.commit.tree,
@@ -23882,7 +25241,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         if (!shallowCommits.has(commit4.oid)) {
           for (const oid2 of commit4.commit.parent) {
-            const commit5 = await _readCommit({ fs: fs21, cache, gitdir, oid: oid2 });
+            const commit5 = await _readCommit({ fs: fs23, cache, gitdir, oid: oid2 });
             if (!tips.map((commit6) => commit6.oid).includes(commit5.oid)) {
               tips.push(commit5);
             }
@@ -23896,7 +25255,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (includeChanges) {
         for (const commit4 of commits) {
           commit4.commit.changes = await getChanges({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir,
             commit: commit4,
@@ -23906,10 +25265,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return commits;
     }
-    async function getChanges({ fs: fs21, cache, gitdir, commit: commit4, shallow }) {
+    async function getChanges({ fs: fs23, cache, gitdir, commit: commit4, shallow }) {
       const parent = shallow || !commit4.commit.parent[0] ? "4b825dc642cb6eb9a060e54bf8d69288fbee4904" : commit4.commit.parent[0];
       return _walk({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         trees: [TREE2({ ref: commit4.oid }), TREE2({ ref: parent })],
@@ -23940,7 +25299,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
     }
     async function log2({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       filepath,
@@ -23954,10 +25313,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _log({
           fs: fsp,
@@ -24001,10 +25360,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         const author = await normalizeAuthorObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author: _author
         });
@@ -24012,7 +25371,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new MissingNameError("author");
         }
         const committer = await normalizeCommitterObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author,
           committer: _committer
@@ -24021,7 +25380,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new MissingNameError("committer");
         }
         return await _merge({
-          fs: fs21,
+          fs: fs23,
           cache,
           dir,
           gitdir: updatedGitdir,
@@ -24054,7 +25413,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       ref_delta: 112
     };
     async function _pack({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
@@ -24087,20 +25446,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       write("00000002", "hex");
       write(padHex(8, oids.length), "hex");
       for (const oid of oids) {
-        const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
         await writeObject2({ write, object, stype: type });
       }
       const digest = hash.digest();
       outputStream.push(digest);
       return outputStream;
     }
-    async function _packObjects({ fs: fs21, cache, gitdir, oids, write }) {
-      const buffers = await _pack({ fs: fs21, cache, gitdir, oids });
+    async function _packObjects({ fs: fs23, cache, gitdir, oids, write }) {
+      const buffers = await _pack({ fs: fs23, cache, gitdir, oids });
       const packfile = Buffer.from(await collect(buffers));
       const packfileSha = packfile.slice(-20).toString("hex");
       const filename = `pack-${packfileSha}.pack`;
       if (write) {
-        await fs21.write(join3(gitdir, `objects/pack/${filename}`), packfile);
+        await fs23.write(join3(gitdir, `objects/pack/${filename}`), packfile);
         return { filename };
       }
       return {
@@ -24109,7 +25468,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       };
     }
     async function packObjects({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oids,
@@ -24117,10 +25476,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oids", oids);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _packObjects({
           fs: fsp,
@@ -24163,23 +25522,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       try {
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         const author = await normalizeAuthorObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author: _author
         });
         if (!author) throw new MissingNameError("author");
         const committer = await normalizeCommitterObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author,
           committer: _committer
         });
         if (!committer) throw new MissingNameError("committer");
         return await _pull({
-          fs: fs21,
+          fs: fs23,
           cache,
           http,
           onProgress,
@@ -24210,22 +25569,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listCommitsAndTags({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
       start,
       finish
     }) {
-      const shallows = await GitShallowManager.read({ fs: fs21, gitdir });
+      const shallows = await GitShallowManager.read({ fs: fs23, gitdir });
       const startingSet = /* @__PURE__ */ new Set();
       const finishingSet = /* @__PURE__ */ new Set();
       for (const ref of start) {
-        startingSet.add(await GitRefManager.resolve({ fs: fs21, gitdir, ref }));
+        startingSet.add(await GitRefManager.resolve({ fs: fs23, gitdir, ref }));
       }
       for (const ref of finish) {
         try {
-          const oid = await GitRefManager.resolve({ fs: fs21, gitdir, ref });
+          const oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
           finishingSet.add(oid);
         } catch (err) {
         }
@@ -24233,7 +25592,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const visited = /* @__PURE__ */ new Set();
       async function walk3(oid) {
         visited.add(oid);
-        const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
         if (type === "tag") {
           const tag2 = GitAnnotatedTag.from(object);
           const commit4 = tag2.headers().object;
@@ -24258,7 +25617,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return visited;
     }
     async function listObjects({
-      fs: fs21,
+      fs: fs23,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
@@ -24268,7 +25627,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async function walk3(oid) {
         if (visited.has(oid)) return;
         visited.add(oid);
-        const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
         if (type === "tag") {
           const tag2 = GitAnnotatedTag.from(object);
           const obj = tag2.headers().object;
@@ -24347,7 +25706,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return packstream;
     }
     async function _push({
-      fs: fs21,
+      fs: fs23,
       cache,
       http,
       onProgress,
@@ -24366,11 +25725,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       corsProxy,
       headers = {}
     }) {
-      const ref = _ref || await _currentBranch({ fs: fs21, gitdir });
+      const ref = _ref || await _currentBranch({ fs: fs23, gitdir });
       if (typeof ref === "undefined") {
         throw new MissingParameterError("ref");
       }
-      const config2 = await GitConfigManager.get({ fs: fs21, gitdir });
+      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
       remote = remote || await config2.get(`branch.${ref}.pushRemote`) || await config2.get("remote.pushDefault") || await config2.get(`branch.${ref}.remote`) || "origin";
       const url = _url || await config2.get(`remote.${remote}.pushurl`) || await config2.get(`remote.${remote}.url`);
       if (typeof url === "undefined") {
@@ -24383,8 +25742,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (corsProxy === void 0) {
         corsProxy = await config2.get("http.corsProxy");
       }
-      const fullRef = await GitRefManager.expand({ fs: fs21, gitdir, ref });
-      const oid = _delete ? "0000000000000000000000000000000000000000" : await GitRefManager.resolve({ fs: fs21, gitdir, ref: fullRef });
+      const fullRef = await GitRefManager.expand({ fs: fs23, gitdir, ref });
+      const oid = _delete ? "0000000000000000000000000000000000000000" : await GitRefManager.resolve({ fs: fs23, gitdir, ref: fullRef });
       const GitRemoteHTTP2 = GitRemoteManager.getRemoteHelperFor({ url });
       const httpRemote = await GitRemoteHTTP2.discover({
         http,
@@ -24432,30 +25791,30 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         let skipObjects = /* @__PURE__ */ new Set();
         if (oldoid !== "0000000000000000000000000000000000000000") {
           const mergebase = await _findMergeBase({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir,
             oids: [oid, oldoid]
           });
           for (const oid2 of mergebase) finish.push(oid2);
           if (thinPack) {
-            skipObjects = await listObjects({ fs: fs21, cache, gitdir, oids: mergebase });
+            skipObjects = await listObjects({ fs: fs23, cache, gitdir, oids: mergebase });
           }
         }
         if (!finish.includes(oid)) {
           const commits = await listCommitsAndTags({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir,
             start: [oid],
             finish
           });
-          objects = await listObjects({ fs: fs21, cache, gitdir, oids: commits });
+          objects = await listObjects({ fs: fs23, cache, gitdir, oids: commits });
         }
         if (thinPack) {
           try {
             const ref2 = await GitRefManager.resolve({
-              fs: fs21,
+              fs: fs23,
               gitdir,
               ref: `refs/remotes/${remote}/HEAD`,
               depth: 2
@@ -24466,7 +25825,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               map: httpRemote.refs
             });
             const oids = [oid2];
-            for (const oid3 of await listObjects({ fs: fs21, cache, gitdir, oids })) {
+            for (const oid3 of await listObjects({ fs: fs23, cache, gitdir, oids })) {
               skipObjects.add(oid3);
             }
           } catch (e) {
@@ -24481,7 +25840,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             throw new PushRejectedError("tag-exists");
           }
           if (oid !== "0000000000000000000000000000000000000000" && oldoid !== "0000000000000000000000000000000000000000" && !await _isDescendent({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir,
             oid,
@@ -24501,7 +25860,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         triplets: [{ oldoid, oid, fullRef: fullRemoteRef }]
       });
       const packstream2 = _delete ? [] : await _pack({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oids: [...objects]
@@ -24533,9 +25892,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           ""
         )}`;
         if (_delete) {
-          await GitRefManager.deleteRef({ fs: fs21, gitdir, ref: ref2 });
+          await GitRefManager.deleteRef({ fs: fs23, gitdir, ref: ref2 });
         } else {
-          await GitRefManager.writeRef({ fs: fs21, gitdir, ref: ref2, value: oid });
+          await GitRefManager.writeRef({ fs: fs23, gitdir, ref: ref2, value: oid });
         }
       }
       if (result.ok && Object.values(result.refs).every((result2) => result2.ok)) {
@@ -24547,7 +25906,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function push({
-      fs: fs21,
+      fs: fs23,
       http,
       onProgress,
       onMessage,
@@ -24568,10 +25927,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _push({
           fs: fsp,
@@ -24598,11 +25957,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function resolveBlob({ fs: fs21, cache, gitdir, oid }) {
-      const { type, object } = await _readObject({ fs: fs21, cache, gitdir, oid });
+    async function resolveBlob({ fs: fs23, cache, gitdir, oid }) {
+      const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
       if (type === "tag") {
         oid = GitAnnotatedTag.from(object).parse().object;
-        return resolveBlob({ fs: fs21, cache, gitdir, oid });
+        return resolveBlob({ fs: fs23, cache, gitdir, oid });
       }
       if (type !== "blob") {
         throw new ObjectTypeError(oid, type, "blob");
@@ -24610,17 +25969,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return { oid, blob: new Uint8Array(object) };
     }
     async function _readBlob({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       oid,
       filepath = void 0
     }) {
       if (filepath !== void 0) {
-        oid = await resolveFilepath({ fs: fs21, cache, gitdir, oid, filepath });
+        oid = await resolveFilepath({ fs: fs23, cache, gitdir, oid, filepath });
       }
       const blob = await resolveBlob({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid
@@ -24628,7 +25987,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return blob;
     }
     async function readBlob2({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
@@ -24636,10 +25995,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readBlob({
           fs: fsp,
@@ -24654,17 +26013,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function readCommit({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readCommit({
           fs: fsp,
@@ -24678,15 +26037,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _readNote({
-      fs: fs21,
+      fs: fs23,
       cache,
       gitdir,
       ref = "refs/notes/commits",
       oid
     }) {
-      const parent = await GitRefManager.resolve({ gitdir, fs: fs21, ref });
+      const parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
       const { blob } = await _readBlob({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: parent,
@@ -24695,7 +26054,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return blob;
     }
     async function readNote({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref = "refs/notes/commits",
@@ -24703,11 +26062,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readNote({
           fs: fsp,
@@ -24735,11 +26094,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         if (filepath !== void 0) {
           oid = await resolveFilepath({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir: updatedGitdir,
             oid,
@@ -24748,7 +26107,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         const _format = format2 === "parsed" ? "content" : format2;
         const result = await _readObject({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir: updatedGitdir,
           oid,
@@ -24791,9 +26150,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _readTag({ fs: fs21, cache, gitdir, oid }) {
+    async function _readTag({ fs: fs23, cache, gitdir, oid }) {
       const { type, object } = await _readObject({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid,
@@ -24811,17 +26170,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return result;
     }
     async function readTag({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readTag({
           fs: fsp,
@@ -24835,7 +26194,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function readTree({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
@@ -24843,10 +26202,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readTree({
           fs: fsp,
@@ -24885,7 +26244,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _removeNote({
-      fs: fs21,
+      fs: fs23,
       cache,
       onSign,
       gitdir,
@@ -24897,14 +26256,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       let parent;
       try {
-        parent = await GitRefManager.resolve({ gitdir, fs: fs21, ref });
+        parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
       } catch (err) {
         if (!(err instanceof NotFoundError)) {
           throw err;
         }
       }
       const result = await _readTree({
-        fs: fs21,
+        fs: fs23,
         cache,
         gitdir,
         oid: parent || "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -24912,12 +26271,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let tree = result.tree;
       tree = tree.filter((entry) => entry.path !== oid);
       const treeOid = await _writeTree({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         tree
       });
       const commitOid = await _commit({
-        fs: fs21,
+        fs: fs23,
         cache,
         onSign,
         gitdir,
@@ -24948,23 +26307,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         const author = await normalizeAuthorObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author: _author
         });
         if (!author) throw new MissingNameError("author");
         const committer = await normalizeCommitterObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           author,
           committer: _committer
         });
         if (!committer) throw new MissingNameError("committer");
         return await _removeNote({
-          fs: fs21,
+          fs: fs23,
           cache,
           onSign,
           gitdir: updatedGitdir,
@@ -24980,7 +26339,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _renameBranch({
-      fs: fs21,
+      fs: fs23,
       gitdir,
       oldref,
       ref,
@@ -24994,27 +26353,27 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       const fulloldref = `refs/heads/${oldref}`;
       const fullnewref = `refs/heads/${ref}`;
-      const newexist = await GitRefManager.exists({ fs: fs21, gitdir, ref: fullnewref });
+      const newexist = await GitRefManager.exists({ fs: fs23, gitdir, ref: fullnewref });
       if (newexist) {
         throw new AlreadyExistsError("branch", ref, false);
       }
       const value = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: fulloldref,
         depth: 1
       });
-      await GitRefManager.writeRef({ fs: fs21, gitdir, ref: fullnewref, value });
-      await GitRefManager.deleteRef({ fs: fs21, gitdir, ref: fulloldref });
+      await GitRefManager.writeRef({ fs: fs23, gitdir, ref: fullnewref, value });
+      await GitRefManager.deleteRef({ fs: fs23, gitdir, ref: fulloldref });
       const fullCurrentBranchRef = await _currentBranch({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         fullname: true
       });
       const isCurrentBranch = fullCurrentBranchRef === fulloldref;
       if (checkout2 || isCurrentBranch) {
         await GitRefManager.writeSymbolicRef({
-          fs: fs21,
+          fs: fs23,
           gitdir,
           ref: "HEAD",
           value: fullnewref
@@ -25022,7 +26381,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function renameBranch({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
@@ -25030,11 +26389,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       checkout: checkout2 = false
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
         assertParameter("oldref", oldref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _renameBranch({
           fs: fsp,
@@ -25063,13 +26422,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         let oid;
         let workdirOid;
         try {
           oid = await GitRefManager.resolve({
-            fs: fs21,
+            fs: fs23,
             gitdir: updatedGitdir,
             ref: ref || "HEAD"
           });
@@ -25081,7 +26440,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (oid) {
           try {
             oid = await resolveFilepath({
-              fs: fs21,
+              fs: fs23,
               cache,
               gitdir: updatedGitdir,
               oid,
@@ -25101,7 +26460,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           gid: 0,
           size: 0
         };
-        const object = dir && await fs21.read(join3(dir, filepath));
+        const object = dir && await fs23.read(join3(dir, filepath));
         if (object) {
           workdirOid = await hashObject$1({
             gitdir: updatedGitdir,
@@ -25109,11 +26468,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             object
           });
           if (oid === workdirOid) {
-            stats = await fs21.lstat(join3(dir, filepath));
+            stats = await fs23.lstat(join3(dir, filepath));
           }
         }
         await GitIndexManager.acquire(
-          { fs: fs21, gitdir: updatedGitdir, cache },
+          { fs: fs23, gitdir: updatedGitdir, cache },
           async function(index2) {
             index2.delete({ filepath });
             if (oid) {
@@ -25127,17 +26486,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function resolveRef2({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
       depth
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         const oid = await GitRefManager.resolve({
           fs: fsp,
@@ -25155,32 +26514,32 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       dir,
       gitdir = join3(dir, ".git"),
-      path: path28,
+      path: path32,
       value,
       append: append2 = false
     }) {
       try {
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
-        assertParameter("path", path28);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
-        const config2 = await GitConfigManager.get({ fs: fs21, gitdir: updatedGitdir });
+        assertParameter("path", path32);
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const config2 = await GitConfigManager.get({ fs: fs23, gitdir: updatedGitdir });
         if (append2) {
-          await config2.append(path28, value);
+          await config2.append(path32, value);
         } else {
-          await config2.set(path28, value);
+          await config2.set(path32, value);
         }
-        await GitConfigManager.save({ fs: fs21, gitdir: updatedGitdir, config: config2 });
+        await GitConfigManager.save({ fs: fs23, gitdir: updatedGitdir, config: config2 });
       } catch (err) {
         err.caller = "git.setConfig";
         throw err;
       }
     }
-    async function _writeCommit({ fs: fs21, gitdir, commit: commit4 }) {
+    async function _writeCommit({ fs: fs23, gitdir, commit: commit4 }) {
       const object = GitCommit.from(commit4).toObject();
       const oid = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "commit",
         object,
@@ -25222,9 +26581,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.dir - The working directory.
        * @param {string}[args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        */
-      constructor({ fs: fs21, dir, gitdir = join3(dir, ".git") }) {
+      constructor({ fs: fs23, dir, gitdir = join3(dir, ".git") }) {
         Object.assign(this, {
-          fs: fs21,
+          fs: fs23,
           dir,
           gitdir,
           _author: null
@@ -25393,26 +26752,26 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return GitRefStash.getStashReflogEntry(reflogString, parsed);
       }
     };
-    async function _createStashCommit({ fs: fs21, dir, gitdir, message = "" }) {
-      const stashMgr = new GitStashManager({ fs: fs21, dir, gitdir });
+    async function _createStashCommit({ fs: fs23, dir, gitdir, message = "" }) {
+      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
       await stashMgr.getAuthor();
       const branch2 = await _currentBranch({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         fullname: false
       });
       const headCommit = await GitRefManager.resolve({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         ref: "HEAD"
       });
-      const headCommitObj = await readCommit({ fs: fs21, dir, gitdir, oid: headCommit });
+      const headCommitObj = await readCommit({ fs: fs23, dir, gitdir, oid: headCommit });
       const headMsg = headCommitObj.commit.message;
       const stashCommitParents = [headCommit];
       let stashCommitTree = null;
       let workDirCompareBase = TREE2({ ref: "HEAD" });
       const indexTree = await writeTreeChanges({
-        fs: fs21,
+        fs: fs23,
         dir,
         gitdir,
         treePair: [TREE2({ ref: "HEAD" }), "stage"]
@@ -25428,7 +26787,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         workDirCompareBase = STAGE2();
       }
       const workingTree = await writeTreeChanges({
-        fs: fs21,
+        fs: fs23,
         dir,
         gitdir,
         treePair: [workDirCompareBase, "workdir"]
@@ -25453,9 +26812,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return { stashCommit, stashMsg, branch: branch2, stashMgr };
     }
-    async function _stashPush({ fs: fs21, dir, gitdir, message = "" }) {
+    async function _stashPush({ fs: fs23, dir, gitdir, message = "" }) {
       const { stashCommit, stashMsg, branch: branch2, stashMgr } = await _createStashCommit({
-        fs: fs21,
+        fs: fs23,
         dir,
         gitdir,
         message
@@ -25466,7 +26825,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         message: stashMsg
       });
       await checkout({
-        fs: fs21,
+        fs: fs23,
         dir,
         gitdir,
         ref: branch2,
@@ -25476,17 +26835,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return stashCommit;
     }
-    async function _stashCreate({ fs: fs21, dir, gitdir, message = "" }) {
+    async function _stashCreate({ fs: fs23, dir, gitdir, message = "" }) {
       const { stashCommit } = await _createStashCommit({
-        fs: fs21,
+        fs: fs23,
         dir,
         gitdir,
         message
       });
       return stashCommit;
     }
-    async function _stashApply({ fs: fs21, dir, gitdir, refIdx = 0 }) {
-      const stashMgr = new GitStashManager({ fs: fs21, dir, gitdir });
+    async function _stashApply({ fs: fs23, dir, gitdir, refIdx = 0 }) {
+      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
       const stashCommit = await stashMgr.readStashCommit(refIdx);
       const { parent: stashParents = null } = stashCommit.commit ? stashCommit.commit : {};
       if (!stashParents || !Array.isArray(stashParents)) {
@@ -25494,14 +26853,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       for (let i = 0; i < stashParents.length - 1; i++) {
         const applyingCommit = await _readCommit({
-          fs: fs21,
+          fs: fs23,
           cache: {},
           gitdir,
           oid: stashParents[i + 1]
         });
         const wasStaged = applyingCommit.commit.message.startsWith("stash-Index");
         await applyTreeChanges({
-          fs: fs21,
+          fs: fs23,
           dir,
           gitdir,
           stashCommit: stashParents[i + 1],
@@ -25510,16 +26869,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         });
       }
     }
-    async function _stashDrop({ fs: fs21, dir, gitdir, refIdx = 0 }) {
-      const stashMgr = new GitStashManager({ fs: fs21, dir, gitdir });
+    async function _stashDrop({ fs: fs23, dir, gitdir, refIdx = 0 }) {
+      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
       const stashCommit = await stashMgr.readStashCommit(refIdx);
       if (!stashCommit.commit) {
         return;
       }
       const stashRefPath = stashMgr.refStashPath;
       await acquireLock2(stashRefPath, async () => {
-        if (await fs21.exists(stashRefPath)) {
-          await fs21.rm(stashRefPath);
+        if (await fs23.exists(stashRefPath)) {
+          await fs23.rm(stashRefPath);
         }
       });
       const reflogEntries = await stashMgr.readStashReflogs({ parsed: false });
@@ -25530,7 +26889,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const stashReflogPath = stashMgr.refLogsStashPath;
       await acquireLock2(stashReflogPath, async () => {
         if (reflogEntries.length) {
-          await fs21.write(
+          await fs23.write(
             stashReflogPath,
             reflogEntries.reverse().join("\n") + "\n",
             "utf8"
@@ -25538,40 +26897,40 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const lastStashCommit = reflogEntries[reflogEntries.length - 1].split(" ")[1];
           await stashMgr.writeStashRef(lastStashCommit);
         } else {
-          await fs21.rm(stashReflogPath);
+          await fs23.rm(stashReflogPath);
         }
       });
     }
-    async function _stashList({ fs: fs21, dir, gitdir }) {
-      const stashMgr = new GitStashManager({ fs: fs21, dir, gitdir });
+    async function _stashList({ fs: fs23, dir, gitdir }) {
+      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
       return stashMgr.readStashReflogs({ parsed: true });
     }
-    async function _stashClear({ fs: fs21, dir, gitdir }) {
-      const stashMgr = new GitStashManager({ fs: fs21, dir, gitdir });
+    async function _stashClear({ fs: fs23, dir, gitdir }) {
+      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
       const stashRefPath = [stashMgr.refStashPath, stashMgr.refLogsStashPath];
       await acquireLock2(stashRefPath, async () => {
         await Promise.all(
-          stashRefPath.map(async (path28) => {
-            if (await fs21.exists(path28)) {
-              return fs21.rm(path28);
+          stashRefPath.map(async (path32) => {
+            if (await fs23.exists(path32)) {
+              return fs23.rm(path32);
             }
           })
         );
       });
     }
-    async function _stashPop({ fs: fs21, dir, gitdir, refIdx = 0 }) {
-      await _stashApply({ fs: fs21, dir, gitdir, refIdx });
-      await _stashDrop({ fs: fs21, dir, gitdir, refIdx });
+    async function _stashPop({ fs: fs23, dir, gitdir, refIdx = 0 }) {
+      await _stashApply({ fs: fs23, dir, gitdir, refIdx });
+      await _stashDrop({ fs: fs23, dir, gitdir, refIdx });
     }
     async function stash({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       op = "push",
       message = "",
       refIdx = 0
     }) {
-      assertParameter("fs", fs21);
+      assertParameter("fs", fs23);
       assertParameter("dir", dir);
       assertParameter("gitdir", gitdir);
       assertParameter("op", op);
@@ -25586,7 +26945,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       };
       const opsNeedRefIdx = ["apply", "drop", "pop"];
       try {
-        const _fs = new FileSystem(fs21);
+        const _fs = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp: _fs, dotgit: gitdir });
         const folders = ["refs", "logs", "logs/refs"];
         folders.map((f) => join3(updatedGitdir, f)).forEach(async (folder) => {
@@ -25628,18 +26987,18 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
-        const headTree = await getHeadTree({ fs: fs21, cache, gitdir: updatedGitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const headTree = await getHeadTree({ fs: fs23, cache, gitdir: updatedGitdir });
         const treeOid = await getOidAtPath({
-          fs: fs21,
+          fs: fs23,
           cache,
           gitdir: updatedGitdir,
           tree: headTree,
           path: filepath
         });
         const indexEntry = await GitIndexManager.acquire(
-          { fs: fs21, gitdir: updatedGitdir, cache },
+          { fs: fs23, gitdir: updatedGitdir, cache },
           async function(index2) {
             for (const entry of index2) {
               if (entry.path === filepath) return entry;
@@ -25649,7 +27008,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         );
         if (treeOid === null && indexEntry === null) {
           const ignored = await GitIgnoreManager.isIgnored({
-            fs: fs21,
+            fs: fs23,
             gitdir: updatedGitdir,
             dir,
             filepath
@@ -25658,7 +27017,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             return "ignored";
           }
         }
-        const stats = await fs21.lstat(join3(dir, filepath));
+        const stats = await fs23.lstat(join3(dir, filepath));
         const H = treeOid !== null;
         const I = indexEntry !== null;
         const W = stats !== null;
@@ -25666,9 +27025,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           if (I && !compareStats(indexEntry, stats)) {
             return indexEntry.oid;
           } else {
-            const config2 = await GitConfigManager.get({ fs: fs21, gitdir: updatedGitdir });
+            const config2 = await GitConfigManager.get({ fs: fs23, gitdir: updatedGitdir });
             const autocrlf = await config2.get("core.autocrlf");
-            const object = await fs21.read(join3(dir, filepath), { autocrlf });
+            const object = await fs23.read(join3(dir, filepath), { autocrlf });
             const workdirOid = await hashObject$1({
               gitdir: updatedGitdir,
               type: "blob",
@@ -25677,7 +27036,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             if (refresh && I && indexEntry.oid === workdirOid) {
               if (stats.size !== -1) {
                 GitIndexManager.acquire(
-                  { fs: fs21, gitdir: updatedGitdir, cache },
+                  { fs: fs23, gitdir: updatedGitdir, cache },
                   async function(index2) {
                     index2.insert({ filepath, stats, oid: workdirOid });
                   }
@@ -25715,36 +27074,36 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function getOidAtPath({ fs: fs21, cache, gitdir: updatedGitdir, tree, path: path28 }) {
-      if (typeof path28 === "string") path28 = path28.split("/");
-      const dirname4 = path28.shift();
+    async function getOidAtPath({ fs: fs23, cache, gitdir: updatedGitdir, tree, path: path32 }) {
+      if (typeof path32 === "string") path32 = path32.split("/");
+      const dirname4 = path32.shift();
       for (const entry of tree) {
         if (entry.path === dirname4) {
-          if (path28.length === 0) {
+          if (path32.length === 0) {
             return entry.oid;
           }
           const { type, object } = await _readObject({
-            fs: fs21,
+            fs: fs23,
             cache,
             gitdir: updatedGitdir,
             oid: entry.oid
           });
           if (type === "tree") {
             const tree2 = GitTree.from(object);
-            return getOidAtPath({ fs: fs21, cache, gitdir: updatedGitdir, tree: tree2, path: path28 });
+            return getOidAtPath({ fs: fs23, cache, gitdir: updatedGitdir, tree: tree2, path: path32 });
           }
           if (type === "blob") {
-            throw new ObjectTypeError(entry.oid, type, "blob", path28.join("/"));
+            throw new ObjectTypeError(entry.oid, type, "blob", path32.join("/"));
           }
         }
       }
       return null;
     }
-    async function getHeadTree({ fs: fs21, cache, gitdir: updatedGitdir }) {
+    async function getHeadTree({ fs: fs23, cache, gitdir: updatedGitdir }) {
       let oid;
       try {
         oid = await GitRefManager.resolve({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           ref: "HEAD"
         });
@@ -25753,7 +27112,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           return [];
         }
       }
-      const { tree } = await _readTree({ fs: fs21, cache, gitdir: updatedGitdir, oid });
+      const { tree } = await _readTree({ fs: fs23, cache, gitdir: updatedGitdir, oid });
       return tree;
     }
     async function statusMatrix2({
@@ -25771,10 +27130,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         return await _walk({
-          fs: fs21,
+          fs: fs23,
           cache,
           dir,
           gitdir: updatedGitdir,
@@ -25783,7 +27142,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             if (!head && !stage && workdir) {
               if (!shouldIgnore) {
                 const isIgnored2 = await GitIgnoreManager.isIgnored({
-                  fs: fs21,
+                  fs: fs23,
                   dir,
                   filepath
                 });
@@ -25841,21 +27200,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fs21 = new FileSystem(_fs);
+        const fs23 = new FileSystem(_fs);
         if (ref === void 0) {
           throw new MissingParameterError("ref");
         }
         ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         const value = await GitRefManager.resolve({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           ref: object || "HEAD"
         });
-        if (!force && await GitRefManager.exists({ fs: fs21, gitdir: updatedGitdir, ref })) {
+        if (!force && await GitRefManager.exists({ fs: fs23, gitdir: updatedGitdir, ref })) {
           throw new AlreadyExistsError("tag", ref);
         }
-        await GitRefManager.writeRef({ fs: fs21, gitdir: updatedGitdir, ref, value });
+        await GitRefManager.writeRef({ fs: fs23, gitdir: updatedGitdir, ref, value });
       } catch (err) {
         err.caller = "git.tag";
         throw err;
@@ -25877,14 +27236,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         if (remove3) {
           return await GitIndexManager.acquire(
-            { fs: fs21, gitdir: updatedGitdir, cache },
+            { fs: fs23, gitdir: updatedGitdir, cache },
             async function(index2) {
               if (!force) {
-                const fileStats2 = await fs21.lstat(join3(dir, filepath));
+                const fileStats2 = await fs23.lstat(join3(dir, filepath));
                 if (fileStats2) {
                   if (fileStats2.isDirectory()) {
                     throw new InvalidFilepathError("directory");
@@ -25902,7 +27261,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         let fileStats;
         if (!oid) {
-          fileStats = await fs21.lstat(join3(dir, filepath));
+          fileStats = await fs23.lstat(join3(dir, filepath));
           if (!fileStats) {
             throw new NotFoundError(
               `file at "${filepath}" on disk and "remove" not set`
@@ -25913,7 +27272,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         }
         return await GitIndexManager.acquire(
-          { fs: fs21, gitdir: updatedGitdir, cache },
+          { fs: fs23, gitdir: updatedGitdir, cache },
           async function(index2) {
             if (!add3 && !index2.has({ filepath })) {
               throw new NotFoundError(
@@ -25923,9 +27282,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             let stats;
             if (!oid) {
               stats = fileStats;
-              const object = stats.isSymbolicLink() ? await fs21.readlink(join3(dir, filepath)) : await fs21.read(join3(dir, filepath));
+              const object = stats.isSymbolicLink() ? await fs23.readlink(join3(dir, filepath)) : await fs23.read(join3(dir, filepath));
               oid = await _writeObject({
-                fs: fs21,
+                fs: fs23,
                 gitdir: updatedGitdir,
                 type: "blob",
                 format: "content",
@@ -25965,7 +27324,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function walk2({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       trees,
@@ -25975,10 +27334,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("trees", trees);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _walk({
           fs: fsp,
@@ -25995,12 +27354,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function writeBlob({ fs: fs21, dir, gitdir = join3(dir, ".git"), blob }) {
+    async function writeBlob({ fs: fs23, dir, gitdir = join3(dir, ".git"), blob }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("blob", blob);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeObject({
           fs: fsp,
@@ -26015,16 +27374,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function writeCommit({
-      fs: fs21,
+      fs: fs23,
       dir,
       gitdir = join3(dir, ".git"),
       commit: commit4
     }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("commit", commit4);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeCommit({
           fs: fsp,
@@ -26047,8 +27406,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       encoding = void 0
     }) {
       try {
-        const fs21 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
+        const fs23 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
         if (format2 === "parsed") {
           switch (type) {
             case "commit":
@@ -26069,7 +27428,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           format2 = "content";
         }
         oid = await _writeObject({
-          fs: fs21,
+          fs: fs23,
           gitdir: updatedGitdir,
           type,
           object,
@@ -26096,29 +27455,29 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
         assertParameter("value", value);
-        const fs21 = new FileSystem(_fs);
+        const fs23 = new FileSystem(_fs);
         if (!isValidRef(ref, true)) {
           throw new InvalidRefNameError(ref, cleanGitRef.clean(ref));
         }
-        const updatedGitdir = await discoverGitdir({ fsp: fs21, dotgit: gitdir });
-        if (!force && await GitRefManager.exists({ fs: fs21, gitdir: updatedGitdir, ref })) {
+        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        if (!force && await GitRefManager.exists({ fs: fs23, gitdir: updatedGitdir, ref })) {
           throw new AlreadyExistsError("ref", ref);
         }
         if (symbolic) {
           await GitRefManager.writeSymbolicRef({
-            fs: fs21,
+            fs: fs23,
             gitdir: updatedGitdir,
             ref,
             value
           });
         } else {
           value = await GitRefManager.resolve({
-            fs: fs21,
+            fs: fs23,
             gitdir: updatedGitdir,
             ref: value
           });
           await GitRefManager.writeRef({
-            fs: fs21,
+            fs: fs23,
             gitdir: updatedGitdir,
             ref,
             value
@@ -26129,10 +27488,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _writeTag({ fs: fs21, gitdir, tag: tag2 }) {
+    async function _writeTag({ fs: fs23, gitdir, tag: tag2 }) {
       const object = GitAnnotatedTag.from(tag2).toObject();
       const oid = await _writeObject({
-        fs: fs21,
+        fs: fs23,
         gitdir,
         type: "tag",
         object,
@@ -26140,12 +27499,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return oid;
     }
-    async function writeTag({ fs: fs21, dir, gitdir = join3(dir, ".git"), tag: tag2 }) {
+    async function writeTag({ fs: fs23, dir, gitdir = join3(dir, ".git"), tag: tag2 }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("tag", tag2);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeTag({
           fs: fsp,
@@ -26157,12 +27516,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function writeTree({ fs: fs21, dir, gitdir = join3(dir, ".git"), tree }) {
+    async function writeTree({ fs: fs23, dir, gitdir = join3(dir, ".git"), tree }) {
       try {
-        assertParameter("fs", fs21);
+        assertParameter("fs", fs23);
         assertParameter("gitdir", gitdir);
         assertParameter("tree", tree);
-        const fsp = new FileSystem(fs21);
+        const fsp = new FileSystem(fs23);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeTree({
           fs: fsp,
@@ -26332,7 +27691,7 @@ __export(vaultgit_exports, {
 async function porcelainDiff(diskPath, headBlob) {
   let work;
   try {
-    work = await import_node_fs9.default.promises.readFile(diskPath);
+    work = await import_node_fs7.default.promises.readFile(diskPath);
   } catch {
     work = null;
   }
@@ -26364,7 +27723,7 @@ async function attributeDate(commit3, touched, keep, into) {
 async function changedBlobPaths(root, commitOid, parentOid, cache) {
   const out = [];
   await git.walk({
-    fs: import_node_fs9.default,
+    fs: import_node_fs7.default,
     dir: root,
     cache,
     trees: [git.TREE({ ref: commitOid }), git.TREE({ ref: parentOid })],
@@ -26418,14 +27777,14 @@ function normalizeEol(s) {
 }
 function fallbackUser() {
   try {
-    const u = import_node_os3.default.userInfo();
+    const u = import_node_os.default.userInfo();
     if (u.username) return u.username;
   } catch {
   }
   return "enchiridion";
 }
 function fallbackHost() {
-  const host = import_node_os3.default.hostname();
+  const host = import_node_os.default.hostname();
   return host || "localhost";
 }
 function messageOf(err) {
@@ -26434,12 +27793,12 @@ function messageOf(err) {
 async function withCommitLock(lockPath, fn) {
   const LOCK_TIMEOUT_MS = 3e4;
   const RETRY_MS = 5;
-  import_node_fs9.default.mkdirSync(import_node_path10.default.dirname(lockPath), { recursive: true });
+  import_node_fs7.default.mkdirSync(import_node_path8.default.dirname(lockPath), { recursive: true });
   const start = Date.now();
   let fd;
   for (; ; ) {
     try {
-      fd = import_node_fs9.default.openSync(lockPath, "wx");
+      fd = import_node_fs7.default.openSync(lockPath, "wx");
       break;
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
@@ -26454,21 +27813,21 @@ async function withCommitLock(lockPath, fn) {
   try {
     return await fn();
   } finally {
-    if (fd !== void 0) import_node_fs9.default.closeSync(fd);
+    if (fd !== void 0) import_node_fs7.default.closeSync(fd);
     try {
-      import_node_fs9.default.unlinkSync(lockPath);
+      import_node_fs7.default.unlinkSync(lockPath);
     } catch {
     }
   }
 }
 async function readBlobAsString(root, oid) {
-  const { blob } = await git.readBlob({ fs: import_node_fs9.default, dir: root, oid });
+  const { blob } = await git.readBlob({ fs: import_node_fs7.default, dir: root, oid });
   return Buffer.from(blob).toString("utf8");
 }
 async function resolveFilePath(root, headOid, filePath) {
   let foundOid = null;
   await git.walk({
-    fs: import_node_fs9.default,
+    fs: import_node_fs7.default,
     dir: root,
     trees: [git.TREE({ ref: headOid })],
     map: async (fp, [entry]) => {
@@ -26483,14 +27842,14 @@ async function resolveFilePath(root, headOid, filePath) {
   if (!foundOid) throw new Error(`${filePath} not found in HEAD`);
   return foundOid;
 }
-var git, import_node_fs9, import_node_os3, import_node_path10, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE, KEEP_ALL;
+var git, import_node_fs7, import_node_os, import_node_path8, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE, KEEP_ALL;
 var init_vaultgit = __esm({
   "src/vaultgit.ts"() {
     "use strict";
     git = __toESM(require_isomorphic_git(), 1);
-    import_node_fs9 = __toESM(require("node:fs"), 1);
-    import_node_os3 = __toESM(require("node:os"), 1);
-    import_node_path10 = __toESM(require("node:path"), 1);
+    import_node_fs7 = __toESM(require("node:fs"), 1);
+    import_node_os = __toESM(require("node:os"), 1);
+    import_node_path8 = __toESM(require("node:path"), 1);
     init_pagepredicate();
     VaultGitError = class extends Error {
       constructor(message) {
@@ -26506,7 +27865,7 @@ var init_vaultgit = __esm({
       /** Initialise a git repository at root. Strict: throws on failure. */
       async init() {
         try {
-          await git.init({ fs: import_node_fs9.default, dir: this.root });
+          await git.init({ fs: import_node_fs7.default, dir: this.root });
         } catch (err) {
           throw new VaultGitError(`git init ${this.root}: ${messageOf(err)}`);
         }
@@ -26524,7 +27883,7 @@ var init_vaultgit = __esm({
       async add(paths) {
         const tracked = await this.trackedFiles();
         for (const pagePath of paths) {
-          if (!import_node_fs9.default.existsSync(import_node_path10.default.join(this.root, pagePath))) {
+          if (!import_node_fs7.default.existsSync(import_node_path8.default.join(this.root, pagePath))) {
             if (!tracked.some((file) => coveredByPaths(file, [pagePath]))) {
               throw new VaultGitError(
                 `git add ${pagePath}: no such file or directory`
@@ -26533,7 +27892,7 @@ var init_vaultgit = __esm({
             continue;
           }
           try {
-            await git.add({ fs: import_node_fs9.default, dir: this.root, filepath: pagePath });
+            await git.add({ fs: import_node_fs7.default, dir: this.root, filepath: pagePath });
           } catch (err) {
             throw new VaultGitError(`git add ${pagePath}: ${messageOf(err)}`);
           }
@@ -26543,7 +27902,7 @@ var init_vaultgit = __esm({
       /** Every path in HEAD's tree, or [] when there is no HEAD yet (first commit). */
       async trackedFiles() {
         try {
-          return await git.listFiles({ fs: import_node_fs9.default, dir: this.root, ref: "HEAD" });
+          return await git.listFiles({ fs: import_node_fs7.default, dir: this.root, ref: "HEAD" });
         } catch {
           return [];
         }
@@ -26552,8 +27911,8 @@ var init_vaultgit = __esm({
       async stageRemovals(tracked, paths) {
         for (const file of tracked) {
           if (!coveredByPaths(file, paths)) continue;
-          if (!import_node_fs9.default.existsSync(import_node_path10.default.join(this.root, file))) {
-            await git.remove({ fs: import_node_fs9.default, dir: this.root, filepath: file });
+          if (!import_node_fs7.default.existsSync(import_node_path8.default.join(this.root, file))) {
+            await git.remove({ fs: import_node_fs7.default, dir: this.root, filepath: file });
           }
         }
       }
@@ -26567,7 +27926,7 @@ var init_vaultgit = __esm({
        * process.
        */
       async stageAndCommit(paths, message) {
-        const lockPath = import_node_path10.default.join(this.root, ".wiki-knowledge", "ingest.lock");
+        const lockPath = import_node_path8.default.join(this.root, ".wiki-knowledge", "ingest.lock");
         return withCommitLock(lockPath, async () => {
           if (paths.length > 0) {
             await this.add(paths);
@@ -26583,7 +27942,7 @@ var init_vaultgit = __esm({
             throw new VaultGitError("git commit: nothing to commit");
           }
           return await git.commit({
-            fs: import_node_fs9.default,
+            fs: import_node_fs7.default,
             dir: this.root,
             message,
             author: signature,
@@ -26598,7 +27957,7 @@ var init_vaultgit = __esm({
       async hasStagedChanges() {
         let staged = false;
         await git.walk({
-          fs: import_node_fs9.default,
+          fs: import_node_fs7.default,
           dir: this.root,
           trees: [git.TREE({ ref: "HEAD" }), git.STAGE()],
           map: async (filepath, [head, stage]) => {
@@ -26618,7 +27977,7 @@ var init_vaultgit = __esm({
       /** Whether root is a git work tree. Lenient: false when absent/unreadable. */
       async isWorkTree() {
         try {
-          await git.findRoot({ fs: import_node_fs9.default, filepath: this.root });
+          await git.findRoot({ fs: import_node_fs7.default, filepath: this.root });
           return true;
         } catch {
           return false;
@@ -26639,7 +27998,7 @@ var init_vaultgit = __esm({
       async committedPages(since) {
         let headOid;
         try {
-          headOid = await git.resolveRef({ fs: import_node_fs9.default, dir: this.root, ref: "HEAD" });
+          headOid = await git.resolveRef({ fs: import_node_fs7.default, dir: this.root, ref: "HEAD" });
         } catch {
           return { head: "", fullRebuild: false, pages: [] };
         }
@@ -26666,7 +28025,7 @@ var init_vaultgit = __esm({
       async lastCommitDate(rel) {
         let headOid;
         try {
-          headOid = await git.resolveRef({ fs: import_node_fs9.default, dir: this.root, ref: "HEAD" });
+          headOid = await git.resolveRef({ fs: import_node_fs7.default, dir: this.root, ref: "HEAD" });
         } catch {
           return "";
         }
@@ -26697,17 +28056,17 @@ var init_vaultgit = __esm({
           let headBlob = null;
           try {
             const headOid = await git.resolveRef({
-              fs: import_node_fs9.default,
+              fs: import_node_fs7.default,
               dir: this.root,
               ref: "HEAD"
             });
             const oid = await resolveFilePath(this.root, headOid, rel);
-            const { blob } = await git.readBlob({ fs: import_node_fs9.default, dir: this.root, oid });
+            const { blob } = await git.readBlob({ fs: import_node_fs7.default, dir: this.root, oid });
             headBlob = Buffer.from(blob);
           } catch {
             headBlob = null;
           }
-          return await porcelainDiff(import_node_path10.default.join(this.root, rel), headBlob);
+          return await porcelainDiff(import_node_path8.default.join(this.root, rel), headBlob);
         } catch {
           return false;
         }
@@ -26720,7 +28079,7 @@ var init_vaultgit = __esm({
       async dirtyFiles(subtrees) {
         try {
           const matrix = await git.statusMatrix({
-            fs: import_node_fs9.default,
+            fs: import_node_fs7.default,
             dir: this.root,
             filter: (f) => coveredByPaths(f, subtrees)
           });
@@ -26749,7 +28108,7 @@ var init_vaultgit = __esm({
       async scanFacts() {
         let headOid;
         try {
-          headOid = await git.resolveRef({ fs: import_node_fs9.default, dir: this.root, ref: "HEAD" });
+          headOid = await git.resolveRef({ fs: import_node_fs7.default, dir: this.root, ref: "HEAD" });
         } catch {
           return new ScanFacts(this.root, /* @__PURE__ */ new Map(), /* @__PURE__ */ new Map());
         }
@@ -26796,9 +28155,9 @@ var init_vaultgit = __esm({
           timezoneOffset: (/* @__PURE__ */ new Date()).getTimezoneOffset()
         };
       }
-      async tryConfig(path28) {
+      async tryConfig(path32) {
         try {
-          const value = await git.getConfig({ fs: import_node_fs9.default, dir: this.root, path: path28 });
+          const value = await git.getConfig({ fs: import_node_fs7.default, dir: this.root, path: path32 });
           return typeof value === "string" ? value : "";
         } catch {
           return "";
@@ -26816,7 +28175,7 @@ var init_vaultgit = __esm({
         let commits;
         try {
           commits = await git.log({
-            fs: import_node_fs9.default,
+            fs: import_node_fs7.default,
             dir: this.root,
             ref: headOid,
             includeChanges: true
@@ -26894,7 +28253,7 @@ var init_vaultgit = __esm({
         const latest = /* @__PURE__ */ new Map();
         try {
           const commits = await git.log({
-            fs: import_node_fs9.default,
+            fs: import_node_fs7.default,
             dir: this.root,
             ref: headOid,
             cache
@@ -26911,7 +28270,7 @@ var init_vaultgit = __esm({
         } catch {
         }
         const out = /* @__PURE__ */ new Map();
-        for (const [path28, when] of latest) out.set(path28, formatDate(when / 1e3));
+        for (const [path32, when] of latest) out.set(path32, formatDate(when / 1e3));
         return out;
       }
       /** Read `filePath` from head's tree, or null when it's deleted there. */
@@ -26930,7 +28289,7 @@ var init_vaultgit = __esm({
        */
       async walkTree(headOid, visit, cache = {}) {
         await git.walk({
-          fs: import_node_fs9.default,
+          fs: import_node_fs7.default,
           dir: this.root,
           cache,
           trees: [git.TREE({ ref: headOid })],
@@ -26960,1376 +28319,17 @@ var init_vaultgit = __esm({
         const oid = this.treeOids.get(rel);
         if (oid !== void 0) {
           try {
-            const { blob } = await git.readBlob({ fs: import_node_fs9.default, dir: this.root, oid });
+            const { blob } = await git.readBlob({ fs: import_node_fs7.default, dir: this.root, oid });
             headBlob = Buffer.from(blob);
           } catch {
             headBlob = null;
           }
         }
-        return porcelainDiff(import_node_path10.default.join(this.root, rel), headBlob);
+        return porcelainDiff(import_node_path8.default.join(this.root, rel), headBlob);
       }
     };
     EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
     KEEP_ALL = () => true;
-  }
-});
-
-// node_modules/node-sqlite3-wasm/dist/node-sqlite3-wasm.js
-var require_node_sqlite3_wasm = __commonJS({
-  "node_modules/node-sqlite3-wasm/dist/node-sqlite3-wasm.js"(exports2, module2) {
-    var Module = typeof Module != "undefined" ? Module : {};
-    var ENVIRONMENT_IS_NODE = true;
-    var INT32_MIN = -2147483648;
-    var INT32_MAX = 2147483647;
-    var NULL = 0;
-    var SQLITE_OK = 0;
-    var SQLITE_ROW = 100;
-    var SQLITE_DONE = 101;
-    var SQLITE_INTEGER = 1;
-    var SQLITE_FLOAT = 2;
-    var SQLITE_TEXT = 3;
-    var SQLITE_BLOB = 4;
-    var SQLITE_NULL = 5;
-    var SQLITE_UTF8 = 1;
-    var SQLITE_TRANSIENT = -1;
-    var SQLITE_DETERMINISTIC = 2048;
-    var temp;
-    var sqlite3 = {};
-    Module.onRuntimeInitialized = () => {
-      temp = stackAlloc(4);
-      const v = null;
-      const n = "number";
-      const s = "string";
-      const n1 = [n];
-      const n2 = [n, ...n1];
-      const n3 = [n, ...n2];
-      const n4 = [n, ...n3];
-      const n5 = [n, ...n4];
-      const signatures = { open_v2: [n, [s, n, n, s]], exec: [n, n5], errmsg: [s, n1], prepare_v2: [n, n5], close_v2: [n, n1], finalize: [n, n1], reset: [n, n1], clear_bindings: [n, n1], bind_int: [n, n3], bind_int64: [n, n3], bind_double: [n, n3], bind_text: [n, n5], bind_blob: [n, n5], bind_blob64: [n, n5], bind_null: [n, n2], bind_parameter_index: [n, [n, s]], step: [n, n1], column_int64: [n, n2], column_double: [n, n2], column_text: [s, n2], column_blob: [n, n2], column_type: [n, n2], column_name: [s, n2], column_count: [n, n1], column_bytes: [n, n2], last_insert_rowid: [n, n1], changes: [n, n1], create_function_v2: [n, [n, s, n, n, n, n, n, n, n]], value_type: [n, n1], value_text: [s, n1], value_blob: [n, n1], value_int64: [n, n1], value_double: [n, n1], value_bytes: [n, n1], result_double: [v, n2], result_null: [v, n1], result_text: [v, n4], result_blob: [v, n4], result_blob64: [v, n4], result_int: [v, n2], result_int64: [v, n2], result_error: [v, n3], column_table_name: [s, n2], get_autocommit: [n, n1] };
-      for (const [name, sig] of Object.entries(signatures)) {
-        sqlite3[name] = cwrap(`sqlite3_${name}`, sig[0], sig[1]);
-      }
-    };
-    var SQLite3Error = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "SQLite3Error";
-      }
-    };
-    function arrayToHeap(array) {
-      const ptr = _malloc(array.byteLength);
-      HEAPU8.set(array, ptr);
-      return ptr;
-    }
-    function stringToHeap(str) {
-      const size = lengthBytesUTF8(str) + 1;
-      const ptr = _malloc(size);
-      stringToUTF8(str, ptr, size);
-      return ptr;
-    }
-    function toNumberOrNot(bigInt) {
-      if (bigInt >= Number.MIN_SAFE_INTEGER && bigInt <= Number.MAX_SAFE_INTEGER) {
-        return Number(bigInt);
-      }
-      return bigInt;
-    }
-    function parseFunctionArguments(argc, argv) {
-      const args = [];
-      for (let i = 0; i < argc; i++) {
-        const ptr = getValue(argv + 4 * i, "i32");
-        const type = sqlite3.value_type(ptr);
-        let arg;
-        switch (type) {
-          case SQLITE_INTEGER:
-            arg = toNumberOrNot(sqlite3.value_int64(ptr));
-            break;
-          case SQLITE_FLOAT:
-            arg = sqlite3.value_double(ptr);
-            break;
-          case SQLITE_TEXT:
-            arg = sqlite3.value_text(ptr);
-            break;
-          case SQLITE_BLOB:
-            const p = sqlite3.value_blob(ptr);
-            if (p != NULL) {
-              arg = HEAPU8.slice(p, p + sqlite3.value_bytes(ptr));
-            } else {
-              arg = new Uint8Array();
-            }
-            break;
-          case SQLITE_NULL:
-            arg = null;
-            break;
-        }
-        args.push(arg);
-      }
-      return args;
-    }
-    function setFunctionResult(cx, result) {
-      switch (typeof result) {
-        case "boolean":
-          sqlite3.result_int(cx, result ? 1 : 0);
-          break;
-        case "number":
-          if (Number.isSafeInteger(result)) {
-            if (result >= INT32_MIN && result <= INT32_MAX) {
-              sqlite3.result_int(cx, result);
-            } else {
-              sqlite3.result_int64(cx, BigInt(result));
-            }
-          } else {
-            sqlite3.result_double(cx, result);
-          }
-          break;
-        case "bigint":
-          sqlite3.result_int64(cx, result);
-          break;
-        case "string":
-          const tempPtr = stringToHeap(result);
-          sqlite3.result_text(cx, tempPtr, -1, SQLITE_TRANSIENT);
-          _free(tempPtr);
-          break;
-        case "object":
-          if (result === null) {
-            sqlite3.result_null(cx);
-          } else if (result instanceof Uint8Array) {
-            const tempPtr2 = arrayToHeap(result);
-            if (result.byteLength <= INT32_MAX) {
-              sqlite3.result_blob(cx, tempPtr2, result.byteLength, SQLITE_TRANSIENT);
-            } else {
-              sqlite3.result_blob64(cx, tempPtr2, BigInt(result.byteLength), SQLITE_TRANSIENT);
-            }
-            _free(tempPtr2);
-          } else {
-            throw new SQLite3Error(`Unsupported type for function result: "${typeof result}"`);
-          }
-          break;
-        default:
-          throw new SQLite3Error(`Unsupported type for function result: "${typeof result}"`);
-      }
-    }
-    var Database2 = class {
-      constructor(filename, { fileMustExist = false, readOnly = false } = {}) {
-        let flags;
-        if (readOnly) {
-          flags = SQLITE_OPEN_READONLY;
-        } else {
-          flags = SQLITE_OPEN_READWRITE;
-          if (!fileMustExist) flags |= SQLITE_OPEN_CREATE;
-        }
-        const rc = sqlite3.open_v2(filename, temp, flags, NULL);
-        this._ptr = getValue(temp, "i32");
-        if (rc !== SQLITE_OK) {
-          if (this._ptr !== NULL) sqlite3.close_v2(this._ptr);
-          throw new SQLite3Error(`Could not open the database "${filename}"`);
-        }
-        this._functions = /* @__PURE__ */ new Map();
-      }
-      get isOpen() {
-        return this._ptr !== null;
-      }
-      get inTransaction() {
-        this._assertOpen();
-        return sqlite3.get_autocommit(this._ptr) === 0;
-      }
-      close() {
-        this._assertOpen();
-        for (const func of this._functions.values()) removeFunction(func);
-        this._functions.clear();
-        this._handleError(sqlite3.close_v2(this._ptr));
-        this._ptr = null;
-      }
-      function(name, func, { deterministic = false } = {}) {
-        this._assertOpen();
-        function wrappedFunc(cx, argc, argv) {
-          const args = parseFunctionArguments(argc, argv);
-          let result;
-          try {
-            result = func.apply(null, args);
-          } catch (err2) {
-            const tempPtr = stringToHeap(err2.toString());
-            sqlite3.result_error(cx, tempPtr, -1);
-            _free(tempPtr);
-            return;
-          }
-          setFunctionResult(cx, result);
-        }
-        if (this._functions.has(name)) {
-          removeFunction(this._functions.get(name));
-          this._functions.delete(name);
-        }
-        const funcPtr = addFunction(wrappedFunc, "viii");
-        this._functions.set(name, funcPtr);
-        let eTextRep = SQLITE_UTF8;
-        if (deterministic) eTextRep |= SQLITE_DETERMINISTIC;
-        this._handleError(sqlite3.create_function_v2(this._ptr, name, func.length, eTextRep, NULL, funcPtr, NULL, NULL, NULL));
-        return this;
-      }
-      exec(sql) {
-        this._assertOpen();
-        const tempPtr = stringToHeap(sql);
-        try {
-          this._handleError(sqlite3.exec(this._ptr, tempPtr, NULL, NULL, NULL));
-        } finally {
-          _free(tempPtr);
-        }
-      }
-      prepare(sql) {
-        this._assertOpen();
-        return new Statement(this, sql);
-      }
-      run(sql, values) {
-        const stmt = this.prepare(sql);
-        try {
-          return stmt.run(values);
-        } finally {
-          stmt.finalize();
-        }
-      }
-      all(sql, values, { expand = false } = {}) {
-        return this._query(sql, values, false, expand);
-      }
-      get(sql, values, { expand = false } = {}) {
-        return this._query(sql, values, true, expand);
-      }
-      _query(sql, values, single, expand) {
-        const stmt = this.prepare(sql);
-        try {
-          if (single) {
-            return stmt.get(values, { expand });
-          } else {
-            return stmt.all(values, { expand });
-          }
-        } finally {
-          stmt.finalize();
-        }
-      }
-      _assertOpen() {
-        if (!this.isOpen) throw new SQLite3Error("Database already closed");
-      }
-      _handleError(returnCode) {
-        if (returnCode !== SQLITE_OK) throw new SQLite3Error(sqlite3.errmsg(this._ptr));
-      }
-    };
-    var Statement = class {
-      constructor(db, sql) {
-        const tempPtr = stringToHeap(sql);
-        try {
-          db._handleError(sqlite3.prepare_v2(db._ptr, tempPtr, -1, temp, NULL));
-        } finally {
-          _free(tempPtr);
-        }
-        this._ptr = getValue(temp, "i32");
-        if (this._ptr === NULL) throw new SQLite3Error("Nothing to prepare");
-        this._db = db;
-      }
-      get database() {
-        return this._db;
-      }
-      get isFinalized() {
-        return this._ptr === null;
-      }
-      run(values) {
-        this._assertReady();
-        this._bind(values);
-        this._step();
-        return { changes: sqlite3.changes(this._db._ptr), lastInsertRowid: toNumberOrNot(sqlite3.last_insert_rowid(this._db._ptr)) };
-      }
-      iterate(values, { expand = false } = {}) {
-        return this._queryRows(values, expand);
-      }
-      all(values, { expand = false } = {}) {
-        return Array.from(this.iterate(values, { expand }));
-      }
-      get(values, { expand = false } = {}) {
-        const result = this._queryRows(values, expand).next();
-        return result.done ? null : result.value;
-      }
-      finalize() {
-        if (this.isFinalized) throw new SQLite3Error("Statement already finalized");
-        try {
-          this._db._handleError(sqlite3.finalize(this._ptr));
-        } finally {
-          this._ptr = null;
-        }
-      }
-      _reset() {
-        return sqlite3.clear_bindings(this._ptr) === SQLITE_OK && sqlite3.reset(this._ptr) === SQLITE_OK;
-      }
-      *_queryRows(values, expand) {
-        this._assertReady();
-        this._bind(values);
-        const columns = this._getColumnNames();
-        while (this._step()) yield this._getRow(columns, expand);
-      }
-      _bind(values) {
-        if (!this._reset()) {
-          throw new SQLite3Error("Could not reset statement prior to binding new values");
-        }
-        if (Array.isArray(values)) {
-          this._bindArray(values);
-        } else if (values != null && typeof values === "object") {
-          this._bindObject(values);
-        } else if (typeof values !== "undefined") {
-          this._bindValue(values, 1);
-        }
-      }
-      _step() {
-        const ret = sqlite3.step(this._ptr);
-        switch (ret) {
-          case SQLITE_ROW:
-            return true;
-          case SQLITE_DONE:
-            return false;
-          default:
-            this._db._handleError(ret);
-        }
-      }
-      _getRow(columns, expand) {
-        const row = {};
-        for (let i = 0; i < columns.length; i++) {
-          let v;
-          const colType = sqlite3.column_type(this._ptr, i);
-          switch (colType) {
-            case SQLITE_INTEGER:
-              v = toNumberOrNot(sqlite3.column_int64(this._ptr, i));
-              break;
-            case SQLITE_FLOAT:
-              v = sqlite3.column_double(this._ptr, i);
-              break;
-            case SQLITE_TEXT:
-              v = sqlite3.column_text(this._ptr, i);
-              break;
-            case SQLITE_BLOB:
-              const p = sqlite3.column_blob(this._ptr, i);
-              if (p != NULL) {
-                v = HEAPU8.slice(p, p + sqlite3.column_bytes(this._ptr, i));
-              } else {
-                v = new Uint8Array();
-              }
-              break;
-            case SQLITE_NULL:
-              v = null;
-              break;
-          }
-          const column = columns[i];
-          if (expand) {
-            let table2 = sqlite3.column_table_name(this._ptr, i);
-            table2 = table2 === "" ? "$" : table2;
-            if (Object.hasOwn(row, table2)) {
-              row[table2][column] = v;
-            } else {
-              row[table2] = { [column]: v };
-            }
-          } else {
-            row[column] = v;
-          }
-        }
-        return row;
-      }
-      _getColumnNames() {
-        const names = [];
-        const columns = sqlite3.column_count(this._ptr);
-        for (let i = 0; i < columns; i++) names.push(sqlite3.column_name(this._ptr, i));
-        return names;
-      }
-      _bindArray(values) {
-        for (let i = 0; i < values.length; i++) this._bindValue(values[i], i + 1);
-      }
-      _bindObject(values) {
-        for (const [param, value] of Object.entries(values)) {
-          const i = sqlite3.bind_parameter_index(this._ptr, param);
-          if (i === 0) throw new SQLite3Error(`Unknown binding parameter: "${param}"`);
-          this._bindValue(value, i);
-        }
-      }
-      _bindValue(value, position) {
-        let ret;
-        switch (typeof value) {
-          case "string":
-            const tempPtr = stringToHeap(value);
-            ret = sqlite3.bind_text(this._ptr, position, tempPtr, -1, SQLITE_TRANSIENT);
-            _free(tempPtr);
-            break;
-          case "number":
-            if (Number.isSafeInteger(value)) {
-              if (value >= INT32_MIN && value <= INT32_MAX) {
-                ret = sqlite3.bind_int(this._ptr, position, value);
-              } else {
-                ret = sqlite3.bind_int64(this._ptr, position, BigInt(value));
-              }
-            } else {
-              ret = sqlite3.bind_double(this._ptr, position, value);
-            }
-            break;
-          case "bigint":
-            ret = sqlite3.bind_int64(this._ptr, position, value);
-            break;
-          case "boolean":
-            ret = sqlite3.bind_int(this._ptr, position, value ? 1 : 0);
-            break;
-          case "object":
-            if (value === null) {
-              ret = sqlite3.bind_null(this._ptr, position);
-            } else if (value instanceof Uint8Array) {
-              const tempPtr2 = arrayToHeap(value);
-              if (value.byteLength <= INT32_MAX) {
-                ret = sqlite3.bind_blob(this._ptr, position, tempPtr2, value.byteLength, SQLITE_TRANSIENT);
-              } else {
-                ret = sqlite3.bind_blob64(this._ptr, position, tempPtr2, BigInt(value.byteLength), SQLITE_TRANSIENT);
-              }
-              _free(tempPtr2);
-            } else {
-              throw new SQLite3Error(`Unsupported type for binding: "${typeof value}"`);
-            }
-            break;
-          default:
-            throw new SQLite3Error(`Unsupported type for binding: "${typeof value}"`);
-        }
-        if (ret !== SQLITE_OK) this._db._handleError(ret);
-      }
-      _assertReady() {
-        if (this.isFinalized) throw new SQLite3Error("Statement already finalized");
-        if (!this._db.isOpen) throw new SQLite3Error("Database is closed");
-      }
-    };
-    Module.Database = Database2;
-    Module.SQLite3Error = SQLite3Error;
-    var path28 = require("node:path");
-    var crypto2 = require("node:crypto");
-    var SQLITE_CANTOPEN = 14;
-    var SQLITE_IOERR_READ = 266;
-    var SQLITE_IOERR_SHORT_READ = 522;
-    var SQLITE_IOERR_FSYNC = 1034;
-    var SQLITE_IOERR_WRITE = 778;
-    var SQLITE_IOERR_DELETE = 2570;
-    var SQLITE_IOERR_CLOSE = 4106;
-    var SQLITE_IOERR_TRUNCATE = 1546;
-    var SQLITE_IOERR_FSTAT = 1802;
-    var SQLITE_IOERR_LOCK = 3850;
-    var SQLITE_IOERR_UNLOCK = 2058;
-    var SQLITE_OPEN_READONLY = 1;
-    var SQLITE_OPEN_READWRITE = 2;
-    var SQLITE_OPEN_CREATE = 4;
-    var SQLITE_OPEN_EXCLUSIVE = 16;
-    var SQLITE_ACCESS_READWRITE = 1;
-    var SQLITE_ACCESS_READ = 2;
-    var SQLITE_LOCK_NONE = 0;
-    var SQLITE_BUSY = 5;
-    function _fd(fileInfo) {
-      return getValue(fileInfo + 4, "i32");
-    }
-    function _isLocked(fileInfo) {
-      return getValue(fileInfo + 8, "i32") != 0;
-    }
-    function _setLocked(fileInfo, locked) {
-      setValue(fileInfo + 8, locked ? 1 : 0, "i32");
-    }
-    function _path(fileInfo) {
-      return UTF8ToString(getValue(fileInfo + 12, "i32"));
-    }
-    function _safeInt(bigInt) {
-      if (bigInt < Number.MIN_SAFE_INTEGER || bigInt > Number.MAX_SAFE_INTEGER) throw 0;
-      return Number(bigInt);
-    }
-    var programArgs = [];
-    var thisProgram = "./this.program";
-    var quit_ = (status, toThrow) => {
-      throw toThrow;
-    };
-    var _scriptName;
-    if (typeof __filename != "undefined") {
-      _scriptName = __filename;
-    } else {
-    }
-    var scriptDirectory = "";
-    function locateFile(path29) {
-      if (Module["locateFile"]) {
-        return Module["locateFile"](path29, scriptDirectory);
-      }
-      return scriptDirectory + path29;
-    }
-    var readAsync;
-    var readBinary;
-    if (ENVIRONMENT_IS_NODE) {
-      fs21 = require("node:fs");
-      scriptDirectory = __dirname + "/";
-      readBinary = (filename) => {
-        filename = isFileURI(filename) ? new URL(filename) : filename;
-        var ret = fs21.readFileSync(filename);
-        return ret;
-      };
-      readAsync = async (filename, binary = true) => {
-        filename = isFileURI(filename) ? new URL(filename) : filename;
-        var ret = fs21.readFileSync(filename, binary ? void 0 : "utf8");
-        return ret;
-      };
-      if (process.argv.length > 1) {
-        thisProgram = process.argv[1].replace(/\\/g, "/");
-      }
-      programArgs = process.argv.slice(2);
-      if (typeof module2 != "undefined") {
-        module2["exports"] = Module;
-      }
-      quit_ = (status, toThrow) => {
-        process.exitCode = status;
-        throw toThrow;
-      };
-    } else {
-    }
-    var fs21;
-    var out = console.log.bind(console);
-    var err = console.error.bind(console);
-    var wasmBinary;
-    var ABORT = false;
-    var EXITSTATUS;
-    var isFileURI = (filename) => filename.startsWith("file://");
-    var runtimeInitialized = false;
-    function getMemoryBuffer() {
-      return wasmMemory.buffer;
-    }
-    function updateMemoryViews() {
-      if (HEAP8?.buffer?.resizable) return;
-      var b = getMemoryBuffer();
-      HEAP8 = new Int8Array(b);
-      HEAP16 = new Int16Array(b);
-      HEAPU8 = new Uint8Array(b);
-      HEAP32 = new Int32Array(b);
-      HEAPU32 = new Uint32Array(b);
-      HEAPF32 = new Float32Array(b);
-      HEAPF64 = new Float64Array(b);
-      HEAP64 = new BigInt64Array(b);
-    }
-    function preRun() {
-      var preRun2 = Module["preRun"];
-      if (preRun2) {
-        if (typeof preRun2 == "function") preRun2 = [preRun2];
-        onPreRuns.push(...preRun2);
-      }
-      callRuntimeCallbacks(onPreRuns);
-    }
-    function initRuntime() {
-      runtimeInitialized = true;
-      wasmExports["z"]();
-    }
-    function postRun() {
-      var postRun2 = Module["postRun"];
-      if (postRun2) {
-        if (typeof postRun2 == "function") postRun2 = [postRun2];
-        onPostRuns.push(...postRun2);
-      }
-      callRuntimeCallbacks(onPostRuns);
-    }
-    function abort(what) {
-      Module["onAbort"]?.(what);
-      what = `Aborted(${what})`;
-      err(what);
-      ABORT = true;
-      what += ". Build with -sASSERTIONS for more info.";
-      var e = new WebAssembly.RuntimeError(what);
-      throw e;
-    }
-    var wasmBinaryFile;
-    function findWasmBinary() {
-      return locateFile("node-sqlite3-wasm.wasm");
-    }
-    function getBinarySync(file) {
-      if (file == wasmBinaryFile && wasmBinary) {
-        return new Uint8Array(wasmBinary);
-      }
-      if (readBinary) {
-        return readBinary(file);
-      }
-      throw 'sync fetching of the wasm failed: you can preload it to Module["wasmBinary"] manually, or emcc.py will do that for you when generating HTML (but not JS)';
-    }
-    function instantiateSync(file, info) {
-      var module3;
-      var binary = getBinarySync(file);
-      module3 = new WebAssembly.Module(binary);
-      var instance = new WebAssembly.Instance(module3, info);
-      return [instance, module3];
-    }
-    function getWasmImports() {
-      var imports = { a: wasmImports };
-      return imports;
-    }
-    function createWasm() {
-      function receiveInstance(instance) {
-        wasmExports = instance.exports;
-        assignWasmExports(wasmExports);
-        updateMemoryViews();
-        return wasmExports;
-      }
-      var info = getWasmImports();
-      var instantiateWasm = Module["instantiateWasm"];
-      if (instantiateWasm) {
-        return new Promise((resolve6) => {
-          instantiateWasm(info, (inst) => resolve6(receiveInstance(inst)));
-        });
-      }
-      wasmBinaryFile ??= findWasmBinary();
-      var result = instantiateSync(wasmBinaryFile, info);
-      return receiveInstance(result[0]);
-    }
-    var ExitStatus = class {
-      name = "ExitStatus";
-      constructor(status) {
-        this.message = `Program terminated with exit(${status})`;
-        this.status = status;
-      }
-    };
-    var HEAP8;
-    var callRuntimeCallbacks = (callbacks) => {
-      while (callbacks.length > 0) {
-        callbacks.shift()(Module);
-      }
-    };
-    var onPostRuns = [];
-    var onPreRuns = [];
-    var noExitRuntime = true;
-    var stackRestore = (val) => __emscripten_stack_restore(val);
-    var stackSave = () => _emscripten_stack_get_current();
-    var __abort_js = () => abort("");
-    var runtimeKeepaliveCounter = 0;
-    var __emscripten_runtime_keepalive_clear = () => {
-      noExitRuntime = false;
-      runtimeKeepaliveCounter = 0;
-    };
-    var isLeapYear = (year) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    var MONTH_DAYS_LEAP_CUMULATIVE = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
-    var MONTH_DAYS_REGULAR_CUMULATIVE = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    var ydayFromDate = (date) => {
-      var leap = isLeapYear(date.getFullYear());
-      var monthDaysCumulative = leap ? MONTH_DAYS_LEAP_CUMULATIVE : MONTH_DAYS_REGULAR_CUMULATIVE;
-      var yday = monthDaysCumulative[date.getMonth()] + date.getDate() - 1;
-      return yday;
-    };
-    var INT53_MAX = 9007199254740992;
-    var INT53_MIN = -9007199254740992;
-    var bigintToI53Checked = (num) => num < INT53_MIN || num > INT53_MAX ? NaN : Number(num);
-    var HEAP32;
-    function __localtime_js(time, tmPtr) {
-      time = bigintToI53Checked(time);
-      var date = new Date(time * 1e3);
-      if (isNaN(date.getTime())) {
-        return 1;
-      }
-      HEAP32[tmPtr >> 2] = date.getSeconds();
-      HEAP32[tmPtr + 4 >> 2] = date.getMinutes();
-      HEAP32[tmPtr + 8 >> 2] = date.getHours();
-      HEAP32[tmPtr + 12 >> 2] = date.getDate();
-      HEAP32[tmPtr + 16 >> 2] = date.getMonth();
-      HEAP32[tmPtr + 20 >> 2] = date.getFullYear() - 1900;
-      HEAP32[tmPtr + 24 >> 2] = date.getDay();
-      var yday = ydayFromDate(date) | 0;
-      HEAP32[tmPtr + 28 >> 2] = yday;
-      HEAP32[tmPtr + 36 >> 2] = -(date.getTimezoneOffset() * 60);
-      var start = new Date(date.getFullYear(), 0, 1);
-      var summerOffset = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
-      var winterOffset = start.getTimezoneOffset();
-      var dst = (summerOffset != winterOffset && date.getTimezoneOffset() == Math.min(winterOffset, summerOffset)) | 0;
-      HEAP32[tmPtr + 32 >> 2] = dst;
-      return 0;
-    }
-    var timers = {};
-    var handleException = (e) => {
-      if (e instanceof ExitStatus || e == "unwind") {
-        return EXITSTATUS;
-      }
-      quit_(1, e);
-    };
-    var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
-    var _proc_exit = (code2) => {
-      EXITSTATUS = code2;
-      if (!keepRuntimeAlive()) {
-        Module["onExit"]?.(code2);
-        ABORT = true;
-      }
-      quit_(code2, new ExitStatus(code2));
-    };
-    var exitJS = (status, implicit) => {
-      EXITSTATUS = status;
-      _proc_exit(status);
-    };
-    var _exit = exitJS;
-    var maybeExit = () => {
-      if (!keepRuntimeAlive()) {
-        try {
-          _exit(EXITSTATUS);
-        } catch (e) {
-          handleException(e);
-        }
-      }
-    };
-    var callUserCallback = (func) => {
-      if (ABORT) {
-        return;
-      }
-      try {
-        return func();
-      } catch (e) {
-        handleException(e);
-      } finally {
-        maybeExit();
-      }
-    };
-    var _emscripten_get_now = () => performance.now();
-    var __setitimer_js = (which, timeout_ms) => {
-      if (timers[which]) {
-        clearTimeout(timers[which].id);
-        delete timers[which];
-      }
-      if (!timeout_ms) return 0;
-      var id = setTimeout(() => {
-        delete timers[which];
-        callUserCallback(() => __emscripten_timeout(which, _emscripten_get_now()));
-      }, timeout_ms);
-      timers[which] = { id, timeout_ms };
-      return 0;
-    };
-    var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
-      if (!(maxBytesToWrite > 0)) return 0;
-      var startIdx = outIdx;
-      var endIdx = outIdx + maxBytesToWrite - 1;
-      for (var i = 0; i < str.length; ++i) {
-        var u = str.codePointAt(i);
-        if (u <= 127) {
-          if (outIdx >= endIdx) break;
-          heap[outIdx++] = u;
-        } else if (u <= 2047) {
-          if (outIdx + 1 >= endIdx) break;
-          heap[outIdx++] = 192 | u >> 6;
-          heap[outIdx++] = 128 | u & 63;
-        } else if (u <= 65535) {
-          if (outIdx + 2 >= endIdx) break;
-          heap[outIdx++] = 224 | u >> 12;
-          heap[outIdx++] = 128 | u >> 6 & 63;
-          heap[outIdx++] = 128 | u & 63;
-        } else {
-          if (outIdx + 3 >= endIdx) break;
-          heap[outIdx++] = 240 | u >> 18;
-          heap[outIdx++] = 128 | u >> 12 & 63;
-          heap[outIdx++] = 128 | u >> 6 & 63;
-          heap[outIdx++] = 128 | u & 63;
-          i++;
-        }
-      }
-      heap[outIdx] = 0;
-      return outIdx - startIdx;
-    };
-    var HEAPU8;
-    var stringToUTF8 = (str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, HEAPU8, outPtr, maxBytesToWrite);
-    var HEAPU32;
-    var __tzset_js = (timezone, daylight, std_name, dst_name) => {
-      var currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-      var winter = new Date(currentYear, 0, 1);
-      var summer = new Date(currentYear, 6, 1);
-      var winterOffset = winter.getTimezoneOffset();
-      var summerOffset = summer.getTimezoneOffset();
-      var stdTimezoneOffset = Math.max(winterOffset, summerOffset);
-      HEAPU32[timezone >> 2] = stdTimezoneOffset * 60;
-      HEAP32[daylight >> 2] = Number(winterOffset != summerOffset);
-      var extractZone = (timezoneOffset) => {
-        var sign = timezoneOffset >= 0 ? "-" : "+";
-        var absOffset = Math.abs(timezoneOffset);
-        var hours = String(Math.floor(absOffset / 60)).padStart(2, "0");
-        var minutes = String(absOffset % 60).padStart(2, "0");
-        return `UTC${sign}${hours}${minutes}`;
-      };
-      var winterName = extractZone(winterOffset);
-      var summerName = extractZone(summerOffset);
-      if (summerOffset < winterOffset) {
-        stringToUTF8(winterName, std_name, 17);
-        stringToUTF8(summerName, dst_name, 17);
-      } else {
-        stringToUTF8(winterName, dst_name, 17);
-        stringToUTF8(summerName, std_name, 17);
-      }
-    };
-    var _emscripten_date_now = () => Date.now();
-    var getHeapMax = () => 2147483648;
-    var alignMemory = (size, alignment) => Math.ceil(size / alignment) * alignment;
-    var growMemory = (size) => {
-      var oldHeapSize = wasmMemory.buffer.byteLength;
-      var pages = (size - oldHeapSize + 65535) / 65536 | 0;
-      try {
-        wasmMemory.grow(pages);
-        updateMemoryViews();
-        return 1;
-      } catch (e) {
-      }
-    };
-    var _emscripten_resize_heap = (requestedSize) => {
-      var oldSize = HEAPU8.length;
-      requestedSize >>>= 0;
-      var maxHeapSize = getHeapMax();
-      if (requestedSize > maxHeapSize) {
-        return false;
-      }
-      for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
-        var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown);
-        overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296);
-        var newSize = Math.min(maxHeapSize, alignMemory(Math.max(requestedSize, overGrownHeapSize), 65536));
-        var replacement = growMemory(newSize);
-        if (replacement) {
-          return true;
-        }
-      }
-      return false;
-    };
-    var UTF8Decoder = globalThis.TextDecoder && new TextDecoder();
-    var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
-      var maxIdx = idx + maxBytesToRead;
-      if (ignoreNul) return maxIdx;
-      while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
-      return idx;
-    };
-    var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
-      var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
-      if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
-        return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
-      }
-      var str = "";
-      while (idx < endPtr) {
-        var u0 = heapOrArray[idx++];
-        if (!(u0 & 128)) {
-          str += String.fromCharCode(u0);
-          continue;
-        }
-        var u1 = heapOrArray[idx++] & 63;
-        if ((u0 & 224) == 192) {
-          str += String.fromCharCode((u0 & 31) << 6 | u1);
-          continue;
-        }
-        var u2 = heapOrArray[idx++] & 63;
-        if ((u0 & 240) == 224) {
-          u0 = (u0 & 15) << 12 | u1 << 6 | u2;
-        } else {
-          u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | heapOrArray[idx++] & 63;
-        }
-        if (u0 < 65536) {
-          str += String.fromCharCode(u0);
-        } else {
-          var ch = u0 - 65536;
-          str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
-        }
-      }
-      return str;
-    };
-    var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) => ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "";
-    var HEAP16;
-    var HEAPF32;
-    var HEAPF64;
-    var HEAP64;
-    function setValue(ptr, value, type = "i8") {
-      if (type.endsWith("*")) type = "*";
-      switch (type) {
-        case "i1":
-          HEAP8[ptr] = value;
-          break;
-        case "i8":
-          HEAP8[ptr] = value;
-          break;
-        case "i16":
-          HEAP16[ptr >> 1] = value;
-          break;
-        case "i32":
-          HEAP32[ptr >> 2] = value;
-          break;
-        case "i64":
-          HEAP64[ptr >> 3] = BigInt(value);
-          break;
-        case "float":
-          HEAPF32[ptr >> 2] = value;
-          break;
-        case "double":
-          HEAPF64[ptr >> 3] = value;
-          break;
-        case "*":
-          HEAPU32[ptr >> 2] = value;
-          break;
-        default:
-          abort(`invalid type for setValue: ${type}`);
-      }
-    }
-    function _nodejsAccess(vfs, filePath, flags, outResult) {
-      let aflags = fs21.constants.F_OK;
-      if (flags == SQLITE_ACCESS_READWRITE) aflags = fs21.constants.R_OK | fs21.constants.W_OK;
-      if (flags == SQLITE_ACCESS_READ) aflags = fs21.constants.R_OK;
-      try {
-        fs21.accessSync(UTF8ToString(filePath), aflags);
-        setValue(outResult, 1, "i32");
-      } catch {
-        setValue(outResult, 0, "i32");
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsCheckReservedLock(fi, outResult) {
-      try {
-        fs21.accessSync(`${_path(fi)}.lock`, fs21.constants.F_OK);
-        setValue(outResult, 1, "i32");
-      } catch {
-        setValue(outResult, 0, "i32");
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsClose(fi) {
-      _nodejsUnlock(fi, SQLITE_LOCK_NONE);
-      try {
-        fs21.closeSync(_fd(fi));
-      } catch {
-        return SQLITE_IOERR_CLOSE;
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsDelete(vfs, filePath, dirSync) {
-      const pathStr = UTF8ToString(filePath);
-      try {
-        fs21.unlinkSync(pathStr);
-      } catch (err2) {
-        if (err2.code != "ENOENT") return SQLITE_IOERR_DELETE;
-      }
-      if (dirSync) {
-        let fd = -1;
-        try {
-          fd = fs21.openSync(path28.dirname(pathStr), "r");
-          fs21.fsyncSync(fd);
-        } catch {
-          return SQLITE_IOERR_FSYNC;
-        } finally {
-          try {
-            fs21.closeSync(fd);
-          } catch {
-            return SQLITE_IOERR_FSYNC;
-          }
-        }
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsFileSize(fi, outSize) {
-      try {
-        setValue(outSize, fs21.fstatSync(_fd(fi)).size, "i64");
-      } catch {
-        return SQLITE_IOERR_FSTAT;
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsFullPathname(vfs, relPath2, sizeFullPath, outFullPath) {
-      const full = path28.resolve(UTF8ToString(relPath2));
-      stringToUTF8(full, outFullPath, sizeFullPath);
-      return full.length < sizeFullPath ? SQLITE_OK : SQLITE_CANTOPEN;
-    }
-    function _nodejsLock(fi, level) {
-      if (!_isLocked(fi)) {
-        try {
-          fs21.mkdirSync(`${_path(fi)}.lock`);
-        } catch (err2) {
-          return err2.code == "EEXIST" ? SQLITE_BUSY : SQLITE_IOERR_LOCK;
-        }
-        _setLocked(fi, true);
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsRandomness(vfs, bytes, outBuffer) {
-      const buf = HEAPU8.subarray(outBuffer, outBuffer + bytes);
-      crypto2.randomFillSync(buf);
-      return bytes;
-    }
-    function _nodejsRead(fi, outBuffer, bytes, offset) {
-      const buf = HEAPU8.subarray(outBuffer, outBuffer + bytes);
-      let bytesRead;
-      try {
-        bytesRead = fs21.readSync(_fd(fi), buf, 0, bytes, offset);
-      } catch {
-        return SQLITE_IOERR_READ;
-      }
-      if (bytesRead == bytes) {
-        return SQLITE_OK;
-      } else if (bytesRead >= 0) {
-        if (bytesRead < bytes) {
-          try {
-            buf.fill(0, bytesRead);
-          } catch {
-            return SQLITE_IOERR_READ;
-          }
-        }
-        return SQLITE_IOERR_SHORT_READ;
-      }
-      return SQLITE_IOERR_READ;
-    }
-    function _nodejsSync(fi, flags) {
-      try {
-        fs21.fsyncSync(_fd(fi));
-      } catch {
-        return SQLITE_IOERR_FSYNC;
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsTruncate(fi, size) {
-      try {
-        fs21.ftruncateSync(_fd(fi), _safeInt(size));
-      } catch {
-        return SQLITE_IOERR_TRUNCATE;
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsUnlock(fi, level) {
-      if (level == SQLITE_LOCK_NONE && _isLocked(fi)) {
-        try {
-          fs21.rmdirSync(`${_path(fi)}.lock`);
-        } catch (err2) {
-          if (err2.code != "ENOENT") return SQLITE_IOERR_UNLOCK;
-        }
-        _setLocked(fi, false);
-      }
-      return SQLITE_OK;
-    }
-    function _nodejsWrite(fi, buffer, bytes, offset) {
-      try {
-        const bytesWritten = fs21.writeSync(_fd(fi), HEAPU8.subarray(buffer, buffer + bytes), 0, bytes, _safeInt(offset));
-        return bytesWritten != bytes ? SQLITE_IOERR_WRITE : SQLITE_OK;
-      } catch {
-        return SQLITE_IOERR_WRITE;
-      }
-    }
-    function _nodejs_max_path_length() {
-      return process.platform == "win32" ? 260 : 4096;
-    }
-    function _nodejs_open(filePath, flags, mode) {
-      let oflags = 0;
-      if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= fs21.constants.O_EXCL;
-      if (flags & SQLITE_OPEN_CREATE) oflags |= fs21.constants.O_CREAT;
-      if (flags & SQLITE_OPEN_READONLY) oflags |= fs21.constants.O_RDONLY;
-      if (flags & SQLITE_OPEN_READWRITE) oflags |= fs21.constants.O_RDWR;
-      try {
-        return fs21.openSync(UTF8ToString(filePath), oflags, mode);
-      } catch {
-        return -1;
-      }
-    }
-    function getValue(ptr, type = "i8") {
-      if (type.endsWith("*")) type = "*";
-      switch (type) {
-        case "i1":
-          return HEAP8[ptr];
-        case "i8":
-          return HEAP8[ptr];
-        case "i16":
-          return HEAP16[ptr >> 1];
-        case "i32":
-          return HEAP32[ptr >> 2];
-        case "i64":
-          return HEAP64[ptr >> 3];
-        case "float":
-          return HEAPF32[ptr >> 2];
-        case "double":
-          return HEAPF64[ptr >> 3];
-        case "*":
-          return HEAPU32[ptr >> 2];
-        default:
-          abort(`invalid type for getValue: ${type}`);
-      }
-    }
-    var getCFunc = (ident) => {
-      var func = Module["_" + ident];
-      return func;
-    };
-    var writeArrayToMemory = (array, buffer) => {
-      HEAP8.set(array, buffer);
-    };
-    var lengthBytesUTF8 = (str) => {
-      var len = 0;
-      for (var i = 0; i < str.length; ++i) {
-        var c = str.charCodeAt(i);
-        if (c <= 127) {
-          len++;
-        } else if (c <= 2047) {
-          len += 2;
-        } else if (c >= 55296 && c <= 57343) {
-          len += 4;
-          ++i;
-        } else {
-          len += 3;
-        }
-      }
-      return len;
-    };
-    var stackAlloc = (sz) => __emscripten_stack_alloc(sz);
-    var stringToUTF8OnStack = (str) => {
-      var size = lengthBytesUTF8(str) + 1;
-      var ret = stackAlloc(size);
-      stringToUTF8(str, ret, size);
-      return ret;
-    };
-    var ccall = (ident, returnType, argTypes, args, opts) => {
-      var toC = { string: (str) => {
-        var ret2 = 0;
-        if (str !== null && str !== void 0 && str !== 0) {
-          ret2 = stringToUTF8OnStack(str);
-        }
-        return ret2;
-      }, array: (arr) => {
-        var ret2 = stackAlloc(arr.length);
-        writeArrayToMemory(arr, ret2);
-        return ret2;
-      } };
-      function convertReturnValue(ret2) {
-        if (returnType === "string") {
-          return UTF8ToString(ret2);
-        }
-        if (returnType === "boolean") return Boolean(ret2);
-        return ret2;
-      }
-      var func = getCFunc(ident);
-      var cArgs = [];
-      var stack = 0;
-      if (args) {
-        for (var i = 0; i < args.length; i++) {
-          var converter = toC[argTypes[i]];
-          if (converter) {
-            if (stack === 0) stack = stackSave();
-            cArgs[i] = converter(args[i]);
-          } else {
-            cArgs[i] = args[i];
-          }
-        }
-      }
-      var ret = func(...cArgs);
-      function onDone(ret2) {
-        if (stack !== 0) stackRestore(stack);
-        return convertReturnValue(ret2);
-      }
-      ret = onDone(ret);
-      return ret;
-    };
-    var cwrap = (ident, returnType, argTypes, opts) => {
-      var numericArgs = !argTypes || argTypes.every((type) => type === "number" || type === "boolean");
-      var numericRet = returnType !== "string";
-      if (numericRet && numericArgs && !opts) {
-        return getCFunc(ident);
-      }
-      return (...args) => ccall(ident, returnType, argTypes, args, opts);
-    };
-    var wasmTableMirror = [];
-    var getWasmTableEntry = (funcPtr) => {
-      var func = wasmTableMirror[funcPtr];
-      if (!func) {
-        wasmTableMirror[funcPtr] = func = wasmTable.get(funcPtr);
-      }
-      return func;
-    };
-    var updateTableMap = (offset, count) => {
-      if (functionsInTableMap) {
-        for (var i = offset; i < offset + count; i++) {
-          var item = getWasmTableEntry(i);
-          if (item) {
-            functionsInTableMap.set(item, i);
-          }
-        }
-      }
-    };
-    var functionsInTableMap;
-    var getFunctionAddress = (func) => {
-      if (!functionsInTableMap) {
-        functionsInTableMap = /* @__PURE__ */ new WeakMap();
-        updateTableMap(0, wasmTable.length);
-      }
-      return functionsInTableMap.get(func) || 0;
-    };
-    var freeTableIndexes = [];
-    var getEmptyTableSlot = () => {
-      if (freeTableIndexes.length) {
-        return freeTableIndexes.pop();
-      }
-      return wasmTable["grow"](1);
-    };
-    var setWasmTableEntry = (idx, func) => {
-      wasmTable.set(idx, func);
-      wasmTableMirror[idx] = wasmTable.get(idx);
-    };
-    var uleb128EncodeWithLen = (arr) => {
-      const n = arr.length;
-      return [n % 128 | 128, n >> 7, ...arr];
-    };
-    var wasmTypeCodes = { i: 127, p: 127, j: 126, f: 125, d: 124, e: 111 };
-    var generateTypePack = (types) => uleb128EncodeWithLen(Array.from(types, (type) => {
-      var code2 = wasmTypeCodes[type];
-      return code2;
-    }));
-    var convertJsFunctionToWasm = (func, sig) => {
-      var bytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 1, ...uleb128EncodeWithLen([1, 96, ...generateTypePack(sig.slice(1)), ...generateTypePack(sig[0] === "v" ? "" : sig[0])]), 2, 7, 1, 1, 101, 1, 102, 0, 0, 7, 5, 1, 1, 102, 0, 0);
-      var module3 = new WebAssembly.Module(bytes);
-      var instance = new WebAssembly.Instance(module3, { e: { f: func } });
-      var wrappedFunc = instance.exports["f"];
-      return wrappedFunc;
-    };
-    var addFunction = (func, sig) => {
-      var rtn = getFunctionAddress(func);
-      if (rtn) {
-        return rtn;
-      }
-      var ret = getEmptyTableSlot();
-      try {
-        setWasmTableEntry(ret, func);
-      } catch (err2) {
-        if (!(err2 instanceof TypeError)) {
-          throw err2;
-        }
-        var wrapped = convertJsFunctionToWasm(func, sig);
-        setWasmTableEntry(ret, wrapped);
-      }
-      functionsInTableMap.set(func, ret);
-      return ret;
-    };
-    var removeFunction = (index) => {
-      functionsInTableMap.delete(getWasmTableEntry(index));
-      setWasmTableEntry(index, null);
-      freeTableIndexes.push(index);
-    };
-    {
-      if (Module["noExitRuntime"]) noExitRuntime = Module["noExitRuntime"];
-      if (Module["print"]) out = Module["print"];
-      if (Module["printErr"]) err = Module["printErr"];
-      if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
-      if (Module["arguments"]) programArgs = Module["arguments"];
-      if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
-      preInit = Module["preInit"];
-      if (preInit) {
-        if (typeof preInit == "function") Module["preInit"] = preInit = [preInit];
-        while (preInit.length > 0) {
-          preInit.shift()();
-        }
-      }
-    }
-    var preInit;
-    Module["cwrap"] = cwrap;
-    Module["addFunction"] = addFunction;
-    Module["removeFunction"] = removeFunction;
-    var _sqlite3_finalize;
-    var _sqlite3_reset;
-    var _sqlite3_clear_bindings;
-    var _sqlite3_value_blob;
-    var _sqlite3_value_text;
-    var _sqlite3_value_bytes;
-    var _sqlite3_value_double;
-    var _sqlite3_value_int64;
-    var _sqlite3_value_type;
-    var _sqlite3_result_blob;
-    var _sqlite3_result_blob64;
-    var _sqlite3_result_double;
-    var _sqlite3_result_error;
-    var _sqlite3_result_int;
-    var _sqlite3_result_int64;
-    var _sqlite3_result_null;
-    var _sqlite3_result_text;
-    var _sqlite3_step;
-    var _sqlite3_column_count;
-    var _sqlite3_column_blob;
-    var _sqlite3_column_bytes;
-    var _sqlite3_column_double;
-    var _sqlite3_column_int64;
-    var _sqlite3_column_text;
-    var _sqlite3_column_type;
-    var _sqlite3_column_name;
-    var _sqlite3_column_table_name;
-    var _sqlite3_bind_blob;
-    var _sqlite3_bind_blob64;
-    var _sqlite3_bind_double;
-    var _sqlite3_bind_int;
-    var _sqlite3_bind_int64;
-    var _sqlite3_bind_null;
-    var _sqlite3_bind_text;
-    var _sqlite3_bind_parameter_index;
-    var _sqlite3_exec;
-    var _sqlite3_prepare_v2;
-    var _sqlite3_errmsg;
-    var _sqlite3_last_insert_rowid;
-    var _sqlite3_changes;
-    var _sqlite3_close_v2;
-    var _sqlite3_create_function_v2;
-    var _sqlite3_open_v2;
-    var _sqlite3_get_autocommit;
-    var _malloc;
-    var _free;
-    var __emscripten_timeout;
-    var __emscripten_stack_restore;
-    var __emscripten_stack_alloc;
-    var _emscripten_stack_get_current;
-    var memory;
-    var __indirect_function_table;
-    var wasmMemory;
-    var wasmTable;
-    function assignWasmExports(wasmExports2) {
-      _sqlite3_finalize = Module["_sqlite3_finalize"] = wasmExports2["A"];
-      _sqlite3_reset = Module["_sqlite3_reset"] = wasmExports2["B"];
-      _sqlite3_clear_bindings = Module["_sqlite3_clear_bindings"] = wasmExports2["C"];
-      _sqlite3_value_blob = Module["_sqlite3_value_blob"] = wasmExports2["D"];
-      _sqlite3_value_text = Module["_sqlite3_value_text"] = wasmExports2["E"];
-      _sqlite3_value_bytes = Module["_sqlite3_value_bytes"] = wasmExports2["F"];
-      _sqlite3_value_double = Module["_sqlite3_value_double"] = wasmExports2["G"];
-      _sqlite3_value_int64 = Module["_sqlite3_value_int64"] = wasmExports2["H"];
-      _sqlite3_value_type = Module["_sqlite3_value_type"] = wasmExports2["I"];
-      _sqlite3_result_blob = Module["_sqlite3_result_blob"] = wasmExports2["J"];
-      _sqlite3_result_blob64 = Module["_sqlite3_result_blob64"] = wasmExports2["K"];
-      _sqlite3_result_double = Module["_sqlite3_result_double"] = wasmExports2["L"];
-      _sqlite3_result_error = Module["_sqlite3_result_error"] = wasmExports2["M"];
-      _sqlite3_result_int = Module["_sqlite3_result_int"] = wasmExports2["N"];
-      _sqlite3_result_int64 = Module["_sqlite3_result_int64"] = wasmExports2["O"];
-      _sqlite3_result_null = Module["_sqlite3_result_null"] = wasmExports2["P"];
-      _sqlite3_result_text = Module["_sqlite3_result_text"] = wasmExports2["Q"];
-      _sqlite3_step = Module["_sqlite3_step"] = wasmExports2["R"];
-      _sqlite3_column_count = Module["_sqlite3_column_count"] = wasmExports2["S"];
-      _sqlite3_column_blob = Module["_sqlite3_column_blob"] = wasmExports2["T"];
-      _sqlite3_column_bytes = Module["_sqlite3_column_bytes"] = wasmExports2["U"];
-      _sqlite3_column_double = Module["_sqlite3_column_double"] = wasmExports2["V"];
-      _sqlite3_column_int64 = Module["_sqlite3_column_int64"] = wasmExports2["W"];
-      _sqlite3_column_text = Module["_sqlite3_column_text"] = wasmExports2["X"];
-      _sqlite3_column_type = Module["_sqlite3_column_type"] = wasmExports2["Y"];
-      _sqlite3_column_name = Module["_sqlite3_column_name"] = wasmExports2["Z"];
-      _sqlite3_column_table_name = Module["_sqlite3_column_table_name"] = wasmExports2["_"];
-      _sqlite3_bind_blob = Module["_sqlite3_bind_blob"] = wasmExports2["$"];
-      _sqlite3_bind_blob64 = Module["_sqlite3_bind_blob64"] = wasmExports2["aa"];
-      _sqlite3_bind_double = Module["_sqlite3_bind_double"] = wasmExports2["ba"];
-      _sqlite3_bind_int = Module["_sqlite3_bind_int"] = wasmExports2["ca"];
-      _sqlite3_bind_int64 = Module["_sqlite3_bind_int64"] = wasmExports2["da"];
-      _sqlite3_bind_null = Module["_sqlite3_bind_null"] = wasmExports2["ea"];
-      _sqlite3_bind_text = Module["_sqlite3_bind_text"] = wasmExports2["fa"];
-      _sqlite3_bind_parameter_index = Module["_sqlite3_bind_parameter_index"] = wasmExports2["ga"];
-      _sqlite3_exec = Module["_sqlite3_exec"] = wasmExports2["ha"];
-      _sqlite3_prepare_v2 = Module["_sqlite3_prepare_v2"] = wasmExports2["ia"];
-      _sqlite3_errmsg = Module["_sqlite3_errmsg"] = wasmExports2["ja"];
-      _sqlite3_last_insert_rowid = Module["_sqlite3_last_insert_rowid"] = wasmExports2["ka"];
-      _sqlite3_changes = Module["_sqlite3_changes"] = wasmExports2["la"];
-      _sqlite3_close_v2 = Module["_sqlite3_close_v2"] = wasmExports2["ma"];
-      _sqlite3_create_function_v2 = Module["_sqlite3_create_function_v2"] = wasmExports2["na"];
-      _sqlite3_open_v2 = Module["_sqlite3_open_v2"] = wasmExports2["oa"];
-      _sqlite3_get_autocommit = Module["_sqlite3_get_autocommit"] = wasmExports2["pa"];
-      _malloc = Module["_malloc"] = wasmExports2["qa"];
-      _free = Module["_free"] = wasmExports2["ra"];
-      __emscripten_timeout = wasmExports2["ta"];
-      __emscripten_stack_restore = wasmExports2["ua"];
-      __emscripten_stack_alloc = wasmExports2["va"];
-      _emscripten_stack_get_current = wasmExports2["wa"];
-      memory = wasmMemory = wasmExports2["y"];
-      __indirect_function_table = wasmTable = wasmExports2["sa"];
-    }
-    var wasmImports = { n: __abort_js, l: __emscripten_runtime_keepalive_clear, o: __localtime_js, i: __setitimer_js, p: __tzset_js, q: _emscripten_date_now, a: _emscripten_get_now, j: _emscripten_resize_heap, w: _nodejsAccess, s: _nodejsCheckReservedLock, f: _nodejsClose, x: _nodejsDelete, v: _nodejsFileSize, m: _nodejsFullPathname, u: _nodejsLock, h: _nodejsRandomness, e: _nodejsRead, b: _nodejsSync, c: _nodejsTruncate, t: _nodejsUnlock, d: _nodejsWrite, g: _nodejs_max_path_length, r: _nodejs_open, k: _proc_exit };
-    async function run2() {
-      preRun();
-      var setStatus = Module["setStatus"];
-      if (setStatus) {
-        setStatus("Running...");
-        await new Promise((resolve6) => setTimeout(resolve6, 1));
-        setTimeout(setStatus, 1, "");
-      }
-      if (ABORT) return;
-      initRuntime();
-      Module["onRuntimeInitialized"]?.();
-      postRun();
-    }
-    var wasmExports;
-    wasmExports = createWasm();
-    run2();
   }
 });
 
@@ -31452,9 +31452,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [path]
    * @return {(string|null|Command)}
    */
-  executableDir(path28) {
-    if (path28 === void 0) return this._executableDir;
-    this._executableDir = path28;
+  executableDir(path32) {
+    if (path32 === void 0) return this._executableDir;
+    this._executableDir = path32;
     return this;
   }
   /**
@@ -31710,10 +31710,27 @@ function useColor() {
 var program = new Command();
 
 // src/cli.ts
-var import_node_fs22 = __toESM(require("node:fs"), 1);
-var import_node_path27 = __toESM(require("node:path"), 1);
+var import_node_path31 = __toESM(require("node:path"), 1);
 var import_node_url = require("node:url");
 var import_node_util5 = __toESM(require("node:util"), 1);
+
+// src/output.ts
+function emitRows(rows) {
+  for (const row of rows) console.log(JSON.stringify(row));
+}
+function emitDocument(value) {
+  console.log(JSON.stringify(value));
+}
+function fail(message) {
+  throw new Error(message);
+}
+function failureMessage(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.endsWith("\n") ? message : message + "\n";
+}
+
+// src/pagecommand.ts
+var import_node_fs6 = __toESM(require("node:fs"), 1);
 
 // src/wikipage.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -36794,7 +36811,7 @@ function formatDateOnly(y, mo, d) {
 }
 
 // src/wikipage.ts
-var ENCODE_CHARS = " #%()<>";
+var EncodeChars = " #%()<>";
 var FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
 var ESCAPED_LINE_BREAK_RE = /\\\r?\n[ \t]*/g;
 function joinEscapedLineBreaks(dest) {
@@ -36816,7 +36833,7 @@ var LINK_RE = new RegExp(
 function percentEncode(p) {
   let out = "";
   for (const ch of p) {
-    if (ch < "\x80" && ENCODE_CHARS.includes(ch)) {
+    if (ch < "\x80" && EncodeChars.includes(ch)) {
       out += "%" + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0");
       continue;
     }
@@ -36862,6 +36879,19 @@ function splitFrontmatter(src) {
     bodyOffset,
     hasFrontmatter: true
   };
+}
+var UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
+function isUnquotedListLinkLine(line) {
+  return UNQUOTED_LIST_LINK_RE.test(line);
+}
+function quoteUnquotedListLinks(frontmatter) {
+  return frontmatter.split("\n").map((line) => {
+    if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
+    const open2 = line.indexOf("[");
+    const close = line.lastIndexOf(")");
+    if (open2 < 0 || close < 0) return line;
+    return line.slice(0, open2) + `"${line.slice(open2, close + 1)}"` + line.slice(close + 1);
+  }).join("\n");
 }
 var md = new MarkdownItCallable();
 function codeLineRanges(src) {
@@ -36942,16 +36972,7 @@ var Page = class _Page {
    */
   frontmatterNode() {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(this.text);
-    if (!hasFrontmatter || frontmatter.trim() === "") return new import_yaml.YAMLMap();
-    const doc = (0, import_yaml.parseDocument)(frontmatter);
-    if (doc.errors.length > 0) {
-      throw new Error(`invalid frontmatter YAML: ${doc.errors[0].message}`);
-    }
-    if (doc.contents === null || !(0, import_yaml.isMap)(doc.contents)) {
-      if (doc.contents === null) return new import_yaml.YAMLMap();
-      throw new Error("frontmatter is not a YAML mapping");
-    }
-    return doc.contents;
+    return frontmatterNodeFrom(frontmatter, hasFrontmatter);
   }
   /** Return the full frontmatter mapping, decoded to plain values, or null
    * when this page has no frontmatter block. */
@@ -36983,17 +37004,16 @@ var Page = class _Page {
   }
   /**
    * Return a new page with frontmatter key set to value, canonicalised first
-   * — see [canonicalForWrite]. Mints a frontmatter block when the page has
+   * — see [rewriteFrontmatter]. Mints a frontmatter block when the page has
    * none; only the block is re-serialised, and the body is spliced back
    * verbatim.
    */
   set(key, value) {
-    const node = this.frontmatterNode();
-    const valueNode = newValueNode(canonicalForWrite(key, value));
-    setKey(node, key, valueNode);
-    const rendered = renderFrontmatter(node);
-    const { body } = splitFrontmatter(this.text);
-    return new _Page("---\n" + rendered + "---\n" + body);
+    return new _Page(
+      rewriteFrontmatter(this.text, (frontmatter) => {
+        frontmatter.set(key, value);
+      })
+    );
   }
   /**
    * Return a new page with values unioned into key's existing list. Existing
@@ -37147,7 +37167,9 @@ function setKey(mapping, key, value) {
 }
 function canonicalForWrite(key, value) {
   if (key === "source_date") return truncateSourceDate(value);
-  if (isStringListKey(key) && !Array.isArray(value)) return [value];
+  if (isStringListKey(key) && value != null && !Array.isArray(value)) {
+    return [value];
+  }
   return value;
 }
 function newValueNode(value) {
@@ -37166,7 +37188,16 @@ function toYamlNode(value) {
 function quoteLinks(node) {
   if (node instanceof import_yaml.YAMLSeq) {
     for (const item of node.items) {
-      if (item instanceof import_yaml.Scalar || item instanceof import_yaml.YAMLSeq) quoteLinks(item);
+      if (item instanceof import_yaml.Scalar || item instanceof import_yaml.YAMLSeq || item instanceof import_yaml.YAMLMap) {
+        quoteLinks(item);
+      }
+    }
+  } else if (node instanceof import_yaml.YAMLMap) {
+    for (const pair of node.items) {
+      const value = pair.value;
+      if (value instanceof import_yaml.Scalar || value instanceof import_yaml.YAMLSeq || value instanceof import_yaml.YAMLMap) {
+        quoteLinks(value);
+      }
     }
   } else if (node instanceof import_yaml.Scalar) {
     if (typeof node.value === "string" && node.value.startsWith("[")) {
@@ -37175,13 +37206,74 @@ function quoteLinks(node) {
   }
 }
 function renderFrontmatter(node) {
-  return (0, import_yaml.stringify)(node, { indent: YAML_INDENT, lineWidth: 0 });
+  return (0, import_yaml.stringify)(node, {
+    indent: YAML_INDENT,
+    lineWidth: 0,
+    flowCollectionPadding: false
+  });
+}
+function frontmatterNodeFrom(frontmatter, hasFrontmatter) {
+  if (!hasFrontmatter || frontmatter.trim() === "") return new import_yaml.YAMLMap();
+  const doc = (0, import_yaml.parseDocument)(frontmatter);
+  if (doc.errors.length > 0) {
+    throw new Error(`invalid frontmatter YAML: ${doc.errors[0].message}`);
+  }
+  if (doc.contents === null) return new import_yaml.YAMLMap();
+  if (!(0, import_yaml.isMap)(doc.contents))
+    throw new Error("frontmatter is not a YAML mapping");
+  return doc.contents;
+}
+function canonicaliseForWrite(node) {
+  for (const pair of node.items) {
+    const key = String(pair.key.value);
+    const value = pair.value;
+    const decoded = value === null ? null : value.toJSON();
+    const canonical = canonicalForWrite(key, decoded);
+    if (!(0, import_node_util3.isDeepStrictEqual)(canonical, decoded)) {
+      pair.value = newValueNode(canonical);
+    }
+  }
+}
+var FrontmatterWriter = class {
+  constructor(node) {
+    this.node = node;
+  }
+  /** The block's keys, in source order. */
+  keys() {
+    return this.node.items.map((pair) => String(pair.key.value));
+  }
+  /** The decoded value of key, or undefined when the key is absent. */
+  get(key) {
+    for (const pair of this.node.items) {
+      if (pair.key.value !== key) continue;
+      const value = pair.value;
+      return value === null ? null : value.toJSON();
+    }
+    return void 0;
+  }
+  /** Set key to value, canonicalised ([canonicalForWrite]) and link-quoted. */
+  set(key, value) {
+    setKey(this.node, key, newValueNode(canonicalForWrite(key, value)));
+  }
+};
+function rewriteFrontmatter(text2, edit) {
+  const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+  const node = frontmatterNodeFrom(
+    quoteUnquotedListLinks(frontmatter),
+    hasFrontmatter
+  );
+  const rewrittenBody = edit(new FrontmatterWriter(node));
+  const newBody = typeof rewrittenBody === "string" ? rewrittenBody : body;
+  canonicaliseForWrite(node);
+  quoteLinks(node);
+  if (!hasFrontmatter && node.items.length === 0) return newBody;
+  const rendered = node.items.length === 0 ? "" : renderFrontmatter(node);
+  return "---\n" + rendered + "---\n" + newBody;
 }
 
-// src/transcriptcapture.ts
-var import_node_fs4 = __toESM(require("node:fs"), 1);
-var import_node_path4 = __toESM(require("node:path"), 1);
-var import_node_child_process2 = require("node:child_process");
+// src/vault.ts
+var import_node_fs5 = __toESM(require("node:fs"), 1);
+var import_node_path6 = __toESM(require("node:path"), 1);
 
 // src/fsutil.ts
 var import_node_fs2 = __toESM(require("node:fs"), 1);
@@ -37205,583 +37297,10 @@ function mkdirSafe(dir, mode) {
   }
 }
 
-// src/transcriptcapture.ts
-var import_node_os2 = __toESM(require("node:os"), 1);
-
-// src/sessionstate.ts
+// src/kindmeta.ts
 var import_node_fs3 = __toESM(require("node:fs"), 1);
-var import_node_os = __toESM(require("node:os"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
-function processLookupEnv(key) {
-  const value = process.env[key];
-  return [value, value !== void 0];
-}
-var ClaudeCode = {
-  marker: ".claude",
-  projectDirEnv: "CLAUDE_PROJECT_DIR",
-  stateDir: import_node_path3.default.join(".claude", "wiki-knowledge", "sessions")
-};
-function findProjectRoot(cwd, layout, lookupEnv) {
-  if (layout.projectDirEnv !== "") {
-    const [projectDir, ok] = lookupEnv(layout.projectDirEnv);
-    if (ok && projectDir) return projectDir;
-  }
-  return markerAncestor(cwd, layout.marker, lookupEnv);
-}
-function findProjectSessionsDir(cwd, layout, lookupEnv) {
-  const root = findProjectRoot(cwd, layout, lookupEnv);
-  return root === void 0 ? void 0 : sessionsUnder(root, layout);
-}
-function projectSessionsDir(cwd, layout, lookupEnv) {
-  return findProjectSessionsDir(cwd, layout, lookupEnv) ?? sessionsUnder(startDir(cwd), layout);
-}
-function findSessionsDir(cwd, lookupEnv = processLookupEnv) {
-  return findProjectSessionsDir(cwd, ClaudeCode, lookupEnv);
-}
-function sessionsDir(cwd, lookupEnv = processLookupEnv) {
-  return projectSessionsDir(cwd, ClaudeCode, lookupEnv);
-}
-function sessionsUnder(base, layout) {
-  return import_node_path3.default.join(base, layout.stateDir);
-}
-function startDir(cwd) {
-  return cwd === "" ? process.cwd() : cwd;
-}
-function markerAncestor(cwd, marker, lookupEnv) {
-  let dir = startDir(cwd);
-  for (; ; ) {
-    if (isHomeDir(dir, lookupEnv)) return void 0;
-    try {
-      if (import_node_fs3.default.statSync(import_node_path3.default.join(dir, marker)).isDirectory()) return dir;
-    } catch {
-    }
-    const parent = import_node_path3.default.dirname(dir);
-    if (parent === dir) return void 0;
-    dir = parent;
-  }
-}
-function isHomeDir(dir, lookupEnv) {
-  const [home, ok] = lookupEnv("HOME");
-  const homeDir = ok && home ? home : import_node_os.default.homedir();
-  return homeDir !== "" && import_node_path3.default.resolve(dir) === import_node_path3.default.resolve(homeDir);
-}
-function statePath(sessionID, stateDir) {
-  return import_node_path3.default.join(stateDir, `${sessionID}.json`);
-}
-function writeTranscriptPath(sessionID, transcriptPath, stateDir) {
-  const file = statePath(sessionID, stateDir);
-  mkdirSafe(import_node_path3.default.dirname(file));
-  import_node_fs3.default.writeFileSync(file, JSON.stringify({ transcript_path: transcriptPath }), {
-    mode: 420
-  });
-}
-function readTranscriptPath(sessionID, stateDir) {
-  let data;
-  try {
-    data = import_node_fs3.default.readFileSync(statePath(sessionID, stateDir), "utf8");
-  } catch {
-    return void 0;
-  }
-  try {
-    const payload = JSON.parse(data);
-    const transcriptPath = payload["transcript_path"];
-    return typeof transcriptPath === "string" ? transcriptPath : void 0;
-  } catch {
-    return void 0;
-  }
-}
-
-// src/transcriptcapture.ts
-var SLUG_MAX_LENGTH = 60;
-var NON_SLUG_RE = /[^a-z0-9]+/g;
-function sanitizeSlug(phrase, maxLength) {
-  const cap = maxLength <= 0 ? SLUG_MAX_LENGTH : maxLength;
-  if (phrase === "") return "";
-  const folded = phrase.normalize("NFKD");
-  let ascii = "";
-  for (const ch of folded) {
-    if (ch.codePointAt(0) < 128) ascii += ch;
-  }
-  const slug = ascii.toLowerCase().replace(NON_SLUG_RE, "-").replace(/^-+|-+$/g, "");
-  if (slug.length <= cap) return slug;
-  const window = slug.slice(0, cap + 1);
-  let head = "";
-  const idx = window.lastIndexOf("-");
-  if (idx >= 0) head = window.slice(0, idx);
-  if (head === "") head = slug.slice(0, cap);
-  return head.replace(/^-+|-+$/g, "");
-}
-function extractText(content) {
-  if (typeof content === "string") return content.trim();
-  if (Array.isArray(content)) {
-    const parts = [];
-    for (const block2 of content) {
-      if (typeof block2 !== "object" || block2 === null) continue;
-      const m = block2;
-      if (m["type"] !== "text") continue;
-      const text2 = typeof m["text"] === "string" ? m["text"].trim() : "";
-      if (text2 !== "") parts.push(text2);
-    }
-    return parts.join("\n\n");
-  }
-  return "";
-}
-function parseClaudeTranscript(jsonlLines) {
-  const turns = [];
-  for (const rawLine of jsonlLines) {
-    const line = rawLine.trim();
-    if (line === "") continue;
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (entry.type !== "user" && entry.type !== "assistant") continue;
-    if (entry.isMeta || entry.isSidechain) continue;
-    const text2 = extractText(entry.message?.content);
-    if (text2 !== "") {
-      turns.push({ role: entry.message.role, text: text2 });
-    }
-  }
-  return turns;
-}
-var ErrTooFewTurns = class extends Error {
-  turns;
-  minTurns;
-  constructor(turns, minTurns) {
-    super(
-      `Transcript has ${turns} non-empty turn(s); need at least ${minTurns}.`
-    );
-    this.turns = turns;
-    this.minTurns = minTurns;
-  }
-};
-function transcriptToPage(turns, hostLabel, sessionID, now, slug, userLabel, assistantLabel, minTurns) {
-  if (turns.length < minTurns) {
-    throw new ErrTooFewTurns(turns.length, minTurns);
-  }
-  const shortID = sessionID.split("-")[0];
-  const safeSlug = sanitizeSlug(slug, SLUG_MAX_LENGTH);
-  const middle = safeSlug !== "" ? `${safeSlug}-` : "";
-  const filename = fmtDate(now, "YYYY-MM-DD-hhmm") + "-" + middle + shortID + ".md";
-  const lines = [
-    `# Session ${sessionID}`,
-    "",
-    `**Saved:** ${fmtDate(now, "YYYY-MM-DD hh:mm")}  `,
-    `**Source:** ${hostLabel} session transcript (save-conversation skill, enchiridion repo)`,
-    "",
-    "---",
-    ""
-  ];
-  for (const t of turns) {
-    const label = t.role === "user" ? userLabel : assistantLabel;
-    lines.push(`## ${label}`, "", t.text, "");
-  }
-  return [filename, lines.join("\n")];
-}
-function pad(n) {
-  return String(n).padStart(2, "0");
-}
-function fmtDate(d, template) {
-  const map = {
-    YYYY: String(d.getFullYear()),
-    MM: pad(d.getMonth() + 1),
-    DD: pad(d.getDate()),
-    hh: pad(d.getHours()),
-    mm: pad(d.getMinutes())
-  };
-  return template.replace(/YYYY|MM|DD|hh|mm/g, (m) => map[m]);
-}
-var CaptureError = class extends Error {
-  constructor(msg, options) {
-    super(msg, options);
-    this.name = "CaptureError";
-  }
-};
-function findTranscriptPath(cwd, lookupEnv = processLookupEnv) {
-  const [sessionIDRaw, ok] = lookupEnv("CLAUDE_CODE_SESSION_ID");
-  const sessionID = sessionIDRaw ?? "";
-  if (!ok || sessionID === "") {
-    throw new CaptureError(
-      "$CLAUDE_CODE_SESSION_ID is not set in this environment."
-    );
-  }
-  const stateDir = sessionsDir(cwd, lookupEnv);
-  let stateStat;
-  try {
-    stateStat = import_node_fs4.default.statSync(stateDir);
-  } catch {
-    throw stateDirNotLocated(cwd);
-  }
-  if (!stateStat.isDirectory()) {
-    throw stateDirNotLocated(cwd);
-  }
-  const transcriptPath = readTranscriptPath(sessionID, stateDir);
-  if (transcriptPath === void 0) {
-    throw new CaptureError(
-      "No state recorded for session " + sessionID + " under " + stateDir + ". (If this session was started before the SessionStart hook was installed, its transcript was never recorded; start a new session and try again.)"
-    );
-  }
-  let trStat;
-  try {
-    trStat = import_node_fs4.default.statSync(transcriptPath);
-  } catch {
-    throw new CaptureError(
-      "Recorded transcript file does not exist: " + transcriptPath
-    );
-  }
-  if (trStat.isDirectory()) {
-    throw new CaptureError(
-      "Recorded transcript file does not exist: " + transcriptPath
-    );
-  }
-  return transcriptPath;
-}
-function stateDirNotLocated(cwd) {
-  return new CaptureError(
-    "Could not locate a session state directory. Searched $CLAUDE_PROJECT_DIR, then walked up from " + cwd + " as far as the home directory for a '.claude/' ancestor, and did not find one. (Has the SessionStart hook ever run in this project? Start a new session in the project root and try again.)"
-  );
-}
-function writeCapture(wikiRoot, filename, markdown, shortID, listDir) {
-  const conversationsDir = import_node_path4.default.join(wikiRoot, "raw", "conversations");
-  mkdirSafe(conversationsDir);
-  const list2 = listDir ?? ((dir) => import_node_fs4.default.readdirSync(dir));
-  let matches = [];
-  try {
-    matches = list2(conversationsDir).filter((f) => f.endsWith(`-${shortID}.md`)).sort();
-  } catch (err) {
-    if (!isENOENT(err)) {
-      throw new CaptureError(
-        `Could not list ${conversationsDir} to find an existing capture of this session: ${errMsg(err)}. (Refusing to guess which file a re-save should rewrite, because a failed listing read as "no prior capture" writes a second raw file instead, orphaning the first.)`,
-        { cause: err }
-      );
-    }
-  }
-  let outPath = import_node_path4.default.join(conversationsDir, filename);
-  if (matches.length > 0) {
-    outPath = import_node_path4.default.join(conversationsDir, matches[0]);
-  }
-  import_node_fs4.default.writeFileSync(outPath, markdown, { mode: 420 });
-  return import_node_path4.default.relative(wikiRoot, outPath).split(import_node_path4.default.sep).join("/");
-}
-async function captureSession(wikiRoot, slug, cwd, lookupEnv = processLookupEnv, now, exportSeam) {
-  const [claudeCodeID] = lookupEnv("CLAUDE_CODE_SESSION_ID");
-  const [openCodeID] = lookupEnv("OPENCODE_SESSION_ID");
-  if (openCodeID && !claudeCodeID) {
-    return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
-  }
-  if (openCodeID) {
-    if (isOpenCodeSessionTracked(cwd, lookupEnv)) {
-      return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
-    }
-    return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
-  }
-  if (claudeCodeID) {
-    return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
-  }
-  throw new CaptureError(
-    "Neither $CLAUDE_CODE_SESSION_ID nor $OPENCODE_SESSION_ID is set in this environment, so there is no way to tell which session to save. (Claude Code sets the first; OpenCode's session-tracker plugin injects the second.)"
-  );
-}
-function captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now) {
-  const transcriptPath = findTranscriptPath(cwd, lookupEnv);
-  const timestamp = now.getTime() === 0 ? /* @__PURE__ */ new Date() : now;
-  let text2;
-  try {
-    text2 = import_node_fs4.default.readFileSync(transcriptPath, "utf8");
-  } catch (err) {
-    throw new CaptureError(`Could not read transcript: ${errMsg(err)}`);
-  }
-  const base = import_node_path4.default.basename(transcriptPath);
-  const ext = import_node_path4.default.extname(transcriptPath);
-  const sessionID = ext !== "" ? base.slice(0, -ext.length) : base;
-  const turns = parseClaudeTranscript(text2.split("\n"));
-  let filename;
-  let markdown;
-  try {
-    [filename, markdown] = transcriptToPage(
-      turns,
-      "Claude Code",
-      sessionID,
-      timestamp,
-      slug,
-      "User",
-      "Claude",
-      2
-    );
-  } catch (err) {
-    throw new CaptureError("Not enough conversation to save: " + errMsg(err));
-  }
-  const shortID = sessionID.split("-")[0];
-  return writeCapture(wikiRoot, filename, markdown, shortID);
-}
-function errMsg(err) {
-  return err instanceof Error ? err.message : String(err);
-}
-function isENOENT(err) {
-  return err.code === "ENOENT";
-}
-var OpenCode = {
-  marker: ".opencode",
-  projectDirEnv: "",
-  stateDir: import_node_path4.default.join(".opencode", "wiki-knowledge", "sessions")
-};
-function findOpenCodeSessionsDir(cwd, lookupEnv = processLookupEnv) {
-  return findProjectSessionsDir(cwd, OpenCode, lookupEnv);
-}
-function openCodeSessionIsTracked(sessionID, stateDir) {
-  let data;
-  try {
-    data = import_node_fs4.default.readFileSync(import_node_path4.default.join(stateDir, `${sessionID}.json`), "utf8");
-  } catch {
-    return false;
-  }
-  try {
-    const payload = JSON.parse(data);
-    return payload["session_id"] === sessionID;
-  } catch {
-    return false;
-  }
-}
-function openCodeSessionIDFromEnv(lookupEnv = processLookupEnv) {
-  const [sessionIDRaw, ok] = lookupEnv("OPENCODE_SESSION_ID");
-  const sessionID = sessionIDRaw ?? "";
-  if (!ok || sessionID === "") {
-    throw new CaptureError(
-      "$OPENCODE_SESSION_ID is not set in this environment. (The session-tracker plugin's shell.env hook injects it; is the plugin installed and loaded in this project?)"
-    );
-  }
-  return sessionID;
-}
-function isOpenCodeSessionTracked(cwd, lookupEnv = processLookupEnv) {
-  const [sessionIDRaw, ok] = lookupEnv("OPENCODE_SESSION_ID");
-  const sessionID = sessionIDRaw ?? "";
-  if (!ok || sessionID === "") return false;
-  const stateDir = findOpenCodeSessionsDir(cwd, lookupEnv);
-  if (stateDir === void 0) return false;
-  try {
-    if (!import_node_fs4.default.statSync(stateDir).isDirectory()) return false;
-  } catch {
-    return false;
-  }
-  return openCodeSessionIsTracked(sessionID, stateDir);
-}
-async function exportTranscript(sessionID, command) {
-  let bin = command;
-  if (bin === "") bin = "opencode";
-  const resolved = findExecutable(bin);
-  if (!resolved) {
-    throw new CaptureError(`${bin} CLI is required but was not found on PATH`);
-  }
-  bin = resolved;
-  const tmp = import_node_path4.default.join(
-    import_node_os2.default.tmpdir(),
-    `opencode-export-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
-  );
-  let stderr = "";
-  try {
-    await runExport(bin, sessionID, tmp, (chunk) => stderr += chunk);
-    return import_node_fs4.default.readFileSync(tmp);
-  } finally {
-    try {
-      import_node_fs4.default.rmSync(tmp, { force: true });
-    } catch {
-    }
-  }
-}
-function runExport(bin, sessionID, tmpPath, onStderr) {
-  return new Promise((resolve6, reject) => {
-    let fd;
-    try {
-      fd = import_node_fs4.default.openSync(tmpPath, "w");
-    } catch (err) {
-      reject(
-        new CaptureError(
-          `Could not create a temp file for the export: ${errMsg(err)}`
-        )
-      );
-      return;
-    }
-    let stderr = "";
-    const child = (0, import_node_child_process2.spawn)(bin, ["export", sessionID], {
-      stdio: ["ignore", fd, "pipe"]
-    });
-    child.stderr?.on("data", (chunk) => {
-      const text2 = chunk.toString();
-      stderr += text2;
-      onStderr(text2);
-    });
-    child.on("error", (err) => {
-      import_node_fs4.default.closeSync(fd);
-      reject(err);
-    });
-    child.on("close", (code2, signal) => {
-      try {
-        import_node_fs4.default.closeSync(fd);
-      } catch {
-      }
-      if (code2 !== 0) {
-        reject(
-          new CaptureError(
-            `opencode export failed (${code2 ?? signal}): ${stderr.trim()}`
-          )
-        );
-        return;
-      }
-      resolve6();
-    });
-  });
-}
-function findExecutable(name) {
-  if (import_node_path4.default.isAbsolute(name)) {
-    return isExecutableFile(name) ? name : null;
-  }
-  const pathEnv = process.env.PATH ?? "";
-  for (const dir of pathEnv.split(import_node_path4.default.delimiter)) {
-    if (dir === "") continue;
-    const candidate = import_node_path4.default.join(dir, name);
-    if (isExecutableFile(candidate)) return candidate;
-  }
-  return null;
-}
-function isExecutableFile(file) {
-  try {
-    const stat4 = import_node_fs4.default.statSync(file);
-    if (!stat4.isFile()) return false;
-    if (process.platform === "win32") return true;
-    return (stat4.mode & 73) !== 0;
-  } catch {
-    return false;
-  }
-}
-function normalizeExport(exportDoc) {
-  let parsed;
-  try {
-    parsed = JSON.parse(new TextDecoder().decode(exportDoc));
-  } catch {
-    throw new CaptureError("opencode export returned invalid JSON");
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new CaptureError("opencode export returned an unexpected shape");
-  }
-  const document2 = parsed;
-  const rawMessages = document2["messages"];
-  const messages = Array.isArray(rawMessages) ? rawMessages : [];
-  const turns = [];
-  for (const raw of messages) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const message = raw;
-    const info = message["info"];
-    const role = typeof info === "object" && info !== null ? info["role"] : void 0;
-    if (role !== "user" && role !== "assistant") continue;
-    const parts = message["parts"];
-    const partList = Array.isArray(parts) ? parts : [];
-    const texts = [];
-    for (const rawPart of partList) {
-      if (typeof rawPart !== "object" || rawPart === null) continue;
-      const part = rawPart;
-      if (part["type"] !== "text") continue;
-      const text2 = typeof part["text"] === "string" ? part["text"].trim() : "";
-      if (text2 !== "") texts.push(text2);
-    }
-    if (texts.length > 0) {
-      turns.push({ role, text: texts.join("\n\n") });
-    }
-  }
-  return turns;
-}
-async function captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam) {
-  const sessionID = openCodeSessionIDFromEnv(lookupEnv);
-  const timestamp = now.getTime() === 0 ? /* @__PURE__ */ new Date() : now;
-  const fetch = exportSeam ?? ((id) => exportTranscript(id, "opencode"));
-  const document2 = await fetch(sessionID);
-  const turns = normalizeExport(document2);
-  let filename;
-  let markdown;
-  try {
-    [filename, markdown] = transcriptToPage(
-      turns,
-      "OpenCode",
-      sessionID,
-      timestamp,
-      slug,
-      "User",
-      "Claude",
-      2
-    );
-  } catch (err) {
-    throw new CaptureError("Not enough conversation to save: " + errMsg(err));
-  }
-  const shortID = sessionID.split("-")[0];
-  return writeCapture(wikiRoot, filename, markdown, shortID);
-}
-
-// src/toolcallstats.ts
-var import_node_fs5 = __toESM(require("node:fs"), 1);
-var import_node_path5 = __toESM(require("node:path"), 1);
-function logPath(sessionID, stateDir) {
-  const dir = stateDir === "" ? sessionsDir("", processLookupEnv) : stateDir;
-  return import_node_path5.default.join(dir, `${sessionID}-tool-calls.jsonl`);
-}
-function readLog(sessionID, stateDir) {
-  const file = logPath(sessionID, stateDir);
-  if (!import_node_fs5.default.existsSync(file)) return [];
-  const data = import_node_fs5.default.readFileSync(file, "utf8");
-  const events = [];
-  for (const line of data.split("\n")) {
-    if (line.trim() === "") continue;
-    try {
-      events.push(JSON.parse(line));
-    } catch {
-    }
-  }
-  return events;
-}
-function summarize(events) {
-  const total = events.length;
-  const counts = /* @__PURE__ */ new Map();
-  const order = [];
-  const promptIDs = /* @__PURE__ */ new Set();
-  for (const event of events) {
-    let tool = typeof event["tool"] === "string" ? event["tool"] : "";
-    if (tool === "") tool = "?";
-    if (!counts.has(tool)) order.push(tool);
-    counts.set(tool, (counts.get(tool) ?? 0) + 1);
-    const id = event["prompt_id"];
-    if (typeof id === "string" && id !== "") promptIDs.add(id);
-  }
-  const byTool = order.map((tool) => ({
-    tool,
-    count: counts.get(tool) ?? 0
-  }));
-  byTool.sort((a, b) => b.count - a.count);
-  const prompts = promptIDs.size;
-  const s = {
-    total,
-    byTool,
-    prompts,
-    callsPerPrompt: 0,
-    hasCallsPerPrompt: false
-  };
-  if (prompts > 0) {
-    s.callsPerPrompt = total / prompts;
-    s.hasCallsPerPrompt = true;
-  }
-  return s;
-}
-function formatSummary(s) {
-  let out = `Total tool calls: ${s.total}
-`;
-  for (const tc of s.byTool) {
-    out += `  ${String(tc.count).padStart(3)}  ${tc.tool}
-`;
-  }
-  if (s.prompts > 0) {
-    out += `Prompts (proxy for turns, not exact \u2014 see #99): ${s.prompts}, ${s.callsPerPrompt.toFixed(1)} calls/prompt`;
-  }
-  return out;
-}
+var import_yaml2 = __toESM(require_dist(), 1);
 
 // src/place.ts
 var KindFolders = {
@@ -37818,7 +37337,7 @@ function slugify(title, maxLength) {
 function folderToKind(folder) {
   return folder.replace(/s$/, "");
 }
-function path6(kind, title, extraKindFolders) {
+function path3(kind, title, extraKindFolders) {
   const folder = KindFolders[kind] ?? extraKindFolders?.[kind];
   if (folder === void 0) {
     const known = [
@@ -37831,21 +37350,8 @@ function path6(kind, title, extraKindFolders) {
   return `wiki/${folder}/${slugify(title, MaxSlugLength)}.md`;
 }
 
-// src/vault.ts
-var import_node_fs8 = __toESM(require("node:fs"), 1);
-var import_node_path9 = __toESM(require("node:path"), 1);
-
 // src/kindmeta.ts
-var import_node_fs6 = __toESM(require("node:fs"), 1);
-var import_node_path6 = __toESM(require("node:path"), 1);
-var import_yaml2 = __toESM(require_dist(), 1);
-function readKindMeta(folderAbsPath) {
-  let text2;
-  try {
-    text2 = import_node_fs6.default.readFileSync(import_node_path6.default.join(folderAbsPath, "KIND.md"), "utf8");
-  } catch {
-    return null;
-  }
+function parseKindMeta(text2) {
   try {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
     if (!hasFrontmatter || frontmatter === "") return null;
@@ -37864,14 +37370,29 @@ function readKindMeta(folderAbsPath) {
     return null;
   }
 }
+function readKindMeta(folderAbsPath) {
+  let text2;
+  try {
+    text2 = import_node_fs3.default.readFileSync(import_node_path3.default.join(folderAbsPath, "KIND.md"), "utf8");
+  } catch {
+    return null;
+  }
+  return parseKindMeta(text2);
+}
+function resolveKind(folder, declaredKind) {
+  return FolderKinds[folder] ?? declaredKind ?? folderToKind(folder);
+}
 function kindForFolder(root, folder) {
-  return FolderKinds[folder] ?? readKindMeta(import_node_path6.default.join(root, "wiki", folder))?.kind ?? folderToKind(folder);
+  return resolveKind(
+    folder,
+    readKindMeta(import_node_path3.default.join(root, "wiki", folder))?.kind
+  );
 }
 function kindByFolder(root) {
-  const wikiDir = import_node_path6.default.join(root, "wiki");
+  const wikiDir = import_node_path3.default.join(root, "wiki");
   let entries;
   try {
-    entries = import_node_fs6.default.readdirSync(wikiDir, { withFileTypes: true });
+    entries = import_node_fs3.default.readdirSync(wikiDir, { withFileTypes: true });
   } catch (err) {
     if (err.code === "ENOENT") return {};
     throw err;
@@ -37884,7 +37405,7 @@ function kindByFolder(root) {
 }
 
 // src/pagerecord.ts
-var import_node_path7 = __toESM(require("node:path"), 1);
+var import_node_path4 = __toESM(require("node:path"), 1);
 var import_yaml3 = __toESM(require_dist(), 1);
 var EdgeKeys = [
   "raw_source",
@@ -37944,13 +37465,13 @@ function decodeEdges(data, pageDir) {
   return { edges, malformed };
 }
 function decodeRecord(pageRef2, text2, kindByFolder2) {
-  let pageDir = import_node_path7.default.posix.dirname(pageRef2);
+  let pageDir = import_node_path4.default.posix.dirname(pageRef2);
   if (pageDir === ".") pageDir = "";
-  const folder = import_node_path7.default.posix.basename(pageDir);
-  if (import_node_path7.default.posix.dirname(pageDir) !== "wiki") {
+  const folder = import_node_path4.default.posix.basename(pageDir);
+  if (import_node_path4.default.posix.dirname(pageDir) !== "wiki") {
     throw new Error(`"${pageRef2}": not directly under a wiki kind-folder`);
   }
-  const kind = FolderKinds[folder] ?? kindByFolder2?.[folder] ?? folderToKind(folder);
+  const kind = resolveKind(folder, kindByFolder2?.[folder]);
   const data = frontmatterMap(text2);
   const { edges, malformed } = decodeEdges(data, pageDir);
   return {
@@ -38056,43 +37577,44 @@ function loadRecords(pages, kindByFolder2, opts = {}) {
 // src/vault.ts
 init_pagepredicate();
 var Markers = ["wiki", ".wiki-root"];
-function processLookupEnv2(key) {
+var RootEnvVar = "WIKI_ROOT";
+function processLookupEnv(key) {
   const value = process.env[key];
   return [value, value !== void 0];
 }
 function hasMarker(dir) {
   for (const marker of Markers) {
     try {
-      import_node_fs8.default.statSync(import_node_path9.default.join(dir, marker));
+      import_node_fs5.default.statSync(import_node_path6.default.join(dir, marker));
       return true;
     } catch {
     }
   }
   return false;
 }
-function resolveRoot(start = "", lookupEnv = processLookupEnv2) {
-  const [wikiRoot, ok] = lookupEnv("WIKI_ROOT");
+function resolveRoot(start = "", lookupEnv = processLookupEnv) {
+  const [wikiRoot, ok] = lookupEnv(RootEnvVar);
   if (ok && wikiRoot !== "" && wikiRoot !== void 0) {
-    return { root: resolve(wikiRoot) };
+    return resolve(wikiRoot);
   }
   const startPath = resolve(start === "" ? process.cwd() : start);
   for (let dir = startPath; ; ) {
-    if (hasMarker(dir)) return { root: dir };
-    const parent = import_node_path9.default.dirname(dir);
+    if (hasMarker(dir)) return dir;
+    const parent = import_node_path6.default.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return { root: startPath };
+  return startPath;
 }
 function resolve(p) {
-  const abs = import_node_path9.default.resolve(p);
+  const abs = import_node_path6.default.resolve(p);
   try {
-    return import_node_fs8.default.realpathSync(abs);
+    return import_node_fs5.default.realpathSync(abs);
   } catch {
     return abs;
   }
 }
-function isENOENT3(err) {
+function isENOENT2(err) {
   return err.code === "ENOENT";
 }
 function isConsolidatableKind(kind, declared) {
@@ -38123,28 +37645,28 @@ var Vault = class {
   wikiSubdirectories() {
     let entries;
     try {
-      entries = import_node_fs8.default.readdirSync(import_node_path9.default.join(this.root, "wiki"), {
+      entries = import_node_fs5.default.readdirSync(import_node_path6.default.join(this.root, "wiki"), {
         withFileTypes: true
       });
     } catch (err) {
-      if (isENOENT3(err)) return [];
+      if (isENOENT2(err)) return [];
       throw err;
     }
     return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
   }
   /** The absolute filesystem path for a vault-relative page ref. */
   path(pageRef2) {
-    return import_node_path9.default.join(this.root, ...pageRef2.split("/"));
+    return import_node_path6.default.join(this.root, ...pageRef2.split("/"));
   }
   /** Read the page at pageRef (vault-relative) into a [Page]. */
   load(pageRef2) {
-    return new Page(import_node_fs8.default.readFileSync(this.path(pageRef2), "utf8"));
+    return new Page(import_node_fs5.default.readFileSync(this.path(pageRef2), "utf8"));
   }
   /** Whether pageRef names an existing *file*; a directory at that path is not
    * a page, so this is false. */
   exists(pageRef2) {
     try {
-      return !import_node_fs8.default.statSync(this.path(pageRef2)).isDirectory();
+      return !import_node_fs5.default.statSync(this.path(pageRef2)).isDirectory();
     } catch {
       return false;
     }
@@ -38152,7 +37674,7 @@ var Vault = class {
   /** Report whether anything at all sits at pageRef, directory included. */
   occupied(pageRef2) {
     try {
-      import_node_fs8.default.statSync(this.path(pageRef2));
+      import_node_fs5.default.statSync(this.path(pageRef2));
       return true;
     } catch {
       return false;
@@ -38162,8 +37684,8 @@ var Vault = class {
    * needed. */
   write(pageRef2, page) {
     const abs = this.path(pageRef2);
-    mkdirSafe(import_node_path9.default.dirname(abs), 493);
-    import_node_fs8.default.writeFileSync(abs, page.text, { mode: 420 });
+    mkdirSafe(import_node_path6.default.dirname(abs), 493);
+    import_node_fs5.default.writeFileSync(abs, page.text, { mode: 420 });
   }
   /** Return `{kind: folder}` for every `wiki/` subdirectory that is not already
    * a canonical kind-folder. The folder must pre-exist — the plugin never
@@ -38182,7 +37704,7 @@ var Vault = class {
   kindOf(folder) {
     return {
       kind: kindForFolder(this.root, folder),
-      consolidatable: readKindMeta(import_node_path9.default.join(this.root, "wiki", folder))?.consolidatable ?? false
+      consolidatable: readKindMeta(import_node_path6.default.join(this.root, "wiki", folder))?.consolidatable ?? false
     };
   }
   /** Whether the kind-folder `folder` is consolidatable (ADR-0027), reading its
@@ -38208,14 +37730,19 @@ var Vault = class {
     const refs = enumeratePageRefs(this.root);
     const pages = {};
     for (const ref of refs)
-      pages[ref] = import_node_fs8.default.readFileSync(this.path(ref), "utf8");
+      pages[ref] = import_node_fs5.default.readFileSync(this.path(ref), "utf8");
     return pages;
+  }
+  /** Decode an already-read {pageRef: text} map, so a caller holding the text
+   * shares one parse. `opts` per [LoadRecordsOptions]. */
+  recordsFor(pages, opts = {}) {
+    return loadRecords(pages, kindByFolder(this.root), opts);
   }
   /** Every `wiki/**` page as a {pageRef: record + text} map. `opts` per
    * [LoadRecordsOptions] — a tolerant check run sets `skipMalformedEdges`. */
   pagesWithText(opts = {}) {
     const pages = this.loadWikiPages();
-    const records = loadRecords(pages, kindByFolder(this.root), opts);
+    const records = this.recordsFor(pages, opts);
     const out = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: pages[ref] };
@@ -38229,20 +37756,6 @@ var Vault = class {
     const out = {};
     for (const ref of Object.keys(withText)) out[ref] = withText[ref].record;
     return out;
-  }
-  /** Load, [Page.set], and write back the page at pageRef. */
-  set(pageRef2, key, value) {
-    const page = this.load(pageRef2);
-    const updated = page.set(key, value);
-    this.write(pageRef2, updated);
-    return updated;
-  }
-  /** Load, [Page.merge], and write back the page at pageRef. */
-  merge(pageRef2, key, values) {
-    const page = this.load(pageRef2);
-    const updated = page.merge(key, values);
-    this.write(pageRef2, updated);
-    return updated;
   }
   /** Write every page in planned whose text differs from before, returning the
    * changed vault-relative paths, sorted. */
@@ -38268,18 +37781,9 @@ var Vault = class {
     }
     const changed = this.writeChanged(planMove(files, oldRef, newRef), files);
     if (this.path(oldRef) !== this.path(newRef)) {
-      import_node_fs8.default.unlinkSync(this.path(oldRef));
+      import_node_fs5.default.unlinkSync(this.path(oldRef));
     }
     return changed;
-  }
-  /** Repoint `wiki/**` pages' inbound links from oldRel to newRel.
-   *
-   * The target itself is never read, parsed, or written — for a non-page target
-   * such as an externally renamed `raw/` artifact, only other pages change.
-   * Returns the changed refs, sorted. */
-  rewriteInboundLinks(oldRel, newRel) {
-    const pages = this.loadWikiPages();
-    return this.writeChanged(planMove(pages, oldRel, newRel), pages);
   }
   /** Absorb losers into the survivor (ADR-0021), repointing inbound links.
    *
@@ -38302,27 +37806,24 @@ var Vault = class {
    * throws. */
   remove(pageRef2) {
     try {
-      import_node_fs8.default.unlinkSync(this.path(pageRef2));
+      import_node_fs5.default.unlinkSync(this.path(pageRef2));
     } catch (err) {
-      if (!isENOENT3(err)) throw err;
+      if (!isENOENT2(err)) throw err;
     }
   }
 };
 function vaultForFile(file) {
   let abs;
   try {
-    abs = import_node_fs8.default.realpathSync(import_node_path9.default.resolve(file));
+    abs = import_node_fs5.default.realpathSync(import_node_path6.default.resolve(file));
   } catch {
-    abs = import_node_path9.default.resolve(file);
+    abs = import_node_path6.default.resolve(file);
   }
-  const { root } = resolveRoot(import_node_path9.default.dirname(abs), () => [void 0, false]);
-  const rel = import_node_path9.default.relative(root, abs).split(import_node_path9.default.sep).join("/");
-  const dir = import_node_path9.default.posix.dirname(rel);
+  const root = resolveRoot(import_node_path6.default.dirname(abs), () => [void 0, false]);
+  const rel = import_node_path6.default.relative(root, abs).split(import_node_path6.default.sep).join("/");
+  const dir = import_node_path6.default.posix.dirname(rel);
   return { vault: new Vault(root), pageDir: dir === "." ? "" : dir };
 }
-
-// src/cli.ts
-init_vaultgit();
 
 // src/supersededby.ts
 function resolve2(seeds, records) {
@@ -38348,435 +37849,8 @@ function resolve2(seeds, records) {
   return resolutions;
 }
 
-// src/ingestscan.ts
-var import_node_fs11 = __toESM(require("node:fs"), 1);
-var import_node_path12 = __toESM(require("node:path"), 1);
-init_vaultgit();
-
-// src/ingestignore.ts
-var import_node_fs10 = __toESM(require("node:fs"), 1);
-var import_node_path11 = __toESM(require("node:path"), 1);
-var Filename = ".ingestignore";
-function parse(text2) {
-  const patterns = [];
-  for (let line of text2.split("\n")) {
-    const hash = line.indexOf("#");
-    if (hash !== -1) line = line.slice(0, hash);
-    line = line.replace(/[ \t\r]+$/, "");
-    if (line.trim() === "") continue;
-    if (/[/!]/.test(line) || line.includes("**")) {
-      throw new Error(
-        `${Filename} patterns must be bare filename globs (no '/', no '!', no '**'): "${line}"`
-      );
-    }
-    patterns.push(line);
-  }
-  return patterns;
-}
-function compile(patterns) {
-  const literals = /* @__PURE__ */ new Set();
-  const globs = [];
-  for (const pattern of patterns) {
-    if (!/[*?]/.test(pattern)) {
-      literals.add(pattern);
-    } else {
-      let re = "";
-      for (const ch of pattern) {
-        if (ch === "*") re += "[^/]*";
-        else if (ch === "?") re += "[^/]";
-        else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      }
-      globs.push(new RegExp(`^${re}$`));
-    }
-  }
-  return {
-    matches(name) {
-      return literals.has(name) || globs.some((re) => re.test(name));
-    }
-  };
-}
-function append(folder, pattern, comment) {
-  const filePath = import_node_path11.default.join(folder, Filename);
-  let existing = null;
-  try {
-    existing = import_node_fs10.default.readFileSync(filePath, "utf8");
-  } catch (err) {
-    if (!isENOENT4(err)) throw err;
-  }
-  if (existing !== null) {
-    const patterns = parse(existing);
-    if (patterns.includes(pattern)) return;
-  }
-  let line = pattern;
-  if (comment !== "") line += "  # " + comment;
-  const fd = import_node_fs10.default.openSync(filePath, "a", 420);
-  try {
-    import_node_fs10.default.writeSync(fd, line + "\n");
-  } finally {
-    import_node_fs10.default.closeSync(fd);
-  }
-}
-function isENOENT4(err) {
-  return err.code === "ENOENT";
-}
-
-// src/ingestscan.ts
-var ReasonNeverIngested = "never-ingested";
-var ReasonChangedSinceIngestion = "changed-since-ingestion";
-var skipNames = /* @__PURE__ */ new Set(["INGESTION.md", ".ingestignore"]);
-function walkRaw(root, folder) {
-  let rawRoot = import_node_path12.default.join(root, "raw");
-  if (folder !== "") rawRoot = import_node_path12.default.join(rawRoot, ...folder.split("/"));
-  let info;
-  try {
-    info = import_node_fs11.default.statSync(rawRoot);
-  } catch (err) {
-    if (isENOENT5(err)) return [];
-    throw err;
-  }
-  if (!info.isDirectory()) return [];
-  const rels = [];
-  const walk2 = (dir) => {
-    const entries = import_node_fs11.default.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    for (const entry of entries) {
-      const abs = import_node_path12.default.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk2(abs);
-      } else if (!skipNames.has(entry.name)) {
-        rels.push(toSlash2(import_node_path12.default.relative(root, abs)));
-      }
-    }
-  };
-  walk2(rawRoot);
-  return rels;
-}
-function loadIngestignore(folder) {
-  const filePath = import_node_path12.default.join(folder, Filename);
-  let text2;
-  try {
-    text2 = import_node_fs11.default.readFileSync(filePath, "utf8");
-  } catch (err) {
-    if (isENOENT5(err)) return [];
-    throw err;
-  }
-  return parse(text2);
-}
-function backPointersByRaw(pages) {
-  const out = {};
-  for (const [pageRef2, page] of Object.entries(pages)) {
-    for (const edge of page.record.edges) {
-      if (edge.key !== "raw_source") continue;
-      for (const target of edge.targets) {
-        (out[target.toLowerCase()] ??= []).push(pageRef2);
-      }
-    }
-  }
-  return out;
-}
-function strictlyNewer(rawDate, pageDate) {
-  if (pageDate === "") return true;
-  if (rawDate === "") return false;
-  return rawDate > pageDate;
-}
-async function scan(root, folder, git2) {
-  const vault = new Vault(root);
-  const pages = vault.pagesWithText();
-  const backPointers = backPointersByRaw(pages);
-  if (git2 === null) git2 = await new VaultGit(root).scanFacts();
-  const rels = walkRaw(root, folder);
-  const result = { eligible: [], ignored: [] };
-  const matcherCache = /* @__PURE__ */ new Map();
-  for (const rel of rels) {
-    const dir = import_node_path12.default.dirname(import_node_path12.default.join(root, ...rel.split("/")));
-    let matcher = matcherCache.get(dir);
-    if (matcher === void 0) {
-      let patterns;
-      try {
-        patterns = loadIngestignore(dir);
-      } catch (err) {
-        throw new Error(`${rel}: ${err.message}`, { cause: err });
-      }
-      matcher = compile(patterns);
-      matcherCache.set(dir, matcher);
-    }
-    if (matcher.matches(import_node_path12.default.basename(rel))) {
-      result.ignored.push(rel);
-      continue;
-    }
-    const pointing = backPointers[rel.toLowerCase()] ?? [];
-    if (pointing.length === 0) {
-      result.eligible.push({
-        rawRel: rel,
-        reason: ReasonNeverIngested,
-        backPointers: []
-      });
-      continue;
-    }
-    if (await git2.porcelainMentions(rel)) {
-      result.eligible.push({
-        rawRel: rel,
-        reason: ReasonChangedSinceIngestion,
-        backPointers: pointing
-      });
-      continue;
-    }
-    const rawDate = await git2.lastCommitDate(rel);
-    for (const pageRel of pointing) {
-      if (strictlyNewer(rawDate, await git2.lastCommitDate(pageRel))) {
-        result.eligible.push({
-          rawRel: rel,
-          reason: ReasonChangedSinceIngestion,
-          backPointers: pointing
-        });
-        break;
-      }
-    }
-  }
-  return result;
-}
-function toSlash2(p) {
-  return p.split(import_node_path12.default.sep).join("/");
-}
-function isENOENT5(err) {
-  return err.code === "ENOENT";
-}
-
-// src/commit.ts
-var import_node_fs12 = __toESM(require("node:fs"), 1);
-var import_node_path14 = __toESM(require("node:path"), 1);
-
-// src/chainofevidence.ts
-var import_node_path13 = __toESM(require("node:path"), 1);
-var sourceDir = `wiki/${KindFolders["source"]}`;
-function check(staged, raw) {
-  raw = import_node_path13.default.posix.normalize(raw);
-  const refs = sortedRefs(staged);
-  let stubRef = "";
-  for (const pageRef2 of refs) {
-    if (import_node_path13.default.posix.dirname(pageRef2) !== sourceDir) continue;
-    const link2 = staged[pageRef2].getString("raw_source");
-    if (link2 === "") continue;
-    const { dest, ok } = linkDest(link2);
-    if (ok && resolveLinkDest(dest, import_node_path13.default.posix.dirname(pageRef2)) === raw) {
-      stubRef = pageRef2;
-      break;
-    }
-  }
-  if (stubRef === "") {
-    return [
-      `${raw} needs a ${KindFolders["source"]}/ page whose raw_source points at it \u2014 every ingested raw file gets a stand-in, even a thin stub`
-    ];
-  }
-  const problems = [];
-  for (const pageRef2 of refs) {
-    if (pageRef2 === stubRef) continue;
-    const links = staged[pageRef2].getStringList("source");
-    const pageDir = import_node_path13.default.posix.dirname(pageRef2);
-    let found = false;
-    for (const link2 of links) {
-      const { dest, ok } = linkDest(link2);
-      if (ok && resolveLinkDest(dest, pageDir) === stubRef) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      problems.push(`${pageRef2} needs a source edge to the stub ${stubRef}`);
-    }
-  }
-  return problems;
-}
-function sortedRefs(staged) {
-  return Object.keys(staged).sort();
-}
-
-// src/commit.ts
-var ErrGate = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "ErrGate";
-  }
-};
-var defaultAction = "ingest";
-function stagedPaths(m) {
-  const paths = [];
-  paths.push(...m.created ?? []);
-  paths.push(...m.updated ?? []);
-  paths.push(...m.deleted ?? []);
-  for (const s of m.superseded ?? []) paths.push(s.old, s.new);
-  if (m.raw_source) paths.push(m.raw_source);
-  const seen = /* @__PURE__ */ new Set();
-  const ordered = [];
-  for (const p of paths) {
-    if (!seen.has(p)) {
-      seen.add(p);
-      ordered.push(p);
-    }
-  }
-  return ordered;
-}
-function buildMessage(m) {
-  const action = m.action === "" ? defaultAction : m.action ?? defaultAction;
-  const lines = [`${action}: ${m.title}`, ""];
-  for (const pageRef2 of m.created ?? []) lines.push(`created: ${pageRef2}`);
-  for (const pageRef2 of m.updated ?? []) lines.push(`updated: ${pageRef2}`);
-  for (const pageRef2 of m.deleted ?? []) lines.push(`deleted: ${pageRef2}`);
-  for (const s of m.superseded ?? [])
-    lines.push(`superseded: ${s.old} -> ${s.new}`);
-  if (m.source_date) lines.push(`source-date: ${m.source_date}`);
-  return lines.join("\n") + "\n";
-}
-async function checkChainOfEvidence(root, m) {
-  if (!m.raw_source) return;
-  const staged = {};
-  for (const pageRef2 of [...m.created ?? [], ...m.updated ?? []]) {
-    const abs = import_node_path14.default.join(root, ...pageRef2.split("/"));
-    let text2;
-    try {
-      text2 = import_node_fs12.default.readFileSync(abs, "utf8");
-    } catch {
-      continue;
-    }
-    staged[pageRef2] = new Page(text2);
-  }
-  const problems = check(staged, m.raw_source);
-  if (problems.length > 0) {
-    throw new ErrGate(`commit gated: ${problems.join("; ")}`);
-  }
-}
-async function commit2(root, m, git2) {
-  if (!await git2.isWorkTree()) {
-    throw new Error(
-      `${root} is not a git work tree; the vault's history is not optional`
-    );
-  }
-  await checkChainOfEvidence(root, m);
-  const paths = stagedPaths(m);
-  return git2.stageAndCommit(paths, buildMessage(m));
-}
-
-// src/initwiki.ts
-var import_node_fs13 = __toESM(require("node:fs"), 1);
-var import_node_path15 = __toESM(require("node:path"), 1);
-init_vaultgit();
-var ModeQueryFromAnywhere = "query-from-anywhere";
-var ModeDedicated = "dedicated";
-var Modes = [ModeQueryFromAnywhere, ModeDedicated];
-var gitignore = "*.rsls\n**/.claude/wiki-knowledge/sessions/\n**/.opencode/wiki-knowledge/sessions/\n.wiki-knowledge/\nlog.md\nindex.md\n_index.md\n";
-async function isVault(root) {
-  if (!hasMarker(root)) return false;
-  return await new VaultGit(root).isWorkTree();
-}
-function settingsJSON(pluginRoot) {
-  const settings = {
-    extraKnownMarketplaces: {
-      "wiki-knowledge-plugin": {
-        source: { source: "directory", path: pluginRoot }
-      }
-    },
-    enabledPlugins: { "wiki-knowledge@wiki-knowledge-plugin": true }
-  };
-  return JSON.stringify(settings, null, 2) + "\n";
-}
-async function init2(vaultRoot, mode, pluginRoot) {
-  switch (mode) {
-    case ModeQueryFromAnywhere:
-      if (pluginRoot === "") {
-        throw new Error(`${ModeQueryFromAnywhere} mode requires a plugin root`);
-      }
-      break;
-    case ModeDedicated:
-      break;
-    default:
-      throw new Error(
-        `unknown mode "${mode}"; must be one of ${Modes.join(", ")}`
-      );
-  }
-  if (await isVault(vaultRoot)) {
-    throw new Error(
-      `${vaultRoot} already looks like a vault (a wiki/ or .wiki-root marker in a git work tree)`
-    );
-  }
-  mkdirSafe(vaultRoot, 493);
-  const converting = import_node_fs13.default.existsSync(import_node_path15.default.join(vaultRoot, "wiki"));
-  for (const folder of Object.values(KindFolders)) {
-    const kindDir = import_node_path15.default.join(vaultRoot, "wiki", folder);
-    if (import_node_fs13.default.existsSync(kindDir)) continue;
-    mkdirSafe(kindDir, 493);
-    touch(import_node_path15.default.join(kindDir, ".gitkeep"));
-  }
-  const rawDir = import_node_path15.default.join(vaultRoot, "raw");
-  if (!converting && !import_node_fs13.default.existsSync(rawDir)) {
-    mkdirSafe(rawDir, 493);
-    touch(import_node_path15.default.join(rawDir, ".gitkeep"));
-  }
-  import_node_fs13.default.writeFileSync(import_node_path15.default.join(vaultRoot, ".gitignore"), gitignore, {
-    mode: 420
-  });
-  const addPaths = [];
-  for (const rel of ["wiki", "raw", ".gitignore"]) {
-    const abs = import_node_path15.default.join(vaultRoot, ...rel.split("/"));
-    if (import_node_fs13.default.existsSync(abs)) addPaths.push(rel);
-  }
-  if (mode === ModeQueryFromAnywhere) {
-    const claudeDir = import_node_path15.default.join(vaultRoot, ".claude");
-    mkdirSafe(claudeDir, 493);
-    import_node_fs13.default.writeFileSync(
-      import_node_path15.default.join(claudeDir, "settings.json"),
-      settingsJSON(pluginRoot),
-      {
-        mode: 420
-      }
-    );
-    addPaths.push(".claude/settings.json");
-  }
-  const repo = new VaultGit(vaultRoot);
-  if (!await repo.isWorkTree()) {
-    await repo.init();
-  }
-  await repo.add(addPaths);
-  await repo.commit("Initialize wiki vault");
-  return import_node_path15.default.resolve(vaultRoot);
-}
-function touch(file) {
-  import_node_fs13.default.closeSync(import_node_fs13.default.openSync(file, "a", 420));
-}
-
-// src/hooks.ts
-var import_node_fs14 = __toESM(require("node:fs"), 1);
-var import_node_path16 = __toESM(require("node:path"), 1);
-function sessionStart(payload, lookupEnv = processLookupEnv) {
-  const p = payload ?? {};
-  if (!p.session_id || !p.transcript_path) return;
-  writeTranscriptPath(
-    p.session_id,
-    p.transcript_path,
-    sessionsDir(p.cwd ?? "", lookupEnv)
-  );
-}
-function postToolUse(payload, lookupEnv = processLookupEnv) {
-  const p = payload ?? {};
-  if (!p.session_id) return;
-  const stateDir = findSessionsDir(p.cwd ?? "", lookupEnv);
-  if (stateDir === void 0) return;
-  const line = JSON.stringify({
-    tool: p.tool_name ?? null,
-    tool_use_id: p.tool_use_id ?? null,
-    prompt_id: p.prompt_id ?? null,
-    agent_id: p.agent_id ?? null,
-    agent_type: p.agent_type ?? null,
-    duration_ms: p.duration_ms ?? null
-  });
-  const logFile = logPath(p.session_id, stateDir);
-  mkdirSafe(import_node_path16.default.dirname(logFile), 493);
-  import_node_fs14.default.appendFileSync(logFile, line + "\n", { mode: 420 });
-}
-
-// src/ingest.ts
-var import_node_path18 = __toESM(require("node:path"), 1);
-
 // src/pageedge.ts
-var import_node_path17 = __toESM(require("node:path"), 1);
+var import_node_path7 = __toESM(require("node:path"), 1);
 var listEdgeKeys = EdgeKeys.filter(
   (key) => !isSingleLinkEdgeKey(key)
 );
@@ -38792,642 +37866,186 @@ function isWholeLink(value) {
 }
 function isVaultRef(ref) {
   if (!isVaultRelativeDest(ref)) return false;
-  const normalized = import_node_path17.default.posix.normalize(ref);
+  const normalized = import_node_path7.default.posix.normalize(ref);
   return normalized !== ".." && !normalized.startsWith("../");
 }
 function edgeRefusal(key, value) {
   return `${key}: ${JSON.stringify(value)} is neither a markdown link nor a resolvable vault-relative page ref`;
 }
 function edgeLabel(key, ref, title) {
-  return key === "raw_source" || title === "" ? import_node_path17.default.posix.basename(ref) : title;
+  return isSingleLinkEdgeKey(key) || title === "" ? import_node_path7.default.posix.basename(ref) : title;
 }
 function composeEdgeLink(key, ref, pageDir, title) {
   return composeLink(edgeLabel(key, ref, title), ref, pageDir);
 }
 function edgeLink(key, value, pageDir, lookup) {
   if (isWholeLink(value)) return value;
-  const ref = import_node_path17.default.posix.normalize(value);
+  const ref = import_node_path7.default.posix.normalize(value);
   if (!isVaultRef(value)) throw new Error(edgeRefusal(key, value));
   const found = lookup(ref);
   if (!found.exists) throw new Error(edgeRefusal(key, value));
   return composeEdgeLink(key, ref, pageDir, found.title);
 }
 
-// src/ingest.ts
-init_pagepredicate();
-var MaxPathLength = 255;
-var OpCreate = "create";
-var OpUpdate = "update";
-var ActionConsolidate = "consolidate";
-var ErrPlan = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "ErrPlan";
-  }
-};
-var OrderedMap = class _OrderedMap {
-  keys = [];
-  values = /* @__PURE__ */ new Map();
-  get(key) {
-    if (!this.values.has(key)) return { value: void 0, ok: false };
-    return { value: this.values.get(key), ok: true };
-  }
-  length() {
-    return this.keys.length;
-  }
-  *all() {
-    for (const key of this.keys) {
-      yield [key, this.values.get(key)];
-    }
-  }
-  set(key, value) {
-    if (!this.values.has(key)) this.keys.push(key);
-    this.values.set(key, value);
-  }
-  /** Decode a JSON object recording key order; a duplicate keeps its first
-   * position and takes the last value. */
-  static decode(data) {
-    const m = new _OrderedMap();
-    if (data === null || typeof data !== "object" || Array.isArray(data)) {
-      return m;
-    }
-    for (const key of Object.keys(data)) {
-      m.set(key, data[key]);
-    }
-    return m;
-  }
-};
-function decodePlan(jsonText) {
-  let data;
-  try {
-    data = JSON.parse(jsonText);
-  } catch (err) {
-    throw new Error(`invalid plan JSON: ${err.message}`, {
-      cause: err
-    });
-  }
-  const action = typeof data["action"] === "string" ? data["action"] : "";
-  const rawPages = Array.isArray(data["pages"]) ? data["pages"] : [];
-  const consolidates = Array.isArray(data["consolidates"]) ? data["consolidates"].map(
-    (ref) => typeof ref === "string" ? ref : String(ref)
-  ) : [];
-  const pages = rawPages.map((p) => {
-    const page = p;
-    return {
-      op: typeof page["op"] === "string" ? page["op"] : "",
-      title: typeof page["title"] === "string" ? page["title"] : "",
-      kind: typeof page["kind"] === "string" ? page["kind"] : "",
-      page_ref: typeof page["page_ref"] === "string" ? page["page_ref"] : "",
-      body: page["body"] === null || page["body"] === void 0 ? null : typeof page["body"] === "string" ? page["body"] : String(page["body"]),
-      frontmatter: OrderedMap.decode(page["frontmatter"]),
-      edges: OrderedMap.decode(page["edges"])
-    };
-  });
-  return {
-    title: typeof data["title"] === "string" ? data["title"] : "",
-    action: action === "" ? "ingest" : action,
-    source_date: typeof data["source_date"] === "string" ? data["source_date"] : "",
-    raw: typeof data["raw"] === "string" ? data["raw"] : "",
-    pages,
-    consolidates
-  };
+// src/pagecommand.ts
+function loadPage(file) {
+  return new Page(import_node_fs6.default.readFileSync(file, "utf8"));
 }
-var Resolved = class {
-  constructor(plan, pages, root, extraKindFolders, consolidation = null) {
-    this.plan = plan;
-    this.pages = pages;
-    this.root = root;
-    this.extraKindFolders = extraKindFolders;
-    this.consolidation = consolidation;
+function writePageFile(file, page) {
+  import_node_fs6.default.writeFileSync(file, page.text, { mode: 420 });
+}
+function edgeNormalizer(file) {
+  const { vault, pageDir } = vaultForFile(file);
+  const lookup = (ref) => vault.exists(ref) ? { exists: true, title: vault.load(ref).getString("title") } : { exists: false, title: "" };
+  return (key, value) => edgeLink(key, value, pageDir, lookup);
+}
+function edgeSetValue(file, key, value) {
+  const normalize3 = edgeNormalizer(file);
+  if (!isListEdgeKey(key)) {
+    if (Array.isArray(value))
+      fail(`${key} holds a single link; pass one value`);
+    if (typeof value !== "string") fail(edgeRefusal(key, value));
+    return normalize3(key, value);
   }
-  vault() {
-    if (this.root === "") return null;
-    return new Vault(this.root);
+  const items = Array.isArray(value) ? value : [value];
+  return items.map((item) => {
+    if (typeof item !== "string") fail(edgeRefusal(key, item));
+    return normalize3(key, item);
+  });
+}
+function stringListSetValue(key, value) {
+  if (typeof value === "string") {
+    const text2 = value.trim();
+    if (!text2.startsWith("[") || !text2.endsWith("]")) return [value];
+    let parsed;
+    try {
+      parsed = JSON.parse(text2);
+    } catch {
+      fail(`${key} starts like a JSON list but does not parse: ${value}`);
+    }
+    return stringListSetValue(key, parsed);
   }
-  opOf(page) {
-    return page.plan.op;
-  }
-  /** Check this plan, shape then semantic, before any write; throws [ErrPlan] naming every problem. */
-  validate() {
-    const problems = [...this.shapeErrors(), ...this.semanticErrors()];
-    if (problems.length > 0) {
-      throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
-    }
-  }
-  /** Required fields and valid ops — everything checkable without a vault. */
-  shapeErrors() {
-    const problems = [];
-    if (this.plan.title === "") {
-      problems.push("plan.title is required");
-    }
-    if (this.plan.pages.length === 0) {
-      problems.push("plan.pages must contain at least one page");
-    }
-    for (let i = 0; i < this.pages.length; i++) {
-      const page = this.pages[i].plan;
-      const prefix = `pages[${i}]`;
-      if (page.op !== OpCreate && page.op !== OpUpdate) {
-        problems.push(
-          `${prefix}.op must be 'create' or 'update', got ${JSON.stringify(page.op)}`
-        );
-        continue;
-      }
-      if (page.op === OpCreate && page.title === "") {
-        problems.push(`${prefix}.title is required`);
-      }
-      if (page.op === OpCreate) {
-        if (page.page_ref !== "") {
-          problems.push(`${prefix}.page_ref must not be set for op=create`);
-        }
-        if (page.kind === "") {
-          problems.push(`${prefix}.kind is required for op=create`);
-        } else if (!Kinds.includes(page.kind) && !(page.kind in this.extraKindFolders)) {
-          problems.push(
-            `${prefix}.kind ${JSON.stringify(page.kind)} is not a valid kind`
-          );
-        }
-        if (page.body === null) {
-          problems.push(`${prefix}.body is required for op=create`);
-        }
-      } else {
-        if (page.kind !== "") {
-          problems.push(`${prefix}.kind must not be set for op=update`);
-        }
-        if (page.page_ref === "") {
-          problems.push(`${prefix}.page_ref is required for op=update`);
-        }
-      }
-      const rawSource = page.frontmatter.get("raw_source");
-      if (rawSource.ok && rawSource.value !== null) {
-        if (rawSource.value !== true) {
-          problems.push(
-            `${prefix}.frontmatter.raw_source must be true (derived from plan.raw), got ${String(rawSource.value)}`
-          );
-        } else if (this.plan.raw === "") {
-          problems.push(
-            `${prefix}.frontmatter.raw_source is true but plan.raw is not set`
-          );
-        }
-      }
-      const sourceDate2 = page.frontmatter.get("source_date");
-      if (sourceDate2.ok && sourceDate2.value !== null) {
-        if (parseSourceDate(sourceDate2.value) === null) {
-          problems.push(
-            `${prefix}.frontmatter.source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(sourceDate2.value)}`
-          );
-        }
-      }
-      const rewritesFrontmatter = page.op === OpCreate || page.frontmatter.length() > 0;
-      if (rewritesFrontmatter) {
-        const volatility = page.frontmatter.get("volatility");
-        const missing = !volatility.ok || volatility.value === null || String(volatility.value).trim() === "";
-        if (missing) {
-          problems.push(`${prefix}.frontmatter.volatility is required`);
-        } else if (!Volatilities.includes(
-          String(volatility.value)
-        )) {
-          problems.push(
-            `${prefix}.frontmatter.volatility must be one of ${Volatilities.join("|")}, got ${String(volatility.value)}`
-          );
-        }
-      }
-    }
-    if (this.plan.action === ActionConsolidate) {
-      if (this.plan.consolidates.length === 0) {
-        problems.push(
-          `plan.consolidates must name at least one page when action is '${ActionConsolidate}'`
-        );
-      }
-      if (this.plan.pages.length !== 1) {
-        problems.push(
-          `action '${ActionConsolidate}' takes exactly one page (the survivor), got ${this.plan.pages.length}`
-        );
-      } else if (this.plan.pages[0].body === null) {
-        problems.push(
-          `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`
-        );
-      }
-      if (this.plan.raw !== "") {
-        problems.push(
-          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`
-        );
-      }
-    } else if (this.plan.consolidates.length > 0) {
-      problems.push(
-        `plan.consolidates is only valid when action is '${ActionConsolidate}'`
-      );
-    }
-    const seenConsolidated = /* @__PURE__ */ new Set();
-    for (let i = 0; i < this.plan.consolidates.length; i++) {
-      const ref = this.plan.consolidates[i];
-      if (ref === "") {
-        problems.push(`plan.consolidates[${i}] must not be empty`);
-        continue;
-      }
-      if (seenConsolidated.has(ref)) {
-        problems.push(`plan.consolidates names ${ref} more than once`);
-        continue;
-      }
-      seenConsolidated.add(ref);
-    }
-    return problems;
-  }
-  /** The checks that need the vault: target existence, path length, evidence chain. */
-  semanticErrors() {
-    if (this.root === "") return [];
-    const v = this.vault();
-    const problems = [];
-    const prospective = /* @__PURE__ */ new Set();
-    for (const rp of this.pages) {
-      if (rp.plan.op === OpCreate && rp.pageRef !== "") {
-        prospective.add(rp.pageRef);
-      }
-    }
-    for (let i = 0; i < this.pages.length; i++) {
-      const rp = this.pages[i];
-      const page = rp.plan;
-      const prefix = `pages[${i}]`;
-      if (page.op !== OpCreate && page.op !== OpUpdate) {
-        continue;
-      }
-      if (page.op === OpCreate && rp.pageRef !== "") {
-        if (rp.occupied) {
-          problems.push(
-            `${prefix}: create target ${rp.pageRef} already exists`
-          );
-        }
-        const full = v.path(rp.pageRef);
-        if (full.length > MaxPathLength) {
-          problems.push(
-            `${prefix}: path ${rp.pageRef} exceeds ${MaxPathLength} chars (${full.length} chars with vault root)`
-          );
-        }
-      } else if (page.op === OpUpdate && rp.pageRef !== "" && !rp.loaded) {
-        problems.push(`${prefix}.page_ref ${rp.pageRef} does not exist`);
-      }
-      for (const target of pageLinkTargets(page, this.plan)) {
-        if (prospective.has(target.ref)) continue;
-        if (!v.exists(target.ref)) {
-          problems.push(
-            `${prefix}: ${target.key} target ${JSON.stringify(target.ref)} does not resolve to a real page`
-          );
-        }
-      }
-    }
-    if (this.plan.raw !== "") {
-      const staged = {};
-      for (const rp of this.pages) {
-        if (rp.pageRef !== "" && rp.page !== null) {
-          staged[rp.pageRef] = rp.page;
-        }
-      }
-      problems.push(...check(staged, this.plan.raw));
-    }
-    if (this.plan.action === ActionConsolidate) {
-      problems.push(...this.consolidationErrors());
-    }
-    return problems;
-  }
-  /** The absorbed pages are real and exist, and the survivor still reads their content. */
-  consolidationErrors() {
-    const c = this.consolidation;
-    if (c === null) return [];
-    const problems = [];
-    if (c.survivorRef === "") {
-      return problems;
-    }
-    if (c.absorbed.some((a) => a.pageRef === c.survivorRef)) {
-      problems.push(
-        `plan.consolidates names the survivor ${c.survivorRef}; a page cannot absorb itself`
-      );
-    }
-    for (let i = 0; i < c.absorbed.length; i++) {
-      const absorbed = c.absorbed[i];
-      if (absorbed.pageRef === "") continue;
-      if (!isPageRef(absorbed.pageRef)) {
-        problems.push(
-          `plan.consolidates[${i}] ${absorbed.pageRef} is not a page (wiki/<kind-folder>/<file>.md)`
-        );
-        continue;
-      }
-      if (!absorbed.found) {
-        problems.push(
-          `plan.consolidates[${i}] ${absorbed.pageRef} does not exist`
-        );
-      }
-    }
-    problems.push(...this.losslessnessErrors());
-    return problems;
-  }
-  /**
-   * The losslessness gate (ADR-0021): each absorbed body must still be readable
-   * in the survivor's body, so the delete drops nothing. Compared through
-   * [canonicalizeLinkTargets] — by where links point, not how they are spelled —
-   * so a body re-based into another kind-folder compares equal and a link the
-   * merge broke does not. Frontmatter is deliberately outside the comparison.
-   */
-  losslessnessErrors() {
-    const c = this.consolidation;
-    if (c === null || c.survivorRef === "" || this.pages.length !== 1)
-      return [];
-    const survivor = this.pages[0].page;
-    if (survivor === null) return [];
-    const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
-    const target = (ref) => consolidated.has(ref) ? c.survivorRef : ref;
-    const survivorBody = canonicalizeLinkTargets(
-      survivor.body(),
-      import_node_path18.default.posix.dirname(c.survivorRef),
-      target
-    );
-    const problems = [];
-    for (const absorbed of c.absorbed) {
-      if (!absorbed.found) continue;
-      const want = canonicalizeLinkTargets(
-        absorbed.body,
-        import_node_path18.default.posix.dirname(absorbed.pageRef),
-        target
-      ).trim();
-      if (want === "") continue;
-      if (!survivorBody.includes(want)) {
-        problems.push(
-          `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content \u2014 a Consolidation is lossless (ADR-0021)`
-        );
-      }
-    }
-    return problems;
-  }
-  /** Write every resolved page and commit, returning the SHA. Assumes
-   * [Resolved.validate] passed; no rollback on failure. */
-  async execute(git2) {
-    if (this.root === "") {
-      throw new ErrPlan(
-        "invalid plan: cannot execute a plan resolved without a vault root"
-      );
-    }
-    const v = this.vault();
-    if (this.plan.action === ActionConsolidate) {
-      return this.executeConsolidation(v, git2);
-    }
-    const created = [];
-    const updated = [];
-    const superseded = [];
-    for (const resolved of this.pages) {
-      if (resolved.pageRef === "" || resolved.page === null) {
-        throw new ErrPlan(
-          `invalid plan: page ${JSON.stringify(resolved.plan.title)} was not resolved`
-        );
-      }
-      v.write(resolved.pageRef, resolved.page);
-      if (resolved.plan.op !== OpCreate) {
-        updated.push(resolved.pageRef);
-        continue;
-      }
-      created.push(resolved.pageRef);
-      const targets = resolved.plan.edges.get("supersedes");
-      if (targets.ok) {
-        for (const target of targets.value ?? []) {
-          superseded.push({
-            old: import_node_path18.default.posix.normalize(target),
-            new: resolved.pageRef
-          });
-        }
-      }
-    }
-    return commit2(
-      this.root,
-      {
-        title: this.plan.title,
-        action: this.plan.action,
-        created,
-        updated,
-        superseded,
-        source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw
-      },
-      git2
-    );
-  }
-  /**
-   * [execute] for `consolidate`: write the survivor, repoint every inbound
-   * link, delete the absorbed pages, commit once (ADR-0021). The losslessness
-   * check runs again here so a hand-built [Resolved] cannot route around
-   * [validate]. */
-  async executeConsolidation(v, git2) {
-    const c = this.consolidation;
-    const survivor = this.pages.length === 1 ? this.pages[0] : null;
-    if (c === null || c.survivorRef === "" || survivor === null || survivor.page === null) {
-      throw new ErrPlan("invalid plan: consolidation was not resolved");
-    }
-    const problems = this.losslessnessErrors();
-    for (const absorbed of c.absorbed) {
-      if (!absorbed.found) {
-        problems.push(`plan.consolidates ${absorbed.pageRef} does not exist`);
-      }
-    }
-    if (problems.length > 0) {
-      throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
-    }
-    const losers = c.absorbed.map((a) => a.pageRef);
-    const changed = v.consolidate(c.survivorRef, survivor.page, losers);
-    const created = [];
-    const updated = [];
-    for (const ref of changed) {
-      if (ref !== c.survivorRef) updated.push(ref);
-    }
-    if (survivor.plan.op === OpCreate) created.push(c.survivorRef);
-    else updated.unshift(c.survivorRef);
-    return commit2(
-      this.root,
-      {
-        title: this.plan.title,
-        action: this.plan.action,
-        created,
-        updated,
-        deleted: losers,
-        source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw
-      },
-      git2
-    );
-  }
-  /** A human-readable summary of what [Resolved.execute] would write. */
-  describe() {
-    const lines = [`${this.plan.action}: ${this.plan.title}`];
-    for (const resolved of this.pages) {
-      lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
-    }
-    for (const absorbed of this.consolidation?.absorbed ?? []) {
-      lines.push(`  ${"delete".padEnd(6)} ${absorbed.pageRef}`);
-    }
-    return lines.join("\n");
-  }
-};
-function resolve3(plan, root) {
-  let v = null;
-  const extraKindFolders = {};
-  if (root !== "") {
-    v = new Vault(root);
-    const legacy = v.legacyKindFolders();
-    if (legacy.length > 0) {
-      const moves = legacy.map(
-        (kind) => `git mv wiki/${kind}/* wiki/${kind}s/`
-      );
-      throw new Error(
-        `${root} holds pre-ADR-0008 kind-folders (wiki/${legacy.join(", wiki/")}); move their pages into the plural folders before ingesting (${moves.join("; ")}), then remove the empty singular folders. Merge by hand where both spellings hold the same filename`
-      );
-    }
-    Object.assign(extraKindFolders, v.discoveredKinds());
-  }
-  const refs = plan.pages.map((page) => pageRef(page, extraKindFolders));
-  const titles = /* @__PURE__ */ new Map();
-  for (let i = 0; i < refs.length; i++) {
-    const ref = refs[i];
-    if (ref === "") continue;
-    if (!titles.has(ref)) titles.set(ref, plan.pages[i].title);
-  }
-  const resolvedPages = [];
-  for (let i = 0; i < plan.pages.length; i++) {
-    const planPage = plan.pages[i];
-    const pageRef_ = refs[i];
-    if (pageRef_ === "") {
-      resolvedPages.push({
-        plan: planPage,
-        pageRef: "",
-        page: null,
-        occupied: false,
-        loaded: false
-      });
-      continue;
-    }
-    let base = new Page("");
-    let loaded = false;
-    if (planPage.op === OpUpdate && v !== null && v.exists(pageRef_)) {
-      base = v.load(pageRef_);
-      loaded = true;
-    }
-    let page = applyFrontmatter(
-      base,
-      planPage,
-      import_node_path18.default.posix.dirname(pageRef_),
-      plan,
-      titles,
-      v
-    );
-    page = applyBody(page, planPage.body);
-    resolvedPages.push({
-      plan: planPage,
-      pageRef: pageRef_,
-      page,
-      occupied: v !== null && v.occupied(pageRef_),
-      loaded
-    });
-  }
-  return new Resolved(
-    plan,
-    resolvedPages,
-    root,
-    extraKindFolders,
-    resolveConsolidation(plan, resolvedPages, v)
+  if (!Array.isArray(value)) fail(`${key} expects a JSON list of values`);
+  return value.map((item) => {
+    if (typeof item !== "string") fail(`${key} expects a JSON list of strings`);
+    return item;
+  });
+}
+function formatFrontmatterValue(value) {
+  if (!Array.isArray(value)) return formatScalar(value);
+  return "[" + value.map((v) => `'${formatScalar(v)}'`).join(", ") + "]";
+}
+function formatScalar(value) {
+  if (typeof value === "boolean") return value ? "True" : "False";
+  return String(value);
+}
+function registerPageCommands(program2) {
+  const page = program2.command("page").description(
+    "Read and edit one page's frontmatter (edge keys take a markdown link or a vault-relative page ref)"
   );
-}
-function resolveConsolidation(plan, resolvedPages, v) {
-  if (plan.action !== ActionConsolidate || resolvedPages.length === 0) {
-    return null;
-  }
-  const survivorRef = resolvedPages[0].pageRef;
-  const absorbed = plan.consolidates.map((ref) => {
-    const pageRef2 = import_node_path18.default.posix.normalize(ref);
-    let body = "";
-    let found = false;
-    if (v !== null && pageRef2 !== "" && v.exists(pageRef2)) {
-      body = v.load(pageRef2).body();
-      found = true;
+  page.command("get").argument("<file>", "markdown file").argument("<key>", "frontmatter key").description("Print a frontmatter value").action((file, key) => {
+    const p = loadPage(file);
+    const { value, ok } = p.get(key);
+    if (!ok || value === null || value === void 0) {
+      fail(`no frontmatter key "${key}" in ${file}`);
     }
-    return { pageRef: pageRef2, body, found };
+    console.log(formatFrontmatterValue(value));
   });
-  return { survivorRef, absorbed };
-}
-function pageRef(page, extraKindFolders) {
-  if (page.op !== OpCreate) return page.page_ref;
-  if (page.title === "") return "";
-  try {
-    return path6(page.kind, page.title, extraKindFolders);
-  } catch {
-    return "";
-  }
-}
-function resolveTitle(targetRef, titles, v) {
-  targetRef = import_node_path18.default.posix.normalize(targetRef);
-  const title = titles.get(targetRef);
-  if (title !== void 0) return title;
-  if (v !== null && v.exists(targetRef)) {
-    const page = v.load(targetRef);
-    const diskTitle = page.getString("title");
-    if (diskTitle !== "") return diskTitle;
-  }
-  return "";
-}
-function applyFrontmatter(page, planPage, pageDir, plan, titles, v) {
-  if (planPage.op === OpCreate || planPage.title !== "") {
-    page = page.set("title", planPage.title);
-  }
-  const merging = planPage.op === OpUpdate;
-  for (const [key, value] of planPage.frontmatter.all()) {
-    let v_ = value;
-    if (key === "raw_source" && value === true) {
-      if (plan.raw === "") {
+  page.command("set").argument("<file>", "markdown file").argument("<key>", "frontmatter key").argument(
+    "<value>",
+    "value; for an edge key, exactly one markdown link or a vault-relative page ref; for tags, one value or a JSON list (a list-valued key is replaced)"
+  ).option("--json", "parse value as JSON; a list for a list-valued key").description(
+    "Set a frontmatter value in place \u2014 replaces the key, including a list-valued edge key"
+  ).action(
+    (file, key, raw, opts) => {
+      const p = loadPage(file);
+      let value = raw;
+      if (opts.json) {
+        try {
+          value = JSON.parse(raw);
+        } catch {
+          fail(`parsing ${key} as JSON: invalid JSON`);
+        }
+      }
+      if (key === "source_date") value = canonicalSourceDate(value);
+      if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
+      if (isStringListKey(key)) value = stringListSetValue(key, value);
+      const updated = p.set(key, value);
+      writePageFile(file, updated);
+    }
+  );
+  page.command("merge").argument("<file>", "markdown file").argument("<key>", "frontmatter key").argument(
+    "<json-list>",
+    "JSON list of values to union in; edge links or vault-relative page refs"
+  ).description(
+    "Union a JSON list into an existing list-valued key (page set replaces it instead)"
+  ).action((file, key, raw) => {
+    const p = loadPage(file);
+    let values;
+    try {
+      values = JSON.parse(raw);
+    } catch {
+      fail(`merge expects a JSON list for ${key}`);
+    }
+    if (!Array.isArray(values)) {
+      fail(`merge expects a JSON list for ${key}`);
+    }
+    if (isEdgeKey(key) && !isListEdgeKey(key)) {
+      fail(`${key} holds a single link; use page set`);
+    }
+    if (isEdgeKey(key)) {
+      const normalize3 = edgeNormalizer(file);
+      values = values.map((item) => {
+        if (typeof item !== "string") fail(edgeRefusal(key, item));
+        return normalize3(key, item);
+      });
+    }
+    const updated = p.merge(key, values);
+    writePageFile(file, updated);
+  });
+  program2.command("read-page <ref>").description("Print a page's full content by vault-relative ref").option("--json", "emit {page_ref, frontmatter, body} as one JSON line").action((ref, opts) => {
+    const root = resolveRoot();
+    const vault = new Vault(root);
+    if (!vault.exists(ref)) {
+      fail(`page not found: ${ref}`);
+    }
+    const page2 = vault.load(ref);
+    if (opts.json) {
+      emitDocument({
+        page_ref: ref,
+        frontmatter: page2.frontmatter(),
+        body: page2.body()
+      });
+      return;
+    }
+    process.stdout.write(page2.text);
+  });
+  program2.command("superseded-by <page_ref...>").description("Resolve page refs to their current supersession heads").option("--json", "emit results as JSON Lines (one object per line)").action(async (pageRefs, opts) => {
+    const root = resolveRoot();
+    const records = new Vault(root).pages();
+    const resolutions = resolve2(pageRefs, records);
+    if (opts.json) {
+      emitRows(resolutions);
+      return;
+    }
+    for (const res of resolutions) {
+      if (res.chain.length === 0) {
+        console.log(`${res.seed}  (current)`);
         continue;
       }
-      v_ = composeEdgeLink("raw_source", plan.raw, pageDir, "");
+      let via = "";
+      if (res.chain.length > 1) {
+        via = ` via ${res.chain.slice(0, -1).join(" -> ")}`;
+      }
+      console.log(`${res.seed}  ->  ${res.active}${via}`);
     }
-    if (Array.isArray(v_) && merging) {
-      page = page.merge(key, v_);
-    } else {
-      page = page.set(key, v_);
-    }
-  }
-  if (page.getString("source_date") === "" && plan.source_date !== "") {
-    page = page.set("source_date", plan.source_date);
-  }
-  for (const [key, refs] of planPage.edges.all()) {
-    const links = refs.map(
-      (ref) => composeEdgeLink(key, ref, pageDir, resolveTitle(ref, titles, v))
-    );
-    if (merging) {
-      page = page.mergeStrings(key, links);
-    } else {
-      page = page.set(key, links);
-    }
-  }
-  return page;
-}
-function manifestSourceDate(s) {
-  const date = parseSourceDate(s);
-  return date !== null ? date : s;
-}
-function applyBody(page, newBody) {
-  if (newBody === null) return page;
-  const { bodyOffset } = splitFrontmatter(page.text);
-  return new Page(page.text.slice(0, bodyOffset) + normalizeBodyLinks(newBody));
-}
-function pageLinkTargets(page, plan) {
-  const targets = [];
-  const rawSource = page.frontmatter.get("raw_source");
-  if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
-    targets.push({ key: "raw_source", ref: import_node_path18.default.posix.normalize(plan.raw) });
-  }
-  for (const [key, refs] of page.edges.all()) {
-    for (const ref of refs) {
-      targets.push({ key, ref: import_node_path18.default.posix.normalize(ref) });
-    }
-  }
-  return targets;
+  });
 }
 
 // src/searchindex.ts
 var import_node_sqlite3_wasm = __toESM(require_node_sqlite3_wasm(), 1);
-var import_node_fs15 = __toESM(require("node:fs"), 1);
-var import_node_path19 = __toESM(require("node:path"), 1);
+var import_node_fs8 = __toESM(require("node:fs"), 1);
+var import_node_path9 = __toESM(require("node:path"), 1);
 init_pagepredicate();
 var { Database } = import_node_sqlite3_wasm.default;
 var SCHEMA_VERSION = "5";
@@ -39492,9 +38110,9 @@ var Index = class _Index {
   }
   /** Open with a substituted Git surface — the test seam. */
   static async openWithGit(root, git2) {
-    const indexDir = import_node_path19.default.join(root, ".wiki-knowledge");
+    const indexDir = import_node_path9.default.join(root, ".wiki-knowledge");
     mkdirSafe(indexDir);
-    const dbPath = import_node_path19.default.join(indexDir, "index.db");
+    const dbPath = import_node_path9.default.join(indexDir, "index.db");
     const db = new Database(dbPath);
     const index = new _Index(root, dbPath, db, git2, kindByFolder(root));
     index.createSchema();
@@ -39752,7 +38370,7 @@ var Index = class _Index {
     let dbSizeBytes = 0;
     if (this.dbPath !== ":memory:") {
       try {
-        const stat4 = import_node_fs15.default.statSync(this.dbPath);
+        const stat4 = import_node_fs8.default.statSync(this.dbPath);
         dbSizeBytes = stat4.size;
       } catch {
       }
@@ -39967,6 +38585,1285 @@ function placeholders(n) {
   return Array(n).fill("?").join(", ");
 }
 
+// src/cliargs.ts
+function splitCommaList(value) {
+  return value.split(",").map((s) => s.trim()).filter((s) => s !== "");
+}
+function collectFlag(value, previous) {
+  return [...previous, value];
+}
+
+// src/searchcommand.ts
+function orDash(s) {
+  if (s === "") return "-";
+  return s;
+}
+function orDashPtr(s) {
+  if (s === null) return "-";
+  return orDash(s);
+}
+function hitRow(hit) {
+  return {
+    page_ref: hit.pageRef,
+    score: hit.score,
+    title: hit.title,
+    summary: hit.summary,
+    tags: hit.tags,
+    kind: hit.kind,
+    source_date: hit.sourceDate,
+    git_date: hit.gitDate,
+    volatility: hit.volatility,
+    superseded_by: hit.supersededBy,
+    snippet: hit.snippet
+  };
+}
+function renderHits(hits, asJSON) {
+  if (asJSON) {
+    emitRows(hits.map(hitRow));
+    return;
+  }
+  let width = 0;
+  for (const hit of hits) {
+    if (hit.pageRef.length > width) width = hit.pageRef.length;
+  }
+  for (const hit of hits) {
+    console.log(
+      `${hit.pageRef.padEnd(width)}  ${hit.score.toFixed(2).padStart(7)}  ${orDash(hit.title)}  [${orDash(hit.volatility)}]  src=${orDash(hit.sourceDate)}  git=${orDashPtr(hit.gitDate)}`
+    );
+  }
+}
+function renderStatus(st, asJSON) {
+  if (asJSON) {
+    emitDocument({
+      pages: st.pages,
+      db_size_bytes: st.dbSizeBytes,
+      backend: st.backend,
+      schema_version: st.schemaVersion,
+      git_head: st.gitHead,
+      uncommitted_pages: st.uncommittedPages
+    });
+    return;
+  }
+  console.log(`pages:             ${st.pages}`);
+  console.log(`db_size_bytes:     ${st.dbSizeBytes}`);
+  console.log(`backend:           ${st.backend}`);
+  console.log(`schema_version:    ${st.schemaVersion}`);
+  console.log(`git_head:          ${orDash(st.gitHead)}`);
+  if (st.uncommittedPages > 0) {
+    console.log(
+      `uncommitted_pages: ${st.uncommittedPages} page(s) on disk not yet committed \u2014 not searchable.`
+    );
+  } else {
+    console.log(`uncommitted_pages: 0`);
+  }
+}
+function renderReindex(stats, full, asJSON) {
+  if (asJSON) {
+    emitDocument({
+      pages: stats.pages,
+      inserted: stats.inserted,
+      updated: stats.updated,
+      removed: stats.removed,
+      duration_ms: stats.durationMs
+    });
+    return;
+  }
+  const action = full ? "full reindex" : "reindex";
+  console.log(
+    `${action}: ${stats.pages} pages (+${stats.inserted} ~${stats.updated} -${stats.removed}) in ${stats.durationMs.toFixed(1)} ms`
+  );
+}
+function registerSearchCommand(program2) {
+  program2.command("search [text]").description("Search the wiki vault via the lexical index").option(
+    "--tag <tag>",
+    "filter by tag; repeat for tags_all (AND) and combine with --tag-any for OR",
+    collectFlag,
+    []
+  ).option(
+    "--tag-any <tag>",
+    "filter by tag (OR semantics across the listed tags)",
+    collectFlag,
+    []
+  ).option(
+    "--kind <kinds>",
+    "filter by kind \u2014 a canonical kind or a folder's declared kind; comma-separated for multiple",
+    splitCommaList,
+    []
+  ).option("--since <date>", "ISO date; inclusive lower bound on date_field").option("--until <date>", "ISO date; inclusive upper bound on date_field").option(
+    "--date-field <field>",
+    "which date the --since/--until bounds apply to (source_date|git_date)",
+    (value) => {
+      if (value !== "source_date" && value !== "git_date") {
+        fail(`must be 'source_date' or 'git_date', got "${value}"`);
+      }
+      return value;
+    },
+    "source_date"
+  ).option(
+    "--volatility <vols>",
+    `filter by volatility (${Volatilities.join("|")}); comma-separated for multiple`,
+    splitCommaList,
+    []
+  ).option("--limit <n>", "max hits", (v) => Number(v), 20).option(
+    "--include-superseded",
+    "include pages that have been superseded (default: filter them out)"
+  ).option(
+    "--raw",
+    "pass the text through as a literal FTS5 expression (escape hatch)"
+  ).option("--json", "emit results as JSON Lines (one object per line)").option("--reindex", "rebuild the index").option("--full", "with --reindex: wipe the index and rebuild from scratch").option("--status", "print index status and exit").action(
+    async (text2, opts) => {
+      const root = resolveRoot();
+      const index = await Index.open(root);
+      try {
+        if (opts.status) {
+          renderStatus(await index.status(), opts.json ?? false);
+          return;
+        }
+        if (opts.reindex) {
+          renderReindex(
+            await index.reindex(opts.full ?? false),
+            opts.full ?? false,
+            opts.json ?? false
+          );
+          return;
+        }
+        const query = {
+          text: text2 ?? "",
+          raw: opts.raw ?? false,
+          tagsAll: opts.tag,
+          tagsAny: opts.tagAny,
+          kinds: opts.kind,
+          since: opts.since ?? "",
+          until: opts.until ?? "",
+          dateField: opts.dateField,
+          volatility: opts.volatility,
+          includeSuperseded: opts.includeSuperseded ?? false,
+          limit: opts.limit
+        };
+        renderHits(await index.search(query), opts.json ?? false);
+      } finally {
+        index.close();
+      }
+    }
+  );
+}
+
+// src/ingestcommand.ts
+var import_node_fs17 = __toESM(require("node:fs"), 1);
+var import_node_path19 = __toESM(require("node:path"), 1);
+
+// src/toolcallstats.ts
+var import_node_fs10 = __toESM(require("node:fs"), 1);
+var import_node_path11 = __toESM(require("node:path"), 1);
+
+// src/sessionstate.ts
+var import_node_fs9 = __toESM(require("node:fs"), 1);
+var import_node_os2 = __toESM(require("node:os"), 1);
+var import_node_path10 = __toESM(require("node:path"), 1);
+function processLookupEnv2(key) {
+  const value = process.env[key];
+  return [value, value !== void 0];
+}
+var ClaudeCode = {
+  marker: ".claude",
+  projectDirEnv: "CLAUDE_PROJECT_DIR",
+  stateDir: import_node_path10.default.join(".claude", "wiki-knowledge", "sessions")
+};
+function findProjectRoot(cwd, layout, lookupEnv) {
+  if (layout.projectDirEnv !== "") {
+    const [projectDir, ok] = lookupEnv(layout.projectDirEnv);
+    if (ok && projectDir) return projectDir;
+  }
+  return markerAncestor(cwd, layout.marker, lookupEnv);
+}
+function findProjectSessionsDir(cwd, layout, lookupEnv) {
+  const root = findProjectRoot(cwd, layout, lookupEnv);
+  return root === void 0 ? void 0 : sessionsUnder(root, layout);
+}
+function projectSessionsDir(cwd, layout, lookupEnv) {
+  return findProjectSessionsDir(cwd, layout, lookupEnv) ?? sessionsUnder(startDir(cwd), layout);
+}
+function findSessionsDir(cwd, lookupEnv = processLookupEnv2) {
+  return findProjectSessionsDir(cwd, ClaudeCode, lookupEnv);
+}
+function sessionsDir(cwd, lookupEnv = processLookupEnv2) {
+  return projectSessionsDir(cwd, ClaudeCode, lookupEnv);
+}
+function sessionsUnder(base, layout) {
+  return import_node_path10.default.join(base, layout.stateDir);
+}
+function startDir(cwd) {
+  return cwd === "" ? process.cwd() : cwd;
+}
+function markerAncestor(cwd, marker, lookupEnv) {
+  let dir = startDir(cwd);
+  for (; ; ) {
+    if (isHomeDir(dir, lookupEnv)) return void 0;
+    try {
+      if (import_node_fs9.default.statSync(import_node_path10.default.join(dir, marker)).isDirectory()) return dir;
+    } catch {
+    }
+    const parent = import_node_path10.default.dirname(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+}
+function isHomeDir(dir, lookupEnv) {
+  const [home, ok] = lookupEnv("HOME");
+  const homeDir = ok && home ? home : import_node_os2.default.homedir();
+  return homeDir !== "" && import_node_path10.default.resolve(dir) === import_node_path10.default.resolve(homeDir);
+}
+function statePath(sessionID, stateDir) {
+  return import_node_path10.default.join(stateDir, `${sessionID}.json`);
+}
+function writeTranscriptPath(sessionID, transcriptPath, stateDir) {
+  const file = statePath(sessionID, stateDir);
+  mkdirSafe(import_node_path10.default.dirname(file));
+  import_node_fs9.default.writeFileSync(file, JSON.stringify({ transcript_path: transcriptPath }), {
+    mode: 420
+  });
+}
+function readTranscriptPath(sessionID, stateDir) {
+  let data;
+  try {
+    data = import_node_fs9.default.readFileSync(statePath(sessionID, stateDir), "utf8");
+  } catch {
+    return void 0;
+  }
+  try {
+    const payload = JSON.parse(data);
+    const transcriptPath = payload["transcript_path"];
+    return typeof transcriptPath === "string" ? transcriptPath : void 0;
+  } catch {
+    return void 0;
+  }
+}
+
+// src/toolcallstats.ts
+function logPath(sessionID, stateDir) {
+  const dir = stateDir === "" ? sessionsDir("", processLookupEnv2) : stateDir;
+  return import_node_path11.default.join(dir, `${sessionID}-tool-calls.jsonl`);
+}
+function readLog(sessionID, stateDir) {
+  const file = logPath(sessionID, stateDir);
+  if (!import_node_fs10.default.existsSync(file)) return [];
+  const data = import_node_fs10.default.readFileSync(file, "utf8");
+  const events = [];
+  for (const line of data.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      events.push(JSON.parse(line));
+    } catch {
+    }
+  }
+  return events;
+}
+function summarize(events) {
+  const total = events.length;
+  const counts = /* @__PURE__ */ new Map();
+  const order = [];
+  const promptIDs = /* @__PURE__ */ new Set();
+  for (const event of events) {
+    let tool = typeof event["tool"] === "string" ? event["tool"] : "";
+    if (tool === "") tool = "?";
+    if (!counts.has(tool)) order.push(tool);
+    counts.set(tool, (counts.get(tool) ?? 0) + 1);
+    const id = event["prompt_id"];
+    if (typeof id === "string" && id !== "") promptIDs.add(id);
+  }
+  const byTool = order.map((tool) => ({
+    tool,
+    count: counts.get(tool) ?? 0
+  }));
+  byTool.sort((a, b) => b.count - a.count);
+  const prompts = promptIDs.size;
+  const s = {
+    total,
+    byTool,
+    prompts,
+    callsPerPrompt: 0,
+    hasCallsPerPrompt: false
+  };
+  if (prompts > 0) {
+    s.callsPerPrompt = total / prompts;
+    s.hasCallsPerPrompt = true;
+  }
+  return s;
+}
+function formatSummary(s) {
+  let out = `Total tool calls: ${s.total}
+`;
+  for (const tc of s.byTool) {
+    out += `  ${String(tc.count).padStart(3)}  ${tc.tool}
+`;
+  }
+  if (s.prompts > 0) {
+    out += `Prompts (proxy for turns, not exact \u2014 see #99): ${s.prompts}, ${s.callsPerPrompt.toFixed(1)} calls/prompt`;
+  }
+  return out;
+}
+
+// src/ingestcommand.ts
+init_vaultgit();
+
+// src/ingestscan.ts
+var import_node_fs12 = __toESM(require("node:fs"), 1);
+var import_node_path13 = __toESM(require("node:path"), 1);
+init_vaultgit();
+
+// src/ingestignore.ts
+var import_node_fs11 = __toESM(require("node:fs"), 1);
+var import_node_path12 = __toESM(require("node:path"), 1);
+var Filename = ".ingestignore";
+function parse(text2) {
+  const patterns = [];
+  for (let line of text2.split("\n")) {
+    const hash = line.indexOf("#");
+    if (hash !== -1) line = line.slice(0, hash);
+    line = line.replace(/[ \t\r]+$/, "");
+    if (line.trim() === "") continue;
+    if (/[/!]/.test(line) || line.includes("**")) {
+      throw new Error(
+        `${Filename} patterns must be bare filename globs (no '/', no '!', no '**'): "${line}"`
+      );
+    }
+    patterns.push(line);
+  }
+  return patterns;
+}
+function compile(patterns) {
+  const literals = /* @__PURE__ */ new Set();
+  const globs = [];
+  for (const pattern of patterns) {
+    if (!/[*?]/.test(pattern)) {
+      literals.add(pattern);
+    } else {
+      let re = "";
+      for (const ch of pattern) {
+        if (ch === "*") re += "[^/]*";
+        else if (ch === "?") re += "[^/]";
+        else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      globs.push(new RegExp(`^${re}$`));
+    }
+  }
+  return {
+    matches(name) {
+      return literals.has(name) || globs.some((re) => re.test(name));
+    }
+  };
+}
+function append(folder, pattern, comment) {
+  const filePath = import_node_path12.default.join(folder, Filename);
+  let existing = null;
+  try {
+    existing = import_node_fs11.default.readFileSync(filePath, "utf8");
+  } catch (err) {
+    if (!isENOENT3(err)) throw err;
+  }
+  if (existing !== null) {
+    const patterns = parse(existing);
+    if (patterns.includes(pattern)) return;
+  }
+  let line = pattern;
+  if (comment !== "") line += "  # " + comment;
+  const fd = import_node_fs11.default.openSync(filePath, "a", 420);
+  try {
+    import_node_fs11.default.writeSync(fd, line + "\n");
+  } finally {
+    import_node_fs11.default.closeSync(fd);
+  }
+}
+function isENOENT3(err) {
+  return err.code === "ENOENT";
+}
+
+// src/ingestscan.ts
+var ReasonNeverIngested = "never-ingested";
+var ReasonChangedSinceIngestion = "changed-since-ingestion";
+var skipNames = /* @__PURE__ */ new Set(["INGESTION.md", ".ingestignore"]);
+function walkRaw(root, folder) {
+  let rawRoot = import_node_path13.default.join(root, "raw");
+  if (folder !== "") rawRoot = import_node_path13.default.join(rawRoot, ...folder.split("/"));
+  let info;
+  try {
+    info = import_node_fs12.default.statSync(rawRoot);
+  } catch (err) {
+    if (isENOENT4(err)) return [];
+    throw err;
+  }
+  if (!info.isDirectory()) return [];
+  const rels = [];
+  const walk2 = (dir) => {
+    const entries = import_node_fs12.default.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    for (const entry of entries) {
+      const abs = import_node_path13.default.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk2(abs);
+      } else if (!skipNames.has(entry.name)) {
+        rels.push(toSlash2(import_node_path13.default.relative(root, abs)));
+      }
+    }
+  };
+  walk2(rawRoot);
+  return rels;
+}
+function loadIngestignore(folder) {
+  const filePath = import_node_path13.default.join(folder, Filename);
+  let text2;
+  try {
+    text2 = import_node_fs12.default.readFileSync(filePath, "utf8");
+  } catch (err) {
+    if (isENOENT4(err)) return [];
+    throw err;
+  }
+  return parse(text2);
+}
+function backPointersByRaw(pages) {
+  const out = {};
+  for (const [pageRef2, page] of Object.entries(pages)) {
+    for (const edge of page.record.edges) {
+      if (edge.key !== "raw_source") continue;
+      for (const target of edge.targets) {
+        (out[target.toLowerCase()] ??= []).push(pageRef2);
+      }
+    }
+  }
+  return out;
+}
+function strictlyNewer(rawDate, pageDate) {
+  if (pageDate === "") return true;
+  if (rawDate === "") return false;
+  return rawDate > pageDate;
+}
+async function scan(root, folder, git2) {
+  const vault = new Vault(root);
+  const pages = vault.pagesWithText();
+  const backPointers = backPointersByRaw(pages);
+  if (git2 === null) git2 = await new VaultGit(root).scanFacts();
+  const rels = walkRaw(root, folder);
+  const result = { eligible: [], ignored: [] };
+  const matcherCache = /* @__PURE__ */ new Map();
+  for (const rel of rels) {
+    const dir = import_node_path13.default.dirname(import_node_path13.default.join(root, ...rel.split("/")));
+    let matcher = matcherCache.get(dir);
+    if (matcher === void 0) {
+      let patterns;
+      try {
+        patterns = loadIngestignore(dir);
+      } catch (err) {
+        throw new Error(`${rel}: ${err.message}`, { cause: err });
+      }
+      matcher = compile(patterns);
+      matcherCache.set(dir, matcher);
+    }
+    if (matcher.matches(import_node_path13.default.basename(rel))) {
+      result.ignored.push(rel);
+      continue;
+    }
+    const pointing = backPointers[rel.toLowerCase()] ?? [];
+    if (pointing.length === 0) {
+      result.eligible.push({
+        rawRel: rel,
+        reason: ReasonNeverIngested,
+        backPointers: []
+      });
+      continue;
+    }
+    if (await git2.porcelainMentions(rel)) {
+      result.eligible.push({
+        rawRel: rel,
+        reason: ReasonChangedSinceIngestion,
+        backPointers: pointing
+      });
+      continue;
+    }
+    const rawDate = await git2.lastCommitDate(rel);
+    for (const pageRel of pointing) {
+      if (strictlyNewer(rawDate, await git2.lastCommitDate(pageRel))) {
+        result.eligible.push({
+          rawRel: rel,
+          reason: ReasonChangedSinceIngestion,
+          backPointers: pointing
+        });
+        break;
+      }
+    }
+  }
+  return result;
+}
+function toSlash2(p) {
+  return p.split(import_node_path13.default.sep).join("/");
+}
+function isENOENT4(err) {
+  return err.code === "ENOENT";
+}
+
+// src/commit.ts
+var import_node_fs13 = __toESM(require("node:fs"), 1);
+var import_node_path15 = __toESM(require("node:path"), 1);
+
+// src/chainofevidence.ts
+var import_node_path14 = __toESM(require("node:path"), 1);
+var sourceDir = `wiki/${KindFolders["source"]}`;
+function check(staged, raw) {
+  raw = import_node_path14.default.posix.normalize(raw);
+  const refs = sortedRefs(staged);
+  let stubRef = "";
+  for (const pageRef2 of refs) {
+    if (import_node_path14.default.posix.dirname(pageRef2) !== sourceDir) continue;
+    const link2 = staged[pageRef2].getString("raw_source");
+    if (link2 === "") continue;
+    const { dest, ok } = linkDest(link2);
+    if (ok && resolveLinkDest(dest, import_node_path14.default.posix.dirname(pageRef2)) === raw) {
+      stubRef = pageRef2;
+      break;
+    }
+  }
+  if (stubRef === "") {
+    return [
+      `${raw} needs a ${KindFolders["source"]}/ page whose raw_source points at it \u2014 every ingested raw file gets a stand-in, even a thin stub`
+    ];
+  }
+  const problems = [];
+  for (const pageRef2 of refs) {
+    if (pageRef2 === stubRef) continue;
+    const links = staged[pageRef2].getStringList("source");
+    const pageDir = import_node_path14.default.posix.dirname(pageRef2);
+    let found = false;
+    for (const link2 of links) {
+      const { dest, ok } = linkDest(link2);
+      if (ok && resolveLinkDest(dest, pageDir) === stubRef) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      problems.push(`${pageRef2} needs a source edge to the stub ${stubRef}`);
+    }
+  }
+  return problems;
+}
+function sortedRefs(staged) {
+  return Object.keys(staged).sort();
+}
+
+// src/commit.ts
+var ErrGate = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ErrGate";
+  }
+};
+var defaultAction = "ingest";
+function stagedPaths(m) {
+  const paths = [];
+  paths.push(...m.created ?? []);
+  paths.push(...m.updated ?? []);
+  paths.push(...m.deleted ?? []);
+  for (const s of m.superseded ?? []) paths.push(s.old, s.new);
+  if (m.raw_source) paths.push(m.raw_source);
+  const seen = /* @__PURE__ */ new Set();
+  const ordered = [];
+  for (const p of paths) {
+    if (!seen.has(p)) {
+      seen.add(p);
+      ordered.push(p);
+    }
+  }
+  return ordered;
+}
+function buildMessage(m) {
+  const action = m.action === "" ? defaultAction : m.action ?? defaultAction;
+  const lines = [`${action}: ${m.title}`, ""];
+  for (const pageRef2 of m.created ?? []) lines.push(`created: ${pageRef2}`);
+  for (const pageRef2 of m.updated ?? []) lines.push(`updated: ${pageRef2}`);
+  for (const pageRef2 of m.deleted ?? []) lines.push(`deleted: ${pageRef2}`);
+  for (const s of m.superseded ?? [])
+    lines.push(`superseded: ${s.old} -> ${s.new}`);
+  if (m.source_date) lines.push(`source-date: ${m.source_date}`);
+  return lines.join("\n") + "\n";
+}
+async function checkChainOfEvidence(root, m) {
+  if (!m.raw_source) return;
+  const staged = {};
+  for (const pageRef2 of [...m.created ?? [], ...m.updated ?? []]) {
+    const abs = import_node_path15.default.join(root, ...pageRef2.split("/"));
+    let text2;
+    try {
+      text2 = import_node_fs13.default.readFileSync(abs, "utf8");
+    } catch {
+      continue;
+    }
+    staged[pageRef2] = new Page(text2);
+  }
+  const problems = check(staged, m.raw_source);
+  if (problems.length > 0) {
+    throw new ErrGate(`commit gated: ${problems.join("; ")}`);
+  }
+}
+async function commit2(root, m, git2) {
+  if (!await git2.isWorkTree()) {
+    throw new Error(
+      `${root} is not a git work tree; the vault's history is not optional`
+    );
+  }
+  await checkChainOfEvidence(root, m);
+  const paths = stagedPaths(m);
+  return git2.stageAndCommit(paths, buildMessage(m));
+}
+
+// src/ingest.ts
+var import_node_path16 = __toESM(require("node:path"), 1);
+init_pagepredicate();
+var MaxPathLength = 255;
+var OpCreate = "create";
+var OpUpdate = "update";
+var ActionIngest = "ingest";
+var ActionSynthesize = "synthesize";
+var ActionConsolidate = "consolidate";
+var PlanActions = [
+  ActionIngest,
+  ActionSynthesize,
+  ActionConsolidate
+];
+function isPlanAction(action) {
+  return PlanActions.includes(action);
+}
+var ErrPlan = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ErrPlan";
+  }
+};
+var OrderedMap = class _OrderedMap {
+  keys = [];
+  values = /* @__PURE__ */ new Map();
+  get(key) {
+    if (!this.values.has(key)) return { value: void 0, ok: false };
+    return { value: this.values.get(key), ok: true };
+  }
+  length() {
+    return this.keys.length;
+  }
+  *all() {
+    for (const key of this.keys) {
+      yield [key, this.values.get(key)];
+    }
+  }
+  set(key, value) {
+    if (!this.values.has(key)) this.keys.push(key);
+    this.values.set(key, value);
+  }
+  /** Decode a JSON object recording key order; a duplicate keeps its first
+   * position and takes the last value. */
+  static decode(data) {
+    const m = new _OrderedMap();
+    if (data === null || typeof data !== "object" || Array.isArray(data)) {
+      return m;
+    }
+    for (const key of Object.keys(data)) {
+      m.set(key, data[key]);
+    }
+    return m;
+  }
+};
+function decodePlan(jsonText) {
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error(`invalid plan JSON: ${err.message}`, {
+      cause: err
+    });
+  }
+  const action = typeof data["action"] === "string" ? data["action"] : "";
+  const rawPages = Array.isArray(data["pages"]) ? data["pages"] : [];
+  const consolidates = Array.isArray(data["consolidates"]) ? data["consolidates"].map(
+    (ref) => typeof ref === "string" ? ref : String(ref)
+  ) : [];
+  const pages = rawPages.map((p) => {
+    const page = p;
+    return {
+      op: typeof page["op"] === "string" ? page["op"] : "",
+      title: typeof page["title"] === "string" ? page["title"] : "",
+      kind: typeof page["kind"] === "string" ? page["kind"] : "",
+      page_ref: typeof page["page_ref"] === "string" ? page["page_ref"] : "",
+      body: page["body"] === null || page["body"] === void 0 ? null : typeof page["body"] === "string" ? page["body"] : String(page["body"]),
+      frontmatter: OrderedMap.decode(page["frontmatter"]),
+      edges: OrderedMap.decode(page["edges"])
+    };
+  });
+  return {
+    title: typeof data["title"] === "string" ? data["title"] : "",
+    action: action === "" ? ActionIngest : action,
+    source_date: typeof data["source_date"] === "string" ? data["source_date"] : "",
+    raw: typeof data["raw"] === "string" ? data["raw"] : "",
+    pages,
+    consolidates
+  };
+}
+var Resolved = class {
+  constructor(plan, pages, root, extraKindFolders, consolidation = null) {
+    this.plan = plan;
+    this.pages = pages;
+    this.root = root;
+    this.extraKindFolders = extraKindFolders;
+    this.consolidation = consolidation;
+  }
+  vault() {
+    if (this.root === "") return null;
+    return new Vault(this.root);
+  }
+  opOf(page) {
+    return page.plan.op;
+  }
+  /** Check this plan, shape then semantic, before any write; throws [ErrPlan] naming every problem. */
+  validate() {
+    const problems = [...this.shapeErrors(), ...this.semanticErrors()];
+    if (problems.length > 0) {
+      throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
+    }
+  }
+  /** Required fields and valid ops — everything checkable without a vault. */
+  shapeErrors() {
+    const problems = [];
+    if (!isPlanAction(this.plan.action)) {
+      problems.push(
+        `plan.action must be one of ${PlanActions.join("|")}, got ${JSON.stringify(this.plan.action)}`
+      );
+    }
+    if (this.plan.title === "") {
+      problems.push("plan.title is required");
+    }
+    if (this.plan.pages.length === 0) {
+      problems.push("plan.pages must contain at least one page");
+    }
+    for (let i = 0; i < this.pages.length; i++) {
+      const page = this.pages[i].plan;
+      const prefix = `pages[${i}]`;
+      if (page.op !== OpCreate && page.op !== OpUpdate) {
+        problems.push(
+          `${prefix}.op must be 'create' or 'update', got ${JSON.stringify(page.op)}`
+        );
+        continue;
+      }
+      if (page.op === OpCreate && page.title === "") {
+        problems.push(`${prefix}.title is required`);
+      }
+      if (page.op === OpCreate) {
+        if (page.page_ref !== "") {
+          problems.push(`${prefix}.page_ref must not be set for op=create`);
+        }
+        if (page.kind === "") {
+          problems.push(`${prefix}.kind is required for op=create`);
+        } else if (!Kinds.includes(page.kind) && !(page.kind in this.extraKindFolders)) {
+          problems.push(
+            `${prefix}.kind ${JSON.stringify(page.kind)} is not a valid kind`
+          );
+        }
+        if (page.body === null) {
+          problems.push(`${prefix}.body is required for op=create`);
+        }
+      } else {
+        if (page.kind !== "") {
+          problems.push(`${prefix}.kind must not be set for op=update`);
+        }
+        if (page.page_ref === "") {
+          problems.push(`${prefix}.page_ref is required for op=update`);
+        }
+      }
+      const rawSource = page.frontmatter.get("raw_source");
+      if (rawSource.ok && rawSource.value !== null) {
+        if (rawSource.value !== true) {
+          problems.push(
+            `${prefix}.frontmatter.raw_source must be true (derived from plan.raw), got ${String(rawSource.value)}`
+          );
+        } else if (this.plan.raw === "") {
+          problems.push(
+            `${prefix}.frontmatter.raw_source is true but plan.raw is not set`
+          );
+        }
+      }
+      const sourceDate2 = page.frontmatter.get("source_date");
+      if (sourceDate2.ok && sourceDate2.value !== null) {
+        if (parseSourceDate(sourceDate2.value) === null) {
+          problems.push(
+            `${prefix}.frontmatter.source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(sourceDate2.value)}`
+          );
+        }
+      }
+      const rewritesFrontmatter = page.op === OpCreate || page.frontmatter.length() > 0;
+      if (rewritesFrontmatter) {
+        const volatility = page.frontmatter.get("volatility");
+        const missing = !volatility.ok || volatility.value === null || String(volatility.value).trim() === "";
+        if (missing) {
+          problems.push(`${prefix}.frontmatter.volatility is required`);
+        } else if (!Volatilities.includes(
+          String(volatility.value)
+        )) {
+          problems.push(
+            `${prefix}.frontmatter.volatility must be one of ${Volatilities.join("|")}, got ${String(volatility.value)}`
+          );
+        }
+      }
+    }
+    if (this.plan.action === ActionConsolidate) {
+      if (this.plan.consolidates.length === 0) {
+        problems.push(
+          `plan.consolidates must name at least one page when action is '${ActionConsolidate}'`
+        );
+      }
+      if (this.plan.pages.length !== 1) {
+        problems.push(
+          `action '${ActionConsolidate}' takes exactly one page (the survivor), got ${this.plan.pages.length}`
+        );
+      } else if (this.plan.pages[0].body === null) {
+        problems.push(
+          `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`
+        );
+      }
+      if (this.plan.raw !== "") {
+        problems.push(
+          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`
+        );
+      }
+    } else if (this.plan.consolidates.length > 0) {
+      problems.push(
+        `plan.consolidates is only valid when action is '${ActionConsolidate}'`
+      );
+    }
+    if (this.plan.action === ActionSynthesize) {
+      if (this.plan.pages.length !== 1) {
+        problems.push(
+          `action '${ActionSynthesize}' takes exactly one page, got ${this.plan.pages.length}`
+        );
+      } else {
+        const page = this.plan.pages[0];
+        if (page.op !== OpCreate) {
+          problems.push(
+            `pages[0].op must be '${OpCreate}' when action is '${ActionSynthesize}', got ${JSON.stringify(page.op)}`
+          );
+        }
+        if (page.kind !== "synthesis") {
+          problems.push(
+            `pages[0].kind must be 'synthesis' when action is '${ActionSynthesize}', got ${JSON.stringify(page.kind)}`
+          );
+        }
+      }
+      if (this.plan.raw !== "") {
+        problems.push(
+          `plan.raw must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`
+        );
+      }
+    }
+    const seenConsolidated = /* @__PURE__ */ new Set();
+    for (let i = 0; i < this.plan.consolidates.length; i++) {
+      const ref = this.plan.consolidates[i];
+      if (ref === "") {
+        problems.push(`plan.consolidates[${i}] must not be empty`);
+        continue;
+      }
+      if (seenConsolidated.has(ref)) {
+        problems.push(`plan.consolidates names ${ref} more than once`);
+        continue;
+      }
+      seenConsolidated.add(ref);
+    }
+    return problems;
+  }
+  /** The checks that need the vault: target existence, path length, evidence chain. */
+  semanticErrors() {
+    if (this.root === "") return [];
+    const v = this.vault();
+    const problems = [];
+    const prospective = /* @__PURE__ */ new Set();
+    for (const rp of this.pages) {
+      if (rp.plan.op === OpCreate && rp.pageRef !== "") {
+        prospective.add(rp.pageRef);
+      }
+    }
+    for (let i = 0; i < this.pages.length; i++) {
+      const rp = this.pages[i];
+      const page = rp.plan;
+      const prefix = `pages[${i}]`;
+      if (page.op !== OpCreate && page.op !== OpUpdate) {
+        continue;
+      }
+      if (page.op === OpCreate && rp.pageRef !== "") {
+        if (rp.occupied) {
+          problems.push(
+            `${prefix}: create target ${rp.pageRef} already exists`
+          );
+        }
+        const full = v.path(rp.pageRef);
+        if (full.length > MaxPathLength) {
+          problems.push(
+            `${prefix}: path ${rp.pageRef} exceeds ${MaxPathLength} chars (${full.length} chars with vault root)`
+          );
+        }
+      } else if (page.op === OpUpdate && rp.pageRef !== "" && !rp.loaded) {
+        problems.push(`${prefix}.page_ref ${rp.pageRef} does not exist`);
+      }
+      for (const target of pageLinkTargets(page, this.plan)) {
+        if (prospective.has(target.ref)) continue;
+        if (!v.exists(target.ref)) {
+          problems.push(
+            `${prefix}: ${target.key} target ${JSON.stringify(target.ref)} does not resolve to a real page`
+          );
+        }
+      }
+    }
+    if (this.plan.raw !== "") {
+      const staged = {};
+      for (const rp of this.pages) {
+        if (rp.pageRef !== "" && rp.page !== null) {
+          staged[rp.pageRef] = rp.page;
+        }
+      }
+      problems.push(...check(staged, this.plan.raw));
+    }
+    if (this.plan.action === ActionConsolidate) {
+      problems.push(...this.consolidationErrors());
+    }
+    return problems;
+  }
+  /** The absorbed pages are real and exist, and the survivor still reads their content. */
+  consolidationErrors() {
+    const c = this.consolidation;
+    if (c === null) return [];
+    const problems = [];
+    if (c.survivorRef === "") {
+      return problems;
+    }
+    if (c.absorbed.some((a) => a.pageRef === c.survivorRef)) {
+      problems.push(
+        `plan.consolidates names the survivor ${c.survivorRef}; a page cannot absorb itself`
+      );
+    }
+    for (let i = 0; i < c.absorbed.length; i++) {
+      const absorbed = c.absorbed[i];
+      if (absorbed.pageRef === "") continue;
+      if (!isPageRef(absorbed.pageRef)) {
+        problems.push(
+          `plan.consolidates[${i}] ${absorbed.pageRef} is not a page (wiki/<kind-folder>/<file>.md)`
+        );
+        continue;
+      }
+      if (!absorbed.found) {
+        problems.push(
+          `plan.consolidates[${i}] ${absorbed.pageRef} does not exist`
+        );
+      }
+    }
+    problems.push(...this.losslessnessErrors());
+    return problems;
+  }
+  /**
+   * The losslessness gate (ADR-0021): each absorbed body must still be readable
+   * in the survivor's body, so the delete drops nothing. Compared through
+   * [canonicalizeLinkTargets] — by where links point, not how they are spelled —
+   * so a body re-based into another kind-folder compares equal and a link the
+   * merge broke does not. Frontmatter is deliberately outside the comparison.
+   */
+  losslessnessErrors() {
+    const c = this.consolidation;
+    if (c === null || c.survivorRef === "" || this.pages.length !== 1)
+      return [];
+    const survivor = this.pages[0].page;
+    if (survivor === null) return [];
+    const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
+    const target = (ref) => consolidated.has(ref) ? c.survivorRef : ref;
+    const survivorBody = canonicalizeLinkTargets(
+      survivor.body(),
+      import_node_path16.default.posix.dirname(c.survivorRef),
+      target
+    );
+    const problems = [];
+    for (const absorbed of c.absorbed) {
+      if (!absorbed.found) continue;
+      const want = canonicalizeLinkTargets(
+        absorbed.body,
+        import_node_path16.default.posix.dirname(absorbed.pageRef),
+        target
+      ).trim();
+      if (want === "") continue;
+      if (!survivorBody.includes(want)) {
+        problems.push(
+          `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content \u2014 a Consolidation is lossless (ADR-0021)`
+        );
+      }
+    }
+    return problems;
+  }
+  /** Write every resolved page and commit, returning the SHA. Assumes
+   * [Resolved.validate] passed; no rollback on failure. */
+  async execute(git2) {
+    if (this.root === "") {
+      throw new ErrPlan(
+        "invalid plan: cannot execute a plan resolved without a vault root"
+      );
+    }
+    const v = this.vault();
+    if (this.plan.action === ActionConsolidate) {
+      return this.executeConsolidation(v, git2);
+    }
+    const created = [];
+    const updated = [];
+    const superseded = [];
+    for (const resolved of this.pages) {
+      if (resolved.pageRef === "" || resolved.page === null) {
+        throw new ErrPlan(
+          `invalid plan: page ${JSON.stringify(resolved.plan.title)} was not resolved`
+        );
+      }
+      v.write(resolved.pageRef, resolved.page);
+      if (resolved.plan.op !== OpCreate) {
+        updated.push(resolved.pageRef);
+        continue;
+      }
+      created.push(resolved.pageRef);
+      const targets = resolved.plan.edges.get("supersedes");
+      if (targets.ok) {
+        for (const target of targets.value ?? []) {
+          superseded.push({
+            old: import_node_path16.default.posix.normalize(target),
+            new: resolved.pageRef
+          });
+        }
+      }
+    }
+    return commit2(
+      this.root,
+      {
+        title: this.plan.title,
+        action: this.plan.action,
+        created,
+        updated,
+        superseded,
+        source_date: manifestSourceDate(this.plan.source_date),
+        raw_source: this.plan.raw
+      },
+      git2
+    );
+  }
+  /**
+   * [execute] for `consolidate`: write the survivor, repoint every inbound
+   * link, delete the absorbed pages, commit once (ADR-0021). The losslessness
+   * check runs again here so a hand-built [Resolved] cannot route around
+   * [validate]. */
+  async executeConsolidation(v, git2) {
+    const c = this.consolidation;
+    const survivor = this.pages.length === 1 ? this.pages[0] : null;
+    if (c === null || c.survivorRef === "" || survivor === null || survivor.page === null) {
+      throw new ErrPlan("invalid plan: consolidation was not resolved");
+    }
+    const problems = this.losslessnessErrors();
+    for (const absorbed of c.absorbed) {
+      if (!absorbed.found) {
+        problems.push(`plan.consolidates ${absorbed.pageRef} does not exist`);
+      }
+    }
+    if (problems.length > 0) {
+      throw new ErrPlan(`invalid plan: ${problems.join("; ")}`);
+    }
+    const losers = c.absorbed.map((a) => a.pageRef);
+    const changed = v.consolidate(c.survivorRef, survivor.page, losers);
+    const created = [];
+    const updated = [];
+    for (const ref of changed) {
+      if (ref !== c.survivorRef) updated.push(ref);
+    }
+    if (survivor.plan.op === OpCreate) created.push(c.survivorRef);
+    else updated.unshift(c.survivorRef);
+    return commit2(
+      this.root,
+      {
+        title: this.plan.title,
+        action: this.plan.action,
+        created,
+        updated,
+        deleted: losers,
+        source_date: manifestSourceDate(this.plan.source_date),
+        raw_source: this.plan.raw
+      },
+      git2
+    );
+  }
+  /** A human-readable summary of what [Resolved.execute] would write. */
+  describe() {
+    const lines = [`${this.plan.action}: ${this.plan.title}`];
+    for (const resolved of this.pages) {
+      lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
+    }
+    for (const absorbed of this.consolidation?.absorbed ?? []) {
+      lines.push(`  ${"delete".padEnd(6)} ${absorbed.pageRef}`);
+    }
+    return lines.join("\n");
+  }
+};
+function resolve3(plan, root) {
+  let v = null;
+  const extraKindFolders = {};
+  if (root !== "") {
+    v = new Vault(root);
+    const legacy = v.legacyKindFolders();
+    if (legacy.length > 0) {
+      const moves = legacy.map(
+        (kind) => `git mv wiki/${kind}/* wiki/${kind}s/`
+      );
+      throw new Error(
+        `${root} holds pre-ADR-0008 kind-folders (wiki/${legacy.join(", wiki/")}); move their pages into the plural folders before ingesting (${moves.join("; ")}), then remove the empty singular folders. Merge by hand where both spellings hold the same filename`
+      );
+    }
+    Object.assign(extraKindFolders, v.discoveredKinds());
+  }
+  const refs = plan.pages.map((page) => pageRef(page, extraKindFolders));
+  const titles = /* @__PURE__ */ new Map();
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i];
+    if (ref === "") continue;
+    if (!titles.has(ref)) titles.set(ref, plan.pages[i].title);
+  }
+  const resolvedPages = [];
+  for (let i = 0; i < plan.pages.length; i++) {
+    const planPage = plan.pages[i];
+    const pageRef_ = refs[i];
+    if (pageRef_ === "") {
+      resolvedPages.push({
+        plan: planPage,
+        pageRef: "",
+        page: null,
+        occupied: false,
+        loaded: false
+      });
+      continue;
+    }
+    let base = new Page("");
+    let loaded = false;
+    if (planPage.op === OpUpdate && v !== null && v.exists(pageRef_)) {
+      base = v.load(pageRef_);
+      loaded = true;
+    }
+    let page = applyFrontmatter(
+      base,
+      planPage,
+      import_node_path16.default.posix.dirname(pageRef_),
+      plan,
+      titles,
+      v
+    );
+    page = applyBody(page, planPage.body);
+    resolvedPages.push({
+      plan: planPage,
+      pageRef: pageRef_,
+      page,
+      occupied: v !== null && v.occupied(pageRef_),
+      loaded
+    });
+  }
+  return new Resolved(
+    plan,
+    resolvedPages,
+    root,
+    extraKindFolders,
+    resolveConsolidation(plan, resolvedPages, v)
+  );
+}
+function resolveConsolidation(plan, resolvedPages, v) {
+  if (plan.action !== ActionConsolidate || resolvedPages.length === 0) {
+    return null;
+  }
+  const survivorRef = resolvedPages[0].pageRef;
+  const absorbed = plan.consolidates.map((ref) => {
+    const pageRef2 = import_node_path16.default.posix.normalize(ref);
+    let body = "";
+    let found = false;
+    if (v !== null && pageRef2 !== "" && v.exists(pageRef2)) {
+      body = v.load(pageRef2).body();
+      found = true;
+    }
+    return { pageRef: pageRef2, body, found };
+  });
+  return { survivorRef, absorbed };
+}
+function pageRef(page, extraKindFolders) {
+  if (page.op !== OpCreate) return page.page_ref;
+  if (page.title === "") return "";
+  try {
+    return path3(page.kind, page.title, extraKindFolders);
+  } catch {
+    return "";
+  }
+}
+function resolveTitle(targetRef, titles, v) {
+  targetRef = import_node_path16.default.posix.normalize(targetRef);
+  const title = titles.get(targetRef);
+  if (title !== void 0) return title;
+  if (v !== null && v.exists(targetRef)) {
+    const page = v.load(targetRef);
+    const diskTitle = page.getString("title");
+    if (diskTitle !== "") return diskTitle;
+  }
+  return "";
+}
+function applyFrontmatter(page, planPage, pageDir, plan, titles, v) {
+  if (planPage.op === OpCreate || planPage.title !== "") {
+    page = page.set("title", planPage.title);
+  }
+  const merging = planPage.op === OpUpdate;
+  for (const [key, value] of planPage.frontmatter.all()) {
+    let v_ = value;
+    if (key === "raw_source" && value === true) {
+      if (plan.raw === "") {
+        continue;
+      }
+      v_ = composeEdgeLink("raw_source", plan.raw, pageDir, "");
+    }
+    if (Array.isArray(v_) && merging) {
+      page = page.merge(key, v_);
+    } else {
+      page = page.set(key, v_);
+    }
+  }
+  if (page.getString("source_date") === "" && plan.source_date !== "") {
+    page = page.set("source_date", plan.source_date);
+  }
+  for (const [key, refs] of planPage.edges.all()) {
+    const links = refs.map(
+      (ref) => composeEdgeLink(key, ref, pageDir, resolveTitle(ref, titles, v))
+    );
+    if (merging) {
+      page = page.mergeStrings(key, links);
+    } else {
+      page = page.set(key, links);
+    }
+  }
+  return page;
+}
+function manifestSourceDate(s) {
+  const date = parseSourceDate(s);
+  return date !== null ? date : s;
+}
+function applyBody(page, newBody) {
+  if (newBody === null) return page;
+  const { bodyOffset } = splitFrontmatter(page.text);
+  return new Page(page.text.slice(0, bodyOffset) + normalizeBodyLinks(newBody));
+}
+function pageLinkTargets(page, plan) {
+  const targets = [];
+  const rawSource = page.frontmatter.get("raw_source");
+  if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
+    targets.push({ key: "raw_source", ref: import_node_path16.default.posix.normalize(plan.raw) });
+  }
+  for (const [key, refs] of page.edges.all()) {
+    for (const ref of refs) {
+      targets.push({ key, ref: import_node_path16.default.posix.normalize(ref) });
+    }
+  }
+  return targets;
+}
+
 // src/discover.ts
 var HintDuplicate = "duplicate";
 var HintRefines = "refines";
@@ -40094,18 +39991,18 @@ function tagCounts(vocabulary, tags) {
 }
 
 // src/watch.ts
-var import_node_fs18 = __toESM(require("node:fs"), 1);
-var import_node_path21 = __toESM(require("node:path"), 1);
+var import_node_fs16 = __toESM(require("node:fs"), 1);
+var import_node_path18 = __toESM(require("node:path"), 1);
 
 // node_modules/chokidar/index.js
 var import_node_events2 = require("node:events");
-var import_node_fs17 = require("node:fs");
+var import_node_fs15 = require("node:fs");
 var import_promises3 = require("node:fs/promises");
 var sp2 = __toESM(require("node:path"), 1);
 
 // node_modules/readdirp/index.js
 var import_promises = require("node:fs/promises");
-var import_node_path20 = require("node:path");
+var import_node_path17 = require("node:path");
 var import_node_stream = require("node:stream");
 var EntryTypes = {
   FILE_TYPE: "files",
@@ -40196,7 +40093,7 @@ var ReaddirpStream = class extends import_node_stream.Readable {
     this._directoryFilter = normalizeFilter(opts.directoryFilter);
     const statMethod = opts.lstat ? import_promises.lstat : import_promises.stat;
     if (wantBigintFsStats) {
-      this._stat = (path28) => statMethod(path28, { bigint: true });
+      this._stat = (path32) => statMethod(path32, { bigint: true });
     } else {
       this._stat = statMethod;
     }
@@ -40204,8 +40101,8 @@ var ReaddirpStream = class extends import_node_stream.Readable {
     this._wantsDir = DIR_TYPES.has(type);
     this._wantsFile = FILE_TYPES.has(type);
     this._wantsEverything = type === EntryTypes.EVERYTHING_TYPE;
-    this._root = (0, import_node_path20.resolve)(root);
-    this._relStart = this._root.endsWith(import_node_path20.sep) ? this._root.length : this._root.length + 1;
+    this._root = (0, import_node_path17.resolve)(root);
+    this._relStart = this._root.endsWith(import_node_path17.sep) ? this._root.length : this._root.length + 1;
     this._isDirent = !opts.alwaysStat;
     this._statsProp = this._isDirent ? "dirent" : "stats";
     this._rdOptions = { encoding: "utf8", withFileTypes: this._isDirent };
@@ -40224,8 +40121,8 @@ var ReaddirpStream = class extends import_node_stream.Readable {
         const par = this.parent;
         const fil = par && par.files;
         if (fil && fil.length > 0) {
-          const { path: path28, depth } = par;
-          const slice = fil.splice(0, batch).map((dirent) => this._formatEntry(dirent, path28));
+          const { path: path32, depth } = par;
+          const slice = fil.splice(0, batch).map((dirent) => this._formatEntry(dirent, path32));
           const awaited = this._isDirent ? slice : await Promise.all(slice);
           for (const entry of awaited) {
             if (!entry)
@@ -40284,19 +40181,19 @@ var ReaddirpStream = class extends import_node_stream.Readable {
   //   directoryFilter rejects, doesn't follow symlinked dirs, and fails
   //   wholesale (all entries lost) if anything in the subtree is unreadable,
   //   instead of emitting a 'warn' and continuing.
-  async _exploreDir(path28, depth) {
+  async _exploreDir(path32, depth) {
     let files;
     try {
-      files = await (0, import_promises.readdir)(path28, this._rdOptions);
+      files = await (0, import_promises.readdir)(path32, this._rdOptions);
     } catch (error) {
       this._onError(error);
     }
-    return { files, depth, path: path28 };
+    return { files, depth, path: path32 };
   }
   // Synchronous in dirent mode; returns a promise only when stats are needed.
-  _formatEntry(dirent, path28) {
+  _formatEntry(dirent, path32) {
     const basename3 = this._isDirent ? dirent.name : dirent;
-    const fullPath = (0, import_node_path20.join)(path28, basename3);
+    const fullPath = (0, import_node_path17.join)(path32, basename3);
     const entry = { path: fullPath.slice(this._relStart), fullPath, basename: basename3 };
     if (this._isDirent) {
       entry.dirent = dirent;
@@ -40342,7 +40239,7 @@ var ReaddirpStream = class extends import_node_stream.Readable {
       }
       if (entryRealPathStats.isDirectory()) {
         const len = entryRealPath.length;
-        if (full.startsWith(entryRealPath) && full[len] === import_node_path20.sep) {
+        if (full.startsWith(entryRealPath) && full[len] === import_node_path17.sep) {
           const recursiveError = new Error(`Circular symlink detected: "${full}" points to "${entryRealPath}"`);
           recursiveError.code = RECURSIVE_ERROR_CODE;
           this._onError(recursiveError);
@@ -40378,9 +40275,9 @@ function readdirp(root, options = {}) {
 }
 
 // node_modules/chokidar/handler.js
-var import_node_fs16 = require("node:fs");
+var import_node_fs14 = require("node:fs");
 var import_promises2 = require("node:fs/promises");
-var import_node_os4 = require("node:os");
+var import_node_os3 = require("node:os");
 var sp = __toESM(require("node:path"), 1);
 var STR_DATA = "data";
 var STR_END = "end";
@@ -40392,7 +40289,7 @@ var isWindows = pl === "win32";
 var isMacos = pl === "darwin";
 var isLinux = pl === "linux";
 var isFreeBSD = pl === "freebsd";
-var isIBMi = (0, import_node_os4.type)() === "OS400";
+var isIBMi = (0, import_node_os3.type)() === "OS400";
 var EVENTS = {
   ALL: "all",
   READY: "ready",
@@ -40707,16 +40604,16 @@ var delFromSet = (main2, prop, item) => {
 };
 var isEmptySet = (val) => val instanceof Set ? val.size === 0 : !val;
 var FsWatchInstances = /* @__PURE__ */ new Map();
-function createFsWatchInstance(path28, options, listener, errHandler, emitRaw) {
+function createFsWatchInstance(path32, options, listener, errHandler, emitRaw) {
   const handleEvent = (rawEvent, evPath) => {
-    listener(path28);
-    emitRaw(rawEvent, evPath, { watchedPath: path28 });
-    if (evPath && path28 !== evPath) {
-      fsWatchBroadcast(sp.resolve(path28, evPath), KEY_LISTENERS, sp.join(path28, evPath));
+    listener(path32);
+    emitRaw(rawEvent, evPath, { watchedPath: path32 });
+    if (evPath && path32 !== evPath) {
+      fsWatchBroadcast(sp.resolve(path32, evPath), KEY_LISTENERS, sp.join(path32, evPath));
     }
   };
   try {
-    return (0, import_node_fs16.watch)(path28, {
+    return (0, import_node_fs14.watch)(path32, {
       persistent: options.persistent
     }, handleEvent);
   } catch (error) {
@@ -40732,12 +40629,12 @@ var fsWatchBroadcast = (fullPath, listenerType, val1, val2, val3) => {
     listener(val1, val2, val3);
   });
 };
-var setFsWatchListener = (path28, fullPath, options, handlers) => {
+var setFsWatchListener = (path32, fullPath, options, handlers) => {
   const { listener, errHandler, rawEmitter } = handlers;
   let cont = FsWatchInstances.get(fullPath);
   let watcher;
   if (!options.persistent) {
-    watcher = createFsWatchInstance(path28, options, listener, errHandler, rawEmitter);
+    watcher = createFsWatchInstance(path32, options, listener, errHandler, rawEmitter);
     if (!watcher)
       return;
     return watcher.close.bind(watcher);
@@ -40748,7 +40645,7 @@ var setFsWatchListener = (path28, fullPath, options, handlers) => {
     addAndConvert(cont, KEY_RAW, rawEmitter);
   } else {
     watcher = createFsWatchInstance(
-      path28,
+      path32,
       options,
       fsWatchBroadcast.bind(null, fullPath, KEY_LISTENERS),
       errHandler,
@@ -40763,7 +40660,7 @@ var setFsWatchListener = (path28, fullPath, options, handlers) => {
         cont.watcherUnusable = true;
       if (isWindows && error.code === "EPERM") {
         try {
-          const fd = await (0, import_promises2.open)(path28, "r");
+          const fd = await (0, import_promises2.open)(path32, "r");
           await fd.close();
           broadcastErr(error);
         } catch (err) {
@@ -40794,12 +40691,12 @@ var setFsWatchListener = (path28, fullPath, options, handlers) => {
   };
 };
 var FsWatchFileInstances = /* @__PURE__ */ new Map();
-var setFsWatchFileListener = (path28, fullPath, options, handlers) => {
+var setFsWatchFileListener = (path32, fullPath, options, handlers) => {
   const { listener, rawEmitter } = handlers;
   let cont = FsWatchFileInstances.get(fullPath);
   const copts = cont && cont.options;
   if (copts && (copts.persistent < options.persistent || copts.interval > options.interval)) {
-    (0, import_node_fs16.unwatchFile)(fullPath);
+    (0, import_node_fs14.unwatchFile)(fullPath);
     cont = void 0;
   }
   if (cont) {
@@ -40810,13 +40707,13 @@ var setFsWatchFileListener = (path28, fullPath, options, handlers) => {
       listeners: listener,
       rawEmitters: rawEmitter,
       options,
-      watcher: (0, import_node_fs16.watchFile)(fullPath, options, (curr, prev) => {
+      watcher: (0, import_node_fs14.watchFile)(fullPath, options, (curr, prev) => {
         foreach(cont.rawEmitters, (rawEmitter2) => {
           rawEmitter2(EV.CHANGE, fullPath, { curr, prev });
         });
         const currmtime = curr.mtimeMs;
         if (curr.size !== prev.size || currmtime > prev.mtimeMs || currmtime === 0) {
-          foreach(cont.listeners, (listener2) => listener2(path28, curr));
+          foreach(cont.listeners, (listener2) => listener2(path32, curr));
         }
       })
     };
@@ -40827,7 +40724,7 @@ var setFsWatchFileListener = (path28, fullPath, options, handlers) => {
     delFromSet(cont, KEY_RAW, rawEmitter);
     if (isEmptySet(cont.listeners)) {
       FsWatchFileInstances.delete(fullPath);
-      (0, import_node_fs16.unwatchFile)(fullPath);
+      (0, import_node_fs14.unwatchFile)(fullPath);
       cont.options = cont.watcher = void 0;
       Object.freeze(cont);
     }
@@ -40846,13 +40743,13 @@ var NodeFsHandler = class {
    * @param listener on fs change
    * @returns closer for the watcher instance
    */
-  _watchWithNodeFs(path28, listener) {
+  _watchWithNodeFs(path32, listener) {
     const opts = this.fsw.options;
-    const directory = sp.dirname(path28);
-    const basename3 = sp.basename(path28);
+    const directory = sp.dirname(path32);
+    const basename3 = sp.basename(path32);
     const parent = this.fsw._getWatchedDir(directory);
     parent.add(basename3);
-    const absolutePath = sp.resolve(path28);
+    const absolutePath = sp.resolve(path32);
     const options = {
       persistent: opts.persistent
     };
@@ -40862,12 +40759,12 @@ var NodeFsHandler = class {
     if (opts.usePolling) {
       const enableBin = opts.interval !== opts.binaryInterval;
       options.interval = enableBin && isBinaryPath(basename3) ? opts.binaryInterval : opts.interval;
-      closer = setFsWatchFileListener(path28, absolutePath, options, {
+      closer = setFsWatchFileListener(path32, absolutePath, options, {
         listener,
         rawEmitter: this.fsw._emitRaw
       });
     } else {
-      closer = setFsWatchListener(path28, absolutePath, options, {
+      closer = setFsWatchListener(path32, absolutePath, options, {
         listener,
         errHandler: this._boundHandleError,
         rawEmitter: this.fsw._emitRaw
@@ -40889,7 +40786,7 @@ var NodeFsHandler = class {
     let prevStats = stats;
     if (parent.has(basename3))
       return;
-    const listener = async (path28, newStats) => {
+    const listener = async (path32, newStats) => {
       if (!this.fsw._throttle(THROTTLE_MODE_WATCH, file, 5))
         return;
       if (!newStats || newStats.mtimeMs === 0) {
@@ -40903,11 +40800,11 @@ var NodeFsHandler = class {
             this.fsw._emit(EV.CHANGE, file, newStats2);
           }
           if ((isMacos || isLinux || isFreeBSD) && prevStats.ino !== newStats2.ino) {
-            this.fsw._closeFile(path28);
+            this.fsw._closeFile(path32);
             prevStats = newStats2;
             const closer2 = this._watchWithNodeFs(file, listener);
             if (closer2)
-              this.fsw._addPathCloser(path28, closer2);
+              this.fsw._addPathCloser(path32, closer2);
           } else {
             prevStats = newStats2;
           }
@@ -40939,7 +40836,7 @@ var NodeFsHandler = class {
    * @param item basename of this item
    * @returns true if no more processing is needed for this entry.
    */
-  async _handleSymlink(entry, directory, path28, item) {
+  async _handleSymlink(entry, directory, path32, item) {
     if (this.fsw.closed) {
       return;
     }
@@ -40949,7 +40846,7 @@ var NodeFsHandler = class {
       this.fsw._incrReadyCount();
       let linkPath;
       try {
-        linkPath = await (0, import_promises2.realpath)(path28);
+        linkPath = await (0, import_promises2.realpath)(path32);
       } catch (e) {
         this.fsw._emitReady();
         return true;
@@ -40959,12 +40856,12 @@ var NodeFsHandler = class {
       if (dir.has(item)) {
         if (this.fsw._symlinkPaths.get(full) !== linkPath) {
           this.fsw._symlinkPaths.set(full, linkPath);
-          this.fsw._emit(EV.CHANGE, path28, entry.stats);
+          this.fsw._emit(EV.CHANGE, path32, entry.stats);
         }
       } else {
         dir.add(item);
         this.fsw._symlinkPaths.set(full, linkPath);
-        this.fsw._emit(EV.ADD, path28, entry.stats);
+        this.fsw._emit(EV.ADD, path32, entry.stats);
       }
       this.fsw._emitReady();
       return true;
@@ -40994,9 +40891,9 @@ var NodeFsHandler = class {
         return;
       }
       const item = entry.path;
-      let path28 = sp.join(directory, item);
+      let path32 = sp.join(directory, item);
       current.add(item);
-      if (entry.stats.isSymbolicLink() && await this._handleSymlink(entry, directory, path28, item)) {
+      if (entry.stats.isSymbolicLink() && await this._handleSymlink(entry, directory, path32, item)) {
         return;
       }
       if (this.fsw.closed) {
@@ -41005,8 +40902,8 @@ var NodeFsHandler = class {
       }
       if (item === target || !target && !previous.has(item)) {
         this.fsw._incrReadyCount();
-        path28 = sp.join(dir, sp.relative(dir, path28));
-        this._addToNodeFs(path28, initialAdd, wh, depth + 1);
+        path32 = sp.join(dir, sp.relative(dir, path32));
+        this._addToNodeFs(path32, initialAdd, wh, depth + 1);
       }
     }).on(EV.ERROR, this._boundHandleError);
     return new Promise((resolve6, reject) => {
@@ -41075,13 +40972,13 @@ var NodeFsHandler = class {
    * @param depth Child path actually targeted for watch
    * @param target Child path actually targeted for watch
    */
-  async _addToNodeFs(path28, initialAdd, priorWh, depth, target) {
+  async _addToNodeFs(path32, initialAdd, priorWh, depth, target) {
     const ready = this.fsw._emitReady;
-    if (this.fsw._isIgnored(path28) || this.fsw.closed) {
+    if (this.fsw._isIgnored(path32) || this.fsw.closed) {
       ready();
       return false;
     }
-    const wh = this.fsw._getWatchHelpers(path28);
+    const wh = this.fsw._getWatchHelpers(path32);
     if (priorWh) {
       wh.filterPath = (entry) => priorWh.filterPath(entry);
       wh.filterDir = (entry) => priorWh.filterDir(entry);
@@ -41097,8 +40994,8 @@ var NodeFsHandler = class {
       const follow = this.fsw.options.followSymlinks;
       let closer;
       if (stats.isDirectory()) {
-        const absPath = sp.resolve(path28);
-        const targetPath = follow ? await (0, import_promises2.realpath)(path28) : path28;
+        const absPath = sp.resolve(path32);
+        const targetPath = follow ? await (0, import_promises2.realpath)(path32) : path32;
         if (this.fsw.closed)
           return;
         closer = await this._handleDir(wh.watchPath, stats, initialAdd, depth, target, wh, targetPath);
@@ -41108,29 +41005,29 @@ var NodeFsHandler = class {
           this.fsw._symlinkPaths.set(absPath, targetPath);
         }
       } else if (stats.isSymbolicLink()) {
-        const targetPath = follow ? await (0, import_promises2.realpath)(path28) : path28;
+        const targetPath = follow ? await (0, import_promises2.realpath)(path32) : path32;
         if (this.fsw.closed)
           return;
         const parent = sp.dirname(wh.watchPath);
         this.fsw._getWatchedDir(parent).add(wh.watchPath);
         this.fsw._emit(EV.ADD, wh.watchPath, stats);
-        closer = await this._handleDir(parent, stats, initialAdd, depth, path28, wh, targetPath);
+        closer = await this._handleDir(parent, stats, initialAdd, depth, path32, wh, targetPath);
         if (this.fsw.closed)
           return;
         if (targetPath !== void 0) {
-          this.fsw._symlinkPaths.set(sp.resolve(path28), targetPath);
+          this.fsw._symlinkPaths.set(sp.resolve(path32), targetPath);
         }
       } else {
         closer = this._handleFile(wh.watchPath, stats, initialAdd);
       }
       ready();
       if (closer)
-        this.fsw._addPathCloser(path28, closer);
+        this.fsw._addPathCloser(path32, closer);
       return false;
     } catch (error) {
       if (this.fsw._handleError(error)) {
         ready();
-        return path28;
+        return path32;
       }
     }
   }
@@ -41173,24 +41070,24 @@ function createPattern(matcher) {
   }
   return () => false;
 }
-function normalizePath(path28) {
-  if (typeof path28 !== "string")
+function normalizePath(path32) {
+  if (typeof path32 !== "string")
     throw new Error("string expected");
-  path28 = sp2.normalize(path28);
-  path28 = path28.replace(/\\/g, "/");
+  path32 = sp2.normalize(path32);
+  path32 = path32.replace(/\\/g, "/");
   let prepend = false;
-  if (path28.startsWith("//"))
+  if (path32.startsWith("//"))
     prepend = true;
-  path28 = path28.replace(DOUBLE_SLASH_RE, "/");
+  path32 = path32.replace(DOUBLE_SLASH_RE, "/");
   if (prepend)
-    path28 = "/" + path28;
-  return path28;
+    path32 = "/" + path32;
+  return path32;
 }
 function matchPatterns(patterns, testString, stats) {
-  const path28 = normalizePath(testString);
+  const path32 = normalizePath(testString);
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index];
-    if (pattern(path28, stats)) {
+    if (pattern(path32, stats)) {
       return true;
     }
   }
@@ -41228,19 +41125,19 @@ var toUnix = (string) => {
   }
   return str;
 };
-var normalizePathToUnix = (path28) => toUnix(sp2.normalize(toUnix(path28)));
-var normalizeIgnored = (cwd = "") => (path28) => {
-  if (typeof path28 === "string") {
-    return normalizePathToUnix(sp2.isAbsolute(path28) ? path28 : sp2.join(cwd, path28));
+var normalizePathToUnix = (path32) => toUnix(sp2.normalize(toUnix(path32)));
+var normalizeIgnored = (cwd = "") => (path32) => {
+  if (typeof path32 === "string") {
+    return normalizePathToUnix(sp2.isAbsolute(path32) ? path32 : sp2.join(cwd, path32));
   } else {
-    return path28;
+    return path32;
   }
 };
-var getAbsolutePath = (path28, cwd) => {
-  if (sp2.isAbsolute(path28)) {
-    return path28;
+var getAbsolutePath = (path32, cwd) => {
+  if (sp2.isAbsolute(path32)) {
+    return path32;
   }
-  return sp2.join(cwd, path28);
+  return sp2.join(cwd, path32);
 };
 var EMPTY_SET = Object.freeze(/* @__PURE__ */ new Set());
 var DirEntry = class {
@@ -41305,10 +41202,10 @@ var WatchHelper = class {
   dirParts;
   followSymlinks;
   statMethod;
-  constructor(path28, follow, fsw) {
+  constructor(path32, follow, fsw) {
     this.fsw = fsw;
-    const watchPath = path28;
-    this.path = path28 = path28.replace(REPLACER_RE, "");
+    const watchPath = path32;
+    this.path = path32 = path32.replace(REPLACER_RE, "");
     this.watchPath = watchPath;
     this.fullWatchPath = sp2.resolve(watchPath);
     this.dirParts = [];
@@ -41448,20 +41345,20 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
     this._closePromise = void 0;
     let paths = unifyPaths(paths_);
     if (cwd) {
-      paths = paths.map((path28) => {
-        const absPath = getAbsolutePath(path28, cwd);
+      paths = paths.map((path32) => {
+        const absPath = getAbsolutePath(path32, cwd);
         return absPath;
       });
     }
-    paths.forEach((path28) => {
-      this._removeIgnoredPath(path28);
+    paths.forEach((path32) => {
+      this._removeIgnoredPath(path32);
     });
     this._userIgnored = void 0;
     if (!this._readyCount)
       this._readyCount = 0;
     this._readyCount += paths.length;
-    Promise.all(paths.map(async (path28) => {
-      const res = await this._nodeFsHandler._addToNodeFs(path28, !_internal, void 0, 0, _origAdd);
+    Promise.all(paths.map(async (path32) => {
+      const res = await this._nodeFsHandler._addToNodeFs(path32, !_internal, void 0, 0, _origAdd);
       if (res)
         this._emitReady();
       return res;
@@ -41483,17 +41380,17 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
       return this;
     const paths = unifyPaths(paths_);
     const { cwd } = this.options;
-    paths.forEach((path28) => {
-      if (!sp2.isAbsolute(path28) && !this._closers.has(path28)) {
+    paths.forEach((path32) => {
+      if (!sp2.isAbsolute(path32) && !this._closers.has(path32)) {
         if (cwd)
-          path28 = sp2.join(cwd, path28);
-        path28 = sp2.resolve(path28);
+          path32 = sp2.join(cwd, path32);
+        path32 = sp2.resolve(path32);
       }
-      this._closePath(path28);
-      this._addIgnoredPath(path28);
-      if (this._watched.has(path28)) {
+      this._closePath(path32);
+      this._addIgnoredPath(path32);
+      if (this._watched.has(path32)) {
         this._addIgnoredPath({
-          path: path28,
+          path: path32,
           recursive: true
         });
       }
@@ -41557,38 +41454,38 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param stats arguments to be passed with event
    * @returns the error if defined, otherwise the value of the FSWatcher instance's `closed` flag
    */
-  async _emit(event, path28, stats) {
+  async _emit(event, path32, stats) {
     if (this.closed)
       return;
     const opts = this.options;
     if (isWindows)
-      path28 = sp2.normalize(path28);
+      path32 = sp2.normalize(path32);
     if (opts.cwd)
-      path28 = sp2.relative(opts.cwd, path28);
-    const args = [path28];
+      path32 = sp2.relative(opts.cwd, path32);
+    const args = [path32];
     if (stats != null)
       args.push(stats);
     const awf = opts.awaitWriteFinish;
     let pw;
-    if (awf && (pw = this._pendingWrites.get(path28))) {
+    if (awf && (pw = this._pendingWrites.get(path32))) {
       pw.lastChange = /* @__PURE__ */ new Date();
       return this;
     }
     if (opts.atomic) {
       if (event === EVENTS.UNLINK) {
-        this._pendingUnlinks.set(path28, [event, ...args]);
+        this._pendingUnlinks.set(path32, [event, ...args]);
         setTimeout(() => {
-          this._pendingUnlinks.forEach((entry, path29) => {
+          this._pendingUnlinks.forEach((entry, path33) => {
             this.emit(...entry);
             this.emit(EVENTS.ALL, ...entry);
-            this._pendingUnlinks.delete(path29);
+            this._pendingUnlinks.delete(path33);
           });
         }, typeof opts.atomic === "number" ? opts.atomic : 100);
         return this;
       }
-      if (event === EVENTS.ADD && this._pendingUnlinks.has(path28)) {
+      if (event === EVENTS.ADD && this._pendingUnlinks.has(path32)) {
         event = EVENTS.CHANGE;
-        this._pendingUnlinks.delete(path28);
+        this._pendingUnlinks.delete(path32);
       }
     }
     if (awf && (event === EVENTS.ADD || event === EVENTS.CHANGE) && this._readyEmitted) {
@@ -41606,16 +41503,16 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
           this.emitWithAll(event, args);
         }
       };
-      this._awaitWriteFinish(path28, awf.stabilityThreshold, event, awfEmit);
+      this._awaitWriteFinish(path32, awf.stabilityThreshold, event, awfEmit);
       return this;
     }
     if (event === EVENTS.CHANGE) {
-      const isThrottled = !this._throttle(EVENTS.CHANGE, path28, 50);
+      const isThrottled = !this._throttle(EVENTS.CHANGE, path32, 50);
       if (isThrottled)
         return this;
     }
     if (opts.alwaysStat && stats === void 0 && (event === EVENTS.ADD || event === EVENTS.ADD_DIR || event === EVENTS.CHANGE)) {
-      const fullPath = opts.cwd ? sp2.join(opts.cwd, path28) : path28;
+      const fullPath = opts.cwd ? sp2.join(opts.cwd, path32) : path32;
       let stats2;
       try {
         stats2 = await (0, import_promises3.stat)(fullPath);
@@ -41646,23 +41543,23 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param timeout duration of time to suppress duplicate actions
    * @returns tracking object or false if action should be suppressed
    */
-  _throttle(actionType, path28, timeout) {
+  _throttle(actionType, path32, timeout) {
     if (!this._throttled.has(actionType)) {
       this._throttled.set(actionType, /* @__PURE__ */ new Map());
     }
     const action = this._throttled.get(actionType);
     if (!action)
       throw new Error("invalid throttle");
-    const actionPath = action.get(path28);
+    const actionPath = action.get(path32);
     if (actionPath) {
       actionPath.count++;
       return false;
     }
     let timeoutObject;
     const clear = () => {
-      const item = action.get(path28);
+      const item = action.get(path32);
       const count = item ? item.count : 0;
-      action.delete(path28);
+      action.delete(path32);
       clearTimeout(timeoutObject);
       if (item)
         clearTimeout(item.timeoutObject);
@@ -41670,7 +41567,7 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
     };
     timeoutObject = setTimeout(clear, timeout);
     const thr = { timeoutObject, clear, count: 0 };
-    action.set(path28, thr);
+    action.set(path32, thr);
     return thr;
   }
   _incrReadyCount() {
@@ -41684,44 +41581,44 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param event
    * @param awfEmit Callback to be called when ready for event to be emitted.
    */
-  _awaitWriteFinish(path28, threshold, event, awfEmit) {
+  _awaitWriteFinish(path32, threshold, event, awfEmit) {
     const awf = this.options.awaitWriteFinish;
     if (typeof awf !== "object")
       return;
     const pollInterval = awf.pollInterval;
     let timeoutHandler;
-    let fullPath = path28;
-    if (this.options.cwd && !sp2.isAbsolute(path28)) {
-      fullPath = sp2.join(this.options.cwd, path28);
+    let fullPath = path32;
+    if (this.options.cwd && !sp2.isAbsolute(path32)) {
+      fullPath = sp2.join(this.options.cwd, path32);
     }
     const now = /* @__PURE__ */ new Date();
     const writes = this._pendingWrites;
     function awaitWriteFinishFn(prevStat) {
-      (0, import_node_fs17.stat)(fullPath, (err, curStat) => {
-        if (err || !writes.has(path28)) {
+      (0, import_node_fs15.stat)(fullPath, (err, curStat) => {
+        if (err || !writes.has(path32)) {
           if (err && err.code !== "ENOENT")
             awfEmit(err);
           return;
         }
         const now2 = Number(/* @__PURE__ */ new Date());
         if (prevStat && curStat.size !== prevStat.size) {
-          writes.get(path28).lastChange = now2;
+          writes.get(path32).lastChange = now2;
         }
-        const pw = writes.get(path28);
+        const pw = writes.get(path32);
         const df = now2 - pw.lastChange;
         if (df >= threshold) {
-          writes.delete(path28);
+          writes.delete(path32);
           awfEmit(void 0, curStat);
         } else {
           timeoutHandler = setTimeout(awaitWriteFinishFn, pollInterval, curStat);
         }
       });
     }
-    if (!writes.has(path28)) {
-      writes.set(path28, {
+    if (!writes.has(path32)) {
+      writes.set(path32, {
         lastChange: now,
         cancelWait: () => {
-          writes.delete(path28);
+          writes.delete(path32);
           clearTimeout(timeoutHandler);
           return event;
         }
@@ -41732,8 +41629,8 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
   /**
    * Determines whether user has asked to ignore this path.
    */
-  _isIgnored(path28, stats) {
-    if (this.options.atomic && DOT_RE.test(path28))
+  _isIgnored(path32, stats) {
+    if (this.options.atomic && DOT_RE.test(path32))
       return true;
     if (!this._userIgnored) {
       const { cwd } = this.options;
@@ -41743,17 +41640,17 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
       const list2 = [...ignoredPaths.map(normalizeIgnored(cwd)), ...ignored];
       this._userIgnored = anymatch(list2, void 0);
     }
-    return this._userIgnored(path28, stats);
+    return this._userIgnored(path32, stats);
   }
-  _isntIgnored(path28, stat4) {
-    return !this._isIgnored(path28, stat4);
+  _isntIgnored(path32, stat4) {
+    return !this._isIgnored(path32, stat4);
   }
   /**
    * Provides a set of common helpers and properties relating to symlink handling.
    * @param path file or directory pattern being watched
    */
-  _getWatchHelpers(path28) {
-    return new WatchHelper(path28, this.options.followSymlinks, this);
+  _getWatchHelpers(path32) {
+    return new WatchHelper(path32, this.options.followSymlinks, this);
   }
   // Directory helpers
   // -----------------
@@ -41785,63 +41682,63 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param item      base path of item/directory
    */
   _remove(directory, item, isDirectory) {
-    const path28 = sp2.join(directory, item);
-    const fullPath = sp2.resolve(path28);
-    isDirectory = isDirectory != null ? isDirectory : this._watched.has(path28) || this._watched.has(fullPath);
-    if (!this._throttle("remove", path28, 100))
+    const path32 = sp2.join(directory, item);
+    const fullPath = sp2.resolve(path32);
+    isDirectory = isDirectory != null ? isDirectory : this._watched.has(path32) || this._watched.has(fullPath);
+    if (!this._throttle("remove", path32, 100))
       return;
     if (!isDirectory && this._watched.size === 1) {
       this.add(directory, item, true);
     }
-    const wp = this._getWatchedDir(path28);
+    const wp = this._getWatchedDir(path32);
     const nestedDirectoryChildren = wp.getChildren();
-    nestedDirectoryChildren.forEach((nested) => this._remove(path28, nested));
+    nestedDirectoryChildren.forEach((nested) => this._remove(path32, nested));
     const parent = this._getWatchedDir(directory);
     const wasTracked = parent.has(item);
     parent.remove(item);
     if (this._symlinkPaths.has(fullPath)) {
       this._symlinkPaths.delete(fullPath);
     }
-    let relPath2 = path28;
+    let relPath2 = path32;
     if (this.options.cwd)
-      relPath2 = sp2.relative(this.options.cwd, path28);
+      relPath2 = sp2.relative(this.options.cwd, path32);
     if (this.options.awaitWriteFinish && this._pendingWrites.has(relPath2)) {
       const event = this._pendingWrites.get(relPath2).cancelWait();
       if (event === EVENTS.ADD)
         return;
     }
-    this._watched.delete(path28);
+    this._watched.delete(path32);
     this._watched.delete(fullPath);
     const eventName = isDirectory ? EVENTS.UNLINK_DIR : EVENTS.UNLINK;
-    if (wasTracked && !this._isIgnored(path28))
-      this._emit(eventName, path28);
-    this._closePath(path28);
+    if (wasTracked && !this._isIgnored(path32))
+      this._emit(eventName, path32);
+    this._closePath(path32);
   }
   /**
    * Closes all watchers for a path
    */
-  _closePath(path28) {
-    this._closeFile(path28);
-    const dir = sp2.dirname(path28);
-    this._getWatchedDir(dir).remove(sp2.basename(path28));
+  _closePath(path32) {
+    this._closeFile(path32);
+    const dir = sp2.dirname(path32);
+    this._getWatchedDir(dir).remove(sp2.basename(path32));
   }
   /**
    * Closes only file-specific watchers
    */
-  _closeFile(path28) {
-    const closers = this._closers.get(path28);
+  _closeFile(path32) {
+    const closers = this._closers.get(path32);
     if (!closers)
       return;
     closers.forEach((closer) => closer());
-    this._closers.delete(path28);
+    this._closers.delete(path32);
   }
-  _addPathCloser(path28, closer) {
+  _addPathCloser(path32, closer) {
     if (!closer)
       return;
-    let list2 = this._closers.get(path28);
+    let list2 = this._closers.get(path32);
     if (!list2) {
       list2 = [];
-      this._closers.set(path28, list2);
+      this._closers.set(path32, list2);
     }
     list2.push(closer);
   }
@@ -41868,6 +41765,19 @@ function watch(paths, options = {}) {
   watcher.add(paths);
   return watcher;
 }
+
+// src/contract.ts
+var IngestStdout = ["commit SHA", "tool-call cost summary"];
+var KindFields = [
+  "kind",
+  "folder",
+  "canonical",
+  "consolidatable",
+  "definition"
+];
+var KindDefinitionFields = ["kind", "summary"];
+var WatchStartedMarker = "watching ";
+var WatchLockedMarker = "another watcher is already running (lock at ";
 
 // src/watch.ts
 var DefaultDebounceSeconds = 30;
@@ -41901,17 +41811,17 @@ function defaultClock() {
   return () => (Date.now() - start) / 1e3;
 }
 function writeLock(lockPath, pid, startedAt) {
-  mkdirSafe(import_node_path21.default.dirname(lockPath), 493);
+  mkdirSafe(import_node_path18.default.dirname(lockPath), 493);
   if (!pid) pid = process.pid;
   const started = startedAt ? startedAt : /* @__PURE__ */ new Date();
-  import_node_fs18.default.writeFileSync(lockPath, lockPayload(pid, started), { mode: 420 });
+  import_node_fs16.default.writeFileSync(lockPath, lockPayload(pid, started), { mode: 420 });
 }
 function lockPayload(pid, startedAt) {
   return JSON.stringify({ pid, started_at: startedAt.toISOString() });
 }
 function removeLock(lockPath) {
   try {
-    import_node_fs18.default.unlinkSync(lockPath);
+    import_node_fs16.default.unlinkSync(lockPath);
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
@@ -41922,7 +41832,7 @@ function pastStaleWindow(startedAtMs, now) {
 function lockState(lockPath, now, pidAlive) {
   let info;
   try {
-    info = import_node_fs18.default.statSync(lockPath);
+    info = import_node_fs16.default.statSync(lockPath);
   } catch (err) {
     if (err.code === "ENOENT") {
       return { kind: "free" };
@@ -41931,7 +41841,7 @@ function lockState(lockPath, now, pidAlive) {
   }
   let data;
   try {
-    data = import_node_fs18.default.readFileSync(lockPath, "utf8");
+    data = import_node_fs16.default.readFileSync(lockPath, "utf8");
   } catch {
     return { kind: "unparsable" };
   }
@@ -41999,7 +41909,7 @@ function acquireLock(lockPath, seams = {}) {
 function readQueue(queuePath) {
   let data;
   try {
-    data = import_node_fs18.default.readFileSync(queuePath, "utf8");
+    data = import_node_fs16.default.readFileSync(queuePath, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw err;
@@ -42011,7 +41921,7 @@ function readQueue(queuePath) {
   return out;
 }
 function withQueueLock(queuePath, fn) {
-  mkdirSafe(import_node_path21.default.dirname(queuePath), 493);
+  mkdirSafe(import_node_path18.default.dirname(queuePath), 493);
   const writelockPath = queuePath + ".writelock";
   withExclusiveLock(
     writelockPath,
@@ -42020,8 +41930,8 @@ function withQueueLock(queuePath, fn) {
       let body = "";
       for (const line of newLines) body += line + "\n";
       const tmpPath = queuePath + ".tmp";
-      import_node_fs18.default.writeFileSync(tmpPath, body, { mode: 420 });
-      import_node_fs18.default.renameSync(tmpPath, queuePath);
+      import_node_fs16.default.writeFileSync(tmpPath, body, { mode: 420 });
+      import_node_fs16.default.renameSync(tmpPath, queuePath);
     },
     // "fail", never "reclaim": two writers each believing they hold the queue
     // corrupts it. See [StalePolicy].
@@ -42045,29 +41955,29 @@ function checkAndEnqueue(eligibleRels, settledRel, queuePath) {
   return true;
 }
 function forRoot(root) {
-  const wk = import_node_path21.default.join(root, ".wiki-knowledge");
+  const wk = import_node_path18.default.join(root, ".wiki-knowledge");
   return {
     root,
-    lock: import_node_path21.default.join(wk, "watch.lock"),
-    queue: import_node_path21.default.join(wk, "watch-queue.jsonl")
+    lock: import_node_path18.default.join(wk, "watch.lock"),
+    queue: import_node_path18.default.join(wk, "watch-queue.jsonl")
   };
 }
 function relForEvent(root, abs) {
   let info;
   try {
-    info = import_node_fs18.default.statSync(abs);
+    info = import_node_fs16.default.statSync(abs);
   } catch {
     return null;
   }
   if (info.isDirectory()) return null;
-  const rel = import_node_path21.default.relative(root, abs);
-  if (rel === ".." || rel.startsWith(".." + import_node_path21.default.sep)) return null;
+  const rel = import_node_path18.default.relative(root, abs);
+  if (rel === ".." || rel.startsWith(".." + import_node_path18.default.sep)) return null;
   return toSlash3(rel);
 }
 var LockRetryMillis = 5;
 function withExclusiveLock(lockPath, critical, stalePolicy, seams = {}) {
   const { clock, pidAlive, sleep: wait } = lockDefaults(seams);
-  mkdirSafe(import_node_path21.default.dirname(lockPath), 493);
+  mkdirSafe(import_node_path18.default.dirname(lockPath), 493);
   let fd;
   for (; ; ) {
     try {
@@ -42093,7 +42003,7 @@ function withExclusiveLock(lockPath, critical, stalePolicy, seams = {}) {
   } catch (err) {
     criticalErr = err;
   } finally {
-    import_node_fs18.default.closeSync(fd);
+    import_node_fs16.default.closeSync(fd);
     try {
       removeLock(lockPath);
     } catch (err) {
@@ -42103,11 +42013,11 @@ function withExclusiveLock(lockPath, critical, stalePolicy, seams = {}) {
   if (criticalErr !== null) throw criticalErr;
 }
 function createLockFile(lockPath, now) {
-  const fd = import_node_fs18.default.openSync(lockPath, "wx");
+  const fd = import_node_fs16.default.openSync(lockPath, "wx");
   try {
-    import_node_fs18.default.writeSync(fd, lockPayload(process.pid, now));
+    import_node_fs16.default.writeSync(fd, lockPayload(process.pid, now));
   } catch (err) {
-    import_node_fs18.default.closeSync(fd);
+    import_node_fs16.default.closeSync(fd);
     removeLock(lockPath);
     throw err;
   }
@@ -42128,13 +42038,13 @@ function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 function toSlash3(p) {
-  return p.split(import_node_path21.default.sep).join("/");
+  return p.split(import_node_path18.default.sep).join("/");
 }
 var StopSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
 function runWatch(paths, options = {}) {
   const debounceSeconds = options.debounceSeconds ?? DefaultDebounceSeconds;
   const pollIntervalSeconds = options.pollIntervalSeconds ?? DefaultPollIntervalSeconds;
-  const rawRoot = import_node_path21.default.join(paths.root, "raw");
+  const rawRoot = import_node_path18.default.join(paths.root, "raw");
   mkdirSafe(rawRoot, 493);
   const watcher = (options.makeWatcher ?? defaultWatcher)(rawRoot);
   const debouncer = new Debouncer(
@@ -42169,7 +42079,9 @@ function runWatch(paths, options = {}) {
     watcher.on("error", (_err) => {
     });
     watcher.on("ready", () => {
-      log2(`watching ${rawRoot} (debounce=${debounceSeconds}s, pid=${pid})`);
+      log2(
+        `${WatchStartedMarker}${rawRoot} (debounce=${debounceSeconds}s, pid=${pid})`
+      );
     });
     cancel = schedule(() => {
       const settled = debouncer.settledFiles();
@@ -42205,13 +42117,471 @@ function defaultOffSignal(signal, cb) {
   process.removeListener(signal, cb);
 }
 
+// src/ingestcommand.ts
+function readInput(pathOrDash) {
+  if (pathOrDash === "-") return import_node_fs17.default.readFileSync(0, "utf8");
+  return import_node_fs17.default.readFileSync(pathOrDash, "utf8");
+}
+function normalizeFolderArg(arg) {
+  if (arg === "" || arg === "raw/") return "";
+  return arg.startsWith("raw/") ? arg.slice("raw/".length) : arg;
+}
+function renderScanTable(result) {
+  if (result.eligible.length === 0 && result.ignored.length === 0) {
+    console.log("no eligible files; 0 ignored");
+    return;
+  }
+  let width = 10;
+  for (const c of result.eligible) {
+    if (c.rawRel.length > width) width = c.rawRel.length;
+  }
+  for (const rawRel of result.ignored) {
+    if (rawRel.length > width) width = rawRel.length;
+  }
+  for (const c of result.eligible) {
+    console.log(`${c.rawRel.padEnd(width)}  ${c.reason}`);
+  }
+  if (result.ignored.length > 0) {
+    console.log(`
+${result.ignored.length} ignored by .ingestignore:`);
+    for (const rawRel of result.ignored) console.log(`  ${rawRel}`);
+  }
+}
+async function runPlan(planPath, root, dryRun) {
+  const text2 = readInput(planPath);
+  const plan = decodePlan(text2);
+  const resolved = resolve3(plan, root);
+  resolved.validate();
+  if (dryRun) {
+    console.log(resolved.describe());
+    return;
+  }
+  const sha = await resolved.execute(new VaultGit(root));
+  console.log(sha);
+  printToolCallSummary();
+  if (planPath !== "-") {
+    import_node_fs17.default.unlinkSync(planPath);
+  }
+}
+function printToolCallSummary() {
+  const sessionID = process.env.CLAUDE_CODE_SESSION_ID;
+  if (!sessionID) return;
+  const events = readLog(sessionID, "");
+  if (events.length === 0) return;
+  console.log(formatSummary(summarize(events)));
+}
+async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
+  const text2 = readInput(planPath);
+  const plan = decodePlan(text2);
+  const results = await discover(index, plan.pages, opts);
+  const pages = results.map((r) => ({
+    title: r.title,
+    candidates: r.candidates
+  }));
+  const vocab = await index.tagCounts();
+  const payload = { pages };
+  if (tagsContain === "" && tagCount === "") {
+    payload.vocabulary = vocab;
+  } else {
+    if (tagsContain !== "") {
+      payload.tag_matches = tagsContaining(vocab, splitCommaList(tagsContain));
+    }
+    if (tagCount !== "") {
+      payload.tag_counts = tagCounts(vocab, splitCommaList(tagCount));
+    }
+  }
+  emitDocument(payload);
+}
+function ignoreRawFile(root, rawRel, comment) {
+  const rel = import_node_path19.default.posix.normalize(rawRel);
+  if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
+    fail(
+      `--ignore takes a vault-relative path under raw/, got ${JSON.stringify(rawRel)}`
+    );
+  }
+  const folder = import_node_path19.default.join(
+    root,
+    "raw",
+    import_node_path19.default.posix.dirname(rel.slice("raw/".length))
+  );
+  append(folder, import_node_path19.default.posix.basename(rel), comment);
+}
+function registerIngestCommands(program2) {
+  program2.command("ingest-scan [folder]").description("Scan raw/ for files that need ingestion").option(
+    "--json",
+    "emit JSON Lines (one eligible or ignored record per line)"
+  ).action(async (folderArg, opts) => {
+    const root = resolveRoot();
+    const folder = folderArg === void 0 ? "" : normalizeFolderArg(folderArg);
+    const result = await scan(root, folder, null);
+    if (opts.json) {
+      const rows = [];
+      for (const c of result.eligible) {
+        rows.push({
+          kind: "eligible",
+          raw_rel: c.rawRel,
+          reason: c.reason,
+          back_pointers: c.backPointers
+        });
+      }
+      for (const rawRel of result.ignored) {
+        rows.push({ kind: "ignored", raw_rel: rawRel });
+      }
+      emitRows(rows);
+      return;
+    }
+    renderScanTable(result);
+  });
+  program2.command("watch").description(
+    `Watch raw/ for new files and enqueue eligible ones; once observing it prints "${WatchStartedMarker}<raw> (debounce=<s>s, pid=<pid>)", and refuses with "${WatchLockedMarker}<lock>)" when another watcher holds the lock`
+  ).option("--vault <root>", "vault root; defaults to resolve_vault_root()").option(
+    "--debounce <seconds>",
+    `per-file debounce, seconds (default ${DefaultDebounceSeconds})`,
+    (v) => Number(v),
+    DefaultDebounceSeconds
+  ).option(
+    "--poll-interval <seconds>",
+    `how often to check for settled files, seconds (default ${DefaultPollIntervalSeconds})`,
+    (v) => Number(v),
+    DefaultPollIntervalSeconds
+  ).option(
+    "--dequeue <rel>",
+    "remove this vault-relative path from the watch queue and exit, instead of watching"
+  ).action(
+    async (opts) => {
+      let root = opts.vault ?? "";
+      if (root === "") {
+        root = resolveRoot();
+      } else {
+        try {
+          root = import_node_fs17.default.realpathSync(root);
+        } catch {
+        }
+      }
+      const paths = forRoot(root);
+      if (opts.dequeue) {
+        removeFromQueue(paths.queue, opts.dequeue);
+        return;
+      }
+      const { acquired, stalePID } = acquireLock(paths.lock);
+      if (!acquired) {
+        fail(`${WatchLockedMarker}${paths.lock})`);
+      }
+      if (stalePID !== null) {
+        console.log(
+          `previous watcher exited without cleanup, removing stale lock (pid=${stalePID})`
+        );
+      }
+      await runWatch(paths, {
+        debounceSeconds: opts.debounce,
+        pollIntervalSeconds: opts.pollInterval
+      });
+    }
+  );
+  program2.command("ingest").description(
+    `Execute an IngestPlan against the resolved vault; a writing --plan run prints the ${IngestStdout[0]} on line 1, then the ${IngestStdout[1]} when a hook log exists`
+  ).option(
+    "--plan <file>",
+    "path to an IngestPlan JSON file ('-' reads stdin)"
+  ).option(
+    "--ignore <rawRel>",
+    "never offer this raw/ file again for a sweep (appends it to its folder's .ingestignore); repeatable",
+    collectFlag,
+    []
+  ).option(
+    "--ignore-comment <comment>",
+    "optional trailing comment for the --ignore entry"
+  ).option(
+    "--dry-run",
+    "resolve and validate the plan, print what would be written, write nothing"
+  ).action(
+    async (opts) => {
+      const planPath = opts.plan ?? "";
+      const ignoreRels = opts.ignore ?? [];
+      if (opts.dryRun && planPath === "") {
+        fail("--dry-run only applies to --plan; --ignore always writes");
+      }
+      if (planPath === "" === (ignoreRels.length === 0)) {
+        fail("exactly one of --plan or --ignore is required");
+      }
+      const root = resolveRoot();
+      if (ignoreRels.length > 0) {
+        const comment = opts.ignoreComment ?? "";
+        for (const ignoreRel of ignoreRels) {
+          ignoreRawFile(root, ignoreRel, comment);
+        }
+        return;
+      }
+      await runPlan(planPath, root, opts.dryRun ?? false);
+    }
+  );
+  program2.command("commit").description("Write one structured git commit per manifest").option(
+    "--manifest <file>",
+    "path to a manifest JSON file ('-' reads stdin)"
+  ).action(async (opts) => {
+    if (!opts.manifest) {
+      fail("required option '--manifest <file>' not specified");
+    }
+    const root = resolveRoot();
+    const text2 = readInput(opts.manifest);
+    const manifest = JSON.parse(text2);
+    const sha = await commit2(root, manifest, new VaultGit(root));
+    console.log(sha);
+  });
+  program2.command("discover").description(
+    "Find pages overlapping a planned page, plus the tag vocabulary"
+  ).option(
+    "--plan <file>",
+    "path to a draft IngestPlan JSON ('-' reads stdin); discovers candidates for every page in it, plus the vault's tag vocabulary"
+  ).option("--title <text>", "the planned page's own title (single-page mode)").option(
+    "--summary <text>",
+    "the planned page's own summary (single-page mode)"
+  ).option(
+    "--body-file <file>",
+    "path to the planned page's own body text (single-page mode)"
+  ).option(
+    "--limit <n>",
+    `max hits scanned per page; 0 = unbounded (score is the real filter) (default ${DefaultLimit})`,
+    (v) => Number(v),
+    DefaultLimit
+  ).option(
+    "--max-candidates <n>",
+    `max candidates kept per page, highest-scoring first; 0 = use default`,
+    (v) => Number(v),
+    DefaultMaxCandidates
+  ).option(
+    "--duplicate-threshold <n>",
+    "",
+    (v) => Number(v),
+    DuplicateThreshold
+  ).option(
+    "--related-threshold <n>",
+    "",
+    (v) => Number(v),
+    RelatedThreshold
+  ).option(
+    "--tags-containing <substrings>",
+    "comma-separated substrings (case-insensitive OR match); with --plan, selects the tag_matches field in place of the full tag-vocabulary dump"
+  ).option(
+    "--tag-count <tags>",
+    "comma-separated exact tag names; with --plan, selects the tag_counts field (per-tag page counts, 0 if the tag doesn't exist yet) in place of the full tag-vocabulary dump"
+  ).action(
+    async (opts) => {
+      const root = resolveRoot();
+      const discoverOpts = {
+        limit: opts.limit,
+        duplicateThreshold: opts.duplicateThreshold,
+        relatedThreshold: opts.relatedThreshold,
+        maxCandidates: opts.maxCandidates
+      };
+      const index = await Index.open(root);
+      try {
+        if (opts.plan) {
+          await runDiscoverPlan(
+            index,
+            opts.plan,
+            discoverOpts,
+            opts.tagsContaining ?? "",
+            opts.tagCount ?? ""
+          );
+          return;
+        }
+        let body = "";
+        if (opts.bodyFile) {
+          body = import_node_fs17.default.readFileSync(opts.bodyFile, "utf8");
+        }
+        const candidates = await check2(
+          index,
+          opts.title ?? "",
+          opts.summary ?? "",
+          body,
+          discoverOpts
+        );
+        emitRows(candidates);
+      } finally {
+        index.close();
+      }
+    }
+  );
+}
+
+// src/vaultcommand.ts
+var import_node_path21 = __toESM(require("node:path"), 1);
+
+// src/initwiki.ts
+var import_node_fs18 = __toESM(require("node:fs"), 1);
+var import_node_path20 = __toESM(require("node:path"), 1);
+init_vaultgit();
+var ModeQueryFromAnywhere = "query-from-anywhere";
+var ModeDedicated = "dedicated";
+var Modes = [ModeQueryFromAnywhere, ModeDedicated];
+var gitignore = "*.rsls\n**/.claude/wiki-knowledge/sessions/\n**/.opencode/wiki-knowledge/sessions/\n.wiki-knowledge/\nlog.md\nindex.md\n_index.md\n";
+async function isVault(root) {
+  if (!hasMarker(root)) return false;
+  return await new VaultGit(root).isWorkTree();
+}
+function settingsJSON(pluginRoot) {
+  const settings = {
+    extraKnownMarketplaces: {
+      "wiki-knowledge-plugin": {
+        source: { source: "directory", path: pluginRoot }
+      }
+    },
+    enabledPlugins: { "wiki-knowledge@wiki-knowledge-plugin": true }
+  };
+  return JSON.stringify(settings, null, 2) + "\n";
+}
+async function init2(vaultRoot, mode, pluginRoot) {
+  switch (mode) {
+    case ModeQueryFromAnywhere:
+      if (pluginRoot === "") {
+        throw new Error(`${ModeQueryFromAnywhere} mode requires a plugin root`);
+      }
+      break;
+    case ModeDedicated:
+      break;
+    default:
+      throw new Error(
+        `unknown mode "${mode}"; must be one of ${Modes.join(", ")}`
+      );
+  }
+  if (await isVault(vaultRoot)) {
+    throw new Error(
+      `${vaultRoot} already looks like a vault (a wiki/ or .wiki-root marker in a git work tree)`
+    );
+  }
+  mkdirSafe(vaultRoot, 493);
+  const converting = import_node_fs18.default.existsSync(import_node_path20.default.join(vaultRoot, "wiki"));
+  for (const folder of Object.values(KindFolders)) {
+    const kindDir = import_node_path20.default.join(vaultRoot, "wiki", folder);
+    if (import_node_fs18.default.existsSync(kindDir)) continue;
+    mkdirSafe(kindDir, 493);
+    touch(import_node_path20.default.join(kindDir, ".gitkeep"));
+  }
+  const rawDir = import_node_path20.default.join(vaultRoot, "raw");
+  if (!converting && !import_node_fs18.default.existsSync(rawDir)) {
+    mkdirSafe(rawDir, 493);
+    touch(import_node_path20.default.join(rawDir, ".gitkeep"));
+  }
+  import_node_fs18.default.writeFileSync(import_node_path20.default.join(vaultRoot, ".gitignore"), gitignore, {
+    mode: 420
+  });
+  const addPaths = [];
+  for (const rel of ["wiki", "raw", ".gitignore"]) {
+    const abs = import_node_path20.default.join(vaultRoot, ...rel.split("/"));
+    if (import_node_fs18.default.existsSync(abs)) addPaths.push(rel);
+  }
+  if (mode === ModeQueryFromAnywhere) {
+    const claudeDir = import_node_path20.default.join(vaultRoot, ".claude");
+    mkdirSafe(claudeDir, 493);
+    import_node_fs18.default.writeFileSync(
+      import_node_path20.default.join(claudeDir, "settings.json"),
+      settingsJSON(pluginRoot),
+      {
+        mode: 420
+      }
+    );
+    addPaths.push(".claude/settings.json");
+  }
+  const repo = new VaultGit(vaultRoot);
+  if (!await repo.isWorkTree()) {
+    await repo.init();
+  }
+  await repo.add(addPaths);
+  await repo.commit("Initialize wiki vault");
+  return import_node_path20.default.resolve(vaultRoot);
+}
+function touch(file) {
+  import_node_fs18.default.closeSync(import_node_fs18.default.openSync(file, "a", 420));
+}
+
+// src/vaultcommand.ts
+function registerPlacementCommands(program2) {
+  program2.command("init <path>").description(
+    `Scaffold a brand-new wiki vault; --mode is one of: ${Modes.join(", ")}`
+  ).requiredOption(
+    "--mode <mode>",
+    `deployment mode: one of ${Modes.join(", ")}`
+  ).option(
+    "--plugin-root <dir>",
+    "this plugin's install dir (required for query-from-anywhere)"
+  ).action(
+    async (vaultPath, opts) => {
+      const root = await init2(
+        vaultPath,
+        opts.mode,
+        opts.pluginRoot ?? ""
+      );
+      console.log(root);
+    }
+  );
+  program2.command("place <kind> <title>").description(
+    `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder`
+  ).action((kind, title) => {
+    const root = resolveRoot();
+    const rel = path3(kind, title, new Vault(root).discoveredKinds());
+    console.log(rel);
+  });
+}
+function registerVaultCommand(program2) {
+  const vault = program2.command("vault").description(
+    "Resolve the vault root, or move a page within it (moves need exactly two page refs)"
+  ).action(() => {
+    const root = resolveRoot();
+    console.log(root);
+  });
+  vault.command("root").description("Print the resolved vault root (the no-argument default)").action(() => {
+    const root = resolveRoot();
+    console.log(root);
+  });
+  vault.command("move").description(
+    "Move a page within the vault and fix every link, inbound and outbound"
+  ).argument("<old_ref>", "vault-relative path of the page to move").argument("<new_ref>", "vault-relative destination path").action((oldRef, newRef) => {
+    const root = resolveRoot();
+    const changed = new Vault(root).movePage(oldRef, newRef);
+    for (const pageRef2 of changed) console.log(pageRef2);
+  });
+  vault.command("kinds").description(
+    `List all placement kinds as one compact JSON array: canonical four plus any discovered custom folders; each entry: {${KindFields.join(", ")}}, definition {${KindDefinitionFields.join(", ")}} or null`
+  ).action(() => {
+    const root = resolveRoot();
+    const vault2 = new Vault(root);
+    const custom = vault2.discoveredKinds();
+    const result = [];
+    for (const kind of Kinds) {
+      const folder = KindFolders[kind];
+      result.push({
+        kind,
+        folder,
+        canonical: true,
+        consolidatable: vault2.isConsolidatable(folder),
+        definition: null
+      });
+    }
+    for (const [kind, folder] of Object.entries(custom)) {
+      const meta = readKindMeta(import_node_path21.default.join(root, "wiki", folder));
+      result.push({
+        kind,
+        folder,
+        canonical: false,
+        consolidatable: vault2.isConsolidatable(folder),
+        // Unchanged shape: a KIND.md declaring no kind contributes the flag,
+        // not a definition.
+        definition: meta === null || meta.kind === null ? null : { kind: meta.kind, summary: meta.summary }
+      });
+    }
+    emitDocument(result);
+  });
+}
+
 // src/check.ts
-var import_node_fs19 = __toESM(require("node:fs"), 1);
-var import_node_path22 = __toESM(require("node:path"), 1);
+var import_node_path23 = __toESM(require("node:path"), 1);
 var import_node_util4 = require("node:util");
 var import_yaml4 = __toESM(require_dist(), 1);
-init_vaultgit();
-init_pagepredicate();
+
+// src/vaultread.ts
+var import_node_fs19 = __toESM(require("node:fs"), 1);
+var import_node_path22 = __toESM(require("node:path"), 1);
 function walkAllMd(root) {
   const wikiDir = import_node_path22.default.join(root, "wiki");
   const refs = [];
@@ -42232,15 +42602,57 @@ function walkAllMd(root) {
   }
   return refs.sort();
 }
-var UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
-var SOURCES_DIR = "wiki/sources";
-var RAW_HREF_PREFIX = import_node_path22.default.posix.relative(SOURCES_DIR, "raw");
+var VaultRead = class {
+  constructor(root) {
+    this.root = root;
+    this.vault = new Vault(root);
+  }
+  vault;
+  textsCache;
+  allRefsCache;
+  recordsCache;
+  kindsCache;
+  /** Every `wiki/**` page as a {pageRef: text} map. */
+  texts() {
+    return this.textsCache ??= this.vault.loadWikiPages();
+  }
+  /** Every `.md` under `wiki/`, pages and non-pages alike. */
+  allRefs() {
+    return this.allRefsCache ??= walkAllMd(this.root);
+  }
+  /** Parsed records, tolerant of malformed edges — the read every check uses. */
+  records() {
+    return this.recordsCache ??= this.vault.recordsFor(this.texts(), {
+      skipMalformedEdges: true
+    });
+  }
+  /** Each page's parsed record paired with the text it was decoded from. */
+  pagesWithText() {
+    const texts = this.texts();
+    const records = this.records();
+    const out = {};
+    for (const ref of Object.keys(records)) {
+      out[ref] = { record: records[ref], text: texts[ref] };
+    }
+    return out;
+  }
+  /** The kind values `concept-fragmentation` scores (ADR-0027). */
+  consolidatableKinds() {
+    return this.kindsCache ??= this.vault.consolidatableKinds();
+  }
+};
+
+// src/check.ts
+init_vaultgit();
+init_pagepredicate();
+var SOURCES_DIR = `wiki/${KindFolders["source"]}`;
+var RAW_HREF_PREFIX = import_node_path23.default.posix.relative(SOURCES_DIR, "raw");
 function regexEscape(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-async function kindFolderConformance(root) {
+async function kindFolderConformance(read) {
   const findings = [];
-  for (const ref of walkAllMd(root)) {
+  for (const ref of read.allRefs()) {
     const filename = ref.split("/").at(-1);
     if (filename === "KIND.md") continue;
     if (ref === "wiki/_index.md") continue;
@@ -42253,8 +42665,8 @@ async function kindFolderConformance(root) {
   }
   return findings;
 }
-async function ingestionSourceIntegrity(root) {
-  const pages = new Vault(root).pages({ skipMalformedEdges: true });
+async function ingestionSourceIntegrity(read) {
+  const pages = read.records();
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -42269,8 +42681,8 @@ async function ingestionSourceIntegrity(root) {
   }
   return findings;
 }
-async function frontmatterLinkFormat(root) {
-  const pages = new Vault(root).loadWikiPages();
+async function frontmatterLinkFormat(read) {
+  const pages = read.texts();
   const findings = [];
   for (const [ref, text2] of Object.entries(pages)) {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
@@ -42278,7 +42690,7 @@ async function frontmatterLinkFormat(root) {
     const unquotedLines = /* @__PURE__ */ new Set();
     const fmLines = frontmatter.split("\n");
     for (let i = 0; i < fmLines.length; i++) {
-      if (UNQUOTED_LIST_LINK_RE.test(fmLines[i])) {
+      if (isUnquotedListLinkLine(fmLines[i])) {
         unquotedLines.add(i);
         findings.push({
           pageRef: ref,
@@ -42300,8 +42712,8 @@ async function frontmatterLinkFormat(root) {
   }
   return findings;
 }
-async function tagsShape(root) {
-  const pages = new Vault(root).loadWikiPages();
+async function tagsShape(read) {
+  const pages = read.texts();
   const findings = [];
   for (const [ref, text2] of Object.entries(pages)) {
     for (const detail of malformedTags(text2))
@@ -42309,11 +42721,12 @@ async function tagsShape(root) {
   }
   return findings;
 }
-async function staleSynthesis(root) {
-  const pages = new Vault(root).pages({ skipMalformedEdges: true });
-  const vaultGit = new VaultGit(root);
+var StaleSynthesisDays = 30;
+async function staleSynthesis(read) {
+  const pages = read.records();
+  const vaultGit = new VaultGit(read.root);
   const findings = [];
-  const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1e3;
+  const cutoffMs = Date.now() - StaleSynthesisDays * 24 * 60 * 60 * 1e3;
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "synthesis") continue;
     const dateStr = await vaultGit.lastCommitDate(ref);
@@ -42329,8 +42742,8 @@ async function staleSynthesis(root) {
   }
   return findings;
 }
-async function missingVolatilitySourceDate(root) {
-  const pages = new Vault(root).pages({ skipMalformedEdges: true });
+async function missingVolatilitySourceDate(read) {
+  const pages = read.records();
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (!record.volatility)
@@ -42340,10 +42753,8 @@ async function missingVolatilitySourceDate(root) {
   }
   return findings;
 }
-async function unresolvedSupersession(root) {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true
-  });
+async function unresolvedSupersession(read) {
+  const pagesWithText = read.pagesWithText();
   const findings = [];
   for (const [ref, { record, text: text2 }] of Object.entries(pagesWithText)) {
     const hasContradicts = record.edges.some(
@@ -42363,10 +42774,8 @@ async function unresolvedSupersession(root) {
   }
   return findings;
 }
-async function contradictionCallouts(root) {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true
-  });
+async function contradictionCallouts(read) {
+  const pagesWithText = read.pagesWithText();
   const findings = [];
   for (const [ref, { text: text2 }] of Object.entries(pagesWithText)) {
     const { body } = splitFrontmatter(text2);
@@ -42375,10 +42784,8 @@ async function contradictionCallouts(root) {
   }
   return findings;
 }
-async function orphans(root) {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true
-  });
+async function orphans(read) {
+  const pagesWithText = read.pagesWithText();
   const allRefs = new Set(Object.keys(pagesWithText));
   const inbound = /* @__PURE__ */ new Map();
   for (const ref of allRefs) inbound.set(ref, 0);
@@ -42432,33 +42839,14 @@ function frontmatterSplits(frontmatter) {
     const labelEnd = labelStart + link2.label.length;
     const rawLabel = frontmatter.slice(labelStart, labelEnd);
     if (rawLabel.includes("\n") && insideAny(spans, labelStart, labelEnd)) {
-      splits.push({
-        start: labelStart,
-        end: labelEnd,
-        joined: joinLabel(rawLabel),
-        kind: "label",
-        line
-      });
+      splits.push({ joined: joinLabel(rawLabel), kind: "label", line });
     }
     if (link2.labelDestFold && insideAny(spans, link2.labelDestFold.start, link2.labelDestFold.end)) {
-      splits.push({
-        start: link2.labelDestFold.start,
-        end: link2.labelDestFold.end,
-        joined: "",
-        kind: "boundary",
-        line
-      });
+      splits.push({ joined: "", kind: "boundary", line });
     }
     const rawDest = frontmatter.slice(link2.start, link2.end);
     if (rawDest.includes("\n") && insideAny(spans, link2.start, link2.end)) {
-      splits.push({
-        start: link2.start,
-        end: link2.end,
-        // iterLinks already joins escaped breaks, so `dest` is the joined value.
-        joined: link2.dest,
-        kind: "destination",
-        line
-      });
+      splits.push({ joined: link2.dest, kind: "destination", line });
     }
   }
   return splits;
@@ -42483,8 +42871,8 @@ function bodySplits(pageRef2, text2, body, bodyOffset) {
   }
   return findings;
 }
-async function splitLinks(root) {
-  const pages = new Vault(root).loadWikiPages();
+async function splitLinks(read) {
+  const pages = read.texts();
   const findings = [];
   for (const [ref, text2] of Object.entries(pages)) {
     const { frontmatter, hasFrontmatter, body, bodyOffset } = splitFrontmatter(text2);
@@ -42595,10 +42983,10 @@ function fragmentationDetail(cluster) {
   const why = basis.length > 0 ? basis.join("; ") : "similar titles";
   return `${cluster.members.length} closely-related pages (${why}) \u2014 consider consolidating into ${cluster.suggestedSurvivor}`;
 }
-async function conceptFragmentation(root, opts = {}) {
+async function conceptFragmentation(read, opts = {}) {
   const minSimilarity = opts.minSimilarity ?? DefaultMinSimilarity;
-  const scope = new Vault(root).consolidatableKinds();
-  const index = await Index.open(root);
+  const scope = read.consolidatableKinds();
+  const index = await Index.open(read.root);
   try {
     const pages = await index.indexedPages(scope);
     const signals = /* @__PURE__ */ new Map();
@@ -42642,13 +43030,13 @@ async function conceptFragmentation(root, opts = {}) {
     if (scored.length === 0) return [];
     const parent = /* @__PURE__ */ new Map();
     const find = (x) => {
-      const path28 = [];
+      const path32 = [];
       let cur = x;
       while (parent.get(cur) !== cur) {
-        path28.push(cur);
+        path32.push(cur);
         cur = parent.get(cur);
       }
-      for (const node of path28) parent.set(node, cur);
+      for (const node of path32) parent.set(node, cur);
       return cur;
     };
     const union = (a, b) => {
@@ -42662,19 +43050,19 @@ async function conceptFragmentation(root, opts = {}) {
     for (const { a, b } of scored) union(a, b);
     const clusters = /* @__PURE__ */ new Map();
     for (const ref of parent.keys()) {
-      const root2 = find(ref);
-      const members = clusters.get(root2);
+      const root = find(ref);
+      const members = clusters.get(root);
       if (members) members.push(ref);
-      else clusters.set(root2, [ref]);
+      else clusters.set(root, [ref]);
     }
     const basisByRoot = /* @__PURE__ */ new Map();
     const minSimByRoot = /* @__PURE__ */ new Map();
     for (const { a, b, sim } of scored) {
-      const root2 = find(a);
-      let basis = basisByRoot.get(root2);
+      const root = find(a);
+      let basis = basisByRoot.get(root);
       if (!basis) {
         basis = { tags: /* @__PURE__ */ new Set(), titleTokens: /* @__PURE__ */ new Set() };
-        basisByRoot.set(root2, basis);
+        basisByRoot.set(root, basis);
       }
       const sharedTags = intersection(
         signals.get(a).tags,
@@ -42686,17 +43074,17 @@ async function conceptFragmentation(root, opts = {}) {
       );
       for (const tag of sharedTags) basis.tags.add(tag);
       for (const word of sharedTitle) basis.titleTokens.add(word);
-      const previous = minSimByRoot.get(root2);
-      if (previous === void 0 || sim < previous) minSimByRoot.set(root2, sim);
+      const previous = minSimByRoot.get(root);
+      if (previous === void 0 || sim < previous) minSimByRoot.set(root, sim);
     }
-    const head = await new VaultGit(root).committedPages("");
+    const head = await new VaultGit(read.root).committedPages("");
     const text2 = /* @__PURE__ */ new Map();
     for (const change of head.pages) {
       if (!change.deleted) text2.set(change.pageRef, change.content);
     }
     const inbound = inboundCounts(text2);
     const findings = [];
-    for (const [root2, refs] of clusters) {
+    for (const [root, refs] of clusters) {
       if (refs.length < 2) continue;
       const members = refs.sort().map((ref) => ({
         pageRef: ref,
@@ -42706,14 +43094,14 @@ async function conceptFragmentation(root, opts = {}) {
       const suggestedSurvivor = [...members].sort(
         (x, y) => y.inbound - x.inbound || y.bytes - x.bytes || x.pageRef.localeCompare(y.pageRef)
       )[0].pageRef;
-      const basis = basisByRoot.get(root2);
+      const basis = basisByRoot.get(root);
       const cluster = {
         members,
         basis: {
           tags: [...basis?.tags ?? []].sort(),
           titleTokens: [...basis?.titleTokens ?? []].sort()
         },
-        similarity: minSimByRoot.get(root2) ?? minSimilarity,
+        similarity: minSimByRoot.get(root) ?? minSimilarity,
         suggestedSurvivor
       };
       findings.push({
@@ -42789,8 +43177,8 @@ function duplicateDetail(analysis) {
   const reason = !analysis.readable ? "a block is not a readable mapping, so merge by hand" : analysis.dominant.length > 0 ? "redundant, so fix collapses them" : "divergent, so merge by hand";
   return `${analysis.blocks.length} frontmatter blocks before the body; the parser reads only the first, so later blocks' edges are invisible and their text renders as body \u2014 ${reason}`;
 }
-async function duplicateFrontmatter(root) {
-  const pages = new Vault(root).loadWikiPages();
+async function duplicateFrontmatter(read) {
+  const pages = read.texts();
   const findings = [];
   for (const [ref, text2] of Object.entries(pages)) {
     const analysis = duplicateAnalysis(text2);
@@ -42813,85 +43201,104 @@ var CHECKS = {
   "duplicate-frontmatter": duplicateFrontmatter,
   "concept-fragmentation": conceptFragmentation
 };
-async function fixFrontmatterLinkFormat(root) {
-  const pages = new Vault(root).loadWikiPages();
-  const changed = [];
-  for (const [ref, text2] of Object.entries(pages)) {
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
-    if (!hasFrontmatter || frontmatter === "") continue;
-    let fm = frontmatter.split("\n").map((line) => {
-      if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
-      const open2 = line.indexOf("[");
-      if (open2 < 0) return line;
-      const closeParenIdx = line.lastIndexOf(")");
-      if (closeParenIdx < 0) return line;
-      return line.slice(0, open2) + `"${line.slice(open2, closeParenIdx + 1)}"` + line.slice(closeParenIdx + 1);
-    }).join("\n");
-    const edits = [];
-    for (const link2 of iterLinks(fm)) {
-      const reencoded = encodeDest(link2.decodedPath, link2.decodedAnchor);
-      if (link2.dest !== reencoded)
-        edits.push({ start: link2.start, end: link2.end, dest: reencoded });
+async function runAllChecks(root, opts = {}) {
+  const read = new VaultRead(root);
+  const rows = [];
+  for (const [check3, fn] of Object.entries(CHECKS)) {
+    const findings = await fn(read, opts);
+    rows.push(...findings.map((f) => ({ ...f, check: check3 })));
+  }
+  return rows;
+}
+var RawBodyLinkRe = new RegExp(
+  `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
+  "g"
+);
+function rewritable(text2, rewrite) {
+  try {
+    return rewrite();
+  } catch {
+    return text2;
+  }
+}
+function writePlan(vault, plan) {
+  const changed = [...plan.keys()];
+  for (const [ref, text2] of plan) vault.write(ref, new Page(text2));
+  return changed.sort();
+}
+function reencodeLinkEdits(text2) {
+  const edits = [];
+  for (const link2 of iterLinks(text2)) {
+    const dest = encodeDest(link2.decodedPath, link2.decodedAnchor);
+    if (link2.dest !== dest)
+      edits.push({ start: link2.start, end: link2.end, dest });
+  }
+  return edits;
+}
+function frontmatterLinksNeedFix(frontmatter) {
+  if (frontmatter.split("\n").some(isUnquotedListLinkLine)) return true;
+  return reencodeLinkEdits(frontmatter).length > 0;
+}
+function reencodeLinks(value) {
+  if (typeof value === "string") {
+    let out = value;
+    for (const e of reencodeLinkEdits(value).sort(
+      (a, b) => b.start - a.start
+    )) {
+      out = out.slice(0, e.start) + e.dest + out.slice(e.end);
     }
-    edits.sort((a, b) => b.start - a.start);
-    for (const e of edits) fm = fm.slice(0, e.start) + e.dest + fm.slice(e.end);
-    if (fm === frontmatter) continue;
-    import_node_fs19.default.writeFileSync(import_node_path22.default.join(root, ref), `---
-${fm}---
-${body}`, "utf8");
-    changed.push(ref);
+    return out;
   }
-  return changed;
+  if (Array.isArray(value)) return value.map(reencodeLinks);
+  return value;
 }
-async function fixIngestionSourceIntegrity(root) {
-  const pages = new Vault(root).loadWikiPages();
-  const changed = [];
-  for (const [ref, text2] of Object.entries(pages)) {
-    if (!ref.startsWith(SOURCES_DIR + "/")) continue;
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
-    if (!hasFrontmatter) continue;
-    if (/^raw_source\s*:/m.test(frontmatter)) continue;
-    const rawLinkRe = new RegExp(
-      `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
-      "g"
-    );
-    const rawLinks = [...body.matchAll(rawLinkRe)];
-    if (rawLinks.length !== 1) continue;
-    const [m] = rawLinks;
-    const newFm = frontmatter.trimEnd() + `
-raw_source: "${m[0]}"
-`;
-    const newBody = body.slice(0, m.index) + body.slice(m.index + m[0].length);
-    import_node_fs19.default.writeFileSync(
-      import_node_path22.default.join(root, ref),
-      `---
-${newFm}---
-${newBody}`,
-      "utf8"
-    );
-    changed.push(ref);
-  }
-  return changed;
+function fixedFrontmatterLinkFormat(text2) {
+  const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
+  if (!hasFrontmatter || frontmatter === "") return text2;
+  if (!frontmatterLinksNeedFix(frontmatter)) return text2;
+  return rewritable(
+    text2,
+    () => rewriteFrontmatter(text2, (fm) => {
+      for (const key of fm.keys()) {
+        const value = fm.get(key);
+        const reencoded = reencodeLinks(value);
+        if (!(0, import_node_util4.isDeepStrictEqual)(reencoded, value)) fm.set(key, reencoded);
+      }
+    })
+  );
 }
-async function fixMissingCrossReferences(root) {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true
-  });
+function fixedIngestionSourceIntegrity(text2) {
+  const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+  if (!hasFrontmatter) return text2;
+  if (/^raw_source\s*:/m.test(frontmatter)) return text2;
+  const rawLinks = [...body.matchAll(RawBodyLinkRe)];
+  if (rawLinks.length !== 1) return text2;
+  const [m] = rawLinks;
+  const newBody = body.slice(0, m.index) + body.slice(m.index + m[0].length);
+  return rewritable(
+    text2,
+    () => rewriteFrontmatter(text2, (fm) => {
+      fm.set("raw_source", m[0]);
+      return newBody;
+    })
+  );
+}
+function fixedMissingCrossReferences(pages) {
   const titleToRef = /* @__PURE__ */ new Map();
   const ambiguous = /* @__PURE__ */ new Set();
-  for (const [ref, { record }] of Object.entries(pagesWithText)) {
-    if (!record.title) continue;
-    if (ambiguous.has(record.title)) continue;
-    if (titleToRef.has(record.title)) {
-      titleToRef.delete(record.title);
-      ambiguous.add(record.title);
+  for (const [ref, { title }] of Object.entries(pages)) {
+    if (!title) continue;
+    if (ambiguous.has(title)) continue;
+    if (titleToRef.has(title)) {
+      titleToRef.delete(title);
+      ambiguous.add(title);
     } else {
-      titleToRef.set(record.title, ref);
+      titleToRef.set(title, ref);
     }
   }
-  const changed = [];
-  for (const [ref, { text: text2 }] of Object.entries(pagesWithText)) {
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
+  const plan = /* @__PURE__ */ new Map();
+  for (const [ref, { text: text2 }] of Object.entries(pages)) {
+    const { body } = splitFrontmatter(text2);
     const pageDir = ref.split("/").slice(0, -1).join("/");
     const linkedRefs = /* @__PURE__ */ new Set();
     const linkSpans = [];
@@ -42912,8 +43319,7 @@ async function fixMissingCrossReferences(root) {
         continue;
       const ch = idx > 0 ? newBody[idx - 1] : "";
       if (ch === "[" || ch === "`") continue;
-      const relPath2 = import_node_path22.default.relative(pageDir, targetRef).split(import_node_path22.default.sep).join("/");
-      const insertion = `[${title}](${percentEncode(relPath2)})`;
+      const insertion = composeLink(title, targetRef, pageDir);
       const diff = insertion.length - title.length;
       newBody = newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
       for (let i = 0; i < linkSpans.length; i++) {
@@ -42926,48 +43332,67 @@ async function fixMissingCrossReferences(root) {
       anyEdit = true;
     }
     if (!anyEdit) continue;
-    const newText = hasFrontmatter ? `---
-${frontmatter}---
-${newBody}` : newBody;
-    import_node_fs19.default.writeFileSync(import_node_path22.default.join(root, ref), newText, "utf8");
-    changed.push(ref);
+    const next = rewritable(
+      text2,
+      () => rewriteFrontmatter(text2, () => newBody)
+    );
+    if (next !== text2) plan.set(ref, next);
   }
-  return changed;
+  return plan;
+}
+function fixedSplitLinks(text2) {
+  const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
+  if (!hasFrontmatter || frontmatter === "") return text2;
+  if (frontmatterSplits(frontmatter).length === 0) return text2;
+  return rewritable(text2, () => rewriteFrontmatter(text2, () => {
+  }));
+}
+function fixedDuplicateFrontmatter(text2) {
+  const analysis = duplicateAnalysis(text2);
+  if (analysis === null || !analysis.readable) return text2;
+  if (analysis.dominant.length === 0) return text2;
+  const keep = analysis.blocks[analysis.dominant[0]];
+  const last = analysis.blocks[analysis.blocks.length - 1];
+  const collapsed = text2.slice(keep.start, keep.end) + text2.slice(last.end);
+  if (collapsed === text2) return text2;
+  return rewritable(text2, () => rewriteFrontmatter(collapsed, () => {
+  }));
+}
+async function fixEveryPage(root, fix, include = () => true) {
+  const vault = new Vault(root);
+  const plan = /* @__PURE__ */ new Map();
+  for (const [ref, text2] of Object.entries(vault.loadWikiPages())) {
+    if (!include(ref)) continue;
+    const next = fix(text2);
+    if (next !== text2) plan.set(ref, next);
+  }
+  return writePlan(vault, plan);
+}
+async function fixFrontmatterLinkFormat(root) {
+  return fixEveryPage(root, fixedFrontmatterLinkFormat);
+}
+async function fixIngestionSourceIntegrity(root) {
+  return fixEveryPage(
+    root,
+    fixedIngestionSourceIntegrity,
+    (ref) => ref.startsWith(SOURCES_DIR + "/")
+  );
+}
+async function fixMissingCrossReferences(root) {
+  const vault = new Vault(root);
+  const pages = {};
+  for (const [ref, { record, text: text2 }] of Object.entries(
+    vault.pagesWithText({ skipMalformedEdges: true })
+  )) {
+    pages[ref] = { title: record.title, text: text2 };
+  }
+  return writePlan(vault, fixedMissingCrossReferences(pages));
 }
 async function fixSplitLinks(root) {
-  const pages = new Vault(root).loadWikiPages();
-  const changed = [];
-  for (const [ref, text2] of Object.entries(pages)) {
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text2);
-    if (!hasFrontmatter || frontmatter === "") continue;
-    const splits = frontmatterSplits(frontmatter);
-    if (splits.length === 0) continue;
-    let fm = frontmatter;
-    for (const s of splits.sort((a, b) => b.start - a.start)) {
-      fm = fm.slice(0, s.start) + s.joined + fm.slice(s.end);
-    }
-    import_node_fs19.default.writeFileSync(import_node_path22.default.join(root, ref), `---
-${fm}---
-${body}`, "utf8");
-    changed.push(ref);
-  }
-  return changed;
+  return fixEveryPage(root, fixedSplitLinks);
 }
 async function fixDuplicateFrontmatter(root) {
-  const pages = new Vault(root).loadWikiPages();
-  const changed = [];
-  for (const [ref, text2] of Object.entries(pages)) {
-    const analysis = duplicateAnalysis(text2);
-    if (analysis === null || !analysis.readable) continue;
-    if (analysis.dominant.length === 0) continue;
-    const keep = analysis.blocks[analysis.dominant[0]];
-    const last = analysis.blocks[analysis.blocks.length - 1];
-    const collapsed = text2.slice(keep.start, keep.end) + text2.slice(last.end);
-    if (collapsed === text2) continue;
-    import_node_fs19.default.writeFileSync(import_node_path22.default.join(root, ref), collapsed, "utf8");
-    changed.push(ref);
-  }
-  return changed;
+  return fixEveryPage(root, fixedDuplicateFrontmatter);
 }
 var FIXES = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
@@ -42977,28 +43402,536 @@ var FIXES = {
   "duplicate-frontmatter": fixDuplicateFrontmatter
 };
 
-// src/output.ts
-function emitRows(rows) {
-  for (const row of rows) console.log(JSON.stringify(row));
+// src/checkcommand.ts
+function registerCheckFixCommands(program2) {
+  const checkNames = Object.keys(CHECKS).join(", ");
+  program2.command("check").description(
+    `Run a vault health check by name, or --all; names: ${checkNames}`
+  ).argument("[name]", "check name").option("--json", "emit findings as JSON Lines (one object per line)").option(
+    "--all",
+    "run every check; each row carries its slug (JSON) or is prefixed with it (text)"
+  ).option(
+    "--min-similarity <n>",
+    `concept-fragmentation cutoff, 0-1 (default ${DefaultMinSimilarity})`,
+    (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 1) {
+        throw new InvalidArgumentError(
+          `must be a number in [0, 1], got "${v}"`
+        );
+      }
+      return n;
+    }
+  ).action(
+    async (name, opts) => {
+      if (opts.all) {
+        const root2 = resolveRoot();
+        const rows = await runAllChecks(root2, {
+          minSimilarity: opts.minSimilarity
+        });
+        if (opts.json) emitRows(rows);
+        else
+          for (const f of rows)
+            console.log(`${f.check}: ${f.pageRef}: ${f.detail}`);
+        return;
+      }
+      const fn = name ? CHECKS[name] : void 0;
+      if (!fn) {
+        fail(
+          name ? `enchiridion check: unknown check "${name}"; known: ${checkNames}` : `enchiridion check: name a check or pass --all; known: ${checkNames}`
+        );
+      }
+      const root = resolveRoot();
+      const findings = await fn(new VaultRead(root), {
+        minSimilarity: opts.minSimilarity
+      });
+      if (opts.json) emitRows(findings);
+      else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+    }
+  );
+  const fixNames = Object.keys(FIXES).join(", ");
+  program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").action(async (name) => {
+    const fn = FIXES[name];
+    if (!fn) {
+      fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
+    }
+    const root = resolveRoot();
+    const changed = await fn(root);
+    for (const ref of changed) console.log(ref);
+  });
 }
-function emitDocument(value) {
-  console.log(JSON.stringify(value));
+
+// src/exportcommand.ts
+var import_node_fs24 = __toESM(require("node:fs"), 1);
+var import_node_path30 = __toESM(require("node:path"), 1);
+
+// src/transcriptcapture.ts
+var import_node_fs20 = __toESM(require("node:fs"), 1);
+var import_node_path24 = __toESM(require("node:path"), 1);
+var import_node_child_process2 = require("node:child_process");
+var import_node_os4 = __toESM(require("node:os"), 1);
+var SLUG_MAX_LENGTH = 60;
+var NON_SLUG_RE = /[^a-z0-9]+/g;
+function sanitizeSlug(phrase, maxLength) {
+  const cap = maxLength <= 0 ? SLUG_MAX_LENGTH : maxLength;
+  if (phrase === "") return "";
+  const folded = phrase.normalize("NFKD");
+  let ascii = "";
+  for (const ch of folded) {
+    if (ch.codePointAt(0) < 128) ascii += ch;
+  }
+  const slug = ascii.toLowerCase().replace(NON_SLUG_RE, "-").replace(/^-+|-+$/g, "");
+  if (slug.length <= cap) return slug;
+  const window = slug.slice(0, cap + 1);
+  let head = "";
+  const idx = window.lastIndexOf("-");
+  if (idx >= 0) head = window.slice(0, idx);
+  if (head === "") head = slug.slice(0, cap);
+  return head.replace(/^-+|-+$/g, "");
 }
-function fail(message) {
-  throw new Error(message);
+function extractText(content) {
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const block2 of content) {
+      if (typeof block2 !== "object" || block2 === null) continue;
+      const m = block2;
+      if (m["type"] !== "text") continue;
+      const text2 = typeof m["text"] === "string" ? m["text"].trim() : "";
+      if (text2 !== "") parts.push(text2);
+    }
+    return parts.join("\n\n");
+  }
+  return "";
 }
-function failureMessage(err) {
-  const message = err instanceof Error ? err.message : String(err);
-  return message.endsWith("\n") ? message : message + "\n";
+function parseClaudeTranscript(jsonlLines) {
+  const turns = [];
+  for (const rawLine of jsonlLines) {
+    const line = rawLine.trim();
+    if (line === "") continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.type !== "user" && entry.type !== "assistant") continue;
+    if (entry.isMeta || entry.isSidechain) continue;
+    const text2 = extractText(entry.message?.content);
+    if (text2 !== "") {
+      turns.push({ role: entry.message.role, text: text2 });
+    }
+  }
+  return turns;
+}
+var ErrTooFewTurns = class extends Error {
+  turns;
+  minTurns;
+  constructor(turns, minTurns) {
+    super(
+      `Transcript has ${turns} non-empty turn(s); need at least ${minTurns}.`
+    );
+    this.turns = turns;
+    this.minTurns = minTurns;
+  }
+};
+function transcriptToPage(turns, hostLabel, sessionID, now, slug, userLabel, assistantLabel, minTurns) {
+  if (turns.length < minTurns) {
+    throw new ErrTooFewTurns(turns.length, minTurns);
+  }
+  const shortID = sessionID.split("-")[0];
+  const safeSlug = sanitizeSlug(slug, SLUG_MAX_LENGTH);
+  const middle = safeSlug !== "" ? `${safeSlug}-` : "";
+  const filename = fmtDate(now, "YYYY-MM-DD-hhmm") + "-" + middle + shortID + ".md";
+  const lines = [
+    `# Session ${sessionID}`,
+    "",
+    `**Saved:** ${fmtDate(now, "YYYY-MM-DD hh:mm")}  `,
+    `**Source:** ${hostLabel} session transcript (save-conversation skill, enchiridion repo)`,
+    "",
+    "---",
+    ""
+  ];
+  for (const t of turns) {
+    const label = t.role === "user" ? userLabel : assistantLabel;
+    lines.push(`## ${label}`, "", t.text, "");
+  }
+  return [filename, lines.join("\n")];
+}
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+function fmtDate(d, template) {
+  const map = {
+    YYYY: String(d.getFullYear()),
+    MM: pad(d.getMonth() + 1),
+    DD: pad(d.getDate()),
+    hh: pad(d.getHours()),
+    mm: pad(d.getMinutes())
+  };
+  return template.replace(/YYYY|MM|DD|hh|mm/g, (m) => map[m]);
+}
+var CaptureError = class extends Error {
+  constructor(msg, options) {
+    super(msg, options);
+    this.name = "CaptureError";
+  }
+};
+function findTranscriptPath(cwd, lookupEnv = processLookupEnv2) {
+  const [sessionIDRaw, ok] = lookupEnv("CLAUDE_CODE_SESSION_ID");
+  const sessionID = sessionIDRaw ?? "";
+  if (!ok || sessionID === "") {
+    throw new CaptureError(
+      "$CLAUDE_CODE_SESSION_ID is not set in this environment."
+    );
+  }
+  const stateDir = sessionsDir(cwd, lookupEnv);
+  let stateStat;
+  try {
+    stateStat = import_node_fs20.default.statSync(stateDir);
+  } catch {
+    throw stateDirNotLocated(cwd);
+  }
+  if (!stateStat.isDirectory()) {
+    throw stateDirNotLocated(cwd);
+  }
+  const transcriptPath = readTranscriptPath(sessionID, stateDir);
+  if (transcriptPath === void 0) {
+    throw new CaptureError(
+      "No state recorded for session " + sessionID + " under " + stateDir + ". (If this session was started before the SessionStart hook was installed, its transcript was never recorded; start a new session and try again.)"
+    );
+  }
+  let trStat;
+  try {
+    trStat = import_node_fs20.default.statSync(transcriptPath);
+  } catch {
+    throw new CaptureError(
+      "Recorded transcript file does not exist: " + transcriptPath
+    );
+  }
+  if (trStat.isDirectory()) {
+    throw new CaptureError(
+      "Recorded transcript file does not exist: " + transcriptPath
+    );
+  }
+  return transcriptPath;
+}
+function stateDirNotLocated(cwd) {
+  return new CaptureError(
+    "Could not locate a session state directory. Searched $CLAUDE_PROJECT_DIR, then walked up from " + cwd + " as far as the home directory for a '.claude/' ancestor, and did not find one. (Has the SessionStart hook ever run in this project? Start a new session in the project root and try again.)"
+  );
+}
+function writeCapture(wikiRoot, filename, markdown, shortID, listDir) {
+  const conversationsDir = import_node_path24.default.join(wikiRoot, "raw", "conversations");
+  mkdirSafe(conversationsDir);
+  const list2 = listDir ?? ((dir) => import_node_fs20.default.readdirSync(dir));
+  let matches = [];
+  try {
+    matches = list2(conversationsDir).filter((f) => f.endsWith(`-${shortID}.md`)).sort();
+  } catch (err) {
+    if (!isENOENT5(err)) {
+      throw new CaptureError(
+        `Could not list ${conversationsDir} to find an existing capture of this session: ${errMsg(err)}. (Refusing to guess which file a re-save should rewrite, because a failed listing read as "no prior capture" writes a second raw file instead, orphaning the first.)`,
+        { cause: err }
+      );
+    }
+  }
+  let outPath = import_node_path24.default.join(conversationsDir, filename);
+  if (matches.length > 0) {
+    outPath = import_node_path24.default.join(conversationsDir, matches[0]);
+  }
+  import_node_fs20.default.writeFileSync(outPath, markdown, { mode: 420 });
+  return import_node_path24.default.relative(wikiRoot, outPath).split(import_node_path24.default.sep).join("/");
+}
+async function captureSession(wikiRoot, slug, cwd, lookupEnv = processLookupEnv2, now, exportSeam) {
+  const [claudeCodeID] = lookupEnv("CLAUDE_CODE_SESSION_ID");
+  const [openCodeID] = lookupEnv("OPENCODE_SESSION_ID");
+  if (openCodeID && !claudeCodeID) {
+    return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
+  }
+  if (openCodeID) {
+    if (isOpenCodeSessionTracked(cwd, lookupEnv)) {
+      return captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam);
+    }
+    return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
+  }
+  if (claudeCodeID) {
+    return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
+  }
+  throw new CaptureError(
+    "Neither $CLAUDE_CODE_SESSION_ID nor $OPENCODE_SESSION_ID is set in this environment, so there is no way to tell which session to save. (Claude Code sets the first; OpenCode's session-tracker plugin injects the second.)"
+  );
+}
+function captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now) {
+  const transcriptPath = findTranscriptPath(cwd, lookupEnv);
+  const timestamp = now.getTime() === 0 ? /* @__PURE__ */ new Date() : now;
+  let text2;
+  try {
+    text2 = import_node_fs20.default.readFileSync(transcriptPath, "utf8");
+  } catch (err) {
+    throw new CaptureError(`Could not read transcript: ${errMsg(err)}`);
+  }
+  const base = import_node_path24.default.basename(transcriptPath);
+  const ext = import_node_path24.default.extname(transcriptPath);
+  const sessionID = ext !== "" ? base.slice(0, -ext.length) : base;
+  const turns = parseClaudeTranscript(text2.split("\n"));
+  let filename;
+  let markdown;
+  try {
+    [filename, markdown] = transcriptToPage(
+      turns,
+      "Claude Code",
+      sessionID,
+      timestamp,
+      slug,
+      "User",
+      "Claude",
+      2
+    );
+  } catch (err) {
+    throw new CaptureError("Not enough conversation to save: " + errMsg(err));
+  }
+  const shortID = sessionID.split("-")[0];
+  return writeCapture(wikiRoot, filename, markdown, shortID);
+}
+function errMsg(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+function isENOENT5(err) {
+  return err.code === "ENOENT";
+}
+var OpenCode = {
+  marker: ".opencode",
+  projectDirEnv: "",
+  stateDir: import_node_path24.default.join(".opencode", "wiki-knowledge", "sessions")
+};
+function findOpenCodeSessionsDir(cwd, lookupEnv = processLookupEnv2) {
+  return findProjectSessionsDir(cwd, OpenCode, lookupEnv);
+}
+function openCodeSessionIsTracked(sessionID, stateDir) {
+  let data;
+  try {
+    data = import_node_fs20.default.readFileSync(import_node_path24.default.join(stateDir, `${sessionID}.json`), "utf8");
+  } catch {
+    return false;
+  }
+  try {
+    const payload = JSON.parse(data);
+    return payload["session_id"] === sessionID;
+  } catch {
+    return false;
+  }
+}
+function openCodeSessionIDFromEnv(lookupEnv = processLookupEnv2) {
+  const [sessionIDRaw, ok] = lookupEnv("OPENCODE_SESSION_ID");
+  const sessionID = sessionIDRaw ?? "";
+  if (!ok || sessionID === "") {
+    throw new CaptureError(
+      "$OPENCODE_SESSION_ID is not set in this environment. (The session-tracker plugin's shell.env hook injects it; is the plugin installed and loaded in this project?)"
+    );
+  }
+  return sessionID;
+}
+function isOpenCodeSessionTracked(cwd, lookupEnv = processLookupEnv2) {
+  const [sessionIDRaw, ok] = lookupEnv("OPENCODE_SESSION_ID");
+  const sessionID = sessionIDRaw ?? "";
+  if (!ok || sessionID === "") return false;
+  const stateDir = findOpenCodeSessionsDir(cwd, lookupEnv);
+  if (stateDir === void 0) return false;
+  try {
+    if (!import_node_fs20.default.statSync(stateDir).isDirectory()) return false;
+  } catch {
+    return false;
+  }
+  return openCodeSessionIsTracked(sessionID, stateDir);
+}
+async function exportTranscript(sessionID, command) {
+  let bin = command;
+  if (bin === "") bin = "opencode";
+  const resolved = findExecutable(bin);
+  if (!resolved) {
+    throw new CaptureError(`${bin} CLI is required but was not found on PATH`);
+  }
+  bin = resolved;
+  const tmp = import_node_path24.default.join(
+    import_node_os4.default.tmpdir(),
+    `opencode-export-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
+  );
+  let stderr = "";
+  try {
+    await runExport(bin, sessionID, tmp, (chunk) => stderr += chunk);
+    return import_node_fs20.default.readFileSync(tmp);
+  } finally {
+    try {
+      import_node_fs20.default.rmSync(tmp, { force: true });
+    } catch {
+    }
+  }
+}
+function runExport(bin, sessionID, tmpPath, onStderr) {
+  return new Promise((resolve6, reject) => {
+    let fd;
+    try {
+      fd = import_node_fs20.default.openSync(tmpPath, "w");
+    } catch (err) {
+      reject(
+        new CaptureError(
+          `Could not create a temp file for the export: ${errMsg(err)}`
+        )
+      );
+      return;
+    }
+    let stderr = "";
+    const child = (0, import_node_child_process2.spawn)(bin, ["export", sessionID], {
+      stdio: ["ignore", fd, "pipe"]
+    });
+    child.stderr?.on("data", (chunk) => {
+      const text2 = chunk.toString();
+      stderr += text2;
+      onStderr(text2);
+    });
+    child.on("error", (err) => {
+      import_node_fs20.default.closeSync(fd);
+      reject(err);
+    });
+    child.on("close", (code2, signal) => {
+      try {
+        import_node_fs20.default.closeSync(fd);
+      } catch {
+      }
+      if (code2 !== 0) {
+        reject(
+          new CaptureError(
+            `opencode export failed (${code2 ?? signal}): ${stderr.trim()}`
+          )
+        );
+        return;
+      }
+      resolve6();
+    });
+  });
+}
+function findExecutable(name) {
+  if (import_node_path24.default.isAbsolute(name)) {
+    return isExecutableFile(name) ? name : null;
+  }
+  const pathEnv = process.env.PATH ?? "";
+  for (const dir of pathEnv.split(import_node_path24.default.delimiter)) {
+    if (dir === "") continue;
+    const candidate = import_node_path24.default.join(dir, name);
+    if (isExecutableFile(candidate)) return candidate;
+  }
+  return null;
+}
+function isExecutableFile(file) {
+  try {
+    const stat4 = import_node_fs20.default.statSync(file);
+    if (!stat4.isFile()) return false;
+    if (process.platform === "win32") return true;
+    return (stat4.mode & 73) !== 0;
+  } catch {
+    return false;
+  }
+}
+function normalizeExport(exportDoc) {
+  let parsed;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(exportDoc));
+  } catch {
+    throw new CaptureError("opencode export returned invalid JSON");
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new CaptureError("opencode export returned an unexpected shape");
+  }
+  const document2 = parsed;
+  const rawMessages = document2["messages"];
+  const messages = Array.isArray(rawMessages) ? rawMessages : [];
+  const turns = [];
+  for (const raw of messages) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const message = raw;
+    const info = message["info"];
+    const role = typeof info === "object" && info !== null ? info["role"] : void 0;
+    if (role !== "user" && role !== "assistant") continue;
+    const parts = message["parts"];
+    const partList = Array.isArray(parts) ? parts : [];
+    const texts = [];
+    for (const rawPart of partList) {
+      if (typeof rawPart !== "object" || rawPart === null) continue;
+      const part = rawPart;
+      if (part["type"] !== "text") continue;
+      const text2 = typeof part["text"] === "string" ? part["text"].trim() : "";
+      if (text2 !== "") texts.push(text2);
+    }
+    if (texts.length > 0) {
+      turns.push({ role, text: texts.join("\n\n") });
+    }
+  }
+  return turns;
+}
+async function captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam) {
+  const sessionID = openCodeSessionIDFromEnv(lookupEnv);
+  const timestamp = now.getTime() === 0 ? /* @__PURE__ */ new Date() : now;
+  const fetch = exportSeam ?? ((id) => exportTranscript(id, "opencode"));
+  const document2 = await fetch(sessionID);
+  const turns = normalizeExport(document2);
+  let filename;
+  let markdown;
+  try {
+    [filename, markdown] = transcriptToPage(
+      turns,
+      "OpenCode",
+      sessionID,
+      timestamp,
+      slug,
+      "User",
+      "Claude",
+      2
+    );
+  } catch (err) {
+    throw new CaptureError("Not enough conversation to save: " + errMsg(err));
+  }
+  const shortID = sessionID.split("-")[0];
+  return writeCapture(wikiRoot, filename, markdown, shortID);
+}
+
+// src/hooks.ts
+var import_node_fs21 = __toESM(require("node:fs"), 1);
+var import_node_path25 = __toESM(require("node:path"), 1);
+function sessionStart(payload, lookupEnv = processLookupEnv2) {
+  const p = payload ?? {};
+  if (!p.session_id || !p.transcript_path) return;
+  writeTranscriptPath(
+    p.session_id,
+    p.transcript_path,
+    sessionsDir(p.cwd ?? "", lookupEnv)
+  );
+}
+function postToolUse(payload, lookupEnv = processLookupEnv2) {
+  const p = payload ?? {};
+  if (!p.session_id) return;
+  const stateDir = findSessionsDir(p.cwd ?? "", lookupEnv);
+  if (stateDir === void 0) return;
+  const line = JSON.stringify({
+    tool: p.tool_name ?? null,
+    tool_use_id: p.tool_use_id ?? null,
+    prompt_id: p.prompt_id ?? null,
+    agent_id: p.agent_id ?? null,
+    agent_type: p.agent_type ?? null,
+    duration_ms: p.duration_ms ?? null
+  });
+  const logFile = logPath(p.session_id, stateDir);
+  mkdirSafe(import_node_path25.default.dirname(logFile), 493);
+  import_node_fs21.default.appendFileSync(logFile, line + "\n", { mode: 420 });
 }
 
 // src/exportwriter.ts
-var import_node_fs21 = __toESM(require("node:fs"), 1);
-var import_node_path26 = __toESM(require("node:path"), 1);
+var import_node_fs23 = __toESM(require("node:fs"), 1);
+var import_node_path29 = __toESM(require("node:path"), 1);
 init_vaultgit();
 
 // src/exportmeta.ts
-var import_node_path23 = __toESM(require("node:path"), 1);
+var import_node_path26 = __toESM(require("node:path"), 1);
 var FRONT_PAGE_PATH = "index.html";
 var TAGS_INDEX_SLUG = "index";
 function tagPagePath(slug) {
@@ -43047,7 +43980,7 @@ function buildTagSlugMap(tags) {
   return slugMap;
 }
 function outboundRefs(pageRef2, body) {
-  const pageDir = import_node_path23.default.posix.dirname(pageRef2);
+  const pageDir = import_node_path26.default.posix.dirname(pageRef2);
   const baseDir = pageDir === "." ? "" : pageDir;
   const refs = /* @__PURE__ */ new Set();
   for (const link2 of iterLinks(body)) {
@@ -43139,7 +44072,7 @@ function kindLabel(folder) {
 }
 
 // src/exportrender.ts
-var import_node_path24 = __toESM(require("node:path"), 1);
+var import_node_path27 = __toESM(require("node:path"), 1);
 var import_yaml5 = __toESM(require_dist(), 1);
 
 // src/exportstyle.ts
@@ -43494,10 +44427,10 @@ function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function pageHtmlDir(pageRef2) {
-  return import_node_path24.default.posix.dirname(mdToHtml(pageRef2));
+  return import_node_path27.default.posix.dirname(mdToHtml(pageRef2));
 }
 function relHtmlPath(fromPageRef, toPageRef, anchor = "") {
-  const rel = import_node_path24.default.posix.relative(
+  const rel = import_node_path27.default.posix.relative(
     pageHtmlDir(fromPageRef),
     mdToHtml(toPageRef)
   );
@@ -43542,7 +44475,7 @@ function navHref(htmlPath, targetPath, mode) {
   return `${rootPrefix(htmlPath)}${targetPath}`;
 }
 function vaultPageDir(pageRef2) {
-  const d = import_node_path24.default.posix.dirname(pageRef2);
+  const d = import_node_path27.default.posix.dirname(pageRef2);
   return d === "." ? "" : d;
 }
 function applyEdits2(src, edits) {
@@ -43843,18 +44776,13 @@ function* renderPages(pages, meta, opts = {}) {
 }
 
 // src/exportaggregate.ts
-var import_yaml6 = __toESM(require_dist(), 1);
 function kindBlurb(kind, pages) {
   const folder = KindFolders[kind];
   if (!folder) return "";
   const ref = `wiki/${folder}/KIND.md`;
   const entry = pages.get(ref);
   if (!entry) return "";
-  const { frontmatter, hasFrontmatter } = splitFrontmatter(entry.text);
-  if (!hasFrontmatter) return "";
-  const fm = (0, import_yaml6.parse)(frontmatter);
-  if (typeof fm !== "object" || fm === null) return "";
-  return String(fm["summary"] ?? "");
+  return parseKindMeta(entry.text)?.summary ?? "";
 }
 function pageLink(fromHtmlPath, toPageRef, title, context) {
   return `<a href="${escHtml(hrefFor(context.mode)(fromHtmlPath, context.outputPathFor(toPageRef)))}">${escHtml(title)}</a>`;
@@ -44068,22 +44996,22 @@ function renderSingleFile(pages, meta, opts = {}) {
     ...renderPageParts(pages, meta, opts, "single-file"),
     ...renderAggregateParts(pages, meta, opts, "single-file")
   ];
-  for (const { path: path28, parts: pageParts } of parts) {
-    sections.push(buildSection(path28, pageParts));
+  for (const { path: path32, parts: pageParts } of parts) {
+    sections.push(buildSection(path32, pageParts));
   }
   return buildSingleFileDocument(exportTitle(opts), sections);
 }
 
 // src/exportconfig.ts
-var import_node_fs20 = __toESM(require("node:fs"), 1);
-var import_node_path25 = __toESM(require("node:path"), 1);
+var import_node_fs22 = __toESM(require("node:fs"), 1);
+var import_node_path28 = __toESM(require("node:path"), 1);
 function exportConfigPath(root) {
-  return import_node_path25.default.join(root, ".wiki-knowledge", "config.json");
+  return import_node_path28.default.join(root, ".wiki-knowledge", "config.json");
 }
 function readExportConfig(root) {
   let raw;
   try {
-    raw = import_node_fs20.default.readFileSync(exportConfigPath(root), "utf8");
+    raw = import_node_fs22.default.readFileSync(exportConfigPath(root), "utf8");
   } catch {
     return {};
   }
@@ -44106,8 +45034,8 @@ function readExportConfig(root) {
   return config2;
 }
 function writeExportConfig(root, config2) {
-  import_node_fs20.default.mkdirSync(import_node_path25.default.dirname(exportConfigPath(root)), { recursive: true });
-  import_node_fs20.default.writeFileSync(
+  import_node_fs22.default.mkdirSync(import_node_path28.default.dirname(exportConfigPath(root)), { recursive: true });
+  import_node_fs22.default.writeFileSync(
     exportConfigPath(root),
     JSON.stringify(config2, null, 2) + "\n",
     "utf8"
@@ -44126,7 +45054,7 @@ function resolveExportTitle(root, flagTitle) {
   if (isSupplied(flagTitle)) return flagTitle.trim();
   const fromConfig = readExportConfig(root).title;
   if (isSupplied(fromConfig)) return fromConfig.trim();
-  return import_node_path25.default.basename(import_node_path25.default.resolve(root));
+  return import_node_path28.default.basename(import_node_path28.default.resolve(root));
 }
 function normalizeStartPageRef(ref) {
   let normalized = ref.trim();
@@ -44180,21 +45108,21 @@ var ExportStartPageError = class extends Error {
   }
 };
 function enumerateRawRefs(root) {
-  const rawDir = import_node_path26.default.join(root, "raw");
+  const rawDir = import_node_path29.default.join(root, "raw");
   const refs = [];
   function walk2(dir) {
     let entries;
     try {
-      entries = import_node_fs21.default.readdirSync(dir, { withFileTypes: true });
+      entries = import_node_fs23.default.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const abs = import_node_path26.default.join(dir, entry.name);
+      const abs = import_node_path29.default.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk2(abs);
       } else {
-        const rel = import_node_path26.default.relative(root, abs).split(import_node_path26.default.sep).join("/");
+        const rel = import_node_path29.default.relative(root, abs).split(import_node_path29.default.sep).join("/");
         refs.push(rel);
       }
     }
@@ -44208,8 +45136,8 @@ function vaultPageRefs(root) {
   return refs;
 }
 function startPageErrorMessage(root, ref, fromFlag, includeRaw) {
-  const source = fromFlag ? `--start-page "${ref}"` : `the saved start page "${ref}" (${import_node_path26.default.join(".wiki-knowledge", "config.json")})`;
-  if (!includeRaw && ref.startsWith("raw/") && import_node_fs21.default.existsSync(import_node_path26.default.join(root, ...ref.split("/")))) {
+  const source = fromFlag ? `--start-page "${ref}"` : `the saved start page "${ref}" (${import_node_path29.default.join(".wiki-knowledge", "config.json")})`;
+  if (!includeRaw && ref.startsWith("raw/") && import_node_fs23.default.existsSync(import_node_path29.default.join(root, ...ref.split("/")))) {
     return `${source} is a raw/ page, which this run does not include. Pass --raw to include raw/ pages, or nominate a wiki/ page.`;
   }
   if (fromFlag) {
@@ -44218,9 +45146,9 @@ function startPageErrorMessage(root, ref, fromFlag, includeRaw) {
   return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is under raw/.`;
 }
 function writeFileIn(tempDir, relPath2, content) {
-  const abs = import_node_path26.default.join(tempDir, ...relPath2.split("/"));
-  import_node_fs21.default.mkdirSync(import_node_path26.default.dirname(abs), { recursive: true });
-  import_node_fs21.default.writeFileSync(abs, content, "utf8");
+  const abs = import_node_path29.default.join(tempDir, ...relPath2.split("/"));
+  import_node_fs23.default.mkdirSync(import_node_path29.default.dirname(abs), { recursive: true });
+  import_node_fs23.default.writeFileSync(abs, content, "utf8");
 }
 function writeTempSite(tempDir, pages) {
   for (const { path: relPath2, content } of pages) {
@@ -44228,21 +45156,21 @@ function writeTempSite(tempDir, pages) {
   }
 }
 function writeSingleFile(outFile, html) {
-  const tempFile = import_node_path26.default.join(
-    import_node_path26.default.dirname(outFile),
-    `.export-tmp-${import_node_path26.default.basename(outFile)}-${process.pid}`
+  const tempFile = import_node_path29.default.join(
+    import_node_path29.default.dirname(outFile),
+    `.export-tmp-${import_node_path29.default.basename(outFile)}-${process.pid}`
   );
   try {
-    import_node_fs21.default.writeFileSync(tempFile, html, "utf8");
-    import_node_fs21.default.renameSync(tempFile, outFile);
+    import_node_fs23.default.writeFileSync(tempFile, html, "utf8");
+    import_node_fs23.default.renameSync(tempFile, outFile);
   } catch (err) {
     try {
-      import_node_fs21.default.rmSync(tempFile, { force: true });
+      import_node_fs23.default.rmSync(tempFile, { force: true });
     } catch {
     }
     throw err;
   }
-  const warning = singleFileSizeWarning(import_node_fs21.default.statSync(outFile).size, outFile);
+  const warning = singleFileSizeWarning(import_node_fs23.default.statSync(outFile).size, outFile);
   if (warning) console.error(warning);
 }
 async function runExport2(root, opts) {
@@ -44269,15 +45197,15 @@ async function runExport2(root, opts) {
     }
   }
   if (singleFile) {
-    if (import_node_fs21.default.existsSync(outDir) && import_node_fs21.default.statSync(outDir).isDirectory()) {
+    if (import_node_fs23.default.existsSync(outDir) && import_node_fs23.default.statSync(outDir).isDirectory()) {
       throw new ExportTargetIsDirectoryError(
         `Output "${outDir}" is a directory, and --single-file writes one file. Pass --out <file>, or drop --single-file to write a directory tree.`
       );
     }
-  } else if (!force && import_node_fs21.default.existsSync(outDir)) {
+  } else if (!force && import_node_fs23.default.existsSync(outDir)) {
     let hasContents = false;
     try {
-      const entries = import_node_fs21.default.readdirSync(outDir);
+      const entries = import_node_fs23.default.readdirSync(outDir);
       hasContents = entries.length > 0;
     } catch {
     }
@@ -44297,8 +45225,8 @@ async function runExport2(root, opts) {
     const rawRefs = enumerateRawRefs(root);
     for (const ref of rawRefs) {
       try {
-        const text2 = import_node_fs21.default.readFileSync(
-          import_node_path26.default.join(root, ...ref.split("/")),
+        const text2 = import_node_fs23.default.readFileSync(
+          import_node_path29.default.join(root, ...ref.split("/")),
           "utf8"
         );
         pagesMap.set(ref, { text: text2 });
@@ -44327,13 +45255,13 @@ async function runExport2(root, opts) {
     yield* renderPages(pagesMap, meta, exportOpts);
     yield* renderAggregatePages(pagesMap, meta, exportOpts);
   }
-  const outParent = import_node_path26.default.dirname(outDir);
-  import_node_fs21.default.mkdirSync(outParent, { recursive: true });
+  const outParent = import_node_path29.default.dirname(outDir);
+  import_node_fs23.default.mkdirSync(outParent, { recursive: true });
   if (singleFile) {
     writeSingleFile(outDir, renderSingleFile(pagesMap, meta, exportOpts));
     return;
   }
-  const tempDir = import_node_fs21.default.mkdtempSync(import_node_path26.default.join(outParent, ".export-tmp-"));
+  const tempDir = import_node_fs23.default.mkdtempSync(import_node_path29.default.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());
     writeFileIn(
@@ -44341,13 +45269,13 @@ async function runExport2(root, opts) {
       `${STYLESHEET_DIR}/${STYLESHEET_FILE}`,
       EXPORT_STYLESHEET
     );
-    if (import_node_fs21.default.existsSync(outDir)) {
-      import_node_fs21.default.rmSync(outDir, { recursive: true, force: true });
+    if (import_node_fs23.default.existsSync(outDir)) {
+      import_node_fs23.default.rmSync(outDir, { recursive: true, force: true });
     }
-    import_node_fs21.default.renameSync(tempDir, outDir);
+    import_node_fs23.default.renameSync(tempDir, outDir);
   } catch (err) {
     try {
-      import_node_fs21.default.rmSync(tempDir, { recursive: true, force: true });
+      import_node_fs23.default.rmSync(tempDir, { recursive: true, force: true });
     } catch {
     }
     throw err;
@@ -44364,353 +45292,13 @@ function buildCandidates(root) {
   return meta.getStarted;
 }
 
-// src/cli.ts
-var import_meta = {};
-function stub(command, label) {
-  command.action(() => fail(`enchiridion ${label}: not yet implemented`));
-}
-function loadPage(file) {
-  return new Page(import_node_fs22.default.readFileSync(file, "utf8"));
-}
-function writePageFile(file, page) {
-  import_node_fs22.default.writeFileSync(file, page.text, { mode: 420 });
-}
-function edgeNormalizer(file) {
-  const { vault, pageDir } = vaultForFile(file);
-  const lookup = (ref) => vault.exists(ref) ? { exists: true, title: vault.load(ref).getString("title") } : { exists: false, title: "" };
-  return (key, value) => edgeLink(key, value, pageDir, lookup);
-}
-function edgeSetValue(file, key, value) {
-  const normalize3 = edgeNormalizer(file);
-  if (!isListEdgeKey(key)) {
-    if (Array.isArray(value))
-      fail(`${key} holds a single link; pass one value`);
-    if (typeof value !== "string") fail(edgeRefusal(key, value));
-    return normalize3(key, value);
-  }
-  const items = Array.isArray(value) ? value : [value];
-  return items.map((item) => {
-    if (typeof item !== "string") fail(edgeRefusal(key, item));
-    return normalize3(key, item);
-  });
-}
-function stringListSetValue(key, value) {
-  if (typeof value === "string") {
-    const text2 = value.trim();
-    if (!text2.startsWith("[") || !text2.endsWith("]")) return [value];
-    let parsed;
-    try {
-      parsed = JSON.parse(text2);
-    } catch {
-      fail(`${key} starts like a JSON list but does not parse: ${value}`);
-    }
-    return stringListSetValue(key, parsed);
-  }
-  if (!Array.isArray(value)) fail(`${key} expects a JSON list of values`);
-  return value.map((item) => {
-    if (typeof item !== "string") fail(`${key} expects a JSON list of strings`);
-    return item;
-  });
-}
-function formatFrontmatterValue(value) {
-  if (!Array.isArray(value)) return formatScalar(value);
-  return "[" + value.map((v) => `'${formatScalar(v)}'`).join(", ") + "]";
-}
-function formatScalar(value) {
-  if (typeof value === "boolean") return value ? "True" : "False";
-  return String(value);
-}
-var FLAT_SUBCOMMANDS = [];
-function normalizeFolderArg(arg) {
-  if (arg === "" || arg === "raw/") return "";
-  return arg.startsWith("raw/") ? arg.slice("raw/".length) : arg;
-}
-function renderScanTable(result) {
-  if (result.eligible.length === 0 && result.ignored.length === 0) {
-    console.log("no eligible files; 0 ignored");
-    return;
-  }
-  let width = 10;
-  for (const c of result.eligible) {
-    if (c.rawRel.length > width) width = c.rawRel.length;
-  }
-  for (const rawRel of result.ignored) {
-    if (rawRel.length > width) width = rawRel.length;
-  }
-  for (const c of result.eligible) {
-    console.log(`${c.rawRel.padEnd(width)}  ${c.reason}`);
-  }
-  if (result.ignored.length > 0) {
-    console.log(`
-${result.ignored.length} ignored by .ingestignore:`);
-    for (const rawRel of result.ignored) console.log(`  ${rawRel}`);
-  }
-}
-async function runPlan(planPath, root, dryRun) {
-  let text2;
-  if (planPath === "-") {
-    text2 = import_node_fs22.default.readFileSync(0, "utf8");
-  } else {
-    text2 = import_node_fs22.default.readFileSync(planPath, "utf8");
-  }
-  const plan = decodePlan(text2);
-  const resolved = resolve3(plan, root);
-  resolved.validate();
-  if (dryRun) {
-    console.log(resolved.describe());
-    return;
-  }
-  const sha = await resolved.execute(new VaultGit(root));
-  console.log(sha);
-  printToolCallSummary();
-  if (planPath !== "-") {
-    import_node_fs22.default.unlinkSync(planPath);
-  }
-}
-function printToolCallSummary() {
-  const sessionID = process.env.CLAUDE_CODE_SESSION_ID;
-  if (!sessionID) return;
-  const events = readLog(sessionID, "");
-  if (events.length === 0) return;
-  console.log(formatSummary(summarize(events)));
-}
-function splitCommaList(value) {
-  return value.split(",").map((s) => s.trim()).filter((s) => s !== "");
-}
-function collectFlag(value, previous) {
-  return [...previous, value];
-}
-function orDash(s) {
-  if (s === "") return "-";
-  return s;
-}
-function orDashPtr(s) {
-  if (s === null) return "-";
-  return orDash(s);
-}
-function hitRow(hit) {
-  return {
-    page_ref: hit.pageRef,
-    score: hit.score,
-    title: hit.title,
-    summary: hit.summary,
-    tags: hit.tags,
-    kind: hit.kind,
-    source_date: hit.sourceDate,
-    git_date: hit.gitDate,
-    volatility: hit.volatility,
-    superseded_by: hit.supersededBy,
-    snippet: hit.snippet
-  };
-}
-function renderHits(hits, asJSON) {
-  if (asJSON) {
-    emitRows(hits.map(hitRow));
-    return;
-  }
-  let width = 0;
-  for (const hit of hits) {
-    if (hit.pageRef.length > width) width = hit.pageRef.length;
-  }
-  for (const hit of hits) {
-    console.log(
-      `${hit.pageRef.padEnd(width)}  ${hit.score.toFixed(2).padStart(7)}  ${orDash(hit.title)}  [${orDash(hit.volatility)}]  src=${orDash(hit.sourceDate)}  git=${orDashPtr(hit.gitDate)}`
-    );
-  }
-}
-function renderStatus(st, asJSON) {
-  if (asJSON) {
-    emitDocument({
-      pages: st.pages,
-      db_size_bytes: st.dbSizeBytes,
-      backend: st.backend,
-      schema_version: st.schemaVersion,
-      git_head: st.gitHead,
-      uncommitted_pages: st.uncommittedPages
-    });
-    return;
-  }
-  console.log(`pages:             ${st.pages}`);
-  console.log(`db_size_bytes:     ${st.dbSizeBytes}`);
-  console.log(`backend:           ${st.backend}`);
-  console.log(`schema_version:    ${st.schemaVersion}`);
-  console.log(`git_head:          ${orDash(st.gitHead)}`);
-  if (st.uncommittedPages > 0) {
-    console.log(
-      `uncommitted_pages: ${st.uncommittedPages} page(s) on disk not yet committed \u2014 not searchable.`
-    );
-  } else {
-    console.log(`uncommitted_pages: 0`);
-  }
-}
-function renderReindex(stats, full, asJSON) {
-  if (asJSON) {
-    emitDocument({
-      pages: stats.pages,
-      inserted: stats.inserted,
-      updated: stats.updated,
-      removed: stats.removed,
-      duration_ms: stats.durationMs
-    });
-    return;
-  }
-  const action = full ? "full reindex" : "reindex";
-  console.log(
-    `${action}: ${stats.pages} pages (+${stats.inserted} ~${stats.updated} -${stats.removed}) in ${stats.durationMs.toFixed(1)} ms`
-  );
-}
-async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
-  let text2;
-  if (planPath === "-") {
-    text2 = import_node_fs22.default.readFileSync(0, "utf8");
-  } else {
-    text2 = import_node_fs22.default.readFileSync(planPath, "utf8");
-  }
-  const plan = decodePlan(text2);
-  const results = await discover(index, plan.pages, opts);
-  const pages = results.map((r) => ({
-    title: r.title,
-    candidates: r.candidates
-  }));
-  const vocab = await index.tagCounts();
-  const payload = { pages };
-  if (tagsContain === "" && tagCount === "") {
-    payload.vocabulary = vocab;
-  } else {
-    if (tagsContain !== "") {
-      payload.tag_matches = tagsContaining(vocab, splitCommaList(tagsContain));
-    }
-    if (tagCount !== "") {
-      payload.tag_counts = tagCounts(vocab, splitCommaList(tagCount));
-    }
-  }
-  emitDocument(payload);
-}
-function ignoreRawFile(root, rawRel, comment) {
-  const rel = import_node_path27.default.posix.normalize(rawRel);
-  if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
-    fail(
-      `--ignore takes a vault-relative path under raw/, got ${JSON.stringify(rawRel)}`
-    );
-  }
-  const folder = import_node_path27.default.join(
-    root,
-    "raw",
-    import_node_path27.default.posix.dirname(rel.slice("raw/".length))
-  );
-  append(folder, import_node_path27.default.posix.basename(rel), comment);
-}
-function buildProgram() {
-  const program2 = new Command();
-  program2.name("enchiridion").description(
-    "Wiki-knowledge plugin script layer (TypeScript bundle \u2014 ADR-0017)"
-  ).allowExcessArguments(true).allowUnknownOption(true);
-  for (const name of FLAT_SUBCOMMANDS) {
-    const sub = program2.command(`${name} [args...]`).description("not yet implemented");
-    stub(sub, name);
-  }
-  program2.command("search [text]").description("Search the wiki vault via the lexical index").option(
-    "--tag <tag>",
-    "filter by tag; repeat for tags_all (AND) and combine with --tag-any for OR",
-    collectFlag,
-    []
-  ).option(
-    "--tag-any <tag>",
-    "filter by tag (OR semantics across the listed tags)",
-    collectFlag,
-    []
-  ).option(
-    "--kind <kinds>",
-    "filter by kind \u2014 a canonical kind or a folder's declared kind; comma-separated for multiple",
-    splitCommaList,
-    []
-  ).option("--since <date>", "ISO date; inclusive lower bound on date_field").option("--until <date>", "ISO date; inclusive upper bound on date_field").option(
-    "--date-field <field>",
-    "which date the --since/--until bounds apply to (source_date|git_date)",
-    (value) => {
-      if (value !== "source_date" && value !== "git_date") {
-        fail(`must be 'source_date' or 'git_date', got "${value}"`);
-      }
-      return value;
-    },
-    "source_date"
-  ).option(
-    "--volatility <vols>",
-    `filter by volatility (${Volatilities.join("|")}); comma-separated for multiple`,
-    splitCommaList,
-    []
-  ).option("--limit <n>", "max hits", (v) => Number(v), 20).option(
-    "--include-superseded",
-    "include pages that have been superseded (default: filter them out)"
-  ).option(
-    "--raw",
-    "pass the text through as a literal FTS5 expression (escape hatch)"
-  ).option("--json", "emit results as JSON Lines (one object per line)").option("--reindex", "rebuild the index").option("--full", "with --reindex: wipe the index and rebuild from scratch").option("--status", "print index status and exit").action(
-    async (text2, opts) => {
-      const { root } = resolveRoot();
-      const index = await Index.open(root);
-      try {
-        if (opts.status) {
-          renderStatus(await index.status(), opts.json ?? false);
-          return;
-        }
-        if (opts.reindex) {
-          renderReindex(
-            await index.reindex(opts.full ?? false),
-            opts.full ?? false,
-            opts.json ?? false
-          );
-          return;
-        }
-        const query = {
-          text: text2 ?? "",
-          raw: opts.raw ?? false,
-          tagsAll: opts.tag,
-          tagsAny: opts.tagAny,
-          kinds: opts.kind,
-          since: opts.since ?? "",
-          until: opts.until ?? "",
-          dateField: opts.dateField,
-          volatility: opts.volatility,
-          includeSuperseded: opts.includeSuperseded ?? false,
-          limit: opts.limit
-        };
-        renderHits(await index.search(query), opts.json ?? false);
-      } finally {
-        index.close();
-      }
-    }
-  );
-  program2.command("init <path>").description(
-    `Scaffold a brand-new wiki vault; --mode is one of: ${Modes.join(", ")}`
-  ).requiredOption(
-    "--mode <mode>",
-    `deployment mode: one of ${Modes.join(", ")}`
-  ).option(
-    "--plugin-root <dir>",
-    "this plugin's install dir (required for query-from-anywhere)"
-  ).action(
-    async (vaultPath, opts) => {
-      const root = await init2(
-        vaultPath,
-        opts.mode,
-        opts.pluginRoot ?? ""
-      );
-      console.log(root);
-    }
-  );
-  program2.command("place <kind> <title>").description(
-    `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder`
-  ).action((kind, title) => {
-    const { root } = resolveRoot();
-    const rel = path6(kind, title, new Vault(root).discoveredKinds());
-    console.log(rel);
-  });
+// src/exportcommand.ts
+function registerSessionCommands(program2) {
   program2.command("save-session").description("Save this session's transcript as a raw file in the vault").option(
     "--slug <phrase>",
     "phrase naming what this session covered; sanitized, first-save only"
   ).action(async (opts) => {
-    const { root } = resolveRoot();
+    const root = resolveRoot();
     const rel = await captureSession(
       root,
       opts.slug ?? "",
@@ -44737,410 +45325,8 @@ function buildProgram() {
     }
     console.log(formatSummary(summarize(events)));
   });
-  const vault = program2.command("vault").description(
-    "Resolve the vault root, or move a page within it (moves need exactly two page refs)"
-  ).action(() => {
-    const { root } = resolveRoot();
-    console.log(root);
-  });
-  vault.command("root").description("Print the resolved vault root (the no-argument default)").action(() => {
-    const { root } = resolveRoot();
-    console.log(root);
-  });
-  vault.command("move").description(
-    "Move a page within the vault and fix every link, inbound and outbound"
-  ).argument("<old_ref>", "vault-relative path of the page to move").argument("<new_ref>", "vault-relative destination path").action((oldRef, newRef) => {
-    const { root } = resolveRoot();
-    const changed = new Vault(root).movePage(oldRef, newRef);
-    for (const pageRef2 of changed) console.log(pageRef2);
-  });
-  vault.command("kinds").description(
-    "List all placement kinds as a compact JSON array: canonical four plus any discovered custom folders"
-  ).action(() => {
-    const { root } = resolveRoot();
-    const vault2 = new Vault(root);
-    const custom = vault2.discoveredKinds();
-    const result = [];
-    for (const kind of Kinds) {
-      const folder = KindFolders[kind];
-      result.push({
-        kind,
-        folder,
-        canonical: true,
-        consolidatable: vault2.isConsolidatable(folder),
-        definition: null
-      });
-    }
-    for (const [kind, folder] of Object.entries(custom)) {
-      const meta = readKindMeta(import_node_path27.default.join(root, "wiki", folder));
-      result.push({
-        kind,
-        folder,
-        canonical: false,
-        consolidatable: vault2.isConsolidatable(folder),
-        // Unchanged shape: a KIND.md declaring no kind contributes the flag,
-        // not a definition.
-        definition: meta === null || meta.kind === null ? null : { kind: meta.kind, summary: meta.summary }
-      });
-    }
-    emitDocument(result);
-  });
-  const checkNames = Object.keys(CHECKS).join(", ");
-  const check3 = program2.command("check").description(
-    `Run a vault health check by name, or --all; names: ${checkNames}`
-  ).argument("[name]", "check name").option("--json", "emit findings as JSON Lines (one object per line)").option(
-    "--all",
-    "run every check; each row carries its slug (JSON) or is prefixed with it (text)"
-  ).option(
-    "--min-similarity <n>",
-    `concept-fragmentation cutoff, 0-1 (default ${DefaultMinSimilarity})`,
-    (v) => {
-      const n = Number(v);
-      if (!Number.isFinite(n) || n < 0 || n > 1) {
-        throw new InvalidArgumentError(
-          `must be a number in [0, 1], got "${v}"`
-        );
-      }
-      return n;
-    }
-  ).action(
-    async (name, opts) => {
-      if (opts.all) {
-        const { root: root2 } = resolveRoot();
-        const rows = [];
-        for (const [checkName, fn2] of Object.entries(CHECKS)) {
-          const findings2 = await fn2(root2, {
-            minSimilarity: opts.minSimilarity
-          });
-          rows.push(...findings2.map((f) => ({ ...f, check: checkName })));
-        }
-        if (opts.json) emitRows(rows);
-        else
-          for (const f of rows)
-            console.log(`${f.check}: ${f.pageRef}: ${f.detail}`);
-        return;
-      }
-      const fn = name ? CHECKS[name] : void 0;
-      if (!fn) {
-        fail(
-          name ? `enchiridion check: unknown check "${name}"; known: ${checkNames}` : `enchiridion check: name a check or pass --all; known: ${checkNames}`
-        );
-      }
-      const { root } = resolveRoot();
-      const findings = await fn(root, { minSimilarity: opts.minSimilarity });
-      if (opts.json) emitRows(findings);
-      else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
-    }
-  );
-  void check3;
-  const fixNames = Object.keys(FIXES).join(", ");
-  const fix = program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").action(async (name) => {
-    const fn = FIXES[name];
-    if (!fn) {
-      fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
-    }
-    const { root } = resolveRoot();
-    const changed = await fn(root);
-    for (const ref of changed) console.log(ref);
-  });
-  void fix;
-  const page = program2.command("page").description(
-    "Read and edit one page's frontmatter (edge keys take a markdown link or a vault-relative page ref)"
-  );
-  page.command("get").argument("<file>", "markdown file").argument("<key>", "frontmatter key").description("Print a frontmatter value").action((file, key) => {
-    const p = loadPage(file);
-    const { value, ok } = p.get(key);
-    if (!ok || value === null || value === void 0) {
-      fail(`no frontmatter key "${key}" in ${file}`);
-    }
-    console.log(formatFrontmatterValue(value));
-  });
-  page.command("set").argument("<file>", "markdown file").argument("<key>", "frontmatter key").argument(
-    "<value>",
-    "value; for an edge key, exactly one markdown link or a vault-relative page ref; for tags, one value or a JSON list (a list-valued key is replaced)"
-  ).option("--json", "parse value as JSON; a list for a list-valued key").description(
-    "Set a frontmatter value in place \u2014 replaces the key, including a list-valued edge key"
-  ).action(
-    (file, key, raw, opts) => {
-      const p = loadPage(file);
-      let value = raw;
-      if (opts.json) {
-        try {
-          value = JSON.parse(raw);
-        } catch {
-          fail(`parsing ${key} as JSON: invalid JSON`);
-        }
-      }
-      if (key === "source_date") value = canonicalSourceDate(value);
-      if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
-      if (isStringListKey(key)) value = stringListSetValue(key, value);
-      const updated = p.set(key, value);
-      writePageFile(file, updated);
-    }
-  );
-  page.command("merge").argument("<file>", "markdown file").argument("<key>", "frontmatter key").argument(
-    "<json-list>",
-    "JSON list of values to union in; edge links or vault-relative page refs"
-  ).description(
-    "Union a JSON list into an existing list-valued key (page set replaces it instead)"
-  ).action((file, key, raw) => {
-    const p = loadPage(file);
-    let values;
-    try {
-      values = JSON.parse(raw);
-    } catch {
-      fail(`merge expects a JSON list for ${key}`);
-    }
-    if (!Array.isArray(values)) {
-      fail(`merge expects a JSON list for ${key}`);
-    }
-    if (key === "raw_source") {
-      fail("raw_source holds a single link; use page set");
-    }
-    if (isEdgeKey(key)) {
-      const normalize3 = edgeNormalizer(file);
-      values = values.map((item) => {
-        if (typeof item !== "string") fail(edgeRefusal(key, item));
-        return normalize3(key, item);
-      });
-    }
-    const updated = p.merge(key, values);
-    writePageFile(file, updated);
-  });
-  program2.command("read-page <ref>").description("Print a page's full content by vault-relative ref").option("--json", "emit {page_ref, frontmatter, body} as one JSON line").action((ref, opts) => {
-    const { root } = resolveRoot();
-    const vault2 = new Vault(root);
-    if (!vault2.exists(ref)) {
-      fail(`page not found: ${ref}`);
-    }
-    const page2 = vault2.load(ref);
-    if (opts.json) {
-      emitDocument({
-        page_ref: ref,
-        frontmatter: page2.frontmatter(),
-        body: page2.body()
-      });
-      return;
-    }
-    process.stdout.write(page2.text);
-  });
-  program2.command("superseded-by <page_ref...>").description("Resolve page refs to their current supersession heads").option("--json", "emit results as JSON Lines (one object per line)").action(async (pageRefs, opts) => {
-    const { root } = resolveRoot();
-    const records = new Vault(root).pages();
-    const resolutions = resolve2(pageRefs, records);
-    if (opts.json) {
-      emitRows(resolutions);
-      return;
-    }
-    for (const res of resolutions) {
-      if (res.chain.length === 0) {
-        console.log(`${res.seed}  (current)`);
-        continue;
-      }
-      let via = "";
-      if (res.chain.length > 1) {
-        via = ` via ${res.chain.slice(0, -1).join(" -> ")}`;
-      }
-      console.log(`${res.seed}  ->  ${res.active}${via}`);
-    }
-  });
-  program2.command("ingest-scan [folder]").description("Scan raw/ for files that need ingestion").option(
-    "--json",
-    "emit JSON Lines (one eligible or ignored record per line)"
-  ).action(async (folderArg, opts) => {
-    const { root } = resolveRoot();
-    const folder = folderArg === void 0 ? "" : normalizeFolderArg(folderArg);
-    const result = await scan(root, folder, null);
-    if (opts.json) {
-      const rows = [];
-      for (const c of result.eligible) {
-        rows.push({
-          kind: "eligible",
-          raw_rel: c.rawRel,
-          reason: c.reason,
-          back_pointers: c.backPointers
-        });
-      }
-      for (const rawRel of result.ignored) {
-        rows.push({ kind: "ignored", raw_rel: rawRel });
-      }
-      emitRows(rows);
-      return;
-    }
-    renderScanTable(result);
-  });
-  program2.command("watch").description("Watch raw/ for new files and enqueue eligible ones").option("--vault <root>", "vault root; defaults to resolve_vault_root()").option(
-    "--debounce <seconds>",
-    `per-file debounce, seconds (default ${DefaultDebounceSeconds})`,
-    (v) => Number(v),
-    DefaultDebounceSeconds
-  ).option(
-    "--poll-interval <seconds>",
-    `how often to check for settled files, seconds (default ${DefaultPollIntervalSeconds})`,
-    (v) => Number(v),
-    DefaultPollIntervalSeconds
-  ).option(
-    "--dequeue <rel>",
-    "remove this vault-relative path from the watch queue and exit, instead of watching"
-  ).action(
-    async (opts) => {
-      let root = opts.vault ?? "";
-      if (root === "") {
-        ({ root } = resolveRoot());
-      } else {
-        try {
-          root = import_node_fs22.default.realpathSync(root);
-        } catch {
-        }
-      }
-      const paths = forRoot(root);
-      if (opts.dequeue) {
-        removeFromQueue(paths.queue, opts.dequeue);
-        return;
-      }
-      const { acquired, stalePID } = acquireLock(paths.lock);
-      if (!acquired) {
-        fail(`another watcher is already running (lock at ${paths.lock})`);
-      }
-      if (stalePID !== null) {
-        console.log(
-          `previous watcher exited without cleanup, removing stale lock (pid=${stalePID})`
-        );
-      }
-      await runWatch(paths, {
-        debounceSeconds: opts.debounce,
-        pollIntervalSeconds: opts.pollInterval
-      });
-    }
-  );
-  program2.command("ingest").description("Execute an IngestPlan against the resolved vault").option(
-    "--plan <file>",
-    "path to an IngestPlan JSON file ('-' reads stdin)"
-  ).option(
-    "--ignore <rawRel>",
-    "never offer this raw/ file again for a sweep (appends it to its folder's .ingestignore); repeatable",
-    collectFlag,
-    []
-  ).option(
-    "--ignore-comment <comment>",
-    "optional trailing comment for the --ignore entry"
-  ).option(
-    "--dry-run",
-    "resolve and validate the plan, print what would be written, write nothing"
-  ).action(
-    async (opts) => {
-      const planPath = opts.plan ?? "";
-      const ignoreRels = opts.ignore ?? [];
-      if (opts.dryRun && planPath === "") {
-        fail("--dry-run only applies to --plan; --ignore always writes");
-      }
-      if (planPath === "" === (ignoreRels.length === 0)) {
-        fail("exactly one of --plan or --ignore is required");
-      }
-      const { root } = resolveRoot();
-      if (ignoreRels.length > 0) {
-        const comment = opts.ignoreComment ?? "";
-        for (const ignoreRel of ignoreRels) {
-          ignoreRawFile(root, ignoreRel, comment);
-        }
-        return;
-      }
-      await runPlan(planPath, root, opts.dryRun ?? false);
-    }
-  );
-  program2.command("commit").description("Write one structured git commit per manifest").option(
-    "--manifest <file>",
-    "path to a manifest JSON file ('-' reads stdin)"
-  ).action(async (opts) => {
-    if (!opts.manifest) {
-      fail("required option '--manifest <file>' not specified");
-    }
-    const { root } = resolveRoot();
-    let text2;
-    if (opts.manifest === "-") {
-      text2 = import_node_fs22.default.readFileSync(0, "utf8");
-    } else {
-      text2 = import_node_fs22.default.readFileSync(opts.manifest, "utf8");
-    }
-    const manifest = JSON.parse(text2);
-    const sha = await commit2(root, manifest, new VaultGit(root));
-    console.log(sha);
-  });
-  program2.command("discover").description(
-    "Find pages overlapping a planned page, plus the tag vocabulary"
-  ).option(
-    "--plan <file>",
-    "path to a draft IngestPlan JSON ('-' reads stdin); discovers candidates for every page in it, plus the vault's tag vocabulary"
-  ).option("--title <text>", "the planned page's own title (single-page mode)").option(
-    "--summary <text>",
-    "the planned page's own summary (single-page mode)"
-  ).option(
-    "--body-file <file>",
-    "path to the planned page's own body text (single-page mode)"
-  ).option(
-    "--limit <n>",
-    `max hits scanned per page; 0 = unbounded (score is the real filter) (default ${DefaultLimit})`,
-    (v) => Number(v),
-    DefaultLimit
-  ).option(
-    "--max-candidates <n>",
-    `max candidates kept per page, highest-scoring first; 0 = use default`,
-    (v) => Number(v),
-    DefaultMaxCandidates
-  ).option(
-    "--duplicate-threshold <n>",
-    "",
-    (v) => Number(v),
-    DuplicateThreshold
-  ).option(
-    "--related-threshold <n>",
-    "",
-    (v) => Number(v),
-    RelatedThreshold
-  ).option(
-    "--tags-containing <substrings>",
-    "comma-separated substrings (case-insensitive OR match); with --plan, selects the tag_matches field in place of the full tag-vocabulary dump"
-  ).option(
-    "--tag-count <tags>",
-    "comma-separated exact tag names; with --plan, selects the tag_counts field (per-tag page counts, 0 if the tag doesn't exist yet) in place of the full tag-vocabulary dump"
-  ).action(
-    async (opts) => {
-      const { root } = resolveRoot();
-      const discoverOpts = {
-        limit: opts.limit,
-        duplicateThreshold: opts.duplicateThreshold,
-        relatedThreshold: opts.relatedThreshold,
-        maxCandidates: opts.maxCandidates
-      };
-      const index = await Index.open(root);
-      try {
-        if (opts.plan) {
-          await runDiscoverPlan(
-            index,
-            opts.plan,
-            discoverOpts,
-            opts.tagsContaining ?? "",
-            opts.tagCount ?? ""
-          );
-          return;
-        }
-        let body = "";
-        if (opts.bodyFile) {
-          body = import_node_fs22.default.readFileSync(opts.bodyFile, "utf8");
-        }
-        const candidates = await check2(
-          index,
-          opts.title ?? "",
-          opts.summary ?? "",
-          body,
-          discoverOpts
-        );
-        emitRows(candidates);
-      } finally {
-        index.close();
-      }
-    }
-  );
+}
+function registerHookCommands(program2) {
   const hook = program2.command("hook").description("Handle a Claude Code hook payload read from stdin").action(() => {
     fail(
       `hook: name the event, one of ${["session-start", "post-tool-use"].join(", ")}`
@@ -45149,13 +45335,15 @@ function buildProgram() {
   for (const action of ["session-start", "post-tool-use"]) {
     hook.command(action).description("Handle the " + action + " hook event").action(() => {
       try {
-        const payload = JSON.parse(import_node_fs22.default.readFileSync(0, "utf8"));
+        const payload = JSON.parse(import_node_fs24.default.readFileSync(0, "utf8"));
         if (action === "session-start") sessionStart(payload);
         else postToolUse(payload);
       } catch {
       }
     });
   }
+}
+function registerExportCommands(program2) {
   program2.command("export").description("Produce a static HTML site from the vault").option(
     "--single-file",
     `write one self-contained HTML file instead of a directory tree (--out names that file, default: ${SINGLE_FILE_DEFAULT_NAME} at the vault root)`
@@ -45179,7 +45367,7 @@ function buildProgram() {
     "page refs (optionally as ref=annotation) for the get-started block"
   ).action(
     async (opts) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       if (opts.saveTitle !== void 0) {
         try {
           saveExportTitle(root, opts.saveTitle);
@@ -45220,7 +45408,7 @@ function buildProgram() {
           });
         }
       }
-      const outPath = opts.out ? import_node_path27.default.resolve(opts.out) : import_node_path27.default.join(root, opts.singleFile ? SINGLE_FILE_DEFAULT_NAME : "web");
+      const outPath = opts.out ? import_node_path30.default.resolve(opts.out) : import_node_path30.default.join(root, opts.singleFile ? SINGLE_FILE_DEFAULT_NAME : "web");
       try {
         await runExport2(root, {
           out: outPath,
@@ -45245,13 +45433,31 @@ function buildProgram() {
       }
     }
   );
+}
+
+// src/cli.ts
+var import_meta = {};
+function buildProgram() {
+  const program2 = new Command();
+  program2.name("enchiridion").description(
+    "Wiki-knowledge plugin script layer (TypeScript bundle \u2014 ADR-0017)"
+  ).allowExcessArguments(true).allowUnknownOption(true);
+  registerSearchCommand(program2);
+  registerPlacementCommands(program2);
+  registerSessionCommands(program2);
+  registerVaultCommand(program2);
+  registerCheckFixCommands(program2);
+  registerPageCommands(program2);
+  registerIngestCommands(program2);
+  registerHookCommands(program2);
+  registerExportCommands(program2);
   return program2;
 }
 function isMainModule() {
   if (typeof require !== "undefined" && require.main === module) return true;
   const arg = process.argv[1];
   if (arg === void 0) return false;
-  return import_meta.url === (0, import_node_url.pathToFileURL)(import_node_path27.default.resolve(arg)).href;
+  return import_meta.url === (0, import_node_url.pathToFileURL)(import_node_path31.default.resolve(arg)).href;
 }
 async function run(argv) {
   const stdout = [];
