@@ -35,7 +35,7 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
 1. Stand-in for an ingested raw artifact? → **`sources/`** (must carry `raw_source:` field → its `raw/` file).
 2. Saved query result synthesized from other pages? → **`synthesis/`**.
 3. Primarily a named thing linked repeatedly? → **`entities/`**.
-4. **Custom kind** — does the subject fit a custom kind-folder that already exists in the vault? → **`wiki/<custom>/`**. Call `enchiridion vault kinds --json` to discover available custom kinds before deciding; each entry carries `{kind, folder, canonical, definition}`. Custom kinds are peers of canonical ones — weigh them alongside the canonical four, not as a last resort. The plugin never auto-creates a kind-folder; only a pre-existing folder is a valid target.
+4. **Custom kind** — does the subject fit a custom kind-folder that already exists in the vault? → **`wiki/<custom>/`**. Call `enchiridion vault kinds --json` to discover available custom kinds before deciding; each entry carries `{kind, folder, canonical, consolidatable, definition}` (`consolidatable` tells whether `concept-fragmentation` scores the kind — derived for the canonical four, declared in `KIND.md` for the rest). Custom kinds are peers of canonical ones — weigh them alongside the canonical four, not as a last resort. The plugin never auto-creates a kind-folder; only a pre-existing folder is a valid target.
 5. Otherwise → **`concepts/`** (default).
 
 ### The chain of evidence

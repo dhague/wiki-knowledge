@@ -151,6 +151,85 @@ test("discoveredKinds on a vault without a wiki dir", () => {
   assert.deepEqual(v.discoveredKinds(), {});
 });
 
+test("consolidatableKinds defaults to concept alone", () => {
+  const v = writeVault({
+    "wiki/concepts/a.md": "a\n",
+    "wiki/entities/e.md": "e\n",
+    "wiki/synthesis/s.md": "s\n",
+    "wiki/research/r.md": "r\n",
+  });
+  assert.deepEqual(v.consolidatableKinds(), ["concept"]);
+});
+
+test("consolidatableKinds adds a custom folder declaring consolidatable", () => {
+  const v = writeVault({ "wiki/research/r.md": "r\n" });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "research", "KIND.md"),
+    "---\nkind: research\nsummary: Long-form research.\nconsolidatable: true\n---\n",
+  );
+  // The index stores the folder's strip-`s` kind (#589), so the allowlist
+  // speaks that vocabulary.
+  assert.deepEqual(v.consolidatableKinds(), ["concept", "research"]);
+});
+
+test("consolidatableKinds ignores a custom folder that declares nothing", () => {
+  const v = writeVault({ "wiki/research/r.md": "r\n" });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "research", "KIND.md"),
+    "---\nkind: research\nsummary: Long-form research.\n---\n",
+  );
+  assert.deepEqual(v.consolidatableKinds(), ["concept"]);
+});
+
+test("consolidatableKinds lets synthesis declare itself in", () => {
+  const v = writeVault({ "wiki/synthesis/s.md": "s\n" });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "synthesis", "KIND.md"),
+    "---\nconsolidatable: true\n---\n",
+  );
+  assert.deepEqual(v.consolidatableKinds(), ["concept", "synthesis"]);
+});
+
+test("consolidatableKinds cannot lift the entity/source floor", () => {
+  const v = writeVault({
+    "wiki/entities/e.md": "e\n",
+    "wiki/sources/s.md": "s\n",
+  });
+  for (const folder of ["entities", "sources"]) {
+    fs.writeFileSync(
+      path.join(v.root, "wiki", folder, "KIND.md"),
+      "---\nconsolidatable: true\n---\n",
+    );
+  }
+  assert.deepEqual(v.consolidatableKinds(), ["concept"]);
+});
+
+test("consolidatableKinds cannot declare concept out", () => {
+  const v = writeVault({ "wiki/concepts/a.md": "a\n" });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "concepts", "KIND.md"),
+    "---\nconsolidatable: false\n---\n",
+  );
+  assert.deepEqual(v.consolidatableKinds(), ["concept"]);
+});
+
+test("consolidatableKinds keys the floor on the index kind, not the folder name", () => {
+  // A non-canonical singular folder still indexes as the floor kind.
+  const v = writeVault({ "wiki/entity/e.md": "e\n" });
+  fs.writeFileSync(
+    path.join(v.root, "wiki", "entity", "KIND.md"),
+    "---\nconsolidatable: true\n---\n",
+  );
+  assert.deepEqual(v.consolidatableKinds(), ["concept"]);
+});
+
+test("consolidatableKinds on a vault without a wiki dir is concept alone", () => {
+  const v = new Vault(
+    fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-")),
+  );
+  assert.deepEqual(v.consolidatableKinds(), ["concept"]);
+});
+
 test("set and merge write back", () => {
   const v = writeVault({
     "wiki/concepts/a.md": "---\ntitle: A\ntags:\n  - x\n---\nbody\n",
@@ -275,14 +354,31 @@ test("pages decodes records", () => {
   assert.deepEqual(a.supersededBy, ["wiki/sources/s.md"]);
 });
 
-test("readKindMeta returns kind and summary from a well-formed KIND.md", () => {
+test("readKindMeta returns kind, summary and consolidatable from a KIND.md", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
   fs.writeFileSync(
     path.join(dir, "KIND.md"),
-    "---\nkind: person\nsummary: A human individual.\n---\nOptional body.\n",
+    "---\nkind: person\nsummary: A human individual.\nconsolidatable: true\n---\nOptional body.\n",
   );
   const meta = readKindMeta(dir);
-  assert.deepEqual(meta, { kind: "person", summary: "A human individual." });
+  assert.deepEqual(meta, {
+    kind: "person",
+    summary: "A human individual.",
+    consolidatable: true,
+  });
+});
+
+test("readKindMeta defaults consolidatable to false", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
+  fs.writeFileSync(
+    path.join(dir, "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\n",
+  );
+  assert.deepEqual(readKindMeta(dir), {
+    kind: "person",
+    summary: "A human individual.",
+    consolidatable: false,
+  });
 });
 
 test("readKindMeta returns null for a missing KIND.md", () => {
@@ -296,13 +392,17 @@ test("readKindMeta returns null for a KIND.md without frontmatter", () => {
   assert.equal(readKindMeta(dir), null);
 });
 
-test("readKindMeta returns null when frontmatter has no kind key", () => {
+test("readKindMeta keeps a KIND.md declaring no kind, so the flag alone survives", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
   fs.writeFileSync(
     path.join(dir, "KIND.md"),
-    "---\nsummary: Just a summary.\n---\n",
+    "---\nconsolidatable: true\n---\n",
   );
-  assert.equal(readKindMeta(dir), null);
+  assert.deepEqual(readKindMeta(dir), {
+    kind: null,
+    summary: "",
+    consolidatable: true,
+  });
 });
 
 test("readKindMeta returns null for malformed YAML frontmatter", () => {
