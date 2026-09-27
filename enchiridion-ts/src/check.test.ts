@@ -24,6 +24,7 @@ import {
   DefaultMinSimilarity,
   titleTokens,
   CHECKS,
+  runAllChecks,
   fixFrontmatterLinkFormat,
   fixIngestionSourceIntegrity,
   fixMissingCrossReferences,
@@ -32,6 +33,8 @@ import {
   FIXES,
 } from "./check.js";
 import { newPageRecord } from "./pagerecord.js";
+import { Vault } from "./vault.js";
+import { VaultRead } from "./vaultread.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,6 +48,12 @@ function writeVault(pages: Record<string, string>): string {
     fs.writeFileSync(abs, text);
   }
   return root;
+}
+
+/** The read a check receives; fresh per call, so a test that rewrites the vault
+ * on disk is not served a stale cache. */
+function read(root: string): VaultRead {
+  return new VaultRead(root);
 }
 
 /** Minimal valid page frontmatter with given overrides. */
@@ -91,7 +100,7 @@ test("kind-folder-conformance: clean vault returns no findings", async () => {
     "wiki/concepts/foo.md": page("Foo"),
     "wiki/entities/bar.md": page("Bar"),
   });
-  const findings = await kindFolderConformance(root);
+  const findings = await kindFolderConformance(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -100,7 +109,7 @@ test("kind-folder-conformance: page at wiki root is a violation", async () => {
     "wiki/stray.md": page("Stray"),
     "wiki/concepts/ok.md": page("OK"),
   });
-  const findings = await kindFolderConformance(root);
+  const findings = await kindFolderConformance(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/stray.md");
   assert.match(findings[0].detail, /wiki\/ root/);
@@ -110,7 +119,7 @@ test("kind-folder-conformance: page nested below kind-folder is a violation", as
   const root = writeVault({
     "wiki/concepts/sub/deep.md": page("Deep"),
   });
-  const findings = await kindFolderConformance(root);
+  const findings = await kindFolderConformance(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/sub/deep.md");
   assert.match(findings[0].detail, /nested/);
@@ -121,7 +130,7 @@ test("kind-folder-conformance: KIND.md is excluded from findings", async () => {
     "wiki/decisions/KIND.md": "---\nkind: decision\nsummary: s\n---\n",
     "wiki/decisions/my-decision.md": page("My Decision"),
   });
-  const findings = await kindFolderConformance(root);
+  const findings = await kindFolderConformance(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -130,7 +139,7 @@ test("kind-folder-conformance: wiki/_index.md is excluded from findings", async 
     "wiki/_index.md": "generated\n",
     "wiki/concepts/foo.md": page("Foo"),
   });
-  const findings = await kindFolderConformance(root);
+  const findings = await kindFolderConformance(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -138,7 +147,7 @@ test("kind-folder-conformance: page in custom kind-folder is NOT a violation", a
   const root = writeVault({
     "wiki/decisions/my-decision.md": page("My Decision"),
   });
-  const findings = await kindFolderConformance(root);
+  const findings = await kindFolderConformance(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -153,7 +162,7 @@ test("ingestion-source-integrity: source page with raw_source is clean", async (
       'raw_source: "[doc.md](../../raw/doc.md)"\n',
     ),
   });
-  const findings = await ingestionSourceIntegrity(root);
+  const findings = await ingestionSourceIntegrity(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -161,7 +170,7 @@ test("ingestion-source-integrity: source page missing raw_source is a violation"
   const root = writeVault({
     "wiki/sources/doc.md": page("Doc"),
   });
-  const findings = await ingestionSourceIntegrity(root);
+  const findings = await ingestionSourceIntegrity(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/sources/doc.md");
   assert.match(findings[0].detail, /raw_source/);
@@ -171,7 +180,7 @@ test("ingestion-source-integrity: concept page without raw_source is NOT a viola
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo"),
   });
-  const findings = await ingestionSourceIntegrity(root);
+  const findings = await ingestionSourceIntegrity(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -187,7 +196,7 @@ test("frontmatter-link-format: properly quoted and encoded links are clean", asy
     ),
     "wiki/entities/bar.md": page("Bar"),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -197,7 +206,7 @@ test("frontmatter-link-format: unquoted list item link is a violation", async ()
     "wiki/concepts/foo.md":
       "---\ntitle: Foo\nrelated:\n  - [Bar](../entities/bar.md)\n---\nBody.\n",
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.ok(
     findings.some(
       (f) => f.pageRef === "wiki/concepts/foo.md" && /unquoted/.test(f.detail),
@@ -212,7 +221,7 @@ test("frontmatter-link-format: an edge value that is not a markdown link is a fi
     "wiki/concepts/a.md": page("A"),
     "wiki/concepts/b.md": page("B", "related:\n  - wiki/concepts/a.md\n"),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, [
     {
       pageRef: "wiki/concepts/b.md",
@@ -225,7 +234,7 @@ test("frontmatter-link-format: a non-string edge entry is a finding", async () =
   const root = writeVault({
     "wiki/concepts/b.md": page("B", "related:\n  - 42\n"),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, [
     {
       pageRef: "wiki/concepts/b.md",
@@ -244,7 +253,7 @@ test("frontmatter-link-format: frontmatter destination carrying a genuine anchor
     ),
     "wiki/concepts/caching.md": page("Caching"),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -255,7 +264,7 @@ test("frontmatter-link-format: an unencoded # is the anchor separator, not a fil
       'related:\n  - "[Bar](../entities/bar#baz.md)"\n',
     ),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -266,7 +275,7 @@ test("frontmatter-link-format: %23 in a filename destination is the encoded spel
       'related:\n  - "[Bar](../entities/bar%23baz.md)"\n',
     ),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -277,7 +286,7 @@ test("frontmatter-link-format: an anchor is no hiding place for an unencoded pat
       'related:\n  - "[Bar](../entities/my(page).md#ttl)"\n',
     ),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.ok(
     findings.some(
       (f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail),
@@ -297,7 +306,7 @@ test("frontmatter-link-format: a folded destination is checked, not skipped", as
       'related:\n  - "[Bar](../entities/some-rather-long-bar-page-name-here\\\n    (draft).md#ttl)"\n',
     ),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.ok(
     findings.some(
       (f) => f.pageRef === "wiki/concepts/foo.md" && /unencoded/.test(f.detail),
@@ -312,7 +321,7 @@ test("frontmatter-link-format: a boundary fold does not hide an unencoded destin
       'related:\n  - "[Bar]\\\n    (../entities/my(page).md#ttl)"\n',
     ),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.ok(
     findings.some(
       (f) =>
@@ -332,7 +341,7 @@ test("frontmatter-link-format: an unquoted boundary-shaped line is reported once
       "related:\n  - [A]\\\n    (../entities/my(page).md)\n",
     ),
   });
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, [
     {
       pageRef: "wiki/concepts/foo.md",
@@ -354,7 +363,7 @@ test("stale-synthesis: synthesis page committed recently is clean", async () => 
   });
   const recentTs = Math.floor(Date.now() / 1000) - 5 * 24 * 60 * 60;
   await gitCommit(root, recentTs);
-  const findings = await staleSynthesis(root);
+  const findings = await staleSynthesis(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -364,7 +373,7 @@ test("stale-synthesis: synthesis page committed >30 days ago is a violation", as
   });
   const oldTs = Math.floor(Date.now() / 1000) - 45 * 24 * 60 * 60;
   await gitCommit(root, oldTs);
-  const findings = await staleSynthesis(root);
+  const findings = await staleSynthesis(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/synthesis/old.md");
   assert.match(findings[0].detail, /days ago/);
@@ -376,7 +385,7 @@ test("stale-synthesis: concept page >30 days old is NOT a violation", async () =
   });
   const oldTs = Math.floor(Date.now() / 1000) - 45 * 24 * 60 * 60;
   await gitCommit(root, oldTs);
-  const findings = await staleSynthesis(root);
+  const findings = await staleSynthesis(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -391,7 +400,7 @@ test("missing-volatility-source-date: page with both fields is clean", async () 
       "volatility: stable\nsource_date: 2026-01-01\n",
     ),
   });
-  const findings = await missingVolatilitySourceDate(root);
+  const findings = await missingVolatilitySourceDate(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -399,7 +408,7 @@ test("missing-volatility-source-date: page missing volatility is a violation", a
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "source_date: 2026-01-01\n"),
   });
-  const findings = await missingVolatilitySourceDate(root);
+  const findings = await missingVolatilitySourceDate(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /volatility/);
 });
@@ -408,7 +417,7 @@ test("missing-volatility-source-date: page missing source_date is a violation", 
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "volatility: stable\n"),
   });
-  const findings = await missingVolatilitySourceDate(root);
+  const findings = await missingVolatilitySourceDate(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /source_date/);
 });
@@ -423,7 +432,7 @@ test("missing-volatility-source-date: a malformed edge does not abort the run", 
       "related:\n  - wiki/concepts/a-missing-both.md\n",
     ),
   });
-  const findings = await missingVolatilitySourceDate(root);
+  const findings = await missingVolatilitySourceDate(read(root));
   assert.deepEqual(findings, [
     {
       pageRef: "wiki/concepts/a-missing-both.md",
@@ -455,7 +464,7 @@ test("tags-shape: a list of plain tags is clean", async () => {
       "tags:\n  - caching\n  - performance\n",
     ),
   });
-  assert.deepEqual(await tagsShape(root), []);
+  assert.deepEqual(await tagsShape(read(root)), []);
 });
 
 test("tags-shape: no tags, an empty list and an explicit null are all clean", async () => {
@@ -464,7 +473,7 @@ test("tags-shape: no tags, an empty list and an explicit null are all clean", as
     "wiki/concepts/empty.md": page("Empty", "tags: []\n"),
     "wiki/concepts/null.md": page("Null", "tags:\n"),
   });
-  assert.deepEqual(await tagsShape(root), []);
+  assert.deepEqual(await tagsShape(read(root)), []);
 });
 
 // A delimited list collapsed into one string still reads as a value, but
@@ -476,7 +485,7 @@ test("tags-shape: a comma-and-quote-bearing entry is a finding naming the value"
       'tags:\n  - windsor", "campaign-tactics", "ground-game\n',
     ),
   });
-  assert.deepEqual(await tagsShape(root), [
+  assert.deepEqual(await tagsShape(read(root)), [
     {
       pageRef: "wiki/concepts/foo.md",
       detail:
@@ -492,7 +501,7 @@ test("tags-shape: a delimited entry folded across two lines is a finding", async
       'tags:\n  - campaign-tactics", "canvassing",\n    "ground-game\n',
     ),
   });
-  assert.deepEqual(await tagsShape(root), [
+  assert.deepEqual(await tagsShape(read(root)), [
     {
       pageRef: "wiki/concepts/foo.md",
       detail:
@@ -505,7 +514,7 @@ test("tags-shape: a scalar value is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "tags: alpha\n"),
   });
-  assert.deepEqual(await tagsShape(root), [
+  assert.deepEqual(await tagsShape(read(root)), [
     { pageRef: "wiki/concepts/foo.md", detail: 'tags is not a list: "alpha"' },
   ]);
 });
@@ -518,7 +527,7 @@ test("tags-shape: an entry with whitespace, a comma, a quote or no text is a fin
     ),
   });
   assert.deepEqual(
-    (await tagsShape(root)).map((f) => f.detail),
+    (await tagsShape(read(root))).map((f) => f.detail),
     [
       'tags entry is not a plain tag: "ground game"',
       'tags entry is not a plain tag: "caching,performance"',
@@ -534,7 +543,7 @@ test("tags-shape: a null entry is a finding, a numeric or boolean one is not", a
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "tags:\n  - 42\n  - true\n  -\n"),
   });
-  assert.deepEqual(await tagsShape(root), [
+  assert.deepEqual(await tagsShape(read(root)), [
     {
       pageRef: "wiki/concepts/foo.md",
       detail: 'tags entry is not a plain tag: ""',
@@ -547,7 +556,7 @@ test("tags-shape: a malformed block is not this check's finding, and does not ab
     "wiki/concepts/broken.md": "---\ntags: [\n---\nBody.\n",
     "wiki/concepts/foo.md": page("Foo", "tags: alpha\n"),
   });
-  assert.deepEqual(await tagsShape(root), [
+  assert.deepEqual(await tagsShape(read(root)), [
     { pageRef: "wiki/concepts/foo.md", detail: 'tags is not a list: "alpha"' },
   ]);
 });
@@ -564,7 +573,7 @@ test("unresolved-supersession: contradicts + supersedes is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", contradictsFm + supersedesFm),
   });
-  const findings = await unresolvedSupersession(root);
+  const findings = await unresolvedSupersession(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -572,7 +581,7 @@ test("unresolved-supersession: contradicts + no supersedes + active callout is c
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", contradictsFm, calloutBody),
   });
-  const findings = await unresolvedSupersession(root);
+  const findings = await unresolvedSupersession(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -580,7 +589,7 @@ test("unresolved-supersession: contradicts + no supersedes + no callout is a vio
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", contradictsFm),
   });
-  const findings = await unresolvedSupersession(root);
+  const findings = await unresolvedSupersession(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   assert.match(findings[0].detail, /supersedes/);
@@ -594,7 +603,7 @@ test("contradiction-callouts: page without callout is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo"),
   });
-  const findings = await contradictionCallouts(root);
+  const findings = await contradictionCallouts(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -602,7 +611,7 @@ test("contradiction-callouts: page with active Contradiction callout is a violat
   const root = writeVault({
     "wiki/concepts/foo.md": page("Foo", "", calloutBody),
   });
-  const findings = await contradictionCallouts(root);
+  const findings = await contradictionCallouts(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
 });
@@ -616,7 +625,7 @@ test("orphans: page with inbound link is clean", async () => {
     "wiki/concepts/foo.md": page("Foo", "", "[Bar](../entities/bar.md)\n"),
     "wiki/entities/bar.md": page("Bar"),
   });
-  const findings = await orphans(root);
+  const findings = await orphans(read(root));
   assert.ok(!findings.some((f) => f.pageRef === "wiki/entities/bar.md"));
 });
 
@@ -624,7 +633,7 @@ test("orphans: page with zero inbound links is a violation", async () => {
   const root = writeVault({
     "wiki/concepts/lonely.md": page("Lonely"),
   });
-  const findings = await orphans(root);
+  const findings = await orphans(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/lonely.md");
 });
@@ -637,7 +646,7 @@ test("orphans: frontmatter edge counts as inbound link", async () => {
     ),
     "wiki/entities/bar.md": page("Bar"),
   });
-  const findings = await orphans(root);
+  const findings = await orphans(read(root));
   assert.ok(!findings.some((f) => f.pageRef === "wiki/entities/bar.md"));
 });
 
@@ -652,7 +661,7 @@ test("orphans: folded frontmatter edge counts as inbound link", async () => {
     "wiki/entities/a-rather-long-target-page-title-that-will-definitely-wrap.md":
       page("A rather long target page title"),
   });
-  const findings = await orphans(root);
+  const findings = await orphans(read(root));
   assert.ok(
     !findings.some(
       (f) =>
@@ -675,7 +684,7 @@ test("split-links: folded destination is a finding", async () => {
       'related:\n  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-l\\\n    ines.md)"\n',
     ),
   });
-  const findings = await splitLinks(root);
+  const findings = await splitLinks(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   // Fourth line: the opening fence, `title:`, `related:`.
@@ -694,7 +703,7 @@ test("split-links: folded label is a finding", async () => {
       'related:\n  - "[RBWM Council Political\n    Composition](../concepts/rbwm.md)"\n',
     ),
   });
-  const findings = await splitLinks(root);
+  const findings = await splitLinks(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   assert.match(findings[0].detail, /label/);
@@ -709,7 +718,7 @@ test("split-links: a fold between label and destination is a finding", async () 
       'related:\n  - "[A missing both]\\\n    (../concepts/a-missing-both.md)"\n',
     ),
   });
-  const findings = await splitLinks(root);
+  const findings = await splitLinks(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   assert.match(findings[0].detail, /boundary/);
@@ -725,7 +734,7 @@ test("split-links: a boundary fold does not mask a fold in the destination", asy
       'related:\n  - "[A missing both]\\\n    (../sources/a-really-long-slug-that-wraps-across-l\\\n    ines.md)"\n',
     ),
   });
-  const findings = await splitLinks(root);
+  const findings = await splitLinks(read(root));
   assert.equal(findings.length, 2);
   assert.ok(findings.some((f) => /boundary/.test(f.detail)));
   assert.ok(findings.some((f) => /destination/.test(f.detail)));
@@ -739,7 +748,7 @@ test("split-links: a well-formed link on one line is not a finding", async () =>
       "Body links: [Bar](../entities/bar.md) and [x](x.md#ttl).\n",
     ),
   });
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("split-links: a fold inside a block scalar is not a finding", async () => {
@@ -756,7 +765,7 @@ test("split-links: a fold inside a block scalar is not a finding", async () => {
         '    continued](../concepts/other.md)"\n',
     ),
   });
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("split-links: a fold inside a single-quoted scalar is not a finding", async () => {
@@ -768,7 +777,7 @@ test("split-links: a fold inside a single-quoted scalar is not a finding", async
       "related:\n  - '[Some long title](../sources/a-really-long-slug\\\n    -that-wraps.md)'\n",
     ),
   });
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("split-links: body destination split across a line break is a finding", async () => {
@@ -781,7 +790,7 @@ test("split-links: body destination split across a line break is a finding", asy
       "See [composition](../concepts/rbwm-council-political-\ncomposition.md) for details.\n",
     ),
   });
-  const findings = await splitLinks(root);
+  const findings = await splitLinks(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   assert.match(findings[0].detail, /body/);
@@ -799,7 +808,7 @@ test("split-links: a break after a destination is legal markdown, not a finding"
       '[Bar](../entities/bar.md\n"the title") and [Baz](../entities/baz.md\n)\n',
     ),
   });
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("split-links: a split inside a fenced code block is not a finding", async () => {
@@ -811,7 +820,7 @@ test("split-links: a split inside a fenced code block is not a finding", async (
       "```\n[a](../concepts/rbwm-council-political-\ncomposition.md)\n```\n",
     ),
   });
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -825,7 +834,7 @@ test("duplicate-frontmatter: a second block after the first is a finding", async
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + fmBlock() + "Body text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
   assert.match(findings[0].detail, /2 frontmatter blocks/);
@@ -839,7 +848,7 @@ test("duplicate-frontmatter: a stale subset block reports as fixable", async () 
       fmBlock() +
       "Body text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /fix collapses/);
 });
@@ -851,7 +860,7 @@ test("duplicate-frontmatter: divergent blocks report as a hand merge", async () 
       "---\ntitle: Bar\nsummary: t\n---\n" +
       "Body text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /merge by hand/);
 });
@@ -860,7 +869,7 @@ test("duplicate-frontmatter: three blocks are one finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + fmBlock() + fmBlock() + "Body text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /3 frontmatter blocks/);
 });
@@ -869,28 +878,28 @@ test("duplicate-frontmatter: one block is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "Body text.\n",
   });
-  assert.deepEqual(await duplicateFrontmatter(root), []);
+  assert.deepEqual(await duplicateFrontmatter(read(root)), []);
 });
 
 test("duplicate-frontmatter: a thematic break in the body is not a second block", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "\n# Heading\n\n---\n\nmore\n",
   });
-  assert.deepEqual(await duplicateFrontmatter(root), []);
+  assert.deepEqual(await duplicateFrontmatter(read(root)), []);
 });
 
 test("duplicate-frontmatter: an unclosed fence is not a second block", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "---\nprose, with no closing fence\n",
   });
-  assert.deepEqual(await duplicateFrontmatter(root), []);
+  assert.deepEqual(await duplicateFrontmatter(read(root)), []);
 });
 
 test("duplicate-frontmatter: a blank line between blocks is still a finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "\n" + fmBlock() + "Body text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /2 frontmatter blocks/);
   assert.match(findings[0].detail, /fix collapses/);
@@ -900,14 +909,14 @@ test("duplicate-frontmatter: a body opening with a blank line and a break is not
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "\n---\nprose, not YAML\n",
   });
-  assert.deepEqual(await duplicateFrontmatter(root), []);
+  assert.deepEqual(await duplicateFrontmatter(read(root)), []);
 });
 
 test("duplicate-frontmatter: an empty second block is a finding", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "---\n---\nBody text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /fix collapses/);
 });
@@ -916,7 +925,7 @@ test("duplicate-frontmatter: an unreadable second block asks for a hand merge", 
   const root = writeVault({
     "wiki/concepts/foo.md": fmBlock() + "---\n- a\n- b\n---\nBody text.\n",
   });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /not a readable mapping/);
 });
@@ -926,7 +935,7 @@ test("duplicate-frontmatter: a comment-only block is not auto-fixed", async () =
   // delete the body region it fences.
   const src = fmBlock() + "---\n# Section\n---\nBody text.\n";
   const root = writeVault({ "wiki/concepts/foo.md": src });
-  const findings = await duplicateFrontmatter(root);
+  const findings = await duplicateFrontmatter(read(root));
   assert.equal(findings.length, 1);
   assert.match(findings[0].detail, /not a readable mapping/);
   assert.deepEqual(await fixDuplicateFrontmatter(root), []);
@@ -940,7 +949,7 @@ test("duplicate-frontmatter: a page without frontmatter is clean", async () => {
   const root = writeVault({
     "wiki/concepts/foo.md": "# Heading\n\nBody text.\n",
   });
-  assert.deepEqual(await duplicateFrontmatter(root), []);
+  assert.deepEqual(await duplicateFrontmatter(read(root)), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -969,6 +978,41 @@ test("CHECKS registry contains all twelve check names", () => {
   assert.equal(Object.keys(CHECKS).length, expected.length);
 });
 
+test("a full run reads and parses the vault exactly once", async () => {
+  const root = await writeCommittedVault({
+    "wiki/concepts/alpha.md": page("Alpha"),
+    "wiki/concepts/beta.md": page("Beta"),
+    "wiki/synthesis/gamma.md": page("Gamma"),
+  });
+
+  const loads = { text: 0, records: 0 };
+  const loadWikiPages = Vault.prototype.loadWikiPages;
+  const recordsFor = Vault.prototype.recordsFor;
+  Vault.prototype.loadWikiPages = function (this: Vault) {
+    loads.text++;
+    return loadWikiPages.call(this);
+  };
+  Vault.prototype.recordsFor = function (
+    this: Vault,
+    pages: Record<string, string>,
+    opts?: Parameters<typeof recordsFor>[1],
+  ) {
+    loads.records++;
+    return recordsFor.call(this, pages, opts);
+  };
+  try {
+    await runAllChecks(root);
+  } finally {
+    Vault.prototype.loadWikiPages = loadWikiPages;
+    Vault.prototype.recordsFor = recordsFor;
+  }
+
+  // The run may read for many checks and parse for many more; the vault is
+  // touched once each, not once per check.
+  assert.equal(loads.text, 1, "read the vault's text once");
+  assert.equal(loads.records, 1, "parsed the vault once");
+});
+
 // ---------------------------------------------------------------------------
 // Fix — fixFrontmatterLinkFormat
 // ---------------------------------------------------------------------------
@@ -982,7 +1026,7 @@ test("fix frontmatter-link-format: quotes unquoted YAML list link", async () => 
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
   assert.match(text, /- "\[Bar\]/);
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -1044,7 +1088,7 @@ test("fix frontmatter-link-format: fixes an unencoded path and keeps the anchor"
       "../entities/my%28page%29.md#ttl",
     ),
   );
-  assert.deepEqual(await frontmatterLinkFormat(root), []);
+  assert.deepEqual(await frontmatterLinkFormat(read(root)), []);
 });
 
 test("fix frontmatter-link-format: repairs a folded destination whole", async () => {
@@ -1063,7 +1107,7 @@ test("fix frontmatter-link-format: repairs a folded destination whole", async ()
   assert.doesNotMatch(text, /%23ttl/);
   // The anchor is a fragment, not part of the target: read the edge back through
   // the YAML parser, not the raw-text link scan.
-  const findings = await frontmatterLinkFormat(root);
+  const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
     { key: "related", targets: ["wiki/entities/bar(draft).md"] },
@@ -1098,7 +1142,7 @@ test("fix ingestion-source-integrity: moves raw/ body link to raw_source frontma
     text.split("---\n").slice(2).join("---\n"),
     /raw\/doc\.md/,
   );
-  const findings = await ingestionSourceIntegrity(root);
+  const findings = await ingestionSourceIntegrity(read(root));
   assert.deepEqual(findings, []);
 });
 
@@ -1186,7 +1230,7 @@ test("fix split-links: joins a folded destination with nothing", async () => {
       "../sources/a-really-long-slug-that-wraps-across-lines.md",
     ),
   );
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("fix split-links: joins a folded label with a single space", async () => {
@@ -1208,7 +1252,7 @@ test("fix split-links: joins a folded label with a single space", async () => {
       "RBWM Council Political Composition",
     ),
   );
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("fix split-links: joins a boundary fold with nothing", async () => {
@@ -1223,7 +1267,7 @@ test("fix split-links: joins a boundary fold with nothing", async () => {
   assert.deepEqual(changed, ["wiki/concepts/foo.md"]);
   const text = fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8");
   assert.equal(text, src.replace("]\\\n    (", "]("));
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 
   // The edge reads back unchanged through the YAML parser.
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
@@ -1252,7 +1296,7 @@ test("fix split-links: joins a boundary fold and a destination fold together", a
       "](../../raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md)",
     ),
   );
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
   assert.deepEqual(newPageRecord("wiki/sources/foo.md", text).edges, [
     {
       key: "raw_source",
@@ -1302,7 +1346,7 @@ test("fix split-links: both folds on one link, every other byte untouched", asyn
       targets: ["wiki/entities/a-rather-long-target-page-title.md"],
     },
   ]);
-  assert.deepEqual(await splitLinks(root), []);
+  assert.deepEqual(await splitLinks(read(root)), []);
 });
 
 test("fix split-links: never touches a body split", async () => {
@@ -1364,7 +1408,7 @@ test("fix duplicate-frontmatter: drops a stale block that repeats the first's ke
     fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
     repaired + "Body text.\n",
   );
-  assert.deepEqual(await duplicateFrontmatter(root), []);
+  assert.deepEqual(await duplicateFrontmatter(read(root)), []);
 });
 
 test("fix duplicate-frontmatter: promotes a later block that holds the first's keys", async () => {
@@ -1550,7 +1594,7 @@ function memberRefs(findings: Findings): string[] {
 
 test("concept-fragmentation: clusters closely-related concept pages at the default bar", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
-  const findings = await conceptFragmentation(root);
+  const findings = await conceptFragmentation(read(root));
 
   // One proposal per cluster, anchored on the suggested survivor. The
   // custom-kind pair is out of scope until its kind opts in.
@@ -1569,7 +1613,7 @@ test("concept-fragmentation: clusters closely-related concept pages at the defau
 test("concept-fragmentation: a finding carries member sizes, inbound counts, basis and a survivor", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   const cluster = clusterWith(
-    await conceptFragmentation(root),
+    await conceptFragmentation(read(root)),
     "wiki/concepts/cache-eviction.md",
   )!;
   const members = new Map(cluster.members.map((m) => [m.pageRef, m]));
@@ -1600,7 +1644,7 @@ test("concept-fragmentation: a finding carries member sizes, inbound counts, bas
 test("concept-fragmentation: a custom kind is out of scope until its KIND.md opts in", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   assert.ok(
-    !memberRefs(await conceptFragmentation(root)).includes(
+    !memberRefs(await conceptFragmentation(read(root))).includes(
       "wiki/tools/redis.md",
     ),
   );
@@ -1612,7 +1656,7 @@ test("concept-fragmentation: a custom kind is out of scope until its KIND.md opt
     "---\nkind: tool\nsummary: A tool.\nconsolidatable: true\n---\n",
   );
   const cluster = clusterWith(
-    await conceptFragmentation(root),
+    await conceptFragmentation(read(root)),
     "wiki/tools/redis.md",
   )!;
   assert.deepEqual(
@@ -1625,7 +1669,9 @@ test("concept-fragmentation: entity and source pages are never members", async (
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
   // At 0.3 every in-scope near-duplicate is clustered, so a floor kind leaking
   // in would show up here.
-  const findings = await conceptFragmentation(root, { minSimilarity: 0.3 });
+  const findings = await conceptFragmentation(read(root), {
+    minSimilarity: 0.3,
+  });
   for (const ref of memberRefs(findings)) {
     assert.ok(
       !/^wiki\/(entities|sources)\//.test(ref),
@@ -1652,7 +1698,7 @@ test("concept-fragmentation: a cluster never mixes kinds", async () => {
     "---\nconsolidatable: true\n---\n",
   );
 
-  const findings = await conceptFragmentation(root);
+  const findings = await conceptFragmentation(read(root));
   assert.deepEqual(
     findings.map((f) => f.pageRef),
     ["wiki/synthesis/cache-plan.md"],
@@ -1675,7 +1721,7 @@ test("concept-fragmentation: concept cannot be declared out", async () => {
     "---\nconsolidatable: false\n---\n",
   );
   assert.ok(
-    memberRefs(await conceptFragmentation(root)).includes(
+    memberRefs(await conceptFragmentation(read(root))).includes(
       "wiki/concepts/cache-eviction.md",
     ),
   );
@@ -1684,10 +1730,10 @@ test("concept-fragmentation: concept cannot be declared out", async () => {
 test("concept-fragmentation: --min-similarity moves the Consolidation/link boundary", async () => {
   const root = await writeCommittedVault(FRAGMENTATION_FIXTURE);
 
-  const byDefault = memberRefs(await conceptFragmentation(root));
+  const byDefault = memberRefs(await conceptFragmentation(read(root)));
   assert.deepEqual(
     memberRefs(
-      await conceptFragmentation(root, {
+      await conceptFragmentation(read(root), {
         minSimilarity: DefaultMinSimilarity,
       }),
     ),
@@ -1699,7 +1745,7 @@ test("concept-fragmentation: --min-similarity moves the Consolidation/link bound
   assert.ok(!byDefault.includes("wiki/concepts/latency.md"));
 
   const relaxed = memberRefs(
-    await conceptFragmentation(root, { minSimilarity: 0.3 }),
+    await conceptFragmentation(read(root), { minSimilarity: 0.3 }),
   );
   assert.ok(relaxed.includes("wiki/concepts/throughput.md"));
   assert.ok(relaxed.includes("wiki/concepts/latency.md"));
@@ -1711,7 +1757,7 @@ test("concept-fragmentation: detection is a view of HEAD — an uncommitted draf
     path.join(root, "wiki/concepts/cache-eviction-draft.md"),
     taggedPage("Cache eviction", ["caching", "performance"]),
   );
-  const refs = memberRefs(await conceptFragmentation(root));
+  const refs = memberRefs(await conceptFragmentation(read(root)));
   assert.ok(!refs.includes("wiki/concepts/cache-eviction-draft.md"));
   assert.ok(refs.includes("wiki/concepts/cache-eviction.md"));
 });
@@ -1721,7 +1767,7 @@ test("concept-fragmentation: a vault with no clusters is silent", async () => {
     "wiki/concepts/alpha.md": taggedPage("Alpha", ["one"]),
     "wiki/concepts/beta.md": taggedPage("Beta", ["two"]),
   });
-  assert.deepEqual(await conceptFragmentation(root), []);
+  assert.deepEqual(await conceptFragmentation(read(root)), []);
 });
 
 test("titleTokens: lowercases, drops stopwords and one-character words", () => {

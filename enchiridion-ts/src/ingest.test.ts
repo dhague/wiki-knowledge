@@ -11,6 +11,7 @@ import * as git from "isomorphic-git";
 import { decodePlan, resolve, Resolved, ErrPlan, type Plan } from "./ingest.js";
 import { missingVolatilitySourceDate } from "./check.js";
 import { Vault } from "./vault.js";
+import { VaultRead } from "./vaultread.js";
 import { VaultGit } from "./vaultgit.js";
 import type { Git } from "./commit.js";
 
@@ -1319,6 +1320,6 @@ test("an ingested plan leaves no missing-volatility-source-date findings", async
   resolved.validate();
   await resolved.execute(new Fake());
 
-  const findings = await missingVolatilitySourceDate(root);
+  const findings = await missingVolatilitySourceDate(new VaultRead(root));
   assert.deepEqual(findings, []);
 });
