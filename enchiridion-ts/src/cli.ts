@@ -7,7 +7,7 @@
  * get|set|merge`, `hook session-start|post-tool-use`).
  */
 
-import { Command, InvalidArgumentError } from "commander";
+import { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -15,7 +15,6 @@ import util from "node:util";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
 import { resolveRoot } from "./vault.js";
-import { VaultRead } from "./vaultread.js";
 import { VaultGit } from "./vaultgit.js";
 import { scan as scanIngest } from "./ingestscan.js";
 import { commit as commitManifest, type Manifest } from "./commit.js";
@@ -46,7 +45,6 @@ import {
   WatchLockedMarker,
   WatchStartedMarker,
 } from "./contract.js";
-import { CHECKS, DefaultMinSimilarity, FIXES, runAllChecks } from "./check.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 import { registerPageCommands } from "./pagecommand.js";
@@ -55,6 +53,7 @@ import {
   registerPlacementCommands,
   registerVaultCommand,
 } from "./vaultcommand.js";
+import { registerCheckFixCommands } from "./checkcommand.js";
 import {
   runExport,
   buildCandidates,
@@ -280,84 +279,7 @@ export function buildProgram(): Command {
 
   registerVaultCommand(program);
 
-  // check [<name>] [--json] — run one vault health check by name, or every one
-  // with --all. The name is optional only alongside --all.
-  const checkNames = Object.keys(CHECKS).join(", ");
-  const check = program
-    .command("check")
-    .description(
-      `Run a vault health check by name, or --all; names: ${checkNames}`,
-    )
-    .argument("[name]", "check name")
-    .option("--json", "emit findings as JSON Lines (one object per line)")
-    .option(
-      "--all",
-      "run every check; each row carries its slug (JSON) or is prefixed with it (text)",
-    )
-    .option(
-      "--min-similarity <n>",
-      `concept-fragmentation cutoff, 0-1 (default ${DefaultMinSimilarity})`,
-      (v: string) => {
-        const n = Number(v);
-        if (!Number.isFinite(n) || n < 0 || n > 1) {
-          throw new InvalidArgumentError(
-            `must be a number in [0, 1], got "${v}"`,
-          );
-        }
-        return n;
-      },
-    )
-    .action(
-      async (
-        name: string | undefined,
-        opts: { json?: boolean; all?: boolean; minSimilarity?: number },
-      ) => {
-        if (opts.all) {
-          const root = resolveRoot();
-          const rows = await runAllChecks(root, {
-            minSimilarity: opts.minSimilarity,
-          });
-          if (opts.json) emitRows(rows);
-          else
-            for (const f of rows)
-              console.log(`${f.check}: ${f.pageRef}: ${f.detail}`);
-          return;
-        }
-        const fn = name ? CHECKS[name] : undefined;
-        if (!fn) {
-          fail(
-            name
-              ? `enchiridion check: unknown check "${name}"; known: ${checkNames}`
-              : `enchiridion check: name a check or pass --all; known: ${checkNames}`,
-          );
-        }
-        // One check's findings carry no check name — the caller named it.
-        const root = resolveRoot();
-        const findings = await fn(new VaultRead(root), {
-          minSimilarity: opts.minSimilarity,
-        });
-        if (opts.json) emitRows(findings);
-        else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
-      },
-    );
-  void check; // referenced only for side effect of registering the command
-
-  // fix <name> — apply an auto-fix by name; prints each changed page ref.
-  const fixNames = Object.keys(FIXES).join(", ");
-  const fix = program
-    .command("fix")
-    .description(`Apply an auto-fix by name; names: ${fixNames}`)
-    .argument("<name>", "fix name")
-    .action(async (name: string) => {
-      const fn = FIXES[name];
-      if (!fn) {
-        fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
-      }
-      const root = resolveRoot();
-      const changed = await fn(root);
-      for (const ref of changed) console.log(ref);
-    });
-  void fix; // referenced only for side effect of registering the command
+  registerCheckFixCommands(program);
 
   registerPageCommands(program);
 
