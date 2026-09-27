@@ -15,13 +15,13 @@ RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
 [`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue
 
 ## Procedure
 
-1. **Set the vault root** — `$WIKI_ROOT` if it is not the cwd. Every subcommand below resolves the root itself.
+1. **Set the vault root** — `WIKI_ROOT` when the session's working directory is not the vault. Every subcommand resolves the root itself ([the rule](../wiki-conventions/SKILL.md#scripts)).
 
 2. **Launch the `enchiridion watch` subcommand in the background**:
    ```

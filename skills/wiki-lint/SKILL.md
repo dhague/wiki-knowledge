@@ -14,7 +14,7 @@ RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
 ## Invocation
 
@@ -30,7 +30,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the 
 
 ### 1. Resolve vault root
 
-`$WIKI_ROOT` if set, else the argument passed at invocation, else `cwd`. Verify: directory has a `wiki/` subdirectory, else stop and report "not a vault root."
+The script resolves it ([the rule](../wiki-conventions/SKILL.md#scripts)); when invoked with a vault-root argument, put it in `WIKI_ROOT` for the run so every call below resolves there. Verify the resolved root has a `wiki/` subdirectory, else stop and report "not a vault root."
 
 ### 2. Run mechanical checks
 
@@ -51,18 +51,18 @@ Run every check below, in parallel where the vault is large. Each emits JSON Lin
 "$RUNTIME" "$ENCHIRIDION" check concept-fragmentation --json
 ```
 
-- **Kind-folder conformance** (`kind-folder-conformance`) — every `.md` under `wiki/` (bar `KIND.md` and `_index.md`) sits directly under a valid kind-folder — canonical four or a custom folder the vault already carries. Pages at the `wiki/` root or nested below a kind-folder are violations. Fix level: **confirm first** (the repair is `enchiridion vault move`).
-- **Ingestion source integrity** (`ingestion-source-integrity`) — every `wiki/sources/*.md` carries `raw_source:`. Fix level: **auto-fix** when the body holds one unambiguous `raw/` link, else **report only**.
-- **Frontmatter link format** (`frontmatter-link-format`) — every frontmatter edge value is a quoted markdown link with an encoded destination. Fix level: **auto-fix** the quoting and encoding; **report only** a value that is no markdown link at all, which a fix cannot repair — re-set the edge with `page set`, or `page merge` with a JSON list.
-- **Tags shape** (`tags-shape`) — every page's `tags` is a YAML list of plain tags: non-empty strings with no whitespace, comma or quote. A scalar, or an entry holding a delimited list collapsed into one string, indexes as a single junk tag every tag filter misses while the file still shows a value. Fix level: **report only** (the repair re-types the tag list, an author judgment).
-- **Stale synthesis** (`stale-synthesis`) — synthesis pages whose last commit is > 30 days old. Fix level: **report only**.
-- **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field. Fix level: **report only** (the values need author judgment).
-- **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead. Fix level: **report only**.
-- **Contradiction callouts** (`contradiction-callouts`) — pages carrying an active `> [!warning] Contradiction` callout. Fix level: **report only**.
-- **Orphans** (`orphans`) — pages with no inbound link, body or frontmatter. Fix level: **confirm first** (delete only after the user confirms).
-- **Split links** (`split-links`) — no link split across lines, in frontmatter or body. Fix level: **auto-fix** the folded frontmatter shapes (a destination joins with nothing, a label with one space); **report only** body splits — a break after a destination is legal markdown, so joining on sight can silently repoint the link. Scoped to double-quoted frontmatter scalars: raw text cannot tell a block scalar (`related: |`) from a fold, so nothing outside that shape is reported or joined.
-- **Duplicate frontmatter** (`duplicate-frontmatter`) — a page's frontmatter is exactly one leading `---` block. A second block is invisible: the parser reads only the first, so its edges reach no check and its text renders as body. Fix level: **auto-fix** when one block holds every key of the others; **report only** when they diverge or a block is not a readable mapping — which side is current is a judgment call.
-- **Concept fragmentation** (`concept-fragmentation`) — clusters of small, closely-related pages whose knowledge reads better as one page with sections (CONTEXT.md, **Concept fragmentation**). Scope is an allowlist: `concept`, plus any kind whose `wiki/<kind>/KIND.md` declares `consolidatable: true`; `entity` and `source` are never in scope, and a cluster never mixes kinds. One finding per cluster, whose `cluster` payload carries the members with committed byte size and inbound-link count, the shared basis (tags / title words), the weakest pairwise similarity holding the cluster together, and a suggested survivor (most inbound links, largest body as tie-break). The `pageRef` is that survivor and the `detail` a one-line summary. `--min-similarity <n>` (default `0.5`) is the one cutoff. Reads the index, so it sees only committed pages — an uncommitted draft is invisible until committed. Fix level: **confirm first** — a Consolidation, always one cluster per handoff.
+- **Kind-folder conformance** (`kind-folder-conformance`) — every `.md` under `wiki/` (bar `KIND.md` and `_index.md`) sits directly under a valid kind-folder — canonical four or a custom folder the vault already carries. Pages at the `wiki/` root or nested below a kind-folder are violations; the repair is `enchiridion vault move`.
+- **Ingestion source integrity** (`ingestion-source-integrity`) — every `wiki/sources/*.md` carries `raw_source:`.
+- **Frontmatter link format** (`frontmatter-link-format`) — every frontmatter edge value is a quoted markdown link with an encoded destination. A value that is no markdown link at all must be re-set with `page set`, or `page merge` with a JSON list — a fix cannot invent a label.
+- **Tags shape** (`tags-shape`) — every page's `tags` is a YAML list of plain tags: non-empty strings with no whitespace, comma or quote. A scalar, or an entry holding a delimited list collapsed into one string, indexes as a single junk tag every tag filter misses while the file still shows a value.
+- **Stale synthesis** (`stale-synthesis`) — synthesis pages whose last commit is > 30 days old.
+- **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field.
+- **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead.
+- **Contradiction callouts** (`contradiction-callouts`) — pages carrying an active `> [!warning] Contradiction` callout.
+- **Orphans** (`orphans`) — pages with no inbound link, body or frontmatter; the repair deletes committed pages.
+- **Split links** (`split-links`) — no link split across lines, in frontmatter or body. A body split is reported but never joined: a break after a destination is legal markdown, and joining on sight can silently repoint the link. Scoped to double-quoted frontmatter scalars: raw text cannot tell a block scalar (`related: |`) from a fold, so nothing outside that shape is reported or joined.
+- **Duplicate frontmatter** (`duplicate-frontmatter`) — a page's frontmatter is exactly one leading `---` block. A second block is invisible: the parser reads only the first, so its edges reach no check and its text renders as body.
+- **Concept fragmentation** (`concept-fragmentation`) — clusters of small, closely-related pages whose knowledge reads better as one page with sections (CONTEXT.md, **Concept fragmentation**). Scope is an allowlist: `concept`, plus any kind whose `wiki/<kind>/KIND.md` declares `consolidatable: true`; `entity` and `source` are never in scope, and a cluster never mixes kinds. One finding per cluster, whose `cluster` payload carries the members with committed byte size and inbound-link count, the shared basis (tags / title words), the weakest pairwise similarity holding the cluster together, and a suggested survivor (most inbound links, largest body as tie-break). The `pageRef` is that survivor and the `detail` a one-line summary. `--min-similarity <n>` (default `0.5`) is the one cutoff. Reads the index, so it sees only committed pages — an uncommitted draft is invisible until committed. A Consolidation, always one cluster per handoff.
 
 Per-check semantics and the rationale behind each fix: [`reference/checks.md`](reference/checks.md) — read before explaining a finding you cannot classify.
 
@@ -80,19 +80,19 @@ find <vault-root>/wiki -name "*.md" | sort
 "$RUNTIME" "$ENCHIRIDION" search "<page-title-terms>" --limit 10 --json
 ```
 
-Compare `git_date`; where a related page is substantially newer and covers the same ground, flag the claims as possibly superseded. Fix level: **report only**.
+Compare `git_date`; where a related page is substantially newer and covers the same ground, flag the claims as possibly superseded.
 
-**Implicit concepts:** terms appearing across ≥ 3 pages that have no page of their own — candidates for extraction. Fix level: **confirm first** (a new ingestion plan).
+**Implicit concepts:** terms appearing across ≥ 3 pages that have no page of their own — candidates for extraction, which needs a new ingestion plan.
 
-**Missing cross-references:** a page naming another page's title in its body without linking to it. Fix level: **auto-fix** when exactly one page bears the matching title; **confirm first** when ambiguous.
+**Missing cross-references:** a page naming another page's title in its body without linking to it.
 
-**Data gaps:** pages with `volatility: volatile` or `evolving` and a `source_date` > 180 days old, whose premises could have changed. Fix level: **report only**.
+**Data gaps:** pages with `volatility: volatile` or `evolving` and a `source_date` > 180 days old, whose premises could have changed.
 
-**Summary quality:** for each page — missing, empty, > ~25 words (guideline: ≤ ~20), or vague ("this page covers", "information about", "notes on", a bare restatement of the title). Fix level: **report only**.
+**Summary quality:** for each page — missing, empty, over the ≤ ~20 words guideline (a little slack to ~25), or vague ("this page covers", "information about", "notes on", a bare restatement of the title).
 
-**Under-typed edges:** `related:` targets whose bodies support a sharper type — `refines`, `example-of` or `contradicts`, per the typed-edge vocabulary in `wiki-conventions`. Fix level: **confirm first** (retype with `page set` or `page merge`).
+**Under-typed edges:** `related:` targets whose bodies support a sharper type — `refines`, `example-of` or `contradicts`, per the typed-edge vocabulary in `wiki-conventions`; the repair retypes with `page set` or `page merge`.
 
-**Over-typed and stale edges:** the converse of under-typed edges — a `refines`, `example-of` or `contradicts` edge whose justification is missing or no longer holds. Start from the `contradicts:` edges `unresolved-supersession` and `contradiction-callouts` surface, then review `refines:` and `example-of:` edges the same way. Read both bodies. Fix level: **confirm first** (retype, drop, record `supersedes`, or keep and add the callout).
+**Over-typed and stale edges:** the converse of under-typed edges — a `refines`, `example-of` or `contradicts` edge whose justification is missing or no longer holds. Start from the `contradicts:` edges `unresolved-supersession` and `contradiction-callouts` surface, then review `refines:` and `example-of:` edges the same way. Read both bodies; every disposition — retype, drop, record `supersedes`, keep and add the callout — is the user's call.
 
 **The three-way boundary — fragmentation / cross-reference / implicit concept.** One question (*is this one concept or two?*) and one dial (`--min-similarity`) split three checks, so they partition rather than double-report. Read this before raising any of them:
 
@@ -156,13 +156,13 @@ If no findings remain after fixes, report "Vault is clean."
 
 ## Check catalogue
 
-Mechanical checks are named by their `enchiridion check <name>` slug; the judgment checks that follow have no script spelling.
+Mechanical checks are named by their `enchiridion check <name>` slug; the judgment checks that follow carry no `check` slug, and only `missing-cross-references` has a `fix`.
 
 | Check | Fix level |
 |---|---|
 | `kind-folder-conformance` | confirm first |
 | `ingestion-source-integrity` | auto-fix (unambiguous) / report only |
-| `frontmatter-link-format` | auto-fix |
+| `frontmatter-link-format` | auto-fix (quoting/encoding) / report only (non-link) |
 | `tags-shape` | report only |
 | `stale-synthesis` | report only |
 | `missing-volatility-source-date` | report only |
@@ -174,7 +174,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `concept-fragmentation` | confirm first |
 | Stale claims | report only |
 | Implicit concepts | confirm first |
-| Missing cross-references | auto-fix (unambiguous) / confirm first |
+| Missing cross-references (`missing-cross-references`) | auto-fix (unambiguous) / confirm first |
 | Data gaps | report only |
 | Summary quality | report only |
 | Under-typed edges | confirm first |

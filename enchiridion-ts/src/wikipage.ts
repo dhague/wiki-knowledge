@@ -28,7 +28,7 @@ import { truncateSourceDate } from "./sourcedate.js";
 // ---------------------------------------------------------------------------
 
 /** The minimal charset that makes a raw/ filename linkable. */
-const ENCODE_CHARS = " #%()<>";
+export const EncodeChars = " #%()<>";
 
 /** A `---` fence on the very first line, closed by the next `---` line; `\r?`
  * accepts both LF and CRLF. */
@@ -82,11 +82,11 @@ const LINK_RE = new RegExp(
   "gd",
 );
 
-/** Percent-encode [ENCODE_CHARS] in path; all else stays literal. */
+/** Percent-encode [EncodeChars] in path; all else stays literal. */
 export function percentEncode(p: string): string {
   let out = "";
   for (const ch of p) {
-    if (ch < "\x80" && ENCODE_CHARS.includes(ch)) {
+    if (ch < "\x80" && EncodeChars.includes(ch)) {
       out += "%" + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0");
       continue;
     }

@@ -90,9 +90,9 @@ repair deletes committed pages.
 No link may be split across lines. Three shapes exist, all legal YAML in
 frontmatter: a destination folded mid-slug with a trailing `\`, a label folded
 at a space, and a break between a label's `]` and its destination's `(`. All
-three fold back to the same value under any conforming parser, and the fix joins
-all three: a destination and the label/destination boundary join with nothing, a
-label with one space — the way YAML folds one.
+three fold back to the same value under any conforming parser, and the fix
+auto-fixes all three: a destination and the label/destination boundary join with
+nothing, a label with one space — the way YAML folds one.
 
 The check is scoped to double-quoted frontmatter scalars: raw text cannot tell a
 block scalar (`related: |`) from a fold, so nothing outside that shape is

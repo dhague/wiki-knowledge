@@ -18,6 +18,9 @@ import { enumeratePageRefs } from "./pagepredicate.js";
 /** The filenames that make a directory a vault root. */
 export const Markers = ["wiki", ".wiki-root"] as const;
 
+/** The environment variable that overrides every other root-resolution step. */
+export const RootEnvVar = "WIKI_ROOT";
+
 /** A lookupEnv matching `process.env`'s semantics: (value, wasPresent). */
 export type LookupEnv = (key: string) => [string | undefined, boolean];
 
@@ -49,7 +52,7 @@ export function resolveRoot(
   start = "",
   lookupEnv: LookupEnv = processLookupEnv,
 ): { root: string } {
-  const [wikiRoot, ok] = lookupEnv("WIKI_ROOT");
+  const [wikiRoot, ok] = lookupEnv(RootEnvVar);
   if (ok && wikiRoot !== "" && wikiRoot !== undefined) {
     return { root: resolve(wikiRoot) };
   }
