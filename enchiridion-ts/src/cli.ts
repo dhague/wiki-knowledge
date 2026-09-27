@@ -873,8 +873,8 @@ export function buildProgram(): Command {
       if (!Array.isArray(values)) {
         fail(`merge expects a JSON list for ${key}`);
       }
-      if (key === "raw_source") {
-        fail("raw_source holds a single link; use page set");
+      if (isEdgeKey(key) && !isListEdgeKey(key)) {
+        fail(`${key} holds a single link; use page set`);
       }
       if (isEdgeKey(key)) {
         const normalize = edgeNormalizer(file);

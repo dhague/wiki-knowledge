@@ -11,7 +11,7 @@
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { linkDest, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
-import { FolderKinds, folderToKind } from "./place.js";
+import { resolveKind } from "./kindmeta.js";
 import { parseSourceDate } from "./sourcedate.js";
 
 /** Frontmatter keys holding markdown links to other pages, in conventions-spec
@@ -131,8 +131,7 @@ function decodeRecord(
   if (path.posix.dirname(pageDir) !== "wiki") {
     throw new Error(`"${pageRef}": not directly under a wiki kind-folder`);
   }
-  const kind =
-    FolderKinds[folder] ?? kindByFolder?.[folder] ?? folderToKind(folder);
+  const kind = resolveKind(folder, kindByFolder?.[folder]);
 
   const data = frontmatterMap(text);
   const { edges, malformed } = decodeEdges(data, pageDir);
@@ -156,7 +155,7 @@ function decodeRecord(
 
 /** Decode one page's frontmatter, raising on the first refused edge value.
  * SupersededBy stays empty here — only [loadRecords] can fill it in.
- * `kindByFolder` overrides [folderToKind] but never [FolderKinds]. */
+ * `kindByFolder` overrides the declared kind but never [FolderKinds]. */
 export function newPageRecord(
   pageRef: string,
   text: string,
@@ -270,7 +269,7 @@ export interface LoadRecordsOptions {
 
 /** Decode every page ({pageRef: text}, keys vault-relative), filling in
  * SupersededBy by inverting the `supersedes` edges. Custom kind-folders are
- * supported via [folderToKind]; a page not directly under one is an error. */
+ * supported via [resolveKind]; a page not directly under one is an error. */
 export function loadRecords(
   pages: Record<string, string>,
   kindByFolder?: Record<string, string>,
