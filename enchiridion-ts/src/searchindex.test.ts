@@ -8,6 +8,7 @@ import path from "node:path";
 import { Index, tokenizeQuery, SCHEMA_VERSION } from "./searchindex.js";
 import type { Git, Snapshot, PageChange } from "./searchindex.js";
 import { VaultGit } from "./vaultgit.js";
+import { Vault } from "./vault.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,43 @@ function refsOf(hits: Awaited<ReturnType<Index["search"]>>): string[] {
 
 async function openIndex(fake: FakeGit): Promise<Index> {
   return Index.openInMemory(fake);
+}
+
+/** Write one vault-relative file under root, creating parent directories. */
+function writeVaultFile(root: string, ref: string, text: string): void {
+  const p = path.join(root, ...ref.split("/"));
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, text);
+}
+
+/** A fresh temp vault with `files` committed at HEAD, plus its git seam. The
+ * caller removes `root`. */
+async function seedCommittedVault(
+  files: Record<string, string>,
+): Promise<{ root: string; git: VaultGit }> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
+  for (const [ref, text] of Object.entries(files)) {
+    writeVaultFile(root, ref, text);
+  }
+  const git = new VaultGit(root);
+  await git.init();
+  await git.add(["wiki"]);
+  await git.commit("seed vault");
+  return { root, git };
+}
+
+/** Run each statement against the on-disk index db under root. */
+async function patchIndexDb(
+  root: string,
+  ...statements: string[]
+): Promise<void> {
+  const { createRequire } = await import("node:module");
+  const { Database } = createRequire(import.meta.url)("node-sqlite3-wasm") as {
+    Database: new (p: string) => { exec(s: string): void; close(): void };
+  };
+  const db = new Database(path.join(root, ".wiki-knowledge", "index.db"));
+  for (const sql of statements) db.exec(sql);
+  db.close();
 }
 
 // ---------------------------------------------------------------------------
@@ -911,6 +949,176 @@ describe("Index.open on a candidate vault", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Declared kind (ADR-0020, ADR-0027)
+// ---------------------------------------------------------------------------
+
+describe("declared kind", () => {
+  const kindMd = (kind: string): string =>
+    `---\nkind: ${kind}\nsummary: A kind.\n---\n`;
+
+  const ada = page("Ada", "A human.", "Ada Lovelace body.", [], "");
+
+  it("indexes a custom folder's KIND.md-declared kind", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/people/ada.md": ada,
+      "wiki/people/KIND.md": kindMd("person"),
+    });
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        const byPerson = await index.search({
+          text: "Ada",
+          kinds: ["person"],
+        });
+        assert.deepEqual(refsOf(byPerson), ["wiki/people/ada.md"]);
+        assert.equal(byPerson[0].kind, "person");
+
+        const byPeople = await index.search({ text: "Ada", kinds: ["people"] });
+        assert.deepEqual(byPeople, [], "the strip-s guess no longer matches");
+
+        const pages = await index.indexedPages(["person"]);
+        assert.deepEqual(pages, [
+          {
+            pageRef: "wiki/people/ada.md",
+            title: "Ada",
+            kind: "person",
+            tags: [],
+          },
+        ]);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the strip-s kind when a custom folder has no KIND.md", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/tools/redis.md": ada,
+    });
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        const pages = await index.indexedPages(["tool"]);
+        assert.deepEqual(
+          pages.map((p) => p.kind),
+          ["tool"],
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves a canonical folder's kind alone when it carries a stray KIND.md", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/concepts/ada.md": ada,
+      "wiki/concepts/KIND.md": kindMd("notion"),
+    });
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        const pages = await index.indexedPages(["concept"]);
+        assert.deepEqual(
+          pages.map((p) => p.kind),
+          ["concept"],
+        );
+        assert.deepEqual(await index.indexedPages(["notion"]), []);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps two folders declaring one kind distinct for both readers", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/people/ada.md": ada,
+      "wiki/people/KIND.md": kindMd("person"),
+      "wiki/humans/bob.md": page("Bob", "A human.", "Bob body.", [], ""),
+      "wiki/humans/KIND.md": kindMd("person"),
+    });
+    try {
+      const records = new Vault(root).pages();
+      assert.equal(records["wiki/people/ada.md"].kind, "person");
+      assert.equal(
+        records["wiki/humans/bob.md"].kind,
+        "person",
+        "a kind-keyed map would drop one folder and fall back to strip-s",
+      );
+
+      const index = await Index.openWithGit(root, git);
+      try {
+        const pages = await index.indexedPages(["person"]);
+        assert.deepEqual(
+          pages.map((p) => p.pageRef),
+          ["wiki/humans/bob.md", "wiki/people/ada.md"],
+        );
+        assert.deepEqual(
+          pages.map((p) => p.kind),
+          ["person", "person"],
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("picks up a KIND.md edit on the next sync", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/people/ada.md": ada,
+      "wiki/people/KIND.md": kindMd("person"),
+    });
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        assert.equal((await index.indexedPages(["person"])).length, 1);
+
+        writeVaultFile(root, "wiki/people/KIND.md", kindMd("human"));
+
+        assert.equal((await index.indexedPages(["human"])).length, 1);
+        assert.deepEqual(await index.indexedPages(["person"]), []);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("picks up a KIND.md edit on reopen", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/people/ada.md": ada,
+      "wiki/people/KIND.md": kindMd("person"),
+    });
+    try {
+      const first = await Index.openWithGit(root, git);
+      await first.reindex(true);
+      assert.equal((await first.indexedPages(["person"])).length, 1);
+      first.close();
+
+      writeVaultFile(root, "wiki/people/KIND.md", kindMd("human"));
+
+      const second = await Index.openWithGit(root, git);
+      try {
+        assert.equal((await second.indexedPages(["human"])).length, 1);
+        assert.deepEqual(await second.indexedPages(["person"]), []);
+      } finally {
+        second.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Schema version / mismatch
 // ---------------------------------------------------------------------------
 
@@ -928,19 +1136,10 @@ describe("schema", () => {
       await idx1.reindex(false);
       idx1.close();
 
-      // Patch the schema version directly in the DB file.
-      const { createRequire } = await import("node:module");
-      const _req = createRequire(import.meta.url);
-      const { Database } = _req("node-sqlite3-wasm") as {
-        Database: new (p: string) => { exec(s: string): void; close(): void };
-      };
-      const patchDb = new Database(
-        path.join(tmpDir, ".wiki-knowledge", "index.db"),
-      );
-      patchDb.exec(
+      await patchIndexDb(
+        tmpDir,
         "UPDATE meta SET value = '999' WHERE key = 'schema_version'",
       );
-      patchDb.close();
 
       // Reopen: the mismatch should trigger a rebuild from the full tree.
       const idx2 = await Index.openWithGit(tmpDir, fake);
@@ -957,6 +1156,41 @@ describe("schema", () => {
       }
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rebuilds a v4 database and replaces the strip-s kind with the declared one", async () => {
+    const { root, git } = await seedCommittedVault({
+      "wiki/people/ada.md": page("Ada", "A human.", "body", [], ""),
+      "wiki/people/KIND.md": "---\nkind: person\n---\n",
+    });
+    try {
+      const first = await Index.openWithGit(root, git);
+      await first.reindex(true);
+      first.close();
+
+      // The shape a database written before the schema bump holds: v4, and the
+      // `kind` column carrying the strip-s guess the old index derived.
+      await patchIndexDb(
+        root,
+        "UPDATE meta SET value = '4' WHERE key = 'schema_version'",
+        "UPDATE page SET kind = 'people'",
+      );
+
+      const second = await Index.openWithGit(root, git);
+      try {
+        assert.equal((await second.status()).schemaVersion, SCHEMA_VERSION);
+        const pages = await second.indexedPages(["person"]);
+        assert.deepEqual(
+          pages.map((p) => p.kind),
+          ["person"],
+        );
+        assert.deepEqual(await second.indexedPages(["people"]), []);
+      } finally {
+        second.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 });

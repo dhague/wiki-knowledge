@@ -16,7 +16,8 @@ import { Page, isStringListKey } from "./wikipage.js";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
 import { KindFolders, Kinds, path as placePath } from "./place.js";
-import { Vault, readKindMeta, resolveRoot, vaultForFile } from "./vault.js";
+import { Vault, resolveRoot, vaultForFile } from "./vault.js";
+import { readKindMeta } from "./kindmeta.js";
 import { VaultGit } from "./vaultgit.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";
 import { scan as scanIngest } from "./ingestscan.js";
@@ -467,7 +468,7 @@ export function buildProgram(): Command {
     )
     .option(
       "--kind <kinds>",
-      "filter by kind (concept|entity|source|synthesis); comma-separated for multiple",
+      "filter by kind — a canonical kind or a folder's declared kind; comma-separated for multiple",
       splitCommaList,
       [] as string[],
     )

@@ -1,8 +1,7 @@
 /**
- * SQLite FTS5 lexical index for a vault. The index is a materialised view
- * of HEAD's wiki/ tree (ADR-0015): content is read from git blobs, never from
- * files on disk. One connection at a time (no WAL — Resilio Sync + sidecar
- * corruption, ADR-0006).
+ * SQLite FTS5 lexical index for a vault. A materialised view of HEAD's wiki/
+ * tree (ADR-0015), with one working-tree input: a folder's `KIND.md`-declared
+ * kind, which no snapshot carries (ADR-0027). No WAL (ADR-0006).
  */
 
 import nodeSqlite3Wasm from "node-sqlite3-wasm";
@@ -25,12 +24,17 @@ import { newPageRecord, supersedes as supersedesOf } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 import { splitFrontmatter } from "./wikipage.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
+import { kindByFolder } from "./kindmeta.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = "4";
+export const SCHEMA_VERSION = "5";
+
+/** The `meta` key holding the working tree's folder → kind map, compared to
+ * force a rebuild when a declaration changes. */
+const KIND_DECLARATIONS_KEY = "kind_declarations";
 
 /** One search result. Score is higher-is-better (bm25() negated). */
 export interface Hit {
@@ -138,6 +142,19 @@ CREATE VIRTUAL TABLE IF NOT EXISTS page_fts USING fts5(
 `;
 
 // ---------------------------------------------------------------------------
+// Kind declaration key (ADR-0027)
+// ---------------------------------------------------------------------------
+
+/** The canonical form of a folder → kind map, compared to detect a declaration
+ * change. Whole-map rather than a digest: declarations are few and this makes
+ * the `meta` row debuggable. */
+function kindDeclarationsKey(map: Record<string, string>): string {
+  return JSON.stringify(
+    Object.entries(map).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Index
 // ---------------------------------------------------------------------------
 
@@ -147,6 +164,7 @@ export class Index {
     private readonly dbPath: string,
     private readonly db: DatabaseType,
     private readonly git: Git,
+    private kindByFolder: Record<string, string>,
   ) {}
 
   /**
@@ -170,9 +188,11 @@ export class Index {
     mkdirSafe(indexDir);
     const dbPath = path.join(indexDir, "index.db");
     const db = new Database(dbPath);
-    const index = new Index(root, dbPath, db, git);
+    const index = new Index(root, dbPath, db, git, kindByFolder(root));
     index.createSchema();
-    if (!index.schemaOk()) {
+    // A schema bump or an edited declaration both strand the `kind` column, so
+    // either one rebuilds from HEAD (ADR-0027).
+    if (!index.schemaOk() || !index.kindDeclarationsMatch()) {
       await index.rebuildFull();
     }
     return index;
@@ -181,7 +201,7 @@ export class Index {
   /** Open an in-memory index (for tests). */
   static async openInMemory(git: Git): Promise<Index> {
     const db = new Database();
-    const index = new Index(":memory:", ":memory:", db, git);
+    const index = new Index(":memory:", ":memory:", db, git, {});
     index.createSchema();
     if (!index.schemaOk()) {
       await index.rebuildFull();
@@ -212,6 +232,32 @@ export class Index {
     return row?.value === SCHEMA_VERSION;
   }
 
+  private kindDeclarationsMatch(): boolean {
+    const row = this.db.get("SELECT value FROM meta WHERE key = ?", [
+      KIND_DECLARATIONS_KEY,
+    ]) as { value: string } | null;
+    return row?.value === kindDeclarationsKey(this.kindByFolder);
+  }
+
+  private setKindDeclarationsKey(): void {
+    this.db.run("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", [
+      KIND_DECLARATIONS_KEY,
+      kindDeclarationsKey(this.kindByFolder),
+    ]);
+  }
+
+  /** Re-read the working tree's declarations; true when the map changed, in
+   * which case the `kind` column is stale and only a full rebuild fixes it. */
+  private kindDeclarationsChanged(): boolean {
+    if (this.root === ":memory:") return false;
+    const fresh = kindByFolder(this.root);
+    if (kindDeclarationsKey(fresh) === kindDeclarationsKey(this.kindByFolder)) {
+      return false;
+    }
+    this.kindByFolder = fresh;
+    return true;
+  }
+
   // -------------------------------------------------------------------------
   // Core index walk
   // -------------------------------------------------------------------------
@@ -219,7 +265,7 @@ export class Index {
   async reindex(full: boolean): Promise<Stats> {
     const start = Date.now();
     let stats: Stats;
-    if (full) {
+    if (full || this.kindDeclarationsChanged()) {
       stats = await this.rebuildFull();
     } else {
       // Forced range walk; unlike sync(), never short-circuits on HEAD == watermark.
@@ -232,6 +278,7 @@ export class Index {
   }
 
   private async sync(): Promise<Stats> {
+    if (this.kindDeclarationsChanged()) return this.rebuildFull();
     const watermark = this.watermark();
     const snap = await this.git.committedPages(watermark);
     if (snap.head === watermark && !snap.fullRebuild) {
@@ -271,6 +318,7 @@ export class Index {
       DROP TABLE IF EXISTS page_fts;
     `);
     this.createSchema();
+    this.setKindDeclarationsKey();
     let inserted = 0;
     for (const page of snap.pages) {
       if (this.upsertPage(page)) inserted++;
@@ -345,7 +393,7 @@ export class Index {
   private upsertPage(page: PageChange): boolean {
     let rec: PageRecord;
     try {
-      rec = newPageRecord(page.pageRef, page.content);
+      rec = newPageRecord(page.pageRef, page.content, this.kindByFolder);
     } catch {
       this.removePage(page.pageRef);
       return false;

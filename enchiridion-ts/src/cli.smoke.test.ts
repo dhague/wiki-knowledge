@@ -110,7 +110,7 @@ test(
     assert.equal(status.status, 0, status.stderr);
     assert.match(status.stdout, /pages:\s+2/);
     assert.match(status.stdout, /backend:\s+fts5/);
-    assert.match(status.stdout, /schema_version:\s+4/);
+    assert.match(status.stdout, /schema_version:\s+5/);
 
     const reindex = runBundled(["search", "--reindex"], {
       cwd: root,
