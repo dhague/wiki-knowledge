@@ -172,12 +172,16 @@ export async function tagsShape(root: string): Promise<Finding[]> {
   return findings;
 }
 
-/** staleSynthesis — synthesis pages whose last git commit is more than 30 days ago. */
+/** Age at which a synthesis page reads as stale, in days. */
+export const StaleSynthesisDays = 30;
+
+/** staleSynthesis — synthesis pages whose last git commit is older than
+ * [StaleSynthesisDays]. */
 export async function staleSynthesis(root: string): Promise<Finding[]> {
   const pages = new Vault(root).pages({ skipMalformedEdges: true });
   const vaultGit = new VaultGit(root);
   const findings: Finding[] = [];
-  const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - StaleSynthesisDays * 24 * 60 * 60 * 1000;
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "synthesis") continue;
     const dateStr = await vaultGit.lastCommitDate(ref);

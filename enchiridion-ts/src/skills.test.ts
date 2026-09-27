@@ -1,9 +1,6 @@
 /**
- * Structural checks over the shipped skill tree, guarding the packaging contract
- * ADR-0026 makes load-bearing: `npx skills add` requires a non-empty `name` and
- * `description` and installs into a directory named after frontmatter `name`;
- * `cut-release` needs a real boolean `metadata.internal: true`, since the
- * installer ignores a quoted string.
+ * Structural checks over the shipped skill tree: the ADR-0026 packaging
+ * contract, and the prose the script layer must agree with.
  */
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -11,7 +8,15 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
-import { CHECKS, FIXES } from "./check.js";
+import {
+  CHECKS,
+  DefaultMinSimilarity,
+  FIXES,
+  StaleSynthesisDays,
+} from "./check.js";
+import { SummaryWordGuideline } from "./ingest.js";
+import { Markers, RootEnvVar } from "./vault.js";
+import { EncodeChars } from "./wikipage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -114,10 +119,16 @@ test("the portable skill text names no host, tool, model or install path", () =>
   }
 });
 
+/** One shipped markdown document, labelled by its repo-relative path. */
+interface ProseDoc {
+  label: string;
+  text: string;
+}
+
 /** Every markdown file the plugin ships as agent directions: each skill's
  * `SKILL.md`, its `reference/` files, and the subagent briefs. */
-function pluginProse(): Array<{ label: string; text: string }> {
-  const docs: Array<{ label: string; text: string }> = [];
+function pluginProse(): ProseDoc[] {
+  const docs: ProseDoc[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
@@ -260,5 +271,222 @@ test("cut-release is marked internal with a real boolean", () => {
     (fm.metadata as Record<string, unknown>).internal,
     true,
     'cut-release/SKILL.md must set metadata.internal: true — a real boolean, not "true"',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Prose fenced against the script layer
+// ---------------------------------------------------------------------------
+
+/** The one file that states the vault-root rule, per ADR-0004, and the two
+ * wiki-lint files the prose fences read. */
+const CONVENTIONS = "wiki-plugin/skills/wiki-conventions/SKILL.md";
+const LINT_SKILL = "wiki-plugin/skills/wiki-lint/SKILL.md";
+const LINT_CHECKS = "wiki-plugin/skills/wiki-lint/reference/checks.md";
+
+/** The bundle-resolution paragraph every skill that calls the script carries
+ * verbatim; the vault-root rule belongs to [CONVENTIONS] alone. */
+const SHARED_INVOCATION = [
+  "The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:",
+  "",
+  "```bash",
+  "RUNTIME=$(command -v node || command -v bun)",
+  'ENCHIRIDION="<this skill\'s base directory>/scripts/enchiridion.cjs"',
+  "```",
+  "",
+  'Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.',
+].join("\n");
+
+/** The one string that marks a file as resolving the bundle, however it spells
+ * the paragraph around it — deliberately looser than [SHARED_INVOCATION], so a
+ * divergent copy is caught rather than skipped. */
+const BUNDLE_REFERENCE = "scripts/enchiridion.cjs";
+
+let proseCache: Map<string, string> | null = null;
+
+/** One shipped document's text by its repo-relative label; "" when absent. */
+function proseFor(label: string): string {
+  proseCache ??= new Map(pluginProse().map(({ label, text }) => [label, text]));
+  return proseCache.get(label) ?? "";
+}
+
+test("every file that resolves the bundle carries the shared invocation paragraph byte-for-byte", () => {
+  const carriers = pluginProse().filter(({ text }) =>
+    text.includes(BUNDLE_REFERENCE),
+  );
+  assert.ok(carriers.length > 0, "no skill resolves the bundle");
+  for (const { label, text } of carriers) {
+    assert.equal(
+      text.split(SHARED_INVOCATION).length - 1,
+      1,
+      `${label}: must carry the shared invocation paragraph exactly once, byte-identically`,
+    );
+  }
+});
+
+test("the vault-root rule is stated by exactly one file", () => {
+  const owners = pluginProse()
+    .filter(({ text }) => text.includes("nearest ancestor"))
+    .map(({ label }) => label);
+  assert.deepEqual(
+    owners,
+    [CONVENTIONS],
+    "the vault-root rule belongs in wiki-conventions alone; every other file points at it",
+  );
+});
+
+test("the vault-root rule names the markers and env var the script implements", () => {
+  const text = proseFor(CONVENTIONS);
+  const start = text.indexOf("**The vault root");
+  const end = text.indexOf("\n\n", start);
+  const rule = text.slice(start, end < 0 ? undefined : end);
+  const markers = Markers.map((marker) =>
+    marker === "wiki" ? "`wiki/`" : `\`${marker}\``,
+  ).join(" or ");
+  assert.ok(
+    rule.includes(markers),
+    `${CONVENTIONS}: the rule must name ${markers}, the markers vault.ts declares`,
+  );
+  assert.ok(
+    rule.includes(`\`$${RootEnvVar}\``),
+    `${CONVENTIONS}: the rule must name $${RootEnvVar}, the override vault.ts reads`,
+  );
+});
+
+test("every skill points at the vault-root rule rather than restating it", () => {
+  for (const dir of skillDirs()) {
+    if (dir === "wiki-conventions") continue;
+    assert.ok(
+      readSkill(dir).includes("wiki-conventions/SKILL.md#scripts"),
+      `${dir}/SKILL.md must point at wiki-conventions → Scripts for the vault-root rule`,
+    );
+  }
+});
+
+/** Rows of wiki-lint's `| Check | Fix level |` catalogue, header and separator
+ * dropped, cells raw. */
+function lintCatalogue(
+  text: string,
+): Array<{ name: string; fixLevel: string }> {
+  const rows: Array<{ name: string; fixLevel: string }> = [];
+  for (const line of text.split("\n")) {
+    const row = /^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/.exec(line);
+    if (!row || row[1] === "Check" || /^-+$/.test(row[1])) continue;
+    rows.push({ name: row[1], fixLevel: row[2] });
+  }
+  return rows;
+}
+
+/** The `enchiridion fix` slug a catalogue row names, if any. */
+function catalogueFixSlug(name: string): string | null {
+  return /`([a-z][a-z0-9-]*)`/.exec(name)?.[1] ?? null;
+}
+
+/** The three fix levels a check may carry. */
+const FIX_LEVELS = ["auto-fix", "confirm first", "report only"];
+
+/** Every fix level a passage names, case-insensitively. */
+function fixLevels(text: string): string[] {
+  const lower = text.toLowerCase();
+  return FIX_LEVELS.filter((level) => lower.includes(level));
+}
+
+/** A reference file's `## \`slug\`` section body, up to the next heading. */
+function slugSection(text: string, slug: string): string {
+  const start = text.indexOf(`## \`${slug}\``);
+  if (start < 0) return "";
+  const bodyStart = text.indexOf("\n", start) + 1;
+  const next = text.indexOf("\n## ", bodyStart);
+  return text.slice(bodyStart, next < 0 ? undefined : next);
+}
+
+test("wiki-lint states each check's fix level once — in its catalogue", () => {
+  assert.ok(
+    !/Fix level:/i.test(readSkill("wiki-lint")),
+    "the catalogue table is the one statement of a fix level; a run bullet must not restate it",
+  );
+});
+
+test("wiki-lint's catalogue and its run block name the same auto-fixes", () => {
+  // Only the auto-fix half of a fix level has a command to disagree with;
+  // confirm-first and report-only are judgment no run block holds.
+  const text = readSkill("wiki-lint");
+  const catalogue = lintCatalogue(text)
+    .filter((row) => /auto-fix/.test(row.fixLevel))
+    .map((row) => catalogueFixSlug(row.name))
+    .sort();
+  const runBlock = [
+    ...text.matchAll(
+      /^\s*"\$RUNTIME" "\$ENCHIRIDION" fix ([a-z][a-z0-9-]*)\s*$/gm,
+    ),
+  ]
+    .map((match) => match[1])
+    .sort();
+  assert.deepEqual(
+    catalogue,
+    runBlock,
+    "a check the catalogue calls auto-fixable must be run by the fix block, and vice versa",
+  );
+  assert.deepEqual(
+    runBlock,
+    Object.keys(FIXES).sort(),
+    "the run block must call every FIXES entry and nothing else",
+  );
+});
+
+test("wiki-lint's catalogue and its reference prose state the same fix levels", () => {
+  const checks = proseFor(LINT_CHECKS);
+  for (const row of lintCatalogue(readSkill("wiki-lint"))) {
+    const slug = /^`([a-z][a-z0-9-]*)`$/.exec(row.name)?.[1];
+    if (slug === undefined) continue;
+    assert.deepEqual(
+      fixLevels(slugSection(checks, slug)).sort(),
+      fixLevels(row.fixLevel).sort(),
+      `checks.md's ${slug} section and the catalogue must state the same fix levels`,
+    );
+  }
+});
+
+test("the four prose constants track their code constants", () => {
+  // concept-fragmentation's --min-similarity default, check.ts.
+  const similarity = `\`--min-similarity <n>\` (default \`${DefaultMinSimilarity}\`)`;
+  for (const label of [LINT_SKILL, LINT_CHECKS]) {
+    assert.ok(
+      proseFor(label).includes(similarity),
+      `${label}: must state the similarity default as ${similarity}`,
+    );
+  }
+
+  // stale-synthesis's age, check.ts.
+  assert.ok(
+    proseFor(LINT_SKILL).includes(`> ${StaleSynthesisDays} days old`),
+    `${LINT_SKILL}: must state the stale age as ${StaleSynthesisDays} days`,
+  );
+  assert.ok(
+    proseFor(LINT_CHECKS).includes(`more than ${StaleSynthesisDays} days old`),
+    `${LINT_CHECKS}: must state the stale age as ${StaleSynthesisDays} days`,
+  );
+
+  // The summary length guideline, ingest.ts.
+  const summary = `≤ ~${SummaryWordGuideline} words`;
+  for (const label of [
+    CONVENTIONS,
+    "wiki-plugin/skills/wiki-ingest/SKILL.md",
+    "wiki-plugin/skills/wiki-ask/SKILL.md",
+    LINT_SKILL,
+  ]) {
+    assert.ok(
+      proseFor(label).includes(summary),
+      `${label}: must state the summary guideline as "${summary}"`,
+    );
+  }
+
+  // The percent-encode charset, wikipage.ts.
+  const charset = [...EncodeChars]
+    .map((ch) => (ch === " " ? "space" : `\`${ch}\``))
+    .join(", ");
+  assert.ok(
+    proseFor(CONVENTIONS).includes(`encode ${charset};`),
+    `${CONVENTIONS}: must list the encode set as "encode ${charset};"`,
   );
 });

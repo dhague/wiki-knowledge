@@ -7,6 +7,9 @@
  * classification are agent judgment; the mechanics downstream of that decision
  * live here.
  *
+ * A page `summary` is one line, at or under [SummaryWordGuideline] words: it is
+ * what retrieval judges a candidate by before reading the body.
+ *
  * A plan names link targets by vault-relative page reference only: `edges` and
  * `supersedes` hold paths like `wiki/concepts/foo.md`, never composed
  * `[Title](../dest.md)` strings. Composing the link (title lookup, `../`
@@ -73,6 +76,10 @@ import { Volatilities } from "./pagerecord.js";
 
 /** Windows' 255-char path limit, measured against root plus vault-relative path. */
 export const MaxPathLength = 255;
+
+/** The `summary` length the plan schema asks for, in words — a guideline the
+ * skill prose restates and `skills.test.ts` fences to this value. */
+export const SummaryWordGuideline = 20;
 
 export const OpCreate = "create";
 export const OpUpdate = "update";

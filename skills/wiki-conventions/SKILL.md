@@ -166,9 +166,11 @@ RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop, though this file makes no calls of its own.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop. This file makes no calls of its own.
 
-One root-resolution exception, worth carrying here: `page` resolves none for a plain value — an edge value's vault-relative ref is composed against the vault the file sits in, so the file's own location wins and `$WIKI_ROOT` is not consulted.
+**The vault root — the one place this rule is stated; every other skill points here.** The script resolves it itself: `$WIKI_ROOT` when set and non-empty, else the nearest ancestor of the working directory carrying a `wiki/` or `.wiki-root` marker, else the working directory.
+
+One exception: `page` resolves no root for a plain value — an edge value's vault-relative ref is composed against the vault the file sits in, so the file's own location wins and `$WIKI_ROOT` is not consulted.
 
 **Batch independent invocations** — several `search` queries, say — into one shell call rather than issuing each separately; every extra tool call costs a full turn.
 

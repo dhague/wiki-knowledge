@@ -14,7 +14,7 @@ RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`, and the script resolves the vault root itself — `$WIKI_ROOT` first, else the nearest ancestor holding a `wiki/` directory or `.wiki-root` marker, else the cwd. If neither runtime is present, say so and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
 [`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue
 
@@ -55,7 +55,7 @@ Given one document at `<path>`.
          "title": "<the artifact's own title>",
          "body": "<what this artifact is; thin when distilled below>",
          "frontmatter": {
-           "summary": "<one line, ≤~20 words>",
+           "summary": "<one line, ≤ ~20 words>",
            "raw_source": true,           // the "raw" stub — this kind only
            "volatility": "stable"        // an artifact is frozen: its stub is stable
          },
@@ -67,7 +67,7 @@ Given one document at `<path>`.
          "title": "<page title>",
          "body": "<full markdown body>",
          "frontmatter": {
-           "summary": "<one line, ≤~20 words>",
+           "summary": "<one line, ≤ ~20 words>",
            "tags": ["<tag>"],
            "source_date": "<omit to inherit the plan's date>",
            "volatility": "stable | evolving | volatile"

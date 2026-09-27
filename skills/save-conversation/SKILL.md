@@ -6,20 +6,22 @@ description: Save the current conversation to $WIKI_ROOT as a raw markdown artif
 
 Captures session transcript into `$WIKI_ROOT/raw/conversations/`, files it into wiki.
 
-The script layer ships in this skill's `scripts/` directory. Resolve the runtime and the bundle once before any step that calls it — `node` where it exists, `bun` where it does not (the fallback for a host that ships only Bun) — and this skill's base directory as the host reports it when the skill loads:
+The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
 ```bash
 RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
-Every call below is then `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so plainly and stop.
+Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
+
+[`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue.
 
 ## Procedure
 
 `save-session` detects the host session from the environment and fetches its transcript where the host records one.
 
-1. Run capture script with `WIKI_ROOT` set to target vault (per deployment-mode resolution — script runs outside vault, can't use marker-directory discovery from cwd):
+1. Run capture script with `WIKI_ROOT` set to target vault (the session may run outside the vault, so set it explicitly — [the rule](../wiki-conventions/SKILL.md#scripts)):
    ```
    WIKI_ROOT="<path to vault>" "$RUNTIME" "$ENCHIRIDION" save-session --slug "<short phrase>"
    ```
