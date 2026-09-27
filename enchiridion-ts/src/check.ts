@@ -1,6 +1,5 @@
 // Vault health checks for `enchiridion check <name>` and auto-fixes for `enchiridion fix <name>`.
 
-import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
@@ -15,6 +14,9 @@ import {
   resolveLinkDest,
   encodeDest,
   codeLineRanges,
+  rewriteFrontmatter,
+  isUnquotedListLinkLine,
+  Page,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
 import { malformedEdges, malformedTags } from "./pagerecord.js";
@@ -40,10 +42,6 @@ export type TaggedFinding = Finding & { check: string };
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/** A YAML list item whose value begins with a bare `[`: YAML reads it as a flow
- * sequence, not the link string the schema wants. */
-const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
 
 /** The sources kind-folder and the relative route from it into `raw/` (both
  * fixed by the plugin, ADR-0008). */
@@ -113,7 +111,7 @@ export async function frontmatterLinkFormat(
     const unquotedLines = new Set<number>();
     const fmLines = frontmatter.split("\n");
     for (let i = 0; i < fmLines.length; i++) {
-      if (UNQUOTED_LIST_LINK_RE.test(fmLines[i])) {
+      if (isUnquotedListLinkLine(fmLines[i])) {
         unquotedLines.add(i); // 0-based to match link.line from iterLinks
         findings.push({
           pageRef: ref,
@@ -269,9 +267,6 @@ export async function orphans(read: VaultRead): Promise<Finding[]> {
 
 /** One raw region a line break splits, and what a YAML reader makes of it. */
 interface FrontmatterSplit {
-  /** source offsets into the frontmatter block */
-  start: number;
-  end: number;
   /** the value a YAML reader reads for that region */
   joined: string;
   kind: "destination" | "label" | "boundary";
@@ -322,8 +317,8 @@ function joinLabel(raw: string): string {
 }
 
 /** Every line-break split in a frontmatter block's double-quoted link scalars,
- * in source order. One enumeration decides both what [splitLinks] reports and
- * what [fixSplitLinks] splices. */
+ * in source order. [splitLinks] reports one finding each; [fixedSplitLinks]
+ * uses a non-empty list as its signal to re-render the block unfolded. */
 function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
   const spans = doubleQuotedSpans(frontmatter);
   const splits: FrontmatterSplit[] = [];
@@ -335,38 +330,20 @@ function frontmatterSplits(frontmatter: string): FrontmatterSplit[] {
     const labelEnd = labelStart + link.label.length;
     const rawLabel = frontmatter.slice(labelStart, labelEnd);
     if (rawLabel.includes("\n") && insideAny(spans, labelStart, labelEnd)) {
-      splits.push({
-        start: labelStart,
-        end: labelEnd,
-        joined: joinLabel(rawLabel),
-        kind: "label",
-        line,
-      });
+      splits.push({ joined: joinLabel(rawLabel), kind: "label", line });
     }
 
     if (
       link.labelDestFold &&
       insideAny(spans, link.labelDestFold.start, link.labelDestFold.end)
     ) {
-      splits.push({
-        start: link.labelDestFold.start,
-        end: link.labelDestFold.end,
-        joined: "",
-        kind: "boundary",
-        line,
-      });
+      splits.push({ joined: "", kind: "boundary", line });
     }
 
     const rawDest = frontmatter.slice(link.start, link.end);
     if (rawDest.includes("\n") && insideAny(spans, link.start, link.end)) {
-      splits.push({
-        start: link.start,
-        end: link.end,
-        // iterLinks already joins escaped breaks, so `dest` is the joined value.
-        joined: link.dest,
-        kind: "destination",
-        line,
-      });
+      // iterLinks already joins escaped breaks, so `dest` is the joined value.
+      splits.push({ joined: link.dest, kind: "destination", line });
     }
   }
   return splits;
@@ -946,115 +923,137 @@ export async function runAllChecks(
 
 // ---------------------------------------------------------------------------
 // Auto-fix implementations  (`enchiridion fix <name>`)
-// All return the list of page refs that were modified.
+//
+// Each fix is a pure text-to-text function; the driver below is the only I/O.
+// Page writes go through [Vault.write].
 // ---------------------------------------------------------------------------
 
-// fixFrontmatterLinkFormat — quote unquoted list links and re-encode destinations in place.
-export async function fixFrontmatterLinkFormat(
-  root: string,
-): Promise<string[]> {
-  const pages = new Vault(root).loadWikiPages();
-  const changed: string[] = [];
-  for (const [ref, text] of Object.entries(pages)) {
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
-    if (!hasFrontmatter || frontmatter === "") continue;
+/** The one raw/ link a source stub may name from its body ([RAW_HREF_PREFIX] is
+ * the route from the sources folder into `raw/`). */
+const RawBodyLinkRe = new RegExp(
+  `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
+  "g",
+);
 
-    // Pass 1: quote unquoted markdown links in YAML list items.
-    let fm = frontmatter
-      .split("\n")
-      .map((line) => {
-        if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
-        const open = line.indexOf("[");
-        if (open < 0) return line;
-        const closeParenIdx = line.lastIndexOf(")");
-        if (closeParenIdx < 0) return line;
-        return (
-          line.slice(0, open) +
-          `"${line.slice(open, closeParenIdx + 1)}"` +
-          line.slice(closeParenIdx + 1)
-        );
-      })
-      .join("\n");
+/** Run rewrite, tolerating frontmatter the YAML parser refuses: a fix cannot
+ * repair a block it cannot read, and one bad page must not abort the run. */
+function rewritable(text: string, rewrite: () => string): string {
+  try {
+    return rewrite();
+  } catch {
+    return text;
+  }
+}
 
-    // Pass 2: re-encode destinations in the now-quoted frontmatter. Path and
-    // anchor are re-encoded separately: recombining them first turns a working
-    // `#ttl` anchor into a dangling `%23ttl`.
-    const edits: Array<{ start: number; end: number; dest: string }> = [];
-    for (const link of iterLinks(fm)) {
-      const reencoded = encodeDest(link.decodedPath, link.decodedAnchor);
-      if (link.dest !== reencoded)
-        edits.push({ start: link.start, end: link.end, dest: reencoded });
+/** Write every page in plan and return its refs, sorted. */
+function writePlan(vault: Vault, plan: Map<string, string>): string[] {
+  const changed = [...plan.keys()];
+  for (const [ref, text] of plan) vault.write(ref, new Page(text));
+  return changed.sort();
+}
+
+/** Every markdown-link destination in text whose spelling differs from its
+ * canonical encoding — the rule `frontmatter-link-format` reports and this fix
+ * applies. One function so the guard and the rewrite cannot disagree. */
+function reencodeLinkEdits(
+  text: string,
+): Array<{ start: number; end: number; dest: string }> {
+  const edits: Array<{ start: number; end: number; dest: string }> = [];
+  for (const link of iterLinks(text)) {
+    const dest = encodeDest(link.decodedPath, link.decodedAnchor);
+    if (link.dest !== dest)
+      edits.push({ start: link.start, end: link.end, dest });
+  }
+  return edits;
+}
+
+/** Report whether a frontmatter block carries a link the writer would re-encode
+ * or a bare list link it would quote — the two shapes this fix repairs. */
+function frontmatterLinksNeedFix(frontmatter: string): boolean {
+  if (frontmatter.split("\n").some(isUnquotedListLinkLine)) return true;
+  return reencodeLinkEdits(frontmatter).length > 0;
+}
+
+/** Re-encode every markdown-link destination in a decoded frontmatter value,
+ * list entries included. */
+function reencodeLinks(value: unknown): unknown {
+  if (typeof value === "string") {
+    let out = value;
+    for (const e of reencodeLinkEdits(value).sort(
+      (a, b) => b.start - a.start,
+    )) {
+      out = out.slice(0, e.start) + e.dest + out.slice(e.end);
     }
-    edits.sort((a, b) => b.start - a.start);
-    for (const e of edits) fm = fm.slice(0, e.start) + e.dest + fm.slice(e.end);
-
-    if (fm === frontmatter) continue;
-    fs.writeFileSync(path.join(root, ref), `---\n${fm}---\n${body}`, "utf8");
-    changed.push(ref);
+    return out;
   }
-  return changed;
+  if (Array.isArray(value)) return value.map(reencodeLinks);
+  return value;
 }
 
-// fixIngestionSourceIntegrity — move the one unambiguous raw/ body link to raw_source: frontmatter.
-export async function fixIngestionSourceIntegrity(
-  root: string,
-): Promise<string[]> {
-  const pages = new Vault(root).loadWikiPages();
-  const changed: string[] = [];
-  for (const [ref, text] of Object.entries(pages)) {
-    if (!ref.startsWith(SOURCES_DIR + "/")) continue;
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
-    if (!hasFrontmatter) continue;
-    if (/^raw_source\s*:/m.test(frontmatter)) continue;
-
-    // Only when exactly one raw/ link exists in the body ([RAW_HREF_PREFIX] is
-    // the route from this folder into `raw/`).
-    const rawLinkRe = new RegExp(
-      `\\[[^\\]]+\\]\\(${regexEscape(RAW_HREF_PREFIX)}/[^)]+\\)`,
-      "g",
-    );
-    const rawLinks = [...body.matchAll(rawLinkRe)];
-    if (rawLinks.length !== 1) continue;
-
-    const [m] = rawLinks;
-    const newFm = frontmatter.trimEnd() + `\nraw_source: "${m[0]}"\n`;
-    const newBody =
-      body.slice(0, m.index!) + body.slice(m.index! + m[0].length);
-    fs.writeFileSync(
-      path.join(root, ref),
-      `---\n${newFm}---\n${newBody}`,
-      "utf8",
-    );
-    changed.push(ref);
-  }
-  return changed;
+/** fixFrontmatterLinkFormat — quote bare list links and re-encode destinations. */
+export function fixedFrontmatterLinkFormat(text: string): string {
+  const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
+  if (!hasFrontmatter || frontmatter === "") return text;
+  if (!frontmatterLinksNeedFix(frontmatter)) return text;
+  return rewritable(text, () =>
+    rewriteFrontmatter(text, (fm) => {
+      for (const key of fm.keys()) {
+        const value = fm.get(key);
+        const reencoded = reencodeLinks(value);
+        if (!isDeepStrictEqual(reencoded, value)) fm.set(key, reencoded);
+      }
+    }),
+  );
 }
 
-// fixMissingCrossReferences — insert relative markdown links for exact title
-// matches in body text that have no existing link to that page.
-export async function fixMissingCrossReferences(
-  root: string,
-): Promise<string[]> {
-  const pagesWithText = new Vault(root).pagesWithText({
-    skipMalformedEdges: true,
-  });
+/** fixIngestionSourceIntegrity — move the one unambiguous raw/ body link to
+ * raw_source: frontmatter. */
+export function fixedIngestionSourceIntegrity(text: string): string {
+  const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
+  if (!hasFrontmatter) return text;
+  if (/^raw_source\s*:/m.test(frontmatter)) return text;
 
+  const rawLinks = [...body.matchAll(RawBodyLinkRe)];
+  if (rawLinks.length !== 1) return text;
+
+  const [m] = rawLinks;
+  const newBody = body.slice(0, m.index!) + body.slice(m.index! + m[0].length);
+  return rewritable(text, () =>
+    rewriteFrontmatter(text, (fm) => {
+      fm.set("raw_source", m[0]);
+      return newBody;
+    }),
+  );
+}
+
+/** One page as the cross-reference fix reads it. */
+export interface CrossReferencePage {
+  title: string;
+  text: string;
+}
+
+/** fixMissingCrossReferences — insert relative markdown links for exact title
+ * matches in body text that have no existing link to that page. Returns only
+ * the pages it changed. */
+export function fixedMissingCrossReferences(
+  pages: Record<string, CrossReferencePage>,
+): Map<string, string> {
   const titleToRef = new Map<string, string>();
   const ambiguous = new Set<string>();
-  for (const [ref, { record }] of Object.entries(pagesWithText)) {
-    if (!record.title) continue;
-    if (ambiguous.has(record.title)) continue;
-    if (titleToRef.has(record.title)) {
-      titleToRef.delete(record.title);
-      ambiguous.add(record.title);
+  for (const [ref, { title }] of Object.entries(pages)) {
+    if (!title) continue;
+    if (ambiguous.has(title)) continue;
+    if (titleToRef.has(title)) {
+      titleToRef.delete(title);
+      ambiguous.add(title);
     } else {
-      titleToRef.set(record.title, ref);
+      titleToRef.set(title, ref);
     }
   }
 
-  const changed: string[] = [];
-  for (const [ref, { text }] of Object.entries(pagesWithText)) {
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
+  const plan = new Map<string, string>();
+  for (const [ref, { text }] of Object.entries(pages)) {
+    const { body } = splitFrontmatter(text);
     const pageDir = ref.split("/").slice(0, -1).join("/");
 
     const linkedRefs = new Set<string>();
@@ -1103,60 +1102,88 @@ export async function fixMissingCrossReferences(
     }
 
     if (!anyEdit) continue;
-    const newText = hasFrontmatter
-      ? `---\n${frontmatter}---\n${newBody}`
-      : newBody;
-    fs.writeFileSync(path.join(root, ref), newText, "utf8");
-    changed.push(ref);
+    const next = rewritable(text, () =>
+      rewriteFrontmatter(text, () => newBody),
+    );
+    if (next !== text) plan.set(ref, next);
   }
-  return changed;
+  return plan;
 }
 
-// fixSplitLinks — join the three frontmatter shapes in place; body splits stay
-// a report-only finding (joining one on sight can silently repoint the link).
+/** fixSplitLinks — join the three frontmatter shapes. Re-rendering through the
+ * seam joins them because the writer folds nothing (ADR-0024); body splits stay
+ * a report-only finding, since joining one on sight can silently repoint the
+ * link. */
+export function fixedSplitLinks(text: string): string {
+  const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
+  if (!hasFrontmatter || frontmatter === "") return text;
+  if (frontmatterSplits(frontmatter).length === 0) return text;
+  return rewritable(text, () => rewriteFrontmatter(text, () => {}));
+}
+
+/** fixDuplicateFrontmatter — collapse the leading blocks to the one holding
+ * every key; divergent or unreadable blocks are left for a hand merge. */
+export function fixedDuplicateFrontmatter(text: string): string {
+  const analysis = duplicateAnalysis(text);
+  if (analysis === null || !analysis.readable) return text;
+  if (analysis.dominant.length === 0) return text;
+
+  const keep = analysis.blocks[analysis.dominant[0]];
+  const last = analysis.blocks[analysis.blocks.length - 1];
+  const collapsed = text.slice(keep.start, keep.end) + text.slice(last.end);
+  if (collapsed === text) return text;
+  return rewritable(text, () => rewriteFrontmatter(collapsed, () => {}));
+}
+
+/** Run a per-page fix over the whole vault, writing only the pages it changed. */
+async function fixEveryPage(
+  root: string,
+  fix: (text: string) => string,
+  include: (ref: string) => boolean = () => true,
+): Promise<string[]> {
+  const vault = new Vault(root);
+  const plan = new Map<string, string>();
+  for (const [ref, text] of Object.entries(vault.loadWikiPages())) {
+    if (!include(ref)) continue;
+    const next = fix(text);
+    if (next !== text) plan.set(ref, next);
+  }
+  return writePlan(vault, plan);
+}
+
+export async function fixFrontmatterLinkFormat(
+  root: string,
+): Promise<string[]> {
+  return fixEveryPage(root, fixedFrontmatterLinkFormat);
+}
+
+export async function fixIngestionSourceIntegrity(
+  root: string,
+): Promise<string[]> {
+  return fixEveryPage(root, fixedIngestionSourceIntegrity, (ref) =>
+    ref.startsWith(SOURCES_DIR + "/"),
+  );
+}
+
+export async function fixMissingCrossReferences(
+  root: string,
+): Promise<string[]> {
+  const vault = new Vault(root);
+  const pages: Record<string, CrossReferencePage> = {};
+  for (const [ref, { record, text }] of Object.entries(
+    vault.pagesWithText({ skipMalformedEdges: true }),
+  )) {
+    pages[ref] = { title: record.title, text };
+  }
+  return writePlan(vault, fixedMissingCrossReferences(pages));
+}
+
 export async function fixSplitLinks(root: string): Promise<string[]> {
-  const pages = new Vault(root).loadWikiPages();
-  const changed: string[] = [];
-  for (const [ref, text] of Object.entries(pages)) {
-    const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
-    if (!hasFrontmatter || frontmatter === "") continue;
-
-    const splits = frontmatterSplits(frontmatter);
-    if (splits.length === 0) continue;
-
-    // Splice back-to-front by source offset so every untouched byte survives —
-    // key order, quote styles and spacing alike; only the join may differ
-    // (ADR-0012). Joining the reader's own value keeps the edit
-    // semantics-preserving.
-    let fm = frontmatter;
-    for (const s of splits.sort((a, b) => b.start - a.start)) {
-      fm = fm.slice(0, s.start) + s.joined + fm.slice(s.end);
-    }
-
-    fs.writeFileSync(path.join(root, ref), `---\n${fm}---\n${body}`, "utf8");
-    changed.push(ref);
-  }
-  return changed;
+  return fixEveryPage(root, fixedSplitLinks);
 }
 
-// fixDuplicateFrontmatter — collapse the leading blocks to the one holding every
-// key; divergent or unreadable blocks are left for a hand merge.
 export async function fixDuplicateFrontmatter(root: string): Promise<string[]> {
-  const pages = new Vault(root).loadWikiPages();
-  const changed: string[] = [];
-  for (const [ref, text] of Object.entries(pages)) {
-    const analysis = duplicateAnalysis(text);
-    if (analysis === null || !analysis.readable) continue;
-    if (analysis.dominant.length === 0) continue;
-
-    const keep = analysis.blocks[analysis.dominant[0]];
-    const last = analysis.blocks[analysis.blocks.length - 1];
-    const collapsed = text.slice(keep.start, keep.end) + text.slice(last.end);
-    if (collapsed === text) continue;
-    fs.writeFileSync(path.join(root, ref), collapsed, "utf8");
-    changed.push(ref);
-  }
-  return changed;
+  return fixEveryPage(root, fixedDuplicateFrontmatter);
 }
 
 export const FIXES: Record<string, (root: string) => Promise<string[]>> = {

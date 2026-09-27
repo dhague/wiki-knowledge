@@ -24,6 +24,7 @@ import {
   planMove,
   planConsolidate,
   canonicalizeLinkTargets,
+  rewriteFrontmatter,
 } from "./wikipage.js";
 import type { LinkMatch } from "./wikipage.js";
 // The reader that finds frontmatter links through the YAML parser rather than
@@ -549,6 +550,113 @@ describe("Page.set/merge write exactly one frontmatter block", () => {
     ).text;
     assert.ok(!hasSecondBlock(out));
     assert.ok(out.endsWith("# Heading\n\n---\nnote: not frontmatter\n---\n"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rewriteFrontmatter — the one write path
+// ---------------------------------------------------------------------------
+
+describe("rewriteFrontmatter", () => {
+  it("canonicalises every value the block holds, not just the edited one", () => {
+    const out = rewriteFrontmatter(
+      "---\ntitle: T\nsource_date: '2026-01-02T10:00:00Z'\ntags: alpha\n---\nbody\n",
+      (fm) => {
+        fm.set("volatility", "stable");
+      },
+    );
+    assert.equal(
+      out,
+      "---\ntitle: T\nsource_date: 2026-01-02\ntags:\n  - alpha\nvolatility: stable\n---\nbody\n",
+    );
+  });
+
+  it("leaves an absent list value absent rather than wrapping its null", () => {
+    // `tags:` is the clean "no tags" spelling; wrapping its null would write
+    // the null entry `tags-shape` flags.
+    const out = rewriteFrontmatter(
+      "---\ntitle: T\ntags:\n---\nbody\n",
+      (fm) => {
+        fm.set("volatility", "stable");
+      },
+    );
+    assert.equal(out, "---\ntitle: T\ntags:\nvolatility: stable\n---\nbody\n");
+  });
+
+  it("quotes a link value set through the writer", () => {
+    const out = rewriteFrontmatter("---\ntitle: T\n---\nbody\n", (fm) => {
+      fm.set("related", "[B](../entities/b.md)");
+    });
+    assert.equal(
+      out,
+      '---\ntitle: T\nrelated: "[B](../entities/b.md)"\n---\nbody\n',
+    );
+  });
+
+  it("quotes a bare list link the block already holds", () => {
+    const out = rewriteFrontmatter(
+      "---\ntitle: T\nrelated:\n  - [B](../entities/b.md)\n---\nbody\n",
+      () => {},
+    );
+    assert.equal(
+      out,
+      '---\ntitle: T\nrelated:\n  - "[B](../entities/b.md)"\n---\nbody\n',
+    );
+  });
+
+  it("replaces the body when the edit returns one", () => {
+    const out = rewriteFrontmatter("---\ntitle: T\n---\nold\n", () => "new\n");
+    assert.equal(out, "---\ntitle: T\n---\nnew\n");
+  });
+
+  it("mints a block only when a value is written", () => {
+    assert.equal(
+      rewriteFrontmatter("body\n", () => "body\n"),
+      "body\n",
+      "a body-only edit on a page with no block adds none",
+    );
+    assert.equal(
+      rewriteFrontmatter("body\n", (fm) => {
+        fm.set("title", "T");
+      }),
+      "---\ntitle: T\n---\nbody\n",
+    );
+  });
+
+  it("keeps key order, comments and the body", () => {
+    const out = rewriteFrontmatter(
+      "---\n# c\ntitle: A\nsummary: s\n---\nbody\n",
+      (fm) => {
+        fm.set("summary", "t");
+      },
+    );
+    assert.equal(out, "---\n# c\ntitle: A\nsummary: t\n---\nbody\n");
+  });
+
+  it("throws on frontmatter the parser refuses", () => {
+    assert.throws(() =>
+      rewriteFrontmatter("---\ntitle: [unclosed\n---\nbody\n", () => {}),
+    );
+  });
+});
+
+describe("Page.set writes through rewriteFrontmatter", () => {
+  it("canonicalises an untouched value alongside the edited one", () => {
+    const out = new Page(
+      "---\ntitle: A\nsource_date: '2026-01-02T10:00:00Z'\n---\nbody\n",
+    ).set("volatility", "stable").text;
+    assert.equal(
+      out,
+      "---\ntitle: A\nsource_date: 2026-01-02\nvolatility: stable\n---\nbody\n",
+    );
+  });
+
+  it("quotes a link value", () => {
+    const out = new Page("---\ntitle: A\n---\nbody\n").set(
+      "related",
+      "[B](b.md)",
+    ).text;
+    assert.equal(out, '---\ntitle: A\nrelated: "[B](b.md)"\n---\nbody\n');
   });
 });
 

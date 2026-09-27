@@ -166,3 +166,23 @@ test("KIND.md is parsed by kindmeta alone", () => {
     "exportaggregate must read the KIND.md summary through kindmeta",
   );
 });
+
+test("only wikipage.ts assembles a frontmatter block", () => {
+  // rewriteFrontmatter owns the `---\n…---\n` splice; a second assembly site
+  // skips the writer's canonicalisation and link quoting.
+  const owner = "wikipage.ts";
+  const fence = /["'`]---\\n/;
+  for (const { label, code } of sourceFiles()) {
+    if (label === owner) continue;
+    const match = fence.exec(code);
+    assert.equal(
+      match,
+      null,
+      `${label}: assembles a frontmatter block — write through wikipage.rewriteFrontmatter`,
+    );
+  }
+  assert.ok(
+    codeOf(owner).includes("rewriteFrontmatter"),
+    `${owner} must own the frontmatter write seam`,
+  );
+});
