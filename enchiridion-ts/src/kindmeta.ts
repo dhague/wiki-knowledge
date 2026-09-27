@@ -18,21 +18,10 @@ export interface KindMeta {
   consolidatable: boolean;
 }
 
-/**
- * Reads the `KIND.md` declaration in an absolute folder path.
- *
- * `null` only when the file is absent or unparseable (no frontmatter,
- * non-mapping YAML); parseable frontmatter missing `kind:` still returns a
- * [KindMeta], so a `KIND.md` carrying the flag alone is not dropped. Callers
- * fall back to [folderToKind] for a null `kind`.
- */
-export function readKindMeta(folderAbsPath: string): KindMeta | null {
-  let text: string;
-  try {
-    text = fs.readFileSync(path.join(folderAbsPath, "KIND.md"), "utf8");
-  } catch {
-    return null;
-  }
+/** Parse a `KIND.md` document's text; `null` when it has no frontmatter or a
+ * non-mapping one. Parseable frontmatter missing `kind:` still returns a
+ * [KindMeta], so a declaration carrying the flag alone is not dropped. */
+export function parseKindMeta(text: string): KindMeta | null {
   try {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(text);
     if (!hasFrontmatter || frontmatter === "") return null;
@@ -52,13 +41,32 @@ export function readKindMeta(folderAbsPath: string): KindMeta | null {
   }
 }
 
-/** The kind value a folder's pages carry (ADR-0020): [FolderKinds] wins for a
- * canonical folder, so a stray `KIND.md` there never declares it. */
+/** Reads the `KIND.md` declaration in an absolute folder path; `null` as
+ * [parseKindMeta] defines it. */
+export function readKindMeta(folderAbsPath: string): KindMeta | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(folderAbsPath, "KIND.md"), "utf8");
+  } catch {
+    return null;
+  }
+  return parseKindMeta(text);
+}
+
+/** The folder → kind ladder (ADR-0020): a canonical folder wins whatever its
+ * `KIND.md` says, else the declared kind, else strip-`s`. */
+export function resolveKind(
+  folder: string,
+  declaredKind?: string | null,
+): string {
+  return FolderKinds[folder] ?? declaredKind ?? folderToKind(folder);
+}
+
+/** The kind value a folder's pages carry, its declaration read from disk. */
 export function kindForFolder(root: string, folder: string): string {
-  return (
-    FolderKinds[folder] ??
-    readKindMeta(path.join(root, "wiki", folder))?.kind ??
-    folderToKind(folder)
+  return resolveKind(
+    folder,
+    readKindMeta(path.join(root, "wiki", folder))?.kind,
   );
 }
 

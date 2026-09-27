@@ -60,7 +60,7 @@ export function edgeRefusal(key: string, value: unknown): string {
 /** An edge link's label: the target's title, its basename when it has none,
  * and always the filename for `raw_source`. The one owner of the rule. */
 export function edgeLabel(key: string, ref: string, title: string): string {
-  return key === "raw_source" || title === ""
+  return isSingleLinkEdgeKey(key) || title === ""
     ? path.posix.basename(ref)
     : title;
 }

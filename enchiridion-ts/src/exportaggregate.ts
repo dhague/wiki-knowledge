@@ -11,7 +11,6 @@
  * Concatenate the matching generators from both modules for the full set.
  */
 
-import { parse as parseYaml } from "yaml";
 import { PageRecord } from "./pagerecord.js";
 import {
   ExportMeta,
@@ -37,7 +36,7 @@ import {
   shellPages,
 } from "./exportrender.js";
 import { KindFolders } from "./place.js";
-import { splitFrontmatter } from "./wikipage.js";
+import { parseKindMeta } from "./kindmeta.js";
 
 // ---------------------------------------------------------------------------
 // KIND.md summary blurb
@@ -52,11 +51,7 @@ function kindBlurb(
   const ref = `wiki/${folder}/KIND.md`;
   const entry = pages.get(ref);
   if (!entry) return "";
-  const { frontmatter, hasFrontmatter } = splitFrontmatter(entry.text);
-  if (!hasFrontmatter) return "";
-  const fm = parseYaml(frontmatter) as unknown;
-  if (typeof fm !== "object" || fm === null) return "";
-  return String((fm as Record<string, unknown>)["summary"] ?? "");
+  return parseKindMeta(entry.text)?.summary ?? "";
 }
 
 // ---------------------------------------------------------------------------

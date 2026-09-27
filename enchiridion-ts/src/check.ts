@@ -11,13 +11,14 @@ import { Index } from "./searchindex.js";
 import {
   splitFrontmatter,
   iterLinks,
-  percentEncode,
+  composeLink,
   resolveLinkDest,
   encodeDest,
   codeLineRanges,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
 import { malformedEdges, malformedTags } from "./pagerecord.js";
+import { KindFolders } from "./place.js";
 
 export interface CheckOptions {
   /** The Consolidation-vs-link cutoff, in [0, 1]. */
@@ -46,7 +47,7 @@ const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
 
 /** The sources kind-folder and the relative route from it into `raw/` (both
  * fixed by the plugin, ADR-0008). */
-const SOURCES_DIR = "wiki/sources";
+const SOURCES_DIR = `wiki/${KindFolders["source"]}`;
 const RAW_HREF_PREFIX = path.posix.relative(SOURCES_DIR, "raw");
 
 function regexEscape(s: string): string {
@@ -1085,11 +1086,7 @@ export async function fixMissingCrossReferences(
       const ch = idx > 0 ? newBody[idx - 1] : "";
       if (ch === "[" || ch === "`") continue;
 
-      const relPath = path
-        .relative(pageDir, targetRef)
-        .split(path.sep)
-        .join("/");
-      const insertion = `[${title}](${percentEncode(relPath)})`;
+      const insertion = composeLink(title, targetRef, pageDir);
       const diff = insertion.length - title.length;
       newBody =
         newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
