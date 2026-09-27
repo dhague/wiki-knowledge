@@ -46,6 +46,13 @@ import {
   removeFromQueue,
   runWatch,
 } from "./watch.js";
+import {
+  IngestStdout,
+  KindDefinitionFields,
+  KindFields,
+  WatchLockedMarker,
+  WatchStartedMarker,
+} from "./contract.js";
 import { canonicalSourceDate } from "./sourcedate.js";
 import {
   edgeLink,
@@ -675,7 +682,7 @@ export function buildProgram(): Command {
   vault
     .command("kinds")
     .description(
-      "List all placement kinds as a compact JSON array: canonical four plus any discovered custom folders",
+      `List all placement kinds as one compact JSON array: canonical four plus any discovered custom folders; each entry: {${KindFields.join(", ")}}, definition {${KindDefinitionFields.join(", ")}} or null`,
     )
     .action(() => {
       const { root } = resolveRoot();
@@ -978,7 +985,9 @@ export function buildProgram(): Command {
   // removes one queue entry and exits.
   program
     .command("watch")
-    .description("Watch raw/ for new files and enqueue eligible ones")
+    .description(
+      `Watch raw/ for new files and enqueue eligible ones; once observing it prints "${WatchStartedMarker}<raw> (debounce=<s>s, pid=<pid>)", and refuses with "${WatchLockedMarker}<lock>)" when another watcher holds the lock`,
+    )
     .option("--vault <root>", "vault root; defaults to resolve_vault_root()")
     .option(
       "--debounce <seconds>",
@@ -1022,7 +1031,7 @@ export function buildProgram(): Command {
 
         const { acquired, stalePID } = acquireLock(paths.lock);
         if (!acquired) {
-          fail(`another watcher is already running (lock at ${paths.lock})`);
+          fail(`${WatchLockedMarker}${paths.lock})`);
         }
         if (stalePID !== null) {
           console.log(
@@ -1036,11 +1045,13 @@ export function buildProgram(): Command {
       },
     );
 
-  // ingest — execute an IngestPlan against the resolved vault, printing the
-  // commit SHA as the first stdout line.
+  // ingest — resolve the whole plan before any write; no rollback, so a rerun
+  // after a fix is safe.
   program
     .command("ingest")
-    .description("Execute an IngestPlan against the resolved vault")
+    .description(
+      `Execute an IngestPlan against the resolved vault; a writing --plan run prints the ${IngestStdout[0]} on line 1, then the ${IngestStdout[1]} when a hook log exists`,
+    )
     .option(
       "--plan <file>",
       "path to an IngestPlan JSON file ('-' reads stdin)",

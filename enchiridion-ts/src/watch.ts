@@ -10,6 +10,7 @@ import path from "node:path";
 import { mkdirSafe } from "./fsutil.js";
 import { watch as watchRaw } from "chokidar";
 import { scan as scanEligible } from "./ingestscan.js";
+import { WatchStartedMarker } from "./contract.js";
 
 /** The per-file settle window. */
 export const DefaultDebounceSeconds = 30;
@@ -520,7 +521,9 @@ export function runWatch(
       // Log-and-keep-watching; a transient read error isn't fatal.
     });
     watcher.on("ready", () => {
-      log(`watching ${rawRoot} (debounce=${debounceSeconds}s, pid=${pid})`);
+      log(
+        `${WatchStartedMarker}${rawRoot} (debounce=${debounceSeconds}s, pid=${pid})`,
+      );
     });
 
     cancel = schedule(() => {

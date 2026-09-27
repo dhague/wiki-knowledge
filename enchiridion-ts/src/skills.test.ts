@@ -14,6 +14,13 @@ import {
   FIXES,
   StaleSynthesisDays,
 } from "./check.js";
+import {
+  IngestStdout,
+  KindDefinitionFields,
+  KindFields,
+  WatchLockedMarker,
+  WatchStartedMarker,
+} from "./contract.js";
 import { isPlanAction, PlanActions, SummaryWordGuideline } from "./ingest.js";
 import { Markers, RootEnvVar } from "./vault.js";
 import { EncodeChars } from "./wikipage.js";
@@ -566,4 +573,47 @@ test("the agent-facing plan shape names every accepted action", () => {
     [...PlanActions].sort(),
     `${INGEST_SKILL} must name exactly the actions ingest.ts accepts`,
   );
+});
+
+/** The `{a, b, c}` spelling [KindFields] and [KindDefinitionFields] declare. */
+function braceList(fields: readonly string[]): string {
+  return `{${fields.join(", ")}}`;
+}
+
+test("the prose that names vault kinds fields names exactly the declared set", () => {
+  const entry = braceList(KindFields);
+  for (const label of [CONVENTIONS, SCRIPTS_REF]) {
+    assert.ok(
+      proseFor(label).includes(entry),
+      `${label}: must name the vault kinds entry fields as ${entry}`,
+    );
+  }
+  assert.ok(
+    proseFor(SCRIPTS_REF).includes(braceList(KindDefinitionFields)),
+    `${SCRIPTS_REF}: must name the definition fields as ${braceList(KindDefinitionFields)}`,
+  );
+});
+
+test("the ingest command's declared stdout order is stated by its callers", () => {
+  // Every caller names the SHA first and the summary after, in that order, so
+  // reordering [IngestStdout] fails here rather than silently mis-citing it.
+  for (const label of [INGEST_SKILL, SCRIPTS_REF]) {
+    const text = proseFor(label);
+    const first = text.indexOf(IngestStdout[0]);
+    const second = text.indexOf(IngestStdout[1]);
+    assert.ok(
+      first >= 0 && second > first,
+      `${label}: must state "${IngestStdout[0]}" then "${IngestStdout[1]}"`,
+    );
+  }
+});
+
+test("wiki-watch gates on the two startup markers watch declares", () => {
+  const text = readSkill("wiki-watch");
+  for (const marker of [WatchStartedMarker, WatchLockedMarker]) {
+    assert.ok(
+      text.includes(marker),
+      `wiki-watch/SKILL.md: must gate on watch.ts's marker "${marker}"`,
+    );
+  }
 });

@@ -31,7 +31,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 3. **Poll for startup** up to a ~10s deadline (every ~0.5s), reading background output each poll:
    - `another watcher is already running (lock at ...)` and exited, or no line by the deadline: **surface to user** and stop — the watcher is not confirmed running.
-   - `watching <raw/> (debounce=...s, pid=...)`: running normally, continue.
+   - `watching ...`: running normally, continue.
 
 4. **Startup sweep.** Run `"$RUNTIME" "$ENCHIRIDION" ingest-scan --json` once. For each eligible file, delegate the `wiki-ingest` procedure with the file path (and, for a `changed-since-ingestion` file, its back-pointers as reconciliation hint), then wait for the manifest. Same shape as the `wiki-ingest` sweep's per-file delegation, but **without** per-file yes/skip/never gate: every eligible file at startup gets ingested. Log each manifest (see Logging below), move to next file.
 

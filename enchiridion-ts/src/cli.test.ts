@@ -13,6 +13,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as git from "isomorphic-git";
 import { CHECKS } from "./check.js";
+import {
+  IngestStdout,
+  KindDefinitionFields,
+  KindFields,
+  WatchLockedMarker,
+  WatchStartedMarker,
+} from "./contract.js";
 import { PlanActions } from "./ingest.js";
 import { splitFrontmatter } from "./wikipage.js";
 
@@ -107,6 +114,31 @@ test("--help: prints help, exits 0", () => {
   const { status, stdout } = run(["--help"]);
   assert.equal(status, 0);
   assert.match(stdout, /Usage:/);
+});
+
+test("ingest --help declares its stdout order", () => {
+  const { status, stdout } = run(["ingest", "--help"]);
+  assert.equal(status, 0);
+  // Commander wraps help prose, so compare with runs of whitespace collapsed.
+  const help = stdout.replace(/\s+/g, " ");
+  const first = help.indexOf(IngestStdout[0]);
+  const second = help.indexOf(IngestStdout[1]);
+  assert.ok(
+    first >= 0 && second > first,
+    `ingest --help must declare "${IngestStdout[0]}" then "${IngestStdout[1]}"`,
+  );
+});
+
+test("watch --help declares the startup lines its caller gates on", () => {
+  const { status, stdout } = run(["watch", "--help"]);
+  assert.equal(status, 0);
+  const help = stdout.replace(/\s+/g, " ");
+  for (const marker of [WatchStartedMarker, WatchLockedMarker]) {
+    assert.ok(
+      help.includes(marker),
+      `watch --help must declare the startup marker "${marker}"`,
+    );
+  }
 });
 
 test("place: prints the vault-relative path from kind and title", () => {
@@ -1010,7 +1042,7 @@ test("unknown command: commander itself errors non-zero", () => {
   assert.notEqual(status, 0);
 });
 
-test("ingest: executes a plan against a real git vault, printing the SHA first", async () => {
+test("ingest: executes a plan against a real git vault, printing the SHA then the cost summary", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
   );
@@ -1075,14 +1107,26 @@ test("ingest: executes a plan against a real git vault, printing the SHA first",
     }),
   );
 
+  const sessions = path.join(root, ".claude", "wiki-knowledge", "sessions");
+  fs.mkdirSync(sessions, { recursive: true });
+  fs.writeFileSync(
+    path.join(sessions, "ingest-order-tool-calls.jsonl"),
+    `${JSON.stringify({ tool: "Read", prompt_id: "p1" })}\n`,
+  );
+
   const { status, stdout, stderr } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: {
+      WIKI_ROOT: root,
+      CLAUDE_PROJECT_DIR: root,
+      CLAUDE_CODE_SESSION_ID: "ingest-order",
+    },
   });
   assert.equal(status, 0, stderr);
-  // The commit SHA is always the first line of stdout.
-  const firstLine = stdout.split("\n")[0];
-  assert.match(firstLine, /^[0-9a-f]{40}$/);
+  // The commit SHA is always the first line of stdout; the cost summary follows.
+  const lines = stdout.split("\n");
+  assert.match(lines[0], /^[0-9a-f]{40}$/);
+  assert.match(lines[1], /^Total tool calls: 1$/);
   assert.ok(fs.existsSync(path.join(root, "wiki", "sources", "doc.md")));
   assert.ok(
     fs.existsSync(
@@ -2096,7 +2140,10 @@ test("watch: without --dequeue requires a lock and errors when held", () => {
     env: { WIKI_ROOT: root },
   });
   assert.notEqual(status, 0);
-  assert.match(stderr, /another watcher is already running/);
+  assert.ok(
+    stderr.includes(WatchLockedMarker),
+    `the refusal must begin with the declared marker "${WatchLockedMarker}"`,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -2475,6 +2522,46 @@ test("vault kinds: respects WIKI_ROOT env var", () => {
   const custom = kinds.filter((e) => !e.canonical);
   assert.equal(custom.length, 1);
   assert.equal(custom[0].kind, "person");
+});
+
+test("vault kinds: every entry carries exactly the fields its help declares", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
+  fs.mkdirSync(path.join(root, "wiki", "people"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "people", "KIND.md"),
+    "---\nkind: person\nsummary: A human individual.\n---\n",
+  );
+  // `vault kinds` is always one JSON document — no `--json` dialect to select.
+  const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const kinds = JSON.parse(stdout.trim()) as Array<Record<string, unknown>>;
+  assert.ok(kinds.length > 0);
+  for (const entry of kinds) {
+    assert.deepEqual(
+      Object.keys(entry).sort(),
+      [...KindFields].sort(),
+      `a vault kinds entry must carry exactly {${KindFields.join(", ")}}`,
+    );
+  }
+  const definition = kinds.find((e) => e.definition !== null)!.definition as
+    Record<string, unknown> | undefined;
+  assert.deepEqual(
+    Object.keys(definition!).sort(),
+    [...KindDefinitionFields].sort(),
+  );
+});
+
+test("vault kinds --help names every field the command emits", () => {
+  const { status, stdout } = run(["vault", "kinds", "--help"]);
+  assert.equal(status, 0);
+  for (const field of [...KindFields, ...KindDefinitionFields]) {
+    assert.ok(
+      stdout.includes(field),
+      `vault kinds --help must name the emitted field "${field}"`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
