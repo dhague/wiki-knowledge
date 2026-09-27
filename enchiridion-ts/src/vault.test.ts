@@ -46,7 +46,7 @@ test("resolveRoot prefers WIKI_ROOT env", () => {
   const start = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   fs.mkdirSync(path.join(start, "wiki"));
 
-  const { root } = resolveRoot(start, env({ WIKI_ROOT: elsewhere }));
+  const root = resolveRoot(start, env({ WIKI_ROOT: elsewhere }));
   assert.equal(root, resolve(elsewhere));
 });
 
@@ -54,7 +54,7 @@ test("resolveRoot ignores an empty WIKI_ROOT", () => {
   const start = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   fs.mkdirSync(path.join(start, "wiki"));
 
-  const { root } = resolveRoot(start, env({ WIKI_ROOT: "" }));
+  const root = resolveRoot(start, env({ WIKI_ROOT: "" }));
   assert.equal(root, resolve(start));
 });
 
@@ -67,14 +67,14 @@ test("resolveRoot walks up to the nearest marker", () => {
     const deep = path.join(root, "a", "b", "c");
     fs.mkdirSync(deep, { recursive: true });
 
-    const { root: got } = resolveRoot(deep, env({}));
+    const got = resolveRoot(deep, env({}));
     assert.equal(got, resolve(root));
   }
 });
 
 test("resolveRoot falls back to start", () => {
   const start = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
-  const { root } = resolveRoot(start, env({}));
+  const root = resolveRoot(start, env({}));
   assert.equal(root, resolve(start));
 });
 
@@ -237,17 +237,6 @@ test("consolidatableKinds on a vault without a wiki dir is concept alone", () =>
   assert.deepEqual(v.consolidatableKinds(), ["concept"]);
 });
 
-test("set and merge write back", () => {
-  const v = writeVault({
-    "wiki/concepts/a.md": "---\ntitle: A\ntags:\n  - x\n---\nbody\n",
-  });
-  v.set("wiki/concepts/a.md", "volatility", "stable");
-  v.merge("wiki/concepts/a.md", "tags", ["x", "y"]);
-  const page = v.load("wiki/concepts/a.md");
-  assert.equal(page.getString("volatility"), "stable");
-  assert.deepEqual(page.getStringList("tags"), ["x", "y"]);
-});
-
 test("movePage fixes links and removes original", () => {
   const v = writeVault({
     "wiki/concepts/a.md":
@@ -280,20 +269,6 @@ test("movePage onto itself changes nothing", () => {
   const changed = v.movePage("wiki/concepts/a.md", "wiki/concepts/a.md");
   assert.deepEqual(changed, []);
   assert.equal(v.exists("wiki/concepts/a.md"), true);
-});
-
-test("rewriteInboundLinks for a non-page target", () => {
-  const v = writeVault({
-    "wiki/sources/s.md":
-      '---\nraw_source: "[old.md](../../raw/old.md)"\n---\nstub\n',
-    "wiki/concepts/a.md": "Unrelated.\n",
-  });
-  const changed = v.rewriteInboundLinks("raw/old.md", "raw/new.md");
-  assert.deepEqual(changed, ["wiki/sources/s.md"]);
-  const stub = v.load("wiki/sources/s.md");
-  assert.match(stub.text, /\(\.\.\/\.\.\/raw\/new\.md\)/);
-  assert.equal(v.exists("raw/new.md"), false);
-  assert.equal(v.exists("raw/old.md"), false);
 });
 
 test("consolidate writes the survivor, repoints inbound links, deletes the losers", () => {

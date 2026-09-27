@@ -14,9 +14,6 @@ const { Database } = nodeSqlite3Wasm as unknown as {
 import fs from "node:fs";
 import path from "node:path";
 import { mkdirSafe } from "./fsutil.js";
-
-// The Git surface is vaultgit's; re-exported so existing callers keep compiling.
-export type { Git, Snapshot, PageChange, VaultGit } from "./vaultgit.js";
 import type { Git, Snapshot, PageChange } from "./vaultgit.js";
 
 // Page metadata comes from pagerecord, the one reader of the frontmatter schema.

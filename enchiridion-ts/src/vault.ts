@@ -51,21 +51,21 @@ export function hasMarker(dir: string): boolean {
 export function resolveRoot(
   start = "",
   lookupEnv: LookupEnv = processLookupEnv,
-): { root: string } {
+): string {
   const [wikiRoot, ok] = lookupEnv(RootEnvVar);
   if (ok && wikiRoot !== "" && wikiRoot !== undefined) {
-    return { root: resolve(wikiRoot) };
+    return resolve(wikiRoot);
   }
 
   const startPath = resolve(start === "" ? process.cwd() : start);
 
   for (let dir = startPath; ;) {
-    if (hasMarker(dir)) return { root: dir };
+    if (hasMarker(dir)) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return { root: startPath };
+  return startPath;
 }
 
 /** Absolute path with symlinks followed; a path that doesn't exist yet still
@@ -264,22 +264,6 @@ export class Vault {
     return out;
   }
 
-  /** Load, [Page.set], and write back the page at pageRef. */
-  set(pageRef: string, key: string, value: unknown): Page {
-    const page = this.load(pageRef);
-    const updated = page.set(key, value);
-    this.write(pageRef, updated);
-    return updated;
-  }
-
-  /** Load, [Page.merge], and write back the page at pageRef. */
-  merge(pageRef: string, key: string, values: unknown[]): Page {
-    const page = this.load(pageRef);
-    const updated = page.merge(key, values);
-    this.write(pageRef, updated);
-    return updated;
-  }
-
   /** Write every page in planned whose text differs from before, returning the
    * changed vault-relative paths, sorted. */
   private writeChanged(
@@ -316,16 +300,6 @@ export class Vault {
       fs.unlinkSync(this.path(oldRef));
     }
     return changed;
-  }
-
-  /** Repoint `wiki/**` pages' inbound links from oldRel to newRel.
-   *
-   * The target itself is never read, parsed, or written — for a non-page target
-   * such as an externally renamed `raw/` artifact, only other pages change.
-   * Returns the changed refs, sorted. */
-  rewriteInboundLinks(oldRel: string, newRel: string): string[] {
-    const pages = this.loadWikiPages();
-    return this.writeChanged(planMove(pages, oldRel, newRel), pages);
   }
 
   /** Absorb losers into the survivor (ADR-0021), repointing inbound links.
@@ -374,7 +348,7 @@ export function vaultForFile(file: string): { vault: Vault; pageDir: string } {
   } catch {
     abs = path.resolve(file);
   }
-  const { root } = resolveRoot(path.dirname(abs), () => [undefined, false]);
+  const root = resolveRoot(path.dirname(abs), () => [undefined, false]);
   const rel = path.relative(root, abs).split(path.sep).join("/");
   const dir = path.posix.dirname(rel);
   return { vault: new Vault(root), pageDir: dir === "." ? "" : dir };

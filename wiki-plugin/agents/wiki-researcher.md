@@ -2,7 +2,7 @@
 name: wiki-researcher
 description: Answers a question from the wiki vault — query-expanded, BM25-ranked, frontmatter-first, budget-bounded, and cited with each page's age and volatility. Invoke whenever the vault should be asked something rather than read page by page.
 model: haiku
-tools: Read, Grep, Glob, Bash
+tools: Read, Bash
 skills: [wiki-conventions, wiki-ask]
 ---
 <!-- Plugin subagents ignore mcpServers/hooks/permissionMode frontmatter — omitted deliberately, not missing. -->

@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Index, tokenizeQuery, SCHEMA_VERSION } from "./searchindex.js";
-import type { Git, Snapshot, PageChange } from "./searchindex.js";
+import type { Git, Snapshot, PageChange } from "./vaultgit.js";
 import { VaultGit } from "./vaultgit.js";
 import { Vault } from "./vault.js";
 import { enumeratePageRefs } from "./pagepredicate.js";

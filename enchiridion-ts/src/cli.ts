@@ -82,10 +82,6 @@ import {
 } from "./exportconfig.js";
 import type { StarterEntry } from "./exportmeta.js";
 
-function stub(command: Command, label: string): void {
-  command.action(() => fail(`enchiridion ${label}: not yet implemented`));
-}
-
 function loadPage(file: string): Page {
   return new Page(fs.readFileSync(file, "utf8"));
 }
@@ -164,8 +160,6 @@ function formatScalar(value: unknown): string {
   if (typeof value === "boolean") return value ? "True" : "False";
   return String(value);
 }
-
-const FLAT_SUBCOMMANDS = [] as const;
 
 /** "" and "raw/" both mean all of raw/; a "raw/" prefix is stripped, so
  * "notes" and "raw/notes" are interchangeable. */
@@ -445,13 +439,6 @@ export function buildProgram(): Command {
     .allowExcessArguments(true)
     .allowUnknownOption(true);
 
-  for (const name of FLAT_SUBCOMMANDS) {
-    const sub = program
-      .command(`${name} [args...]`)
-      .description("not yet implemented");
-    stub(sub, name);
-  }
-
   // search [text] — query the lexical index, or manage it with --reindex /
   // --status. --json emits one Hit per line, else the compact table.
   program
@@ -527,7 +514,7 @@ export function buildProgram(): Command {
           status?: boolean;
         },
       ) => {
-        const { root } = resolveRoot();
+        const root = resolveRoot();
         const index = await Index.open(root);
         try {
           if (opts.status) {
@@ -598,7 +585,7 @@ export function buildProgram(): Command {
       `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder`,
     )
     .action((kind: string, title: string) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const rel = placePath(kind, title, new Vault(root).discoveredKinds());
       console.log(rel);
     });
@@ -613,7 +600,7 @@ export function buildProgram(): Command {
       "phrase naming what this session covered; sanitized, first-save only",
     )
     .action(async (opts: { slug?: string }) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const rel = await captureSession(
         root,
         opts.slug ?? "",
@@ -657,14 +644,14 @@ export function buildProgram(): Command {
       "Resolve the vault root, or move a page within it (moves need exactly two page refs)",
     )
     .action(() => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       console.log(root);
     });
   vault
     .command("root")
     .description("Print the resolved vault root (the no-argument default)")
     .action(() => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       console.log(root);
     });
   vault
@@ -675,7 +662,7 @@ export function buildProgram(): Command {
     .argument("<old_ref>", "vault-relative path of the page to move")
     .argument("<new_ref>", "vault-relative destination path")
     .action((oldRef: string, newRef: string) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const changed = new Vault(root).movePage(oldRef, newRef);
       for (const pageRef of changed) console.log(pageRef);
     });
@@ -685,7 +672,7 @@ export function buildProgram(): Command {
       `List all placement kinds as one compact JSON array: canonical four plus any discovered custom folders; each entry: {${KindFields.join(", ")}}, definition {${KindDefinitionFields.join(", ")}} or null`,
     )
     .action(() => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const vault = new Vault(root);
       const custom = vault.discoveredKinds();
       const result: {
@@ -756,7 +743,7 @@ export function buildProgram(): Command {
         opts: { json?: boolean; all?: boolean; minSimilarity?: number },
       ) => {
         if (opts.all) {
-          const { root } = resolveRoot();
+          const root = resolveRoot();
           const rows = await runAllChecks(root, {
             minSimilarity: opts.minSimilarity,
           });
@@ -775,7 +762,7 @@ export function buildProgram(): Command {
           );
         }
         // One check's findings carry no check name — the caller named it.
-        const { root } = resolveRoot();
+        const root = resolveRoot();
         const findings = await fn(new VaultRead(root), {
           minSimilarity: opts.minSimilarity,
         });
@@ -796,7 +783,7 @@ export function buildProgram(): Command {
       if (!fn) {
         fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
       }
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const changed = await fn(root);
       for (const ref of changed) console.log(ref);
     });
@@ -901,7 +888,7 @@ export function buildProgram(): Command {
     .description("Print a page's full content by vault-relative ref")
     .option("--json", "emit {page_ref, frontmatter, body} as one JSON line")
     .action((ref: string, opts: { json?: boolean }) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const vault = new Vault(root);
       if (!vault.exists(ref)) {
         fail(`page not found: ${ref}`);
@@ -925,7 +912,7 @@ export function buildProgram(): Command {
     .description("Resolve page refs to their current supersession heads")
     .option("--json", "emit results as JSON Lines (one object per line)")
     .action(async (pageRefs: string[], opts: { json?: boolean }) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const records = new Vault(root).pages();
       const resolutions = resolveSuperseded(pageRefs, records);
 
@@ -955,7 +942,7 @@ export function buildProgram(): Command {
       "emit JSON Lines (one eligible or ignored record per line)",
     )
     .action(async (folderArg: string | undefined, opts: { json?: boolean }) => {
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       const folder =
         folderArg === undefined ? "" : normalizeFolderArg(folderArg);
       // null → scan builds the batched git facts (one tree walk + one history
@@ -1014,7 +1001,7 @@ export function buildProgram(): Command {
       }) => {
         let root = opts.vault ?? "";
         if (root === "") {
-          ({ root } = resolveRoot());
+          root = resolveRoot();
         } else {
           try {
             root = fs.realpathSync(root);
@@ -1085,7 +1072,7 @@ export function buildProgram(): Command {
         if ((planPath === "") === (ignoreRels.length === 0)) {
           fail("exactly one of --plan or --ignore is required");
         }
-        const { root } = resolveRoot();
+        const root = resolveRoot();
         if (ignoreRels.length > 0) {
           const comment = opts.ignoreComment ?? "";
           for (const ignoreRel of ignoreRels) {
@@ -1110,7 +1097,7 @@ export function buildProgram(): Command {
       if (!opts.manifest) {
         fail("required option '--manifest <file>' not specified");
       }
-      const { root } = resolveRoot();
+      const root = resolveRoot();
       let text: string;
       if (opts.manifest === "-") {
         text = fs.readFileSync(0, "utf8");
@@ -1188,7 +1175,7 @@ export function buildProgram(): Command {
         tagsContaining?: string;
         tagCount?: string;
       }) => {
-        const { root } = resolveRoot();
+        const root = resolveRoot();
         const discoverOpts = {
           limit: opts.limit,
           duplicateThreshold: opts.duplicateThreshold,
@@ -1306,7 +1293,7 @@ export function buildProgram(): Command {
         candidates?: boolean;
         starters?: string[];
       }) => {
-        const { root } = resolveRoot();
+        const root = resolveRoot();
 
         // Persist-and-exit, like --candidates: a second full export over a
         // non-empty target is not what "save" means.
