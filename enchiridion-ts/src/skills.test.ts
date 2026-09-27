@@ -18,6 +18,10 @@ import {
   IngestStdout,
   KindDefinitionFields,
   KindFields,
+  KindMdProposalBlock,
+  KindMdProposalFields,
+  SaveCandidateBlock,
+  SaveCandidateFields,
   WatchLockedMarker,
   WatchStartedMarker,
 } from "./contract.js";
@@ -298,10 +302,13 @@ test("cut-release is marked internal with a real boolean", () => {
  * read. */
 const CONVENTIONS = "wiki-plugin/skills/wiki-conventions/SKILL.md";
 const SCRIPTS_REF = "wiki-plugin/skills/wiki-conventions/reference/scripts.md";
+const BLOCKS_REF = "wiki-plugin/skills/wiki-conventions/reference/blocks.md";
 const INGEST_SKILL = "wiki-plugin/skills/wiki-ingest/SKILL.md";
 const AUTHORING_REF = "wiki-plugin/skills/wiki-ingest/reference/authoring.md";
 const LINT_SKILL = "wiki-plugin/skills/wiki-lint/SKILL.md";
 const LINT_CHECKS = "wiki-plugin/skills/wiki-lint/reference/checks.md";
+const ASK_SKILL = "wiki-plugin/skills/wiki-ask/SKILL.md";
+const SAVING_SYNTHESIS = "wiki-plugin/skills/wiki-ask/saving-synthesis.md";
 
 /** The bundle-resolution paragraph every skill that calls the script carries
  * verbatim; the vault-root rule belongs to [SCRIPTS_REF] alone. */
@@ -517,14 +524,10 @@ test("the four prose constants track their code constants", () => {
     `${LINT_CHECKS}: must state the stale age as ${StaleSynthesisDays} days`,
   );
 
-  // The summary length guideline, ingest.ts.
+  // The summary length guideline, ingest.ts. The block protocols own the
+  // guideline for a `save-candidate`'s summary.
   const summary = `≤ ~${SummaryWordGuideline} words`;
-  for (const label of [
-    CONVENTIONS,
-    INGEST_SKILL,
-    "wiki-plugin/skills/wiki-ask/SKILL.md",
-    LINT_SKILL,
-  ]) {
+  for (const label of [CONVENTIONS, INGEST_SKILL, BLOCKS_REF, LINT_SKILL]) {
     assert.ok(
       proseFor(label).includes(summary),
       `${label}: must state the summary guideline as "${summary}"`,
@@ -614,6 +617,118 @@ test("wiki-watch gates on the two startup markers watch declares", () => {
     assert.ok(
       text.includes(marker),
       `wiki-watch/SKILL.md: must gate on watch.ts's marker "${marker}"`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The agent reply block protocols
+// ---------------------------------------------------------------------------
+
+/** The keys of the one fenced `label` block in [text] — the shape the procedure
+ * shows the agent, read back so a malformed block fails the fence. */
+function blockFields(text: string, label: string): string[] {
+  const match = new RegExp("```" + label + "\\n([\\s\\S]*?)\\n\\s*```").exec(
+    text,
+  );
+  assert.ok(match, `must carry a \`\`\`${label} example`);
+  const parsed: unknown = parseYaml(match[1]);
+  assert.ok(
+    parsed !== null && typeof parsed === "object",
+    `the \`\`\`${label} example must be a YAML mapping`,
+  );
+  return Object.keys(parsed as Record<string, unknown>);
+}
+
+test("an agent block carries exactly its declared fields", () => {
+  assert.deepEqual(
+    blockFields(proseFor(INGEST_SKILL), KindMdProposalBlock).sort(),
+    [...KindMdProposalFields].sort(),
+    `${INGEST_SKILL}: a ${KindMdProposalBlock} block must carry exactly ${braceList(KindMdProposalFields)}`,
+  );
+  assert.deepEqual(
+    blockFields(proseFor(ASK_SKILL), SaveCandidateBlock).sort(),
+    [...SaveCandidateFields].sort(),
+    `${ASK_SKILL}: a ${SaveCandidateBlock} block must carry exactly ${braceList(SaveCandidateFields)}`,
+  );
+});
+
+test("the block protocols' one home names the declared field sets", () => {
+  for (const fields of [KindMdProposalFields, SaveCandidateFields]) {
+    assert.ok(
+      proseFor(BLOCKS_REF).includes(braceList(fields)),
+      `${BLOCKS_REF}: must name the block fields as ${braceList(fields)}`,
+    );
+  }
+});
+
+test("every emitting and consuming procedure points at the block protocol", () => {
+  // [BLOCKS_REF] is the one home; a copy of the semantics in the emitter or the
+  // consumer is what this fence exists to catch.
+  for (const label of [INGEST_SKILL, ASK_SKILL, SAVING_SYNTHESIS]) {
+    assert.ok(
+      proseFor(label).includes("wiki-conventions/reference/blocks.md"),
+      `${label}: must point at the block protocol, not restate it`,
+    );
+  }
+});
+
+test("each block field's semantics is stated by exactly one file", () => {
+  const phrases = [
+    "inferred from the folder name and the content filed there",
+    "what next retrieval judges the page by",
+    "the most volatile of the cited pages",
+    "rejects one missing a declared field or carrying an unknown one",
+  ];
+  for (const phrase of phrases) {
+    const owners = pluginProse()
+      .filter(({ text }) => text.includes(phrase))
+      .map(({ label }) => label);
+    assert.deepEqual(
+      owners,
+      [BLOCKS_REF],
+      `"${phrase}" belongs in ${BLOCKS_REF} alone`,
+    );
+  }
+});
+
+/** Fenced code and inline code, so a link shown as an example is not read as a
+ * citation. */
+function stripCode(text: string): string {
+  return text
+    .replace(/^(`{3,})[^\n]*\n[\s\S]*?^\1`*$/gm, "")
+    .replace(/(`+)([\s\S]*?)\1/g, "");
+}
+
+test("no shipped procedure cites a file outside the installed package", () => {
+  // The installed package is wiki-plugin/skills; repo-root docs are absent, so
+  // a link to one dangles for anyone who installed rather than cloned.
+  const pkg = path.join(repoRoot, "wiki-plugin", "skills") + path.sep;
+  for (const { label, text } of pluginProse()) {
+    const docDir = path.dirname(path.join(repoRoot, label));
+    for (const match of stripCode(text).matchAll(/!?\[[^\]]*\]\(([^)\s]+)/g)) {
+      const target = match[1];
+      if (/^([a-z]+:|#)/.test(target)) continue;
+      const resolved = path.resolve(
+        docDir,
+        decodeURIComponent(target.split("#")[0]),
+      );
+      assert.ok(
+        resolved.startsWith(pkg),
+        `${label}: "${target}" points outside the installed package`,
+      );
+    }
+  }
+});
+
+test("no shipped procedure cites the repo-only glossary by name", () => {
+  // The five citations this replaced were bare prose, not links, so the link
+  // guard above cannot see them. CONTEXT.md is absent from the package, so a
+  // procedure must carry the definition or point at an in-package home.
+  for (const { label, text } of pluginProse()) {
+    assert.ok(
+      !text.includes("CONTEXT.md"),
+      `${label}: must not cite CONTEXT.md — the installed package does not carry it`,
     );
   }
 });

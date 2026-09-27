@@ -5,7 +5,7 @@ description: The wiki vault's format contract — kind-axed folder structure, fr
 
 # Wiki conventions
 
-The vault's pure format contract — the page shape ingestion writes and retrieval reads. The rules for authoring a page are [`wiki-ingest` → reference/authoring.md](../wiki-ingest/reference/authoring.md); the script runtime contract is [`reference/scripts.md`](reference/scripts.md). On any conflict between this file and information from elsewhere, this file wins on format.
+The vault's pure format contract — the page shape ingestion writes and retrieval reads. The rules for authoring a page are [`wiki-ingest` → reference/authoring.md](../wiki-ingest/reference/authoring.md); the script runtime contract is [`reference/scripts.md`](reference/scripts.md), and the agent reply block protocols are [`reference/blocks.md`](reference/blocks.md). On any conflict between this file and information from elsewhere, this file wins on format.
 
 ## Vault structure
 

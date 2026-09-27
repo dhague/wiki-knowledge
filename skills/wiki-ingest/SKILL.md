@@ -22,8 +22,8 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 - A folder argument, or no argument — **sweep**, not single ingestion. Read [`reference/sweep.md`](reference/sweep.md) and follow it instead.
 - A file argument — ingest one document. Procedure below.
-- **Consolidation** — a cluster handoff from the `wiki-lint` procedure's `concept-fragmentation` check (CONTEXT.md, **Consolidation**), naming a survivor and the refs it absorbs: sourced from pages, and it deletes committed pages. Follow step 4's Consolidation variant.
-- **If this session can spawn a subagent** and the work is a single file: delegate only — hand the `wiki-ingest` procedure the document path, relay its returned report verbatim (manifest plus lint findings). Then scan output for any `kind-md-proposal` blocks; for each, ask: *"Create `<folder>/KIND.md` for kind `<kind>`? Proposed summary: `<summary>`"* — on explicit yes, write that file with frontmatter `kind: <kind>` and `summary: <summary>` (no other fields required; optional freeform body may follow the closing `---`). Declining is safe — ingestion already committed against the bare folder. A Consolidation delegates the same way, naming the cluster's member refs and the check's suggested survivor — never author the merged body here.
+- **Consolidation** — a cluster handoff from the `wiki-lint` procedure's `concept-fragmentation` check ([Consolidation](reference/consolidation.md)), naming a survivor and the refs it absorbs: sourced from pages, and it deletes committed pages. Follow step 4's Consolidation variant.
+- **If this session can spawn a subagent** and the work is a single file: delegate only — hand the `wiki-ingest` procedure the document path, relay its returned report verbatim (manifest plus lint findings). Then read any `kind-md-proposal` blocks against [the block protocol](../wiki-conventions/reference/blocks.md#kind-md-proposal) — a block missing a declared field or carrying an unknown one is rejected, never guessed at; for each valid block, ask: *"Create `<folder>/KIND.md` for kind `<kind>`? Proposed summary: `<summary>`"* — on explicit yes, write that file with frontmatter `kind: <kind>` and `summary: <summary>` (no other fields required; optional freeform body may follow the closing `---`). Declining is safe — ingestion already committed against the bare folder. A Consolidation delegates the same way, naming the cluster's member refs and the check's suggested survivor — never author the merged body here.
 - **If already running the procedure as a subagent**, continue with procedure using own tools. (Single-file work only.)
 
 ## Procedure
@@ -98,7 +98,7 @@ Given one document at `<path>`.
 
    **Every written page needs `volatility`** — judgment that can't be inherited: `enchiridion ingest` refuses a `create` without it, and an `update` whose `frontmatter` map omits it. So an `update` supplying a frontmatter map must restate it (`stable | evolving | volatile`), or it lands a page `wiki-lint`'s `missing-volatility-source-date` check reports.
 
-   **Consolidation variant — `action: "consolidate"`** (CONTEXT.md, **Consolidation**): one page, the **survivor** (`op: "update"`, or `op: "create"` for a fresh one) whose `body` carries each absorbed body as a section, plus a top-level `"consolidates"` list of the absorbed page references, and no `raw`. Judgment around the survivor: [`reference/consolidation.md`](reference/consolidation.md) — read before authoring one.
+   **Consolidation variant — `action: "consolidate"`** ([Consolidation](reference/consolidation.md)): one page, the **survivor** (`op: "update"`, or `op: "create"` for a fresh one) whose `body` carries each absorbed body as a section, plus a top-level `"consolidates"` list of the absorbed page references, and no `raw`. Judgment around the survivor: [`reference/consolidation.md`](reference/consolidation.md) — read before authoring one.
 
    Judgment calls when filling in (folder's `INGESTION.md` may override any):
    - **Kind** (create pages only): `"$RUNTIME" "$ENCHIRIDION" vault kinds` gives the placement vocabulary; apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm), first match wins. A custom kind-folder is a peer target — never emit a kind `vault kinds` doesn't return. Leave the filename to `enchiridion ingest`, which derives the kebab-slug from `kind` + `title` — never hand-slugify. A chosen custom kind with `definition: null` is noted for step 7's `kind-md-proposal` block; placement into the bare folder completes regardless.
@@ -125,4 +125,4 @@ Given one document at `<path>`.
    ```
    ````
 
-   `kind` is the value used in the plan; `summary` is a one-line definition (≤ ~20 words) inferred from the folder name and the content filed; `folder` is the vault-relative folder path.
+   Field semantics: [the block protocol](../wiki-conventions/reference/blocks.md#kind-md-proposal).
