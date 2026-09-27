@@ -5,7 +5,7 @@ description: Ingest raw documents into schema-valid wiki pages — one file, a f
 
 # Wiki Ingest
 
-Reads `wiki-conventions` for anything this procedure doesn't spell out. Folder/`raw/` sweeps belong to invoking session, not agent.
+Reads `wiki-conventions` for the page format this procedure doesn't spell out. Authoring rules — [the chain of evidence](reference/authoring.md#the-chain-of-evidence), [verifying against the source](reference/authoring.md#verify-against-the-source), [pages state facts](reference/authoring.md#pages-state-facts) — are [`reference/authoring.md`](reference/authoring.md); read it before authoring a page. Folder/`raw/` sweeps belong to invoking session, not agent.
 
 The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
@@ -16,7 +16,7 @@ ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 
 Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
-[`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue
+[`wiki-conventions` → Scripts](../wiki-conventions/reference/scripts.md#script-runtime-contract) — the shared reference for vault-root resolution and the full subcommand catalogue
 
 ## Invocation
 
@@ -34,7 +34,7 @@ Given one document at `<path>`.
 2. **Semantic-chunk.** One page or several? Default one; split when document covers multiple independent ideas deserving own future citation.
 3. **Draft the plan, then discover, then classify.** Write `<plan.json>` now — the file step 4 finishes and step 5 runs. Give every candidate chunk from step 2 a `pages` entry with `title`, `frontmatter.summary`, `body` (full shape in step 4); leave `edges` and unjudged frontmatter for step 4. Run `"$RUNTIME" "$ENCHIRIDION" discover --plan <plan.json> --tags-containing "<candidate tags, comma list>" --tag-count "<candidate tags, comma list>"` once against the whole draft — one call per draft, both flags derived from this draft's own candidate tags, always both. Candidates come back classified `duplicate`/`refines`/`related` (no `distinct` — score-filtered out); `tag_matches`/`tag_counts` feed step 4 tag-minting. Discovery reads only — step 4 owns every write.
 
-   Hint is a starting point — confirm or override against the candidate's own `summary`; record only which **op** each entry gets ([verify rule](../wiki-conventions/SKILL.md#verify-against-the-source)).
+   Hint is a starting point — confirm or override against the candidate's own `summary`; record only which **op** each entry gets ([verify rule](reference/authoring.md#verify-against-the-source)).
    - **No candidates.** New subject. Keep as `op: "create"`; consider any vault page as a typed-edge target in step 4.
    - **`related`.** Worth a typed edge (usually `related`, sometimes `example-of`) from the new page in step 4, not same subject — keep as `op: "create"`.
    - **`duplicate` or `refines`, no conflict.** Candidate adds to or restates an existing page without contradicting. Set the entry to `op: "update"` targeting `page_ref` — step 4 fills whichever of `summary`/`tags`/`source_date`/`volatility`/`body` changes. Record as `updated`, not `created`, in the manifest and commit.
@@ -100,12 +100,12 @@ Given one document at `<path>`.
 
    Judgment calls when filling in (folder's `INGESTION.md` may override any):
    - **Kind** (create pages only): `"$RUNTIME" "$ENCHIRIDION" vault kinds --json` gives the placement vocabulary; apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm), first match wins. A custom kind-folder is a peer target — never emit a kind `vault kinds` doesn't return. Leave the filename to `enchiridion ingest`, which derives the kebab-slug from `kind` + `title` — never hand-slugify. A chosen custom kind with `definition: null` is noted for step 7's `kind-md-proposal` block; placement into the bare folder completes regardless.
-   - **The `source/` stub is not optional** (see [The chain of evidence](../wiki-conventions/SKILL.md#the-chain-of-evidence)) — thin fine, absent not. Prior pass already filed the stub: target it with `op: "update"`, not a second create.
+   - **The `source/` stub is not optional** (see [The chain of evidence](reference/authoring.md#the-chain-of-evidence)) — thin fine, absent not. Prior pass already filed the stub: target it with `op: "update"`, not a second create.
    - **Typed edges** ([vocabulary](../wiki-conventions/SKILL.md#typed-edges)) — judge for **every new or updated page** against every page surfaced in step 3. Assign the most specific type true (`related` only as fallback); `contradicts`/`supersedes` decided by step 3, belong on the *new* page only.
      - Non-judgment edge: **every page except the stub carries a `source` edge to it** — each chunk of a multi-chunk split, `op: "update"` same as `create`. Edges merge on update so restating is safe; omit only if the page already carries it from an earlier pass.
    - **Body** for an `update`: write the *complete* new body (not a diff) when material changes; omit `body` entirely to leave the existing body untouched.
-   - **Body states facts only** ([rule](../wiki-conventions/SKILL.md#pages-state-facts)) — never narrate a correction or the vault's own process; a live disagreement goes in a `> [!warning] Contradiction` callout, in facts, naming both statements.
-   - **Verify the body against the artifact before it lands** ([rule](../wiki-conventions/SKILL.md#verify-against-the-source) — the artifact, then the primary source where it is silent).
+   - **Body states facts only** ([rule](reference/authoring.md#pages-state-facts)) — never narrate a correction or the vault's own process; a live disagreement goes in a `> [!warning] Contradiction` callout, in facts, naming both statements.
+   - **Verify the body against the artifact before it lands** ([rule](reference/authoring.md#verify-against-the-source) — the artifact, then the primary source where it is silent).
    - **`raw_source: true`** derives its link from the plan's `raw` field. **Ingestion never renames raw file** — a file from outside the plugin keeps its name verbatim.
 5. **Run it.** `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` validates the whole plan before writing, then executes place → frontmatter → body → commit in one pass and prints the commit SHA. The index is not touched — the next search's staleness scan picks the pages up. On error: nothing committed, written pages left on disk uncommitted (writes idempotent — fix plan and rerun, don't hand-repair).
 6. **Lint.** After the commit — never after a failed step 5 — run every [mechanical check](../wiki-lint/SKILL.md#2-run-mechanical-checks) over the vault in one call:

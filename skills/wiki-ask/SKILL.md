@@ -22,7 +22,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 - **If this session can spawn a subagent** (and is not already running the retrieval procedure as one): the only action is to spawn one to run the procedure below on the question, then relay its answer — that keeps reading and link-following inside the subagent's context regardless of the invoking session's model.
 - **If already running the retrieval procedure as a subagent**: continue with the procedure below using your own tools.
 
-Scripts resolve the vault root themselves: [`wiki-conventions` → Scripts](../wiki-conventions/SKILL.md#scripts) — the shared reference for vault-root resolution and the full subcommand catalogue.
+Scripts resolve the vault root themselves: [`wiki-conventions` → Scripts](../wiki-conventions/reference/scripts.md#script-runtime-contract) — the shared reference for vault-root resolution and the full subcommand catalogue.
 
 Search `wiki/**` only — `raw/` is not indexed; its `source/` stub has the summary.
 
