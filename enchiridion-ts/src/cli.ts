@@ -15,15 +15,12 @@ import util from "node:util";
 import { Page, isStringListKey } from "./wikipage.js";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
-import { KindFolders, Kinds, path as placePath } from "./place.js";
 import { Vault, resolveRoot, vaultForFile } from "./vault.js";
 import { VaultRead } from "./vaultread.js";
-import { readKindMeta } from "./kindmeta.js";
 import { VaultGit } from "./vaultgit.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";
 import { scan as scanIngest } from "./ingestscan.js";
 import { commit as commitManifest, type Manifest } from "./commit.js";
-import { init as initWiki, Modes } from "./initwiki.js";
 import { sessionStart, postToolUse } from "./hooks.js";
 import { decodePlan, resolve, type Plan } from "./ingest.js";
 import { append as appendIngestignore } from "./ingestignore.js";
@@ -48,8 +45,6 @@ import {
 } from "./watch.js";
 import {
   IngestStdout,
-  KindDefinitionFields,
-  KindFields,
   WatchLockedMarker,
   WatchStartedMarker,
 } from "./contract.js";
@@ -65,6 +60,10 @@ import { CHECKS, DefaultMinSimilarity, FIXES, runAllChecks } from "./check.js";
 import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 import { registerSearchCommand } from "./searchcommand.js";
+import {
+  registerPlacementCommands,
+  registerVaultCommand,
+} from "./vaultcommand.js";
 import {
   runExport,
   buildCandidates,
@@ -321,47 +320,7 @@ export function buildProgram(): Command {
     .allowUnknownOption(true);
 
   registerSearchCommand(program);
-
-  // init <path> — scaffold a brand-new vault from an explicit path, not a
-  // resolved root; the resolved vault root is the only thing on stdout.
-  program
-    .command("init <path>")
-    .description(
-      `Scaffold a brand-new wiki vault; --mode is one of: ${Modes.join(", ")}`,
-    )
-    .requiredOption(
-      "--mode <mode>",
-      `deployment mode: one of ${Modes.join(", ")}`,
-    )
-    .option(
-      "--plugin-root <dir>",
-      "this plugin's install dir (required for query-from-anywhere)",
-    )
-    .action(
-      async (
-        vaultPath: string,
-        opts: { mode: string; pluginRoot?: string },
-      ) => {
-        const root = await initWiki(
-          vaultPath,
-          opts.mode,
-          opts.pluginRoot ?? "",
-        );
-        console.log(root);
-      },
-    );
-
-  // place <kind> <title> — compute a page's vault-relative path (ADR-0020).
-  program
-    .command("place <kind> <title>")
-    .description(
-      `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder`,
-    )
-    .action((kind: string, title: string) => {
-      const root = resolveRoot();
-      const rel = placePath(kind, title, new Vault(root).discoveredKinds());
-      console.log(rel);
-    });
+  registerPlacementCommands(program);
 
   // save-session — write this session's transcript as a raw file, printing its
   // vault-relative path.
@@ -407,81 +366,7 @@ export function buildProgram(): Command {
       console.log(formatSummary(summarize(events)));
     });
 
-  // vault — bare or `vault root` prints the resolved root, `vault move`
-  // moves a page and fixes every link, `vault kinds` lists placement kinds as
-  // JSON. The parent's action runs for bare `vault` and is inherited by a
-  // subcommand with no handler of its own.
-  const vault = program
-    .command("vault")
-    .description(
-      "Resolve the vault root, or move a page within it (moves need exactly two page refs)",
-    )
-    .action(() => {
-      const root = resolveRoot();
-      console.log(root);
-    });
-  vault
-    .command("root")
-    .description("Print the resolved vault root (the no-argument default)")
-    .action(() => {
-      const root = resolveRoot();
-      console.log(root);
-    });
-  vault
-    .command("move")
-    .description(
-      "Move a page within the vault and fix every link, inbound and outbound",
-    )
-    .argument("<old_ref>", "vault-relative path of the page to move")
-    .argument("<new_ref>", "vault-relative destination path")
-    .action((oldRef: string, newRef: string) => {
-      const root = resolveRoot();
-      const changed = new Vault(root).movePage(oldRef, newRef);
-      for (const pageRef of changed) console.log(pageRef);
-    });
-  vault
-    .command("kinds")
-    .description(
-      `List all placement kinds as one compact JSON array: canonical four plus any discovered custom folders; each entry: {${KindFields.join(", ")}}, definition {${KindDefinitionFields.join(", ")}} or null`,
-    )
-    .action(() => {
-      const root = resolveRoot();
-      const vault = new Vault(root);
-      const custom = vault.discoveredKinds();
-      const result: {
-        kind: string;
-        folder: string;
-        canonical: boolean;
-        consolidatable: boolean;
-        definition: { kind: string; summary: string } | null;
-      }[] = [];
-      for (const kind of Kinds) {
-        const folder = KindFolders[kind];
-        result.push({
-          kind,
-          folder,
-          canonical: true,
-          consolidatable: vault.isConsolidatable(folder),
-          definition: null,
-        });
-      }
-      for (const [kind, folder] of Object.entries(custom)) {
-        const meta = readKindMeta(path.join(root, "wiki", folder));
-        result.push({
-          kind,
-          folder,
-          canonical: false,
-          consolidatable: vault.isConsolidatable(folder),
-          // Unchanged shape: a KIND.md declaring no kind contributes the flag,
-          // not a definition.
-          definition:
-            meta === null || meta.kind === null
-              ? null
-              : { kind: meta.kind, summary: meta.summary },
-        });
-      }
-      emitDocument(result);
-    });
+  registerVaultCommand(program);
 
   // check [<name>] [--json] — run one vault health check by name, or every one
   // with --all. The name is optional only alongside --all.
