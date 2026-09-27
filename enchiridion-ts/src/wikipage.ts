@@ -8,6 +8,10 @@
  *
  * Encoding decodes at a single boundary: [splitDest] splits on the literal `#`
  * before decoding, so an encoded `#` in a filename is never read as an anchor.
+ *
+ * Frontmatter bytes are produced at one seam, [rewriteFrontmatter]: [Page.set]
+ * and the `check` auto-fixes both rewrite through it, so the writer's
+ * canonicalisation and link quoting cannot be skipped.
  */
 
 import {
@@ -153,6 +157,35 @@ export function splitFrontmatter(src: string): {
     bodyOffset,
     hasFrontmatter: true,
   };
+}
+
+/** A YAML list item whose value begins with a bare `[`: YAML reads it as a flow
+ * sequence, not the link string the schema wants. */
+const UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
+
+/** Report whether a frontmatter line is a bare markdown link in a YAML list
+ * item — the shape [quoteUnquotedListLinks] repairs. */
+export function isUnquotedListLinkLine(line: string): boolean {
+  return UNQUOTED_LIST_LINK_RE.test(line);
+}
+
+/** Double-quote every bare markdown link in a YAML list item, so the block
+ * parses and the link survives as the string the schema wants. Idempotent. */
+export function quoteUnquotedListLinks(frontmatter: string): string {
+  return frontmatter
+    .split("\n")
+    .map((line) => {
+      if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
+      const open = line.indexOf("[");
+      const close = line.lastIndexOf(")");
+      if (open < 0 || close < 0) return line;
+      return (
+        line.slice(0, open) +
+        `"${line.slice(open, close + 1)}"` +
+        line.slice(close + 1)
+      );
+    })
+    .join("\n");
 }
 
 /** One link/image occurrence, positioned in the source text. */
@@ -306,16 +339,7 @@ export class Page {
    */
   private frontmatterNode(): YAMLMap {
     const { frontmatter, hasFrontmatter } = splitFrontmatter(this.text);
-    if (!hasFrontmatter || frontmatter.trim() === "") return new YAMLMap();
-    const doc = parseDocument(frontmatter);
-    if (doc.errors.length > 0) {
-      throw new Error(`invalid frontmatter YAML: ${doc.errors[0].message}`);
-    }
-    if (doc.contents === null || !isMap(doc.contents)) {
-      if (doc.contents === null) return new YAMLMap();
-      throw new Error("frontmatter is not a YAML mapping");
-    }
-    return doc.contents;
+    return frontmatterNodeFrom(frontmatter, hasFrontmatter);
   }
 
   /** Return the full frontmatter mapping, decoded to plain values, or null
@@ -352,17 +376,16 @@ export class Page {
 
   /**
    * Return a new page with frontmatter key set to value, canonicalised first
-   * — see [canonicalForWrite]. Mints a frontmatter block when the page has
+   * — see [rewriteFrontmatter]. Mints a frontmatter block when the page has
    * none; only the block is re-serialised, and the body is spliced back
    * verbatim.
    */
   set(key: string, value: unknown): Page {
-    const node = this.frontmatterNode();
-    const valueNode = newValueNode(canonicalForWrite(key, value));
-    setKey(node, key, valueNode);
-    const rendered = renderFrontmatter(node);
-    const { body } = splitFrontmatter(this.text);
-    return new Page("---\n" + rendered + "---\n" + body);
+    return new Page(
+      rewriteFrontmatter(this.text, (frontmatter) => {
+        frontmatter.set(key, value);
+      }),
+    );
   }
 
   /**
@@ -669,11 +692,11 @@ function setKey(mapping: YAMLMap, key: string, value: Scalar | YAMLSeq): void {
  * Canonicalise a frontmatter value on its way to disk — the writer's half of
  * the source-date and of the list-valued-key rules.
  *
- * [Page.set] is the one place frontmatter bytes are produced, so applying the
- * rules here is what makes them unskippable: whatever spelling a `source_date`
- * arrives in, the page that reaches disk carries the canonical one, and a
- * scalar handed to a list-valued key ([isStringListKey]) reaches disk as the
- * one-element list the conventions document.
+ * [rewriteFrontmatter] is the one place frontmatter bytes are produced, so
+ * applying the rules there is what makes them unskippable: whatever spelling a
+ * `source_date` arrives in, the page that reaches disk carries the canonical
+ * one, and a scalar handed to a list-valued key ([isStringListKey]) reaches
+ * disk as the one-element list the conventions document.
  *
  * Tolerant, never refusing: a recognised non-canonical spelling truncates to
  * its date; anything that isn't a date at all, such as a hand-written "summer
@@ -682,7 +705,11 @@ function setKey(mapping: YAMLMap, key: string, value: Scalar | YAMLSeq): void {
  */
 function canonicalForWrite(key: string, value: unknown): unknown {
   if (key === "source_date") return truncateSourceDate(value);
-  if (isStringListKey(key) && !Array.isArray(value)) return [value];
+  // An absent value is not a scalar: `tags:` is the clean "no tags" spelling,
+  // and wrapping its null would write the null entry `tags-shape` flags.
+  if (isStringListKey(key) && value != null && !Array.isArray(value)) {
+    return [value];
+  }
   return value;
 }
 
@@ -706,10 +733,27 @@ function toYamlNode(value: unknown): Scalar | YAMLSeq {
   return new Scalar(value);
 }
 
-function quoteLinks(node: Scalar | YAMLSeq): void {
+function quoteLinks(node: Scalar | YAMLSeq | YAMLMap): void {
   if (node instanceof YAMLSeq) {
     for (const item of node.items) {
-      if (item instanceof Scalar || item instanceof YAMLSeq) quoteLinks(item);
+      if (
+        item instanceof Scalar ||
+        item instanceof YAMLSeq ||
+        item instanceof YAMLMap
+      ) {
+        quoteLinks(item);
+      }
+    }
+  } else if (node instanceof YAMLMap) {
+    for (const pair of node.items) {
+      const value = pair.value;
+      if (
+        value instanceof Scalar ||
+        value instanceof YAMLSeq ||
+        value instanceof YAMLMap
+      ) {
+        quoteLinks(value);
+      }
     }
   } else if (node instanceof Scalar) {
     if (typeof node.value === "string" && node.value.startsWith("[")) {
@@ -725,10 +769,107 @@ function quoteLinks(node: Scalar | YAMLSeq): void {
  * stays on one line however long its destination is
  * (`docs/adr/0024-emitted-lines-are-not-folded.md`).
  *
+ * `flowCollectionPadding: false` keeps `[a, b]` as written: the fixes rewrite a
+ * whole block through here, and padding a flow collection they did not touch
+ * would be churn (ADR-0012).
+ *
  * A destination broken mid-token is a link no longer on one line, and every
  * raw-text reader has to be taught the shape. Readers keep that tolerance —
  * pages written before this change carry folds — but nothing new writes one.
  */
 function renderFrontmatter(node: YAMLMap): string {
-  return stringify(node, { indent: YAML_INDENT, lineWidth: 0 });
+  return stringify(node, {
+    indent: YAML_INDENT,
+    lineWidth: 0,
+    flowCollectionPadding: false,
+  });
+}
+
+/** The block's mapping node, minted empty when the page has none. Throws on
+ * YAML the parser refuses, or a block that is not a mapping. */
+function frontmatterNodeFrom(
+  frontmatter: string,
+  hasFrontmatter: boolean,
+): YAMLMap {
+  if (!hasFrontmatter || frontmatter.trim() === "") return new YAMLMap();
+  const doc = parseDocument(frontmatter);
+  if (doc.errors.length > 0) {
+    throw new Error(`invalid frontmatter YAML: ${doc.errors[0].message}`);
+  }
+  if (doc.contents === null) return new YAMLMap();
+  if (!isMap(doc.contents))
+    throw new Error("frontmatter is not a YAML mapping");
+  return doc.contents;
+}
+
+/**
+ * Run every value in the block through [canonicalForWrite], replacing only the
+ * pairs a rule actually changes — a key the rules leave alone keeps its scalar
+ * style. The write-side half of making the rules unskippable.
+ */
+function canonicaliseForWrite(node: YAMLMap): void {
+  for (const pair of node.items) {
+    const key = String((pair.key as Scalar).value);
+    const value = pair.value as Scalar | YAMLSeq | null;
+    const decoded = value === null ? null : value.toJSON();
+    const canonical = canonicalForWrite(key, decoded);
+    if (!isDeepStrictEqual(canonical, decoded)) {
+      pair.value = newValueNode(canonical);
+    }
+  }
+}
+
+/**
+ * The write view of one frontmatter block. [set] runs a value through the
+ * writer's canonicalisation and link quoting, so an edit never encodes a YAML
+ * node itself or hand-quotes a link; [get] and [keys] read the decoded block.
+ */
+export class FrontmatterWriter {
+  constructor(private readonly node: YAMLMap) {}
+
+  /** The block's keys, in source order. */
+  keys(): string[] {
+    return this.node.items.map((pair) => String((pair.key as Scalar).value));
+  }
+
+  /** The decoded value of key, or undefined when the key is absent. */
+  get(key: string): unknown {
+    for (const pair of this.node.items) {
+      if ((pair.key as Scalar).value !== key) continue;
+      const value = pair.value as Scalar | YAMLSeq | null;
+      return value === null ? null : value.toJSON();
+    }
+    return undefined;
+  }
+
+  /** Set key to value, canonicalised ([canonicalForWrite]) and link-quoted. */
+  set(key: string, value: unknown): void {
+    setKey(this.node, key, newValueNode(canonicalForWrite(key, value)));
+  }
+}
+
+/**
+ * The one path a page's frontmatter bytes are written through — [Page.set] and
+ * every `check` auto-fix. `edit` rewrites the parsed block through
+ * [FrontmatterWriter]; every value is then run through [canonicalForWrite] and
+ * [quoteLinks], the block is re-serialised unfolded (ADR-0024) and spliced back
+ * onto the body verbatim. A string returned from `edit` replaces the body; a
+ * page with no block mints one only when a value is written.
+ */
+export function rewriteFrontmatter(
+  text: string,
+  edit: (frontmatter: FrontmatterWriter) => string | void,
+): string {
+  const { frontmatter, hasFrontmatter, body } = splitFrontmatter(text);
+  const node = frontmatterNodeFrom(
+    quoteUnquotedListLinks(frontmatter),
+    hasFrontmatter,
+  );
+  const rewrittenBody = edit(new FrontmatterWriter(node));
+  const newBody = typeof rewrittenBody === "string" ? rewrittenBody : body;
+  canonicaliseForWrite(node);
+  quoteLinks(node);
+  if (!hasFrontmatter && node.items.length === 0) return newBody;
+  const rendered = node.items.length === 0 ? "" : renderFrontmatter(node);
+  return "---\n" + rendered + "---\n" + newBody;
 }

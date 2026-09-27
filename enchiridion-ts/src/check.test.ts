@@ -30,6 +30,11 @@ import {
   fixMissingCrossReferences,
   fixSplitLinks,
   fixDuplicateFrontmatter,
+  fixedFrontmatterLinkFormat,
+  fixedIngestionSourceIntegrity,
+  fixedMissingCrossReferences,
+  fixedSplitLinks,
+  fixedDuplicateFrontmatter,
   FIXES,
 } from "./check.js";
 import { newPageRecord } from "./pagerecord.js";
@@ -1494,6 +1499,105 @@ test("fix duplicate-frontmatter: clean page is not modified", async () => {
   assert.equal(
     fs.readFileSync(path.join(root, "wiki/concepts/foo.md"), "utf8"),
     src,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The fixes are text → text through the write seam
+// ---------------------------------------------------------------------------
+
+test("fix frontmatter-link-format: text → text re-encodes and canonicalises", () => {
+  const src =
+    "---\ntitle: Foo\nsource_date: '2026-01-02T10:00:00Z'\n" +
+    'related:\n  - "[Bar](../entities/my(page).md#ttl)"\n---\nBody.\n';
+  assert.equal(
+    fixedFrontmatterLinkFormat(src),
+    "---\ntitle: Foo\nsource_date: 2026-01-02\n" +
+      'related:\n  - "[Bar](../entities/my%28page%29.md#ttl)"\n---\nBody.\n',
+  );
+});
+
+test("fix frontmatter-link-format: text → text quotes a bare list link", () => {
+  const src =
+    "---\ntitle: Foo\nrelated:\n  - [Bar](../entities/bar.md)\n---\nBody.\n";
+  assert.equal(
+    fixedFrontmatterLinkFormat(src),
+    '---\ntitle: Foo\nrelated:\n  - "[Bar](../entities/bar.md)"\n---\nBody.\n',
+  );
+});
+
+test("fix frontmatter-link-format: text → text leaves an absent tags value absent", () => {
+  // The seam canonicalises the whole block; `tags:` must not become the null
+  // entry that `tags-shape` flags.
+  const src =
+    "---\ntitle: Foo\ntags:\nrelated:\n  - [Bar](../entities/bar.md)\n---\nBody.\n";
+  assert.equal(
+    fixedFrontmatterLinkFormat(src),
+    '---\ntitle: Foo\ntags:\nrelated:\n  - "[Bar](../entities/bar.md)"\n---\nBody.\n',
+  );
+});
+
+test("fix frontmatter-link-format: text → text re-encodes a scheme URL the check flags", () => {
+  // The guard and the rewrite read the same link edit, so a destination the
+  // check reports is one the fix repairs — scheme URL or vault-relative path.
+  const src =
+    '---\ntitle: Foo\nsource: "[x](https://example.com/a(b).md)"\n---\nBody.\n';
+  assert.equal(
+    fixedFrontmatterLinkFormat(src),
+    '---\ntitle: Foo\nsource: "[x](https://example.com/a%28b%29.md)"\n---\nBody.\n',
+  );
+});
+
+test("fix ingestion-source-integrity: text → text quotes raw_source and canonicalises", () => {
+  const src =
+    "---\ntitle: Doc\ntags: alpha\nsource_date: '2026-01-02T10:00:00Z'\n" +
+    "---\nSome body text.\n[doc.md](../../raw/doc.md)\nMore text.\n";
+  assert.equal(
+    fixedIngestionSourceIntegrity(src),
+    "---\ntitle: Doc\ntags:\n  - alpha\nsource_date: 2026-01-02\n" +
+      'raw_source: "[doc.md](../../raw/doc.md)"\n' +
+      "---\nSome body text.\n\nMore text.\n",
+  );
+});
+
+test("fix split-links: text → text joins the fold and canonicalises", () => {
+  const src =
+    "---\ntitle: Foo\nsource_date: '2026-01-02T10:00:00Z'\n" +
+    'related:\n  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-l\\\n' +
+    '    ines.md)"\n---\nBody.\n';
+  assert.equal(
+    fixedSplitLinks(src),
+    "---\ntitle: Foo\nsource_date: 2026-01-02\n" +
+      'related:\n  - "[Some long title](../sources/a-really-long-slug-that-wraps-across-lines.md)"\n' +
+      "---\nBody.\n",
+  );
+});
+
+test("fix duplicate-frontmatter: text → text collapses and canonicalises", () => {
+  const src =
+    "---\ntitle: Foo\nsource_date: '2026-01-02T10:00:00Z'\n---\n" +
+    "---\n---\nBody text.\n";
+  assert.equal(
+    fixedDuplicateFrontmatter(src),
+    "---\ntitle: Foo\nsource_date: 2026-01-02\n---\nBody text.\n",
+  );
+});
+
+test("fix missing-cross-references: text → text links the mention and canonicalises", () => {
+  const plan = fixedMissingCrossReferences({
+    "wiki/concepts/alpha.md": {
+      title: "Alpha",
+      text:
+        "---\ntitle: Alpha\nsource_date: '2026-01-02T10:00:00Z'\n---\n" +
+        "Some text about Beta here.\n",
+    },
+    "wiki/concepts/beta.md": { title: "Beta", text: "---\ntitle: Beta\n---\n" },
+  });
+  assert.deepEqual([...plan.keys()], ["wiki/concepts/alpha.md"]);
+  assert.equal(
+    plan.get("wiki/concepts/alpha.md"),
+    "---\ntitle: Alpha\nsource_date: 2026-01-02\n---\n" +
+      "Some text about [Beta](beta.md) here.\n",
   );
 });
 
