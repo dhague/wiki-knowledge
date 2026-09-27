@@ -160,8 +160,8 @@ test("plugin prose references every check by slug, never by number", () => {
   }
 });
 
-/** `check <slug> --json` — the one shape that tracks the CLI spelling, shared
- * by the guard and the run-block test. */
+/** `check <slug> --json` — the per-slug CLI spelling, one of the shapes
+ * [CHECK_SPELLINGS] scans for. */
 const CHECK_COMMAND = /\bcheck\s+([a-z][a-z0-9-]*)\s+--json/g;
 
 /**
@@ -214,18 +214,26 @@ test("every fix slug named in plugin prose is a FIXES key", () => {
   }
 });
 
-test("wiki-lint's run block runs every CHECKS key, exactly once", () => {
+test("wiki-lint's run block reports every check in one call", () => {
   const text = readFileSync(
     path.join(skillsDir, "wiki-lint", "SKILL.md"),
     "utf8",
   );
-  const listed = [...text.matchAll(CHECK_COMMAND)]
-    .map((match) => match[1])
-    .sort();
-  assert.deepEqual(
-    listed,
-    Object.keys(CHECKS).sort(),
-    "wiki-lint/SKILL.md must run every CHECKS key, by slug, exactly once",
+  const start = text.indexOf("### 2. Run mechanical checks");
+  const end = text.indexOf("\n### ", start + 1);
+  assert.ok(start >= 0 && end > start, "step 2 must be its own section");
+  const step = text.slice(start, end);
+  // The one-call form is the registry's own coverage: it names no slug, so no
+  // per-check list can silently drop one.
+  assert.match(
+    step,
+    /"\$RUNTIME"\s+"\$ENCHIRIDION"\s+check\s+--all\s+--json/,
+    "wiki-lint/SKILL.md must run every check in one `check --all --json` call",
+  );
+  assert.equal(
+    [...step.matchAll(CHECK_COMMAND)].length,
+    0,
+    "wiki-lint/SKILL.md must not run the checks one slug at a time",
   );
 });
 
