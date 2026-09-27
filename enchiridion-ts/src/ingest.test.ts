@@ -8,7 +8,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as git from "isomorphic-git";
-import { decodePlan, resolve, Resolved, ErrPlan, type Plan } from "./ingest.js";
+import {
+  ActionIngest,
+  decodePlan,
+  resolve,
+  Resolved,
+  ErrPlan,
+  PlanActions,
+  type Plan,
+} from "./ingest.js";
 import { missingVolatilitySourceDate } from "./check.js";
 import { Vault } from "./vault.js";
 import { VaultRead } from "./vaultread.js";
@@ -73,6 +81,84 @@ test("decodePlan keeps an explicit action", () => {
   assert.equal(
     decodePlanOK(`{"title":"T","action":"synthesize"}`).action,
     "synthesize",
+  );
+});
+
+test("decodePlan defaults an omitted action to ActionIngest", () => {
+  assert.equal(decodePlanOK(`{"title":"T"}`).action, ActionIngest);
+});
+
+test("shape validation refuses an unknown action, naming the accepted set", () => {
+  const errors = validationErrors(
+    `{"title":"T","action":"synthsize","pages":[
+      {"op":"create","title":"A","kind":"concept","body":"b",
+       "frontmatter":{"volatility":"stable"}}]}`,
+    newVault({}),
+  );
+  assert.match(
+    errors,
+    new RegExp(`plan\\.action must be one of ${PlanActions.join("\\|")}`),
+    errors,
+  );
+  assert.match(
+    errors,
+    /"synthsize"/,
+    "the refusal must quote the offending value",
+  );
+});
+
+test("every declared plan action is recognised by validation", () => {
+  const create = (kind: string): string =>
+    `{"op":"create","title":"A","kind":"${kind}","body":"b","frontmatter":{"volatility":"stable"}}`;
+  const plans: Record<string, string> = {
+    ingest: `"pages":[${create("concept")}]`,
+    synthesize: `"pages":[${create("synthesis")}]`,
+    consolidate: `"consolidates":["wiki/concepts/a.md"],
+      "pages":[{"op":"update","page_ref":"wiki/concepts/b.md","body":"b"}]`,
+  };
+  // Root "" keeps this to the shape rules, so each action is judged on its own
+  // declaration rather than on what happens to exist in a vault.
+  for (const action of PlanActions) {
+    const resolved = resolve(
+      decodePlanOK(`{"title":"T","action":"${action}",${plans[action]}}`),
+      "",
+    );
+    assert.doesNotThrow(
+      () => resolved.validate(),
+      `${action} must be an accepted action`,
+    );
+  }
+});
+
+test("synthesize is one create of kind synthesis, with no raw", () => {
+  const synthesis = `{"op":"create","title":"A","kind":"synthesis","body":"b","frontmatter":{"volatility":"stable"}}`;
+  const plan = (pages: string, extra = ""): string =>
+    `{"title":"Q","action":"synthesize"${extra},"pages":[${pages}]}`;
+
+  const errors = validationErrors(
+    plan(
+      `{"op":"create","title":"A","kind":"concept","body":"b","frontmatter":{"volatility":"stable"}}`,
+    ),
+    newVault({}),
+  );
+  assert.match(errors, /pages\[0\]\.kind must be 'synthesis'/, errors);
+
+  assert.match(
+    validationErrors(
+      plan(`{"op":"update","page_ref":"wiki/concepts/a.md","body":"b"}`),
+      newVault({}),
+    ),
+    /pages\[0\]\.op must be 'create'/,
+  );
+
+  assert.match(
+    validationErrors(plan(synthesis, `,"raw":"raw/doc.md"`), newVault({})),
+    /plan\.raw must not be set when action is 'synthesize'/,
+  );
+
+  assert.match(
+    validationErrors(plan(`${synthesis},${synthesis}`), newVault({})),
+    /takes exactly one page/,
   );
 });
 

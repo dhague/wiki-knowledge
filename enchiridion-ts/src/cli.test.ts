@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as git from "isomorphic-git";
 import { CHECKS } from "./check.js";
+import { PlanActions } from "./ingest.js";
 import { splitFrontmatter } from "./wikipage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1294,6 +1295,57 @@ test("ingest: plan file NOT deleted when ingest fails", async () => {
   });
   assert.notEqual(status, 0);
   assert.ok(fs.existsSync(planPath), "plan file must survive a failed ingest");
+});
+
+test("ingest: a misspelled action is refused before any commit", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  await git.init({ fs, dir: root });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "initial",
+    author: { name: "test", email: "t@e.com", timestamp: 1, timezoneOffset: 0 },
+    committer: {
+      name: "test",
+      email: "t@e.com",
+      timestamp: 1,
+      timezoneOffset: 0,
+    },
+  });
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "Misspelled",
+      action: "synthsize",
+      pages: [
+        {
+          op: "create",
+          title: "T",
+          kind: "concept",
+          body: "b\n",
+          frontmatter: { volatility: "stable" },
+        },
+      ],
+    }),
+  );
+
+  const { status, stderr } = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.notEqual(status, 0);
+  assert.match(
+    stderr,
+    new RegExp(`plan\\.action must be one of ${PlanActions.join("\\|")}`),
+    stderr,
+  );
+  const log = await git.log({ fs, dir: root });
+  assert.equal(log.length, 1, "a refused plan must not commit");
 });
 
 test("ingest: --dry-run prints the describe, writes nothing", async () => {

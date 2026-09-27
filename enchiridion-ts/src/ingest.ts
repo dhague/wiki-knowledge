@@ -21,16 +21,17 @@
  * percent-encoded rather than the file sanitized. Body links are re-encoded on
  * write by [normalizeBodyLinks].
  *
- * `action` is `ingest`, `synthesize` (wiki-ask's confirmed synthesis save: one
- * `create` of kind `synthesis`, with `source` edges and no raw artifact), or
- * `consolidate` (CONTEXT.md, Consolidation; ADR-0021): one survivor absorbs the
- * pages `consolidates` names, each absorbed body becoming a section of the
- * survivor's authored body, every inbound link repointed at the survivor
- * ([Vault.consolidate]), the absorbed pages deleted rather than marked
- * `superseded`, and one commit. `plan.raw` stays unset — a Consolidation is
- * sourced from pages, not an artifact. Losslessness is mechanical: validation,
- * and the executor again immediately before the delete, refuses a survivor body
- * that no longer reads an absorbed page's content.
+ * `action` is one of `ingest` (the default), `synthesize`, or `consolidate` —
+ * [PlanActions], and any other value is refused with the set named. `synthesize`
+ * is wiki-ask's confirmed synthesis save: one `create` of kind `synthesis`, with
+ * `source` edges and no raw artifact. `consolidate` (CONTEXT.md, Consolidation;
+ * ADR-0021): one survivor absorbs the pages `consolidates` names, each absorbed
+ * body becoming a section of the survivor's authored body, every inbound link
+ * repointed at the survivor ([Vault.consolidate]), the absorbed pages deleted
+ * rather than marked `superseded`, and one commit. `plan.raw` stays unset — a
+ * Consolidation is sourced from pages, not an artifact. Losslessness is
+ * mechanical: validation, and the executor again immediately before the delete,
+ * refuses a survivor body that no longer reads an absorbed page's content.
  *
  * Pipeline: [resolve] -> [Resolved.validate] -> [Resolved.execute] -> derive a
  * [commit.Manifest] -> commit. [resolve] is the single place placement,
@@ -84,8 +85,25 @@ export const SummaryWordGuideline = 20;
 export const OpCreate = "create";
 export const OpUpdate = "update";
 
+export const ActionIngest = "ingest";
+export const ActionSynthesize = "synthesize";
+
 /** The plan verb whose one page absorbs the pages `consolidates` names (ADR-0021). */
 export const ActionConsolidate = "consolidate";
+
+/** Every `action` a plan may declare; anything else is refused, naming this set.
+ * [ActionIngest] is the default when a plan omits `action`. */
+export const PlanActions = [
+  ActionIngest,
+  ActionSynthesize,
+  ActionConsolidate,
+] as const;
+
+/** Whether [action] is one the validator accepts. A plan's raw action string is
+ * untrusted until [Resolved.validate] has passed it. */
+export function isPlanAction(action: string): boolean {
+  return (PlanActions as readonly string[]).includes(action);
+}
 
 /** A plan failed validation; the message lists every problem found, not the first. */
 export class ErrPlan extends Error {
@@ -195,7 +213,7 @@ export function decodePlan(jsonText: string): Plan {
   });
   return {
     title: typeof data["title"] === "string" ? data["title"] : "",
-    action: action === "" ? "ingest" : action,
+    action: action === "" ? ActionIngest : action,
     source_date:
       typeof data["source_date"] === "string" ? data["source_date"] : "",
     raw: typeof data["raw"] === "string" ? data["raw"] : "",
@@ -263,6 +281,11 @@ export class Resolved {
   /** Required fields and valid ops — everything checkable without a vault. */
   private shapeErrors(): string[] {
     const problems: string[] = [];
+    if (!isPlanAction(this.plan.action)) {
+      problems.push(
+        `plan.action must be one of ${PlanActions.join("|")}, got ${JSON.stringify(this.plan.action)}`,
+      );
+    }
     if (this.plan.title === "") {
       problems.push("plan.title is required");
     }
@@ -387,6 +410,33 @@ export class Resolved {
       problems.push(
         `plan.consolidates is only valid when action is '${ActionConsolidate}'`,
       );
+    }
+
+    // A synthesis save is exactly one new synthesis page, sourced from other
+    // pages rather than a raw artifact.
+    if (this.plan.action === ActionSynthesize) {
+      if (this.plan.pages.length !== 1) {
+        problems.push(
+          `action '${ActionSynthesize}' takes exactly one page, got ${this.plan.pages.length}`,
+        );
+      } else {
+        const page = this.plan.pages[0];
+        if (page.op !== OpCreate) {
+          problems.push(
+            `pages[0].op must be '${OpCreate}' when action is '${ActionSynthesize}', got ${JSON.stringify(page.op)}`,
+          );
+        }
+        if (page.kind !== "synthesis") {
+          problems.push(
+            `pages[0].kind must be 'synthesis' when action is '${ActionSynthesize}', got ${JSON.stringify(page.kind)}`,
+          );
+        }
+      }
+      if (this.plan.raw !== "") {
+        problems.push(
+          `plan.raw must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
+        );
+      }
     }
 
     const seenConsolidated = new Set<string>();
