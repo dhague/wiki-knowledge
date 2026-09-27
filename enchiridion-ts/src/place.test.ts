@@ -71,8 +71,24 @@ test("path accepts discovered (custom) kinds", () => {
   );
 });
 
+test("path resolves an irregular declared kind to its folder", () => {
+  assert.equal(
+    path("person", "Ada Lovelace", { person: "people" }),
+    "wiki/people/ada-lovelace.md",
+  );
+});
+
 test("path rejects an unknown kind", () => {
   assert.throws(() => path("nonsense", "X"), /unknown kind "nonsense"/);
+});
+
+test("path's unknown-kind error names the custom kinds it was handed", () => {
+  assert.throws(
+    () => path("nonsense", "X", { person: "people", research: "research" }),
+    (err: Error) =>
+      err.message ===
+      'unknown kind "nonsense"; must be one of concept, entity, source, synthesis, person, research',
+  );
 });
 
 test("kinds are in the canonical order", () => {

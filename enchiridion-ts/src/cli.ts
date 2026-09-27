@@ -587,16 +587,15 @@ export function buildProgram(): Command {
       },
     );
 
-  // place <kind> <title> — compute a page's vault-relative path. Resolves no
-  // vault root and accepts only the four canonical kinds, never a discovered
-  // custom kind-folder.
+  // place <kind> <title> — compute a page's vault-relative path (ADR-0020).
   program
     .command("place <kind> <title>")
     .description(
-      `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}`,
+      `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder`,
     )
     .action((kind: string, title: string) => {
-      const rel = placePath(kind, title, undefined);
+      const { root } = resolveRoot();
+      const rel = placePath(kind, title, new Vault(root).discoveredKinds());
       console.log(rel);
     });
 
