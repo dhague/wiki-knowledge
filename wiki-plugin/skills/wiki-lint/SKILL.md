@@ -36,22 +36,13 @@ The script resolves it ([the rule](../wiki-conventions/reference/scripts.md#scri
 
 ### 2. Run mechanical checks
 
-Run every check below, in parallel where the vault is large. Each emits JSON Lines — one `{"pageRef": "...", "detail": "..."}` object per finding, and nothing at all when clean (no `[]` to unwrap). The `concept-fragmentation` check adds a structured `cluster` key (members, basis, similarity, suggested survivor) to each row:
+Run every check in one call:
 
 ```bash
-"$RUNTIME" "$ENCHIRIDION" check kind-folder-conformance --json
-"$RUNTIME" "$ENCHIRIDION" check ingestion-source-integrity --json
-"$RUNTIME" "$ENCHIRIDION" check frontmatter-link-format --json
-"$RUNTIME" "$ENCHIRIDION" check tags-shape --json
-"$RUNTIME" "$ENCHIRIDION" check stale-synthesis --json
-"$RUNTIME" "$ENCHIRIDION" check missing-volatility-source-date --json
-"$RUNTIME" "$ENCHIRIDION" check unresolved-supersession --json
-"$RUNTIME" "$ENCHIRIDION" check contradiction-callouts --json
-"$RUNTIME" "$ENCHIRIDION" check orphans --json
-"$RUNTIME" "$ENCHIRIDION" check split-links --json
-"$RUNTIME" "$ENCHIRIDION" check duplicate-frontmatter --json
-"$RUNTIME" "$ENCHIRIDION" check concept-fragmentation --json
+"$RUNTIME" "$ENCHIRIDION" check --all --json
 ```
+
+One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row naming its own check — and nothing at all when clean (no `[]` to unwrap). `concept-fragmentation` adds a structured `cluster` key (members, basis, similarity, suggested survivor) to each row it raises.
 
 - **Kind-folder conformance** (`kind-folder-conformance`) — every `.md` under `wiki/` (bar `KIND.md` and `_index.md`) sits directly under a valid kind-folder — canonical four or a custom folder the vault already carries. Pages at the `wiki/` root or nested below a kind-folder are violations; the repair is `enchiridion vault move`.
 - **Ingestion source integrity** (`ingestion-source-integrity`) — every `wiki/sources/*.md` carries `raw_source:`.
