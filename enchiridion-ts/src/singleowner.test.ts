@@ -76,7 +76,7 @@ test("no module but place.ts spells a kind-folder name", () => {
 
 test("the single-link edge key is decided by pagerecord.isSingleLinkEdgeKey alone", () => {
   // isSingleLinkEdgeKey owns which edge key holds one link; the two call sites
-  // that decide list-versus-scalar ask it (cli.ts through pageedge's
+  // that decide list-versus-scalar ask it (pagecommand.ts through pageedge's
   // isListEdgeKey) rather than comparing the key's spelling. check.ts and
   // ingest.ts also name `raw_source`, but ask whether the edge is raw_source,
   // not whether the key holds one link.
@@ -87,7 +87,7 @@ test("the single-link edge key is decided by pagerecord.isSingleLinkEdgeKey alon
   );
   const rederived =
     /\bkey\s*(?:===|!==)\s*["']raw_source["']|["']raw_source["']\s*(?:===|!==)\s*key\b/;
-  for (const label of ["pageedge.ts", "cli.ts"]) {
+  for (const label of ["pageedge.ts", "pagecommand.ts"]) {
     const code = codeOf(label);
     assert.equal(
       rederived.exec(code),
