@@ -16,6 +16,8 @@ RUNTIME=$(command -v node || command -v bun)
 ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 ```
 
+`ENCHIRIDION` MUST be an absolute local filesystem path. A harness-internal `skill://` URI is not one — the runtime is an external process and resolves it as a relative file path, so the call fails before the script runs. If the host reports the base directory as such a URI rather than a real path, convert it first (`baseDir=$(realpath '<base-dir>')`).
+
 Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
 ## Invocation
