@@ -91,9 +91,43 @@ skip — a page move, an edge retype, an orphan delete, or a concept
 consolidation).
 
 A concept consolidation (`concept-fragmentation` check) is proposed one cluster at a time and never
-batched, because it deletes committed pages: on yes it hands off to the
-`wiki-ingest` procedure, which reads every member and authors the merged
-survivor.
+batched, because it deletes committed pages. Before asking, the linter reads
+every member and recommends whether to consolidate, relate the pages, or treat
+them as conflicting. On yes it hands off to the `wiki-ingest` procedure, which
+authors the merged survivor. On no it offers to remember the decision as a
+Consolidation exclusion.
+
+### Consolidation exclusions
+
+A remembered decline lives in `CONSOLIDATION_EXCLUSIONS.yaml` in the pages'
+kind-folder. The file is committed with the vault and may hold several exact
+cluster decisions:
+
+```yaml
+exclusions:
+  - members:
+      - page_ref: wiki/concepts/authentication.md
+        blob_oid: 9574fbc08f
+        fingerprint: sha256:0123456789abcdef
+      - page_ref: wiki/concepts/authorization.md
+        blob_oid: 53a7d7365a
+        fingerprint: sha256:fedcba9876543210
+    reason: "Distinct concepts: authentication establishes identity; authorization grants access."
+```
+
+The object IDs shown are illustrative; the plugin writes their full Git value
+and the full semantic digest. A matching `blob_oid` is the fast path. If the
+blob changed, the plugin compares the semantic fingerprint, which covers the
+title, summary, typed relationships, `supersedes`, and body while ignoring
+tags, source date, volatility, YAML formatting, and field order. An irrelevant
+edit therefore preserves the decision and refreshes the cached object ID. A
+content change removes that member from the effective exclusion; unchanged
+members remain excluded while at least two remain.
+
+You can inspect this file directly or delete an exclusion record to reconsider
+it. Let `/wiki-lint` create, refresh, and prune records so hashes and canonical
+ordering stay correct. A malformed record never suppresses a candidate and is
+reported as a registry-integrity finding.
 
 Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
 path argument, else the current directory.
