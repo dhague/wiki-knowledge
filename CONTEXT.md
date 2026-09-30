@@ -55,6 +55,9 @@ _Avoid_: Duplication (too narrow — fragmentation is scatter across pages, not 
 The operation that resolves concept fragmentation by absorbing a cluster of pages into one survivor page, each consolidated page's content becoming a section of the survivor, and every inbound link repointed to the survivor. Lossless by construction — no knowledge is dropped — which is why the consolidated pages are deleted rather than recorded as superseded ([ADR-0021](docs/adr/0021-consolidation-is-lossless-delete-not-supersede.md)).
 _Avoid_: Merge (that is `enchiridion page merge`, a frontmatter list union — and git's), Fold (line folding in YAML, the emitter's business: [ADR-0024](docs/adr/0024-emitted-lines-are-not-folded.md)), Supersede (a consolidation is lossless and deletes the losers; supersession preserves both pages to keep a conflicting claim).
 
+**Consolidation exclusion**:
+A recorded, content-sensitive decision that a particular group of pages should remain separate. A changed member ceases to participate in the exclusion; the unchanged members remain excluded while at least two remain.
+
 **Volatility**:
 A page's authored judgment of how likely its content is to go stale: `stable`, `evolving`, or `volatile`. Drives whether retrieval discounts a page's age.
 
