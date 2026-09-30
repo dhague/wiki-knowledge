@@ -13,6 +13,8 @@ ENCHIRIDION="<this skill's base directory>/scripts/enchiridion.cjs"
 
 Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.
 
+`ENCHIRIDION` MUST be an **absolute local filesystem path**. Some harnesses (e.g. oh-my-pi) advertise a `skill://<name>/<path>` URI for in-process skill access — that is an internal harness URI, not a module path. Never pass a `skill://…` value to Node, Bun, Bash, or any external process; resolve the harness-supplied base directory to a real filesystem path first, then append `/scripts/enchiridion.cjs`.
+
 [`wiki-conventions` → Scripts](../../wiki-conventions/reference/scripts.md#script-runtime-contract) — the shared reference for vault-root resolution and the full subcommand catalogue
 
 ## Procedure

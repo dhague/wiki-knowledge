@@ -321,6 +321,8 @@ const SHARED_INVOCATION = [
   "```",
   "",
   'Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.',
+  "",
+  "`ENCHIRIDION` MUST be an **absolute local filesystem path**. Some harnesses (e.g. oh-my-pi) advertise a `skill://<name>/<path>` URI for in-process skill access — that is an internal harness URI, not a module path. Never pass a `skill://…` value to Node, Bun, Bash, or any external process; resolve the harness-supplied base directory to a real filesystem path first, then append `/scripts/enchiridion.cjs`.",
 ].join("\n");
 
 /** The one string that marks a file as resolving the bundle, however it spells
