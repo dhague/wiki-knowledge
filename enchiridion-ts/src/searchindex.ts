@@ -19,6 +19,7 @@ import type { Git, Snapshot, PageChange } from "./vaultgit.js";
 // Page metadata comes from pagerecord, the one reader of the frontmatter schema.
 import { newPageRecord, supersedes as supersedesOf } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
+import { semanticFingerprint } from "./fingerprint.js";
 import { splitFrontmatter } from "./wikipage.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
 import { kindByFolder } from "./kindmeta.js";
@@ -27,7 +28,7 @@ import { kindByFolder } from "./kindmeta.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = "5";
+export const SCHEMA_VERSION = "6";
 
 /** The `meta` key holding the working tree's folder → kind map, compared to
  * force a rebuild when a declaration changes. */
@@ -99,6 +100,15 @@ export interface SharedTagPair {
   sharedTags: string[];
 }
 
+/** One indexed page's HEAD-blob identity (ADR-0028): the object ID a
+ * Consolidation exclusion's fast path matches, and the semantic fingerprint its
+ * fallback compares. Both ride in the row the index pass already parsed. */
+export interface PageFact {
+  pageRef: string;
+  blobOid: string;
+  fingerprint: string;
+}
+
 /** SQL `GROUP_CONCAT` separator; char 31 cannot occur in a tag or page ref. */
 const GROUP_SEPARATOR = String.fromCharCode(31);
 const GROUP_SEPARATOR_SQL = "char(31)";
@@ -124,7 +134,9 @@ CREATE TABLE IF NOT EXISTS page (
     git_date      TEXT,
     volatility    TEXT,
     supersedes    TEXT,
-    superseded_by TEXT
+    superseded_by TEXT,
+    blob_oid      TEXT,
+    fingerprint   TEXT
 );
 CREATE TABLE IF NOT EXISTS page_tag (
     page_ref TEXT,
@@ -408,8 +420,8 @@ export class Index {
 
     this.db.run(
       `INSERT INTO page(page_ref, title, summary, kind, source_date,
-          git_date, volatility, supersedes, superseded_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+          git_date, volatility, supersedes, superseded_by, blob_oid, fingerprint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       [
         page.pageRef,
         rec.title,
@@ -419,6 +431,8 @@ export class Index {
         page.date || null,
         rec.volatility,
         JSON.stringify(supersedes),
+        page.oid || null,
+        semanticFingerprint(rec, body),
       ],
     );
     for (const tag of rec.tags) {
@@ -542,6 +556,32 @@ export class Index {
       kind: r.kind ?? "",
       tags: r.tags ? r.tags.split(GROUP_SEPARATOR).sort() : [],
     }));
+  }
+
+  /** The HEAD-blob facts for the named pages, keyed by page ref. A page the
+   * index does not hold (deleted, malformed, or never committed) is simply
+   * absent — the caller reads that as "cannot be read at HEAD". */
+  async pageFacts(pageRefs: string[]): Promise<Map<string, PageFact>> {
+    await this.sync();
+    const facts = new Map<string, PageFact>();
+    if (pageRefs.length === 0) return facts;
+    const rows = this.db.all(
+      `SELECT page_ref, blob_oid, fingerprint FROM page
+       WHERE page_ref IN (${placeholders(pageRefs.length)})`,
+      pageRefs as import("node-sqlite3-wasm").JSValue[],
+    ) as unknown as {
+      page_ref: string;
+      blob_oid: string | null;
+      fingerprint: string | null;
+    }[];
+    for (const row of rows) {
+      facts.set(row.page_ref, {
+        pageRef: row.page_ref,
+        blobOid: row.blob_oid ?? "",
+        fingerprint: row.fingerprint ?? "",
+      });
+    }
+    return facts;
   }
 
   /** Pairs of in-scope pages sharing at least one tag, most-shared first — an

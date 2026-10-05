@@ -5,7 +5,14 @@
  */
 
 import { InvalidArgumentError, type Command } from "commander";
-import { CHECKS, DefaultMinSimilarity, FIXES, runAllChecks } from "./check.js";
+import {
+  CHECKS,
+  DefaultMinSimilarity,
+  FIXES,
+  PruneFix,
+  runAllChecks,
+  type FixOptions,
+} from "./check.js";
 import { VaultRead } from "./vaultread.js";
 import { emitRows, fail } from "./output.js";
 import { resolveRoot } from "./vault.js";
@@ -80,13 +87,22 @@ export function registerCheckFixCommands(program: Command): void {
     .command("fix")
     .description(`Apply an auto-fix by name; names: ${fixNames}`)
     .argument("<name>", "fix name")
-    .action(async (name: string) => {
+    .option(
+      "--prune",
+      "consolidation-exclusions: also drop members that no longer match HEAD (confirm first)",
+    )
+    .action(async (name: string, opts: FixOptions) => {
       const fn = FIXES[name];
       if (!fn) {
         fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
       }
+      if (opts.prune && name !== PruneFix) {
+        fail(
+          `enchiridion fix: --prune only applies to fix "${PruneFix}", not "${name}"`,
+        );
+      }
       const root = resolveRoot();
-      const changed = await fn(root);
+      const changed = await fn(root, opts);
       for (const ref of changed) console.log(ref);
     });
 }

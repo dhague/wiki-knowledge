@@ -1,21 +1,35 @@
 # Confirm-first proposal shapes
 
-The exact wording and command for each confirm-first shape. Step 5 of
+The exact wording and command for each confirm-first shape. Step 6 of
 [`../SKILL.md`](../SKILL.md) owns when to present one and how to resolve it;
 every command here assumes the `$RUNTIME` / `$ENCHIRIDION` pair is resolved.
 
-**Consolidation** (`concept-fragmentation`) — "Pages `<a>`, `<b>`[, `<c>`] read
-as one concept (basis: `<shared tags / shared title terms>`, weakest pairwise
-similarity `<s>`). Consolidate into `<suggested-survivor>`?" Name every member
-with its committed size and inbound-link count, so the user can judge the
-suggested survivor — and offer to override it, a judgment the ingest flow also
-gets to make.
+**Consolidation** (`concept-fragmentation`) — present the assessment, not just
+the cluster: the disposition, the rationale in the assessment's own words, and
+the recommendation it carries. Name every member with its committed size and
+inbound-link count, so the user can judge the recommended survivor — and offer
+to override it, a judgment the ingest flow also gets to make.
 
-Command on yes: hand off to the `wiki-ingest` procedure with the survivor and
-the absorbed refs — that flow reads each member's body, authors the merged
-survivor, and lands the one atomic commit.
+- **`consolidate`** — "Pages `<a>`, `<b>`[, `<c>`] read as one concept
+  (basis: `<shared tags / shared title terms>`, weakest pairwise similarity
+  `<s>`): `<rationale>`. Consolidate into `<survivor>`?"
+- **`relate`** — "Pages `<a>` and `<b>` are distinct but related: `<rationale>`.
+  Add the `<key>` edge to `<target>`?" One confirmation per proposed edge, each
+  running the Edge-retyping command below.
+- **`conflict`** — "Pages `<a>` and `<b>` disagree: `<rationale>`. Keep both and
+  record which one wins?" Run the Edge-review **Supersede** command below.
 
-On no: skip the cluster.
+Command on yes for `consolidate`: hand off to the `wiki-ingest` procedure with
+the assessment — that flow reads each member's body, authors the merged
+survivor, and lands the one atomic commit pinned to the assessed snapshot.
+
+On no: skip the cluster, then offer the exclusion **once**
+([`consolidation.md`](consolidation.md)) —
+
+`"$RUNTIME" "$ENCHIRIDION" exclusion add <a> <b> [<c> ...] --reason "<rationale>"`
+
+— and leave the vault unchanged if that too is declined. Never record the
+exclusion without an explicit yes.
 
 **Cross-reference insertion** (ambiguous) — "Page `<page>` mentions '<title>'
 without linking to it, but multiple candidate pages match. Which page should be

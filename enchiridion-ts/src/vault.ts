@@ -9,11 +9,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { mkdirSafe } from "./fsutil.js";
 import { kindByFolder, kindForFolder, readKindMeta } from "./kindmeta.js";
-import { Page, planConsolidate, planMove } from "./wikipage.js";
-import { loadRecords } from "./pagerecord.js";
+import {
+  Page,
+  planConsolidate,
+  planMove,
+  splitFrontmatter,
+} from "./wikipage.js";
+import { loadRecords, newPageRecord } from "./pagerecord.js";
+import { semanticFingerprint } from "./fingerprint.js";
 import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";
 import { FolderKinds, KindFolders } from "./place.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
+import {
+  folderOf,
+  moveInRegistry,
+  registryRef,
+} from "./consolidationexclusions.js";
 
 /** The filenames that make a directory a vault root. */
 export const Markers = ["wiki", ".wiki-root"] as const;
@@ -225,6 +236,34 @@ export class Vault {
     return [...kinds].sort();
   }
 
+  /** The kind-folders a Consolidation may draw from, sorted — [consolidatableKinds]'
+   * folder spelling, for placing and finding a registry. */
+  consolidatableFolders(): string[] {
+    const folders: string[] = [];
+    for (const folder of this.wikiSubdirectories()) {
+      const { kind, consolidatable } = this.kindOf(folder);
+      if (isConsolidatableKind(kind, consolidatable)) folders.push(folder);
+    }
+    return folders;
+  }
+
+  /** Every consolidatable kind-folder's Consolidation-exclusion registry, as
+   * `{ref, text}`, sorted by ref; a folder without one is absent. Malformed text
+   * is returned verbatim — decoding is
+   * [consolidationexclusions.parseRegistry]'s job. */
+  loadRegistries(): Array<{ ref: string; text: string }> {
+    const out: Array<{ ref: string; text: string }> = [];
+    for (const folder of this.consolidatableFolders()) {
+      const ref = registryRef(folder);
+      try {
+        out.push({ ref, text: fs.readFileSync(this.path(ref), "utf8") });
+      } catch (err) {
+        if (!isENOENT(err)) throw err;
+      }
+    }
+    return out.sort((a, b) => a.ref.localeCompare(b.ref));
+  }
+
   /** Every `wiki/**` page as a {pageRef: text} map. Never walks `raw/`. */
   loadWikiPages(): Record<string, string> {
     const refs = enumeratePageRefs(this.root);
@@ -295,11 +334,63 @@ export class Vault {
 
     // planMove keys the moved page under newRef, so writing every changed page
     // also lays the moved file down; only the original is left to drop.
-    const changed = this.writeChanged(planMove(files, oldRef, newRef), files);
+    const planned = planMove(files, oldRef, newRef);
+    const changed = this.writeChanged(planned, files);
     if (this.path(oldRef) !== this.path(newRef)) {
       fs.unlinkSync(this.path(oldRef));
     }
-    return changed;
+    changed.push(...this.followMoveInRegistries(oldRef, newRef, planned));
+    return changed.sort();
+  }
+
+  /** Rewrite the source kind-folder's exclusion registry for a move: within a
+   * kind the moved page's reference follows it, across kinds it leaves the
+   * record (a cluster never mixes kinds). `planned` is the post-move text, so a
+   * member whose inbound link the move re-spelled has its cached fingerprint
+   * refreshed rather than quietly dropping out of the exclusion. */
+  private followMoveInRegistries(
+    oldRef: string,
+    newRef: string,
+    planned: Record<string, string>,
+  ): string[] {
+    const folder = folderOf(oldRef);
+    if (!this.isConsolidatable(folder)) return [];
+    const ref = registryRef(folder);
+    let text: string;
+    try {
+      text = fs.readFileSync(this.path(ref), "utf8");
+    } catch (err) {
+      if (isENOENT(err)) return [];
+      throw err;
+    }
+    const next = moveInRegistry(
+      text,
+      oldRef,
+      newRef,
+      folderOf(oldRef) === folderOf(newRef),
+      (pageRef) => this.fingerprintOf(pageRef, planned[pageRef]),
+    );
+    if (next === null || next === text) return [];
+    mkdirSafe(path.dirname(this.path(ref)), 0o755);
+    fs.writeFileSync(this.path(ref), next, { mode: 0o644 });
+    return [ref];
+  }
+
+  /** One page's semantic fingerprint, or null when its text isn't a readable
+   * page — the ref is needed for the page's own edge resolution. */
+  private fingerprintOf(
+    pageRef: string,
+    text: string | undefined,
+  ): string | null {
+    if (text === undefined) return null;
+    try {
+      return semanticFingerprint(
+        newPageRecord(pageRef, text),
+        splitFrontmatter(text).body,
+      );
+    } catch {
+      return null;
+    }
   }
 
   /** Absorb losers into the survivor (ADR-0021), repointing inbound links.

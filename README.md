@@ -74,14 +74,14 @@ against the plugin's own copy of the bundle.
 
 ### Vault lint
 
-`/wiki-lint` runs 19 checks in two dimensions — structural (kind-folder
+`/wiki-lint` runs 20 checks in two dimensions — structural (kind-folder
 conformance, frontmatter link format, split links, duplicate frontmatter,
-orphans, concept fragmentation) and retrievability (missing
-`volatility`/`source_date`, unresolved supersession, data gaps, summary quality,
-under-typed edges, over-typed and stale edges) — and reports what it finds
-ordered HIGH, MEDIUM, LOW.
+orphans, concept fragmentation, Consolidation-exclusion registry integrity) and
+retrievability (missing `volatility`/`source_date`, unresolved supersession, data
+gaps, summary quality, under-typed edges, over-typed and stale edges) — and
+reports what it finds ordered HIGH, MEDIUM, LOW.
 
-Twelve of the checks are mechanical, run through `enchiridion check <name> --json`;
+Thirteen of the checks are mechanical, run through `enchiridion check <name> --json`;
 the other seven need page judgment. Every finding carries a fix level:
 **auto-fix** (applied without asking — link format, unambiguous `raw_source`
 and cross-reference repairs, folded frontmatter links, redundant frontmatter
@@ -91,9 +91,56 @@ skip — a page move, an edge retype, an orphan delete, or a concept
 consolidation).
 
 A concept consolidation (`concept-fragmentation` check) is proposed one cluster at a time and never
-batched, because it deletes committed pages: on yes it hands off to the
-`wiki-ingest` procedure, which reads every member and authors the merged
-survivor.
+batched, because it deletes committed pages. Each cluster is first **assessed**:
+`enchiridion assess <refs...>` reads every member in full from one committed
+snapshot, and the assessment returns one of three dispositions — `consolidate`
+(one concept: recommend a survivor), `relate` (distinct but related: recommend
+typed edges), or `conflict` (the claims disagree: recommend the supersession
+flow) — with a short rationale. Assessment writes nothing; on yes to a
+`consolidate` it hands off to the `wiki-ingest` procedure, which reads the same
+members, authors the merged survivor, and pins the plan to the assessed snapshot
+so a cluster that changed before the write is refused rather than merged stale.
+
+### Consolidation exclusions
+
+Decline a proposed cluster and lint offers to remember it, so the same unchanged
+cluster is not proposed again. On yes it runs
+
+```bash
+enchiridion exclusion add wiki/concepts/a.md wiki/concepts/b.md --reason "Distinct concepts: …"
+```
+
+which records the members' committed revisions in the kind-folder's
+`CONSOLIDATION_EXCLUSIONS.yaml` and commits that file on its own. Declining the
+offer leaves the vault unchanged.
+
+The registry is plain YAML, committed with your vault, and safe to **inspect or
+edit by hand** — delete a record to let its cluster be proposed again:
+
+```yaml
+exclusions:
+  - members:
+      - page_ref: wiki/concepts/authentication.md
+        blob_oid: 8f3c…            # the member's blob object ID at HEAD
+        fingerprint: sha256:41ab…  # its semantic fingerprint
+      - page_ref: wiki/concepts/authorization.md
+        blob_oid: 0d71…
+        fingerprint: sha256:9c02…
+    reason: "Distinct concepts: authentication establishes identity; authorization grants access."
+```
+
+The unordered member set is the record's identity, and only an exact match
+suppresses a proposal: a different subset, or a superset once a third
+near-duplicate joins, is assessed afresh. Cached values need no hand
+maintenance — `enchiridion fix consolidation-exclusions` refreshes a blob ID
+whose page changed only in ways outside the fingerprint (tags, dates,
+formatting) and collapses identical records, while
+`enchiridion fix consolidation-exclusions --prune` drops members that no longer
+match `HEAD` and deletes a record left with fewer than two. Add records with
+`enchiridion exclusion add`, never by hand: the script captures and verifies one
+committed snapshot, and a malformed registry suppresses nothing and is reported
+as a HIGH finding. Any `contradicts:` or `supersedes:` edge between two candidate
+pages excludes them from a proposal automatically, with no registry record.
 
 Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
 path argument, else the current directory.

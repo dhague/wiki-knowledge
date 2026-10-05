@@ -961,7 +961,7 @@ test("duplicate-frontmatter: a page without frontmatter is clean", async () => {
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all twelve check names", () => {
+test("CHECKS registry contains all thirteen check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
@@ -975,6 +975,7 @@ test("CHECKS registry contains all twelve check names", () => {
     "split-links",
     "duplicate-frontmatter",
     "concept-fragmentation",
+    "consolidation-exclusions",
   ];
   for (const name of expected) {
     assert.ok(name in CHECKS, `CHECKS missing: ${name}`);
@@ -1605,13 +1606,14 @@ test("fix missing-cross-references: text → text links the mention and canonica
 // FIXES registry
 // ---------------------------------------------------------------------------
 
-test("FIXES registry contains all five fix names", () => {
+test("FIXES registry contains all six fix names", () => {
   const expected = [
     "frontmatter-link-format",
     "ingestion-source-integrity",
     "missing-cross-references",
     "split-links",
     "duplicate-frontmatter",
+    "consolidation-exclusions",
   ];
   for (const name of expected) {
     assert.ok(name in FIXES, `FIXES missing: ${name}`);

@@ -19,13 +19,36 @@ import {
   Page,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
-import { malformedEdges, malformedTags } from "./pagerecord.js";
+import { loadRecords, malformedEdges, malformedTags } from "./pagerecord.js";
+import type { PageRecord } from "./pagerecord.js";
 import { KindFolders } from "./place.js";
+import {
+  memberSetKey,
+  parseRegistry,
+  refSetKey,
+  refreshExclusions,
+  renderRegistry,
+  resolveExclusion,
+  suppressedBy,
+} from "./consolidationexclusions.js";
+import type { Registry, ResolvedExclusion } from "./consolidationexclusions.js";
+import type { PageFact } from "./searchindex.js";
 
 export interface CheckOptions {
   /** The Consolidation-vs-link cutoff, in [0, 1]. */
   minSimilarity?: number;
 }
+
+/** What a fix run may be asked to do beyond the always-safe repairs. */
+export interface FixOptions {
+  /** `consolidation-exclusions`: also drop members that no longer match HEAD,
+   * deleting a record left with fewer than two. Confirm-first — it discards a
+   * decision a human made. */
+  prune?: boolean;
+}
+
+/** One auto-fix: a root, and whatever a fix run was asked to do. */
+export type FixFn = (root: string, opts?: FixOptions) => Promise<string[]>;
 
 export interface Finding {
   pageRef: string;
@@ -447,7 +470,6 @@ export interface ClusterMember {
   /** Inbound links from other committed pages. */
   inbound: number;
 }
-
 /** A `concept-fragmentation` finding's whole proposal. */
 export interface FragmentationCluster {
   members: ClusterMember[];
@@ -567,6 +589,38 @@ function inboundCounts(text: Map<string, string>): Map<string, number> {
   return counts;
 }
 
+/** An unordered pair of page refs, in the shared set-key spelling. */
+function pairKey(a: string, b: string): string {
+  return refSetKey([a, b]);
+}
+
+/** Every pair joined by a `contradicts` or `supersedes` edge, in either
+ * direction. Such a pair is already related the right way, so a Consolidation
+ * proposal would be wrong (ADR-0028). */
+function conflictingPairs(records: Record<string, PageRecord>): Set<string> {
+  const pairs = new Set<string>();
+  for (const [ref, record] of Object.entries(records)) {
+    for (const edge of record.edges) {
+      if (edge.key !== "contradicts" && edge.key !== "supersedes") continue;
+      for (const target of edge.targets) {
+        if (target !== ref) pairs.add(pairKey(ref, target));
+      }
+    }
+  }
+  return pairs;
+}
+
+/** Whether any two of a cluster's members are joined by a conflict edge — the
+ * closure can still hold such a pair when a third page links them both. */
+function clusterConflicts(refs: string[], conflicts: Set<string>): boolean {
+  for (let i = 0; i < refs.length; i++) {
+    for (let j = i + 1; j < refs.length; j++) {
+      if (conflicts.has(pairKey(refs[i], refs[j]))) return true;
+    }
+  }
+  return false;
+}
+
 /** The one-line human-readable form of a cluster; structured detail rides in
  * `cluster`. */
 function fragmentationDetail(cluster: FragmentationCluster): string {
@@ -582,20 +636,58 @@ function fragmentationDetail(cluster: FragmentationCluster): string {
   );
 }
 
+/** One decoded registry file plus its records read against HEAD. */
+interface RegistryState extends Registry {
+  resolved: ResolvedExclusion[];
+}
+
+/** One run's registries and the facts they were read against — the fix reuses
+ * both, so a registry is parsed once per run. */
+interface RegistryRead {
+  registries: RegistryState[];
+  facts: Map<string, PageFact>;
+}
+
+/** Decode every registry and read its records against the open index's
+ * snapshot. The index's `page` rows carry exactly the blob oid and fingerprint
+ * the two-tier rule compares, so validating a registry reparses nothing
+ * (ADR-0015). */
+async function readRegistries(
+  read: VaultRead,
+  index: Index,
+): Promise<RegistryRead> {
+  const registries: RegistryState[] = [];
+  const refs: string[] = [];
+  for (const file of read.registryFiles()) {
+    const { exclusions, error } = parseRegistry(file.text);
+    for (const exclusion of exclusions) {
+      for (const member of exclusion.members) refs.push(member.pageRef);
+    }
+    registries.push({ ref: file.ref, exclusions, error, resolved: [] });
+  }
+  const facts = await index.pageFacts(refs);
+  for (const registry of registries) {
+    registry.resolved = registry.exclusions.map((exclusion) =>
+      resolveExclusion(exclusion, facts),
+    );
+  }
+  return { registries, facts };
+}
+
 /**
- * conceptFragmentation — ADR-0021, ADR-0027.
+ * conceptFragmentation — ADR-0021, ADR-0027, ADR-0028.
  *
- * Finds clusters of small, closely-related consolidatable pages and proposes a
- * Consolidation per cluster: a confirm-first, lossless merge. It only surfaces
- * candidates — the judgment that a cluster truly consolidates, and the merged
- * body, belong to the `/wiki-ingest` flow.
+ * Finds clusters of closely-related consolidatable pages and proposes a
+ * Consolidation per cluster: a confirm-first, lossless merge, surfaced only —
+ * the merged body and the content-based recommendation belong to the
+ * `wiki-lint` / `/wiki-ingest` flow.
  *
- * Candidates are ADR-0021's pair: a shared-tag self-join unioned with an FTS5
- * title match. Both read the index, a view of HEAD (ADR-0015), so an
- * uncommitted fragmented draft is invisible. Each surviving pair is scored by
+ * Candidates are ADR-0021's pair — a shared-tag self-join unioned with an FTS5
+ * title match, both read from the index, a view of HEAD (ADR-0015) — scored by
  * [similarity] against `minSimilarity`; pairs below the bar are left to Missing
- * cross-references. Scope and kind-homogeneity are ADR-0027's; the declaration
- * is read from the working tree, where `KIND.md` lives.
+ * cross-references. Scope is ADR-0027's. A `contradicts`/`supersedes` edge
+ * between members, or an exclusion whose effective member set matches, drops
+ * the cluster (ADR-0028).
  */
 export async function conceptFragmentation(
   read: VaultRead,
@@ -616,6 +708,9 @@ export async function conceptFragmentation(
       kindOf.set(page.pageRef, page.kind);
     }
 
+    const { registries } = await readRegistries(read, index);
+    const resolved = registries.flatMap((state) => state.resolved);
+
     // Union of the two generators, keyed unordered so a pair found twice is
     // scored once. Cross-kind pairs are dropped here, which is what keeps every
     // cluster kind-homogeneous.
@@ -623,7 +718,7 @@ export async function conceptFragmentation(
     const addPair = (a: string, b: string): void => {
       if (a === b || !signals.has(a) || !signals.has(b)) return;
       if (kindOf.get(a) !== kindOf.get(b)) return;
-      candidates.add(a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+      candidates.add(pairKey(a, b));
     };
 
     for (const pair of await index.sharedTagPairs(scope)) {
@@ -716,10 +811,21 @@ export async function conceptFragmentation(
       if (!change.deleted) text.set(change.pageRef, change.content);
     }
     const inbound = inboundCounts(text);
+    // Parsed at most once, and only once a cluster survives suppression: the
+    // conflict edges are the one thing the index does not carry.
+    let conflicts: Set<string> | null = null;
+    const conflictEdges = (): Set<string> =>
+      (conflicts ??= conflictingPairs(
+        loadRecords(Object.fromEntries(text), undefined, {
+          skipMalformedEdges: true,
+        }),
+      ));
 
     const findings: Finding[] = [];
     for (const [root, refs] of clusters) {
       if (refs.length < 2) continue;
+      if (suppressedBy(refs, resolved) !== null) continue;
+      if (clusterConflicts(refs, conflictEdges())) continue;
       const members: ClusterMember[] = refs.sort().map((ref) => ({
         pageRef: ref,
         bytes: Buffer.byteLength(text.get(ref) ?? "", "utf8"),
@@ -746,6 +852,81 @@ export async function conceptFragmentation(
         detail: fragmentationDetail(cluster),
         cluster,
       });
+    }
+    return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+  } finally {
+    index.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// consolidationExclusions
+// ---------------------------------------------------------------------------
+
+/** consolidationExclusions — the registry's own integrity (ADR-0028): a
+ * malformed file is reported rather than crashed on, and every other finding
+ * names the repair `fix consolidation-exclusions` would apply. */
+export async function consolidationExclusions(
+  read: VaultRead,
+): Promise<Finding[]> {
+  const index = await Index.open(read.root);
+  try {
+    const { registries } = await readRegistries(read, index);
+    const findings: Finding[] = [];
+    for (const registry of registries) {
+      if (registry.error !== null) {
+        findings.push({
+          pageRef: registry.ref,
+          detail:
+            `registry integrity: ${registry.error}; candidate reporting ignores ` +
+            `this file until the YAML is repaired by hand`,
+        });
+        continue;
+      }
+
+      const byMemberSet = new Map<string, ResolvedExclusion[]>();
+      for (const record of registry.resolved) {
+        const key = memberSetKey(record.exclusion.members);
+        const list = byMemberSet.get(key);
+        if (list) list.push(record);
+        else byMemberSet.set(key, [record]);
+      }
+      for (const duplicates of byMemberSet.values()) {
+        if (duplicates.length < 2) continue;
+        const members = duplicates[0].exclusion.members
+          .map((m) => m.pageRef)
+          .join(", ");
+        const reasons = new Set(duplicates.map((d) => d.exclusion.reason));
+        findings.push({
+          pageRef: registry.ref,
+          detail:
+            reasons.size === 1
+              ? `${duplicates.length} identical records for ${members}; fix consolidation-exclusions collapses them`
+              : `${duplicates.length} records name ${members} with different reasons; resolve by hand`,
+        });
+      }
+
+      for (const record of registry.resolved) {
+        const dropped = [...record.staleMembers, ...record.missingMembers].map(
+          (m) => m.pageRef,
+        );
+        const members = record.exclusion.members
+          .map((m) => m.pageRef)
+          .join(", ");
+        if (dropped.length > 0) {
+          const gone =
+            record.validMembers.length < 2 ? " and deletes the record" : "";
+          findings.push({
+            pageRef: registry.ref,
+            detail: `member(s) ${dropped.join(", ")} no longer match HEAD; fix consolidation-exclusions --prune drops them${gone}`,
+          });
+        } else if (record.validMembers.length < 2) {
+          findings.push({
+            pageRef: registry.ref,
+            detail: `only ${record.validMembers.length} of ${record.exclusion.members.length} members (${members}) match HEAD; fix consolidation-exclusions --prune deletes the record`,
+          });
+        }
+      }
     }
     return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
   } finally {
@@ -904,6 +1085,7 @@ export const CHECKS: Record<string, CheckFn> = {
   "split-links": splitLinks,
   "duplicate-frontmatter": duplicateFrontmatter,
   "concept-fragmentation": conceptFragmentation,
+  "consolidation-exclusions": consolidationExclusions,
 };
 
 /** Run every check against one shared read, in registry order, each finding
@@ -1186,10 +1368,50 @@ export async function fixDuplicateFrontmatter(root: string): Promise<string[]> {
   return fixEveryPage(root, fixedDuplicateFrontmatter);
 }
 
-export const FIXES: Record<string, (root: string) => Promise<string[]>> = {
+/** fixConsolidationExclusions — canonicalise every registry, refresh a cached
+ * blob oid whose fingerprint still matches, and collapse safe duplicates
+ * (ADR-0028). `--prune` also drops members that no longer match HEAD, which is
+ * confirm-first because it discards a decision a human made. */
+export async function fixConsolidationExclusions(
+  root: string,
+  opts: FixOptions = {},
+): Promise<string[]> {
+  const read = new VaultRead(root);
+  if (read.registryFiles().length === 0) return [];
+  const vault = new Vault(root);
+  const index = await Index.open(root);
+  const changed: string[] = [];
+  try {
+    const { registries, facts } = await readRegistries(read, index);
+    for (const registry of registries) {
+      // Not mechanically repairable: the check reports it for a hand edit.
+      if (registry.error !== null) continue;
+      const next = refreshExclusions(registry.exclusions, facts, {
+        prune: opts.prune ?? false,
+      });
+      // Compared decoded, so a registry needing no repair keeps its own
+      // formatting (and any comment a human added).
+      if (JSON.stringify(next) === JSON.stringify(registry.exclusions))
+        continue;
+      vault.write(registry.ref, new Page(renderRegistry(next)));
+      changed.push(registry.ref);
+    }
+  } finally {
+    index.close();
+  }
+  return changed.sort();
+}
+
+/** The one fix that reads [FixOptions]: the others take a root and nothing
+ * else, so `fix <slug> --prune` on them is an error rather than a silent
+ * no-op. */
+export const PruneFix = "consolidation-exclusions";
+
+export const FIXES: Record<string, FixFn> = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
   "missing-cross-references": fixMissingCrossReferences,
   "split-links": fixSplitLinks,
   "duplicate-frontmatter": fixDuplicateFrontmatter,
+  [PruneFix]: fixConsolidationExclusions,
 };

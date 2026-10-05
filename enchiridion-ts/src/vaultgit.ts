@@ -28,6 +28,9 @@ export interface PageChange {
   /** Bytes at HEAD — never the intermediate commit that changed it. Empty when
    * `deleted`. */
   content: string;
+  /** The blob's object ID in HEAD's tree — what pins a Consolidation
+   * exclusion's fast path to one snapshot. Empty when `deleted`. */
+  oid: string;
   /** Whether the page no longer exists in HEAD's tree. */
   deleted: boolean;
 }
@@ -488,9 +491,10 @@ export class VaultGit implements Git {
           : await this.lastCommitDateAt(headOid, filePath);
       pages.push({
         pageRef: filePath,
-        content: result ?? "",
+        content: result?.content ?? "",
+        oid: result?.oid ?? "",
         date,
-        deleted: !result,
+        deleted: result === null,
       });
     }
     return { pages, found: true };
@@ -507,6 +511,7 @@ export class VaultGit implements Git {
       pages.push({
         pageRef: filepath,
         content,
+        oid,
         date: dates.get(filepath) ?? "",
         deleted: false,
       });
@@ -565,14 +570,15 @@ export class VaultGit implements Git {
     return out;
   }
 
-  /** Read `filePath` from head's tree, or null when it's deleted there. */
+  /** Read `filePath` from head's tree: its bytes and blob oid, or null when
+   * it's deleted there. */
   private async tryReadFromHead(
     headOid: string,
     filePath: string,
-  ): Promise<string | null> {
+  ): Promise<{ content: string; oid: string } | null> {
     try {
       const oid = await resolveFilePath(this.root, headOid, filePath);
-      return await readBlobAsString(this.root, oid);
+      return { content: await readBlobAsString(this.root, oid), oid };
     } catch {
       return null;
     }

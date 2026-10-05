@@ -20,6 +20,8 @@ import {
   registerVaultCommand,
 } from "./vaultcommand.js";
 import { registerCheckFixCommands } from "./checkcommand.js";
+import { registerAssessCommand } from "./assesscommand.js";
+import { registerExclusionCommand } from "./exclusioncommand.js";
 import {
   registerSessionCommands,
   registerHookCommands,
@@ -43,6 +45,10 @@ export function buildProgram(): Command {
   registerVaultCommand(program);
 
   registerCheckFixCommands(program);
+
+  registerAssessCommand(program);
+
+  registerExclusionCommand(program);
 
   registerPageCommands(program);
 

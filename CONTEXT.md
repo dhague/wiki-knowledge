@@ -55,6 +55,10 @@ _Avoid_: Duplication (too narrow — fragmentation is scatter across pages, not 
 The operation that resolves concept fragmentation by absorbing a cluster of pages into one survivor page, each consolidated page's content becoming a section of the survivor, and every inbound link repointed to the survivor. Lossless by construction — no knowledge is dropped — which is why the consolidated pages are deleted rather than recorded as superseded ([ADR-0021](docs/adr/0021-consolidation-is-lossless-delete-not-supersede.md)).
 _Avoid_: Merge (that is `enchiridion page merge`, a frontmatter list union — and git's), Fold (line folding in YAML, the emitter's business: [ADR-0024](docs/adr/0024-emitted-lines-are-not-folded.md)), Supersede (a consolidation is lossless and deletes the losers; supersession preserves both pages to keep a conflicting claim).
 
+**Consolidation exclusion**:
+A declined concept-fragmentation cluster remembered in a committed `CONSOLIDATION_EXCLUSIONS.yaml` in the cluster's kind-folder, so lint stops proposing that exact member set. Identified by its unordered member set, and validated against `HEAD` two ways: a matching blob object ID is the fast path, a matching semantic fingerprint the fallback, so an edit outside the fingerprint keeps the exclusion while a meaningful one drops that member. A move within a kind follows the reference; a move to another kind leaves the record ([ADR-0028](docs/adr/0028-consolidation-exclusions-are-content-validated-registry-records.md)). Distinct from a typed edge — an exclusion records a decision *not* to join two pages, where an edge records that they are related — and from a `supersedes` record, which is a claim about which page wins.
+_Avoid_: Blacklist, suppression list (they name a mechanism, not the decision the user made); exclusion *rule* (the member set is the record, not a pattern).
+
 **Volatility**:
 A page's authored judgment of how likely its content is to go stale: `stable`, `evolving`, or `volatile`. Drives whether retrieval discounts a page's age.
 

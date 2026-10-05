@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as git from "isomorphic-git";
+import { SCHEMA_VERSION } from "./searchindex.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distCli = path.join(__dirname, "..", "dist", "cli.cjs");
@@ -110,7 +111,10 @@ test(
     assert.equal(status.status, 0, status.stderr);
     assert.match(status.stdout, /pages:\s+2/);
     assert.match(status.stdout, /backend:\s+fts5/);
-    assert.match(status.stdout, /schema_version:\s+5/);
+    assert.match(
+      status.stdout,
+      new RegExp(`schema_version:\\s+${SCHEMA_VERSION}`),
+    );
 
     const reindex = runBundled(["search", "--reindex"], {
       cwd: root,

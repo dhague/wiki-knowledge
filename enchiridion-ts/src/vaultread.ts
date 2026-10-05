@@ -41,6 +41,7 @@ export class VaultRead {
   private allRefsCache?: string[];
   private recordsCache?: Record<string, PageRecord>;
   private kindsCache?: string[];
+  private registryCache?: Array<{ ref: string; text: string }>;
 
   constructor(readonly root: string) {
     this.vault = new Vault(root);
@@ -77,5 +78,11 @@ export class VaultRead {
   /** The kind values `concept-fragmentation` scores (ADR-0027). */
   consolidatableKinds(): string[] {
     return (this.kindsCache ??= this.vault.consolidatableKinds());
+  }
+
+  /** Every consolidatable kind-folder's Consolidation-exclusion registry, as
+   * written on disk (ADR-0028). */
+  registryFiles(): Array<{ ref: string; text: string }> {
+    return (this.registryCache ??= this.vault.loadRegistries());
   }
 }

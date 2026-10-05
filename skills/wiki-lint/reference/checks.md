@@ -150,8 +150,43 @@ one concept; below it the pair belongs to missing cross-references.
 The check reads the committed index, so it sees only committed pages: an
 uncommitted draft is invisible until committed.
 
+Two things suppress a cluster outright, both read from committed content. A
+`contradicts:` or `supersedes:` edge between any two of its members means the
+pages are already related the way they should be — a Consolidation would either
+merge a live conflict or re-open a settled replacement — so the cluster is
+dropped, registry or no registry. And a member set matching an exclusion in that
+kind-folder's `CONSOLIDATION_EXCLUSIONS.yaml` means the user already declined
+that cluster and does not need to be asked twice. What it matches is the
+exclusion's *effective* set — its members that still describe their page at
+`HEAD`: unchanged members stay excluded while two remain, while a member
+rejoining or any other set is assessed afresh, and the stale members are
+reported for the confirm-first prune.
+
 Confirm first — a Consolidation, always one cluster per handoff and never
 auto-applied, because absorbing a cluster deletes committed pages.
+
+## `consolidation-exclusions`
+
+The registry's own integrity, one registry per consolidatable kind-folder. It
+never proposes a Consolidation: it reports why a record is not doing its job,
+so the suppression the reader expects is either restored or understood to be
+gone.
+
+The file is read from the working tree, so a hand edit takes effect before it is
+committed; the revisions each record caches are still validated against `HEAD`,
+the only snapshot the pages themselves are read from.
+
+A malformed registry fails open — it suppresses nothing, and the cluster it once
+covered is proposed again — so it is reported for a hand edit. A fix cannot
+repair YAML whose intent is unknown, and a half-applied registry would suppress
+some clusters while silently dropping others.
+
+Auto-fix covers the repairs with one answer: canonical ordering, a cached
+`blob_oid` refreshed where the semantic fingerprint still matches, and identical
+duplicate records collapsed. Confirm first to prune: dropping a member whose
+page no longer matches `HEAD`, and deleting a record left with fewer than two
+valid members, discards a decision a human made, so the user agrees to it before
+it happens.
 
 ## Why a fix skips an ambiguous page
 
