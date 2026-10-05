@@ -80,13 +80,22 @@ export function registerCheckFixCommands(program: Command): void {
     .command("fix")
     .description(`Apply an auto-fix by name; names: ${fixNames}`)
     .argument("<name>", "fix name")
-    .action(async (name: string) => {
+    .option(
+      "--include-headings",
+      "missing-cross-references: also link a mention on a heading line",
+    )
+    .action(async (name: string, opts: { includeHeadings?: boolean }) => {
       const fn = FIXES[name];
       if (!fn) {
         fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
       }
+      if (opts.includeHeadings && name !== "missing-cross-references") {
+        fail(
+          `enchiridion fix: --include-headings applies only to missing-cross-references`,
+        );
+      }
       const root = resolveRoot();
-      const changed = await fn(root);
+      const changed = await fn(root, { includeHeadings: opts.includeHeadings });
       for (const ref of changed) console.log(ref);
     });
 }
