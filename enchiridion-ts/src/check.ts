@@ -1032,11 +1032,52 @@ export interface CrossReferencePage {
   text: string;
 }
 
-/** fixMissingCrossReferences — insert relative markdown links for exact title
+export interface FixOptions {
+  /** missing-cross-references: allow a mention on a heading line. Off by
+   * default, because a heading that matches a title is usually the page's own
+   * title rather than a reference. */
+  includeHeadings?: boolean;
+}
+
+/** An ATX heading opener: one to six `#`, then a space or tab. */
+const HeadingLineRe = /^#{1,6}[ \t]/;
+
+/** Whether the line [idx] falls on is a heading. */
+function onHeadingLine(body: string, idx: number): boolean {
+  const lineStart = body.lastIndexOf("\n", idx) + 1;
+  return HeadingLineRe.test(body.slice(lineStart, lineStart + 7));
+}
+
+/** The first mention of [title] in [body] usable as an insertion point — outside
+ * every existing link, not the opening of a link label or code span, and not a
+ * heading unless [includeHeadings]. Later mentions are considered rather than
+ * giving up, so a title in a heading still links where prose names it. */
+function firstMention(
+  body: string,
+  title: string,
+  linkSpans: Array<[number, number]>,
+  includeHeadings: boolean,
+): number {
+  for (
+    let at = body.indexOf(title);
+    at >= 0;
+    at = body.indexOf(title, at + 1)
+  ) {
+    if (linkSpans.some(([s, e]) => at >= s && at + title.length <= e)) continue;
+    const ch = at > 0 ? body[at - 1] : "";
+    if (ch === "[" || ch === "`") continue;
+    if (!includeHeadings && onHeadingLine(body, at)) continue;
+    return at;
+  }
+  return -1;
+}
+
+/** fixedMissingCrossReferences — insert relative markdown links for exact title
  * matches in body text that have no existing link to that page. Returns only
  * the pages it changed. */
 export function fixedMissingCrossReferences(
   pages: Record<string, CrossReferencePage>,
+  { includeHeadings = false }: FixOptions = {},
 ): Map<string, string> {
   const titleToRef = new Map<string, string>();
   const ambiguous = new Set<string>();
@@ -1074,16 +1115,8 @@ export function fixedMissingCrossReferences(
       if (targetRef === ref) continue;
       if (linkedRefs.has(targetRef)) continue;
 
-      const idx = newBody.indexOf(title);
+      const idx = firstMention(newBody, title, linkSpans, includeHeadings);
       if (idx < 0) continue;
-
-      // Skip if the mention falls inside an existing link span (linkSpans stays in sync with newBody)
-      if (linkSpans.some(([s, e]) => idx >= s && idx + title.length <= e))
-        continue;
-
-      // Skip if preceded by [ (already a link label) or backtick (code span)
-      const ch = idx > 0 ? newBody[idx - 1] : "";
-      if (ch === "[" || ch === "`") continue;
 
       const insertion = composeLink(title, targetRef, pageDir);
       const diff = insertion.length - title.length;
@@ -1167,6 +1200,7 @@ export async function fixIngestionSourceIntegrity(
 
 export async function fixMissingCrossReferences(
   root: string,
+  opts: FixOptions = {},
 ): Promise<string[]> {
   const vault = new Vault(root);
   const pages: Record<string, CrossReferencePage> = {};
@@ -1175,7 +1209,7 @@ export async function fixMissingCrossReferences(
   )) {
     pages[ref] = { title: record.title, text };
   }
-  return writePlan(vault, fixedMissingCrossReferences(pages));
+  return writePlan(vault, fixedMissingCrossReferences(pages, opts));
 }
 
 export async function fixSplitLinks(root: string): Promise<string[]> {
@@ -1186,7 +1220,10 @@ export async function fixDuplicateFrontmatter(root: string): Promise<string[]> {
   return fixEveryPage(root, fixedDuplicateFrontmatter);
 }
 
-export const FIXES: Record<string, (root: string) => Promise<string[]>> = {
+export const FIXES: Record<
+  string,
+  (root: string, opts?: FixOptions) => Promise<string[]>
+> = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
   "missing-cross-references": fixMissingCrossReferences,

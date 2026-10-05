@@ -2078,6 +2078,41 @@ test("fix: prints each changed page ref, one per line", () => {
   );
 });
 
+test("fix missing-cross-references: leaves a heading mention alone unless --include-headings", () => {
+  const root = buildLintableVault();
+  const a = path.join(root, "wiki/concepts/a.md");
+  fs.writeFileSync(a, "---\ntitle: A\nsummary: s\n---\n\n## About B\n");
+
+  const bare = runEnv(["fix", "missing-cross-references"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(bare.status, 0, bare.stderr);
+  assert.equal(bare.stdout, "");
+  assert.equal(
+    fs.readFileSync(a, "utf8"),
+    "---\ntitle: A\nsummary: s\n---\n\n## About B\n",
+  );
+
+  const opted = runEnv(
+    ["fix", "missing-cross-references", "--include-headings"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(opted.status, 0, opted.stderr);
+  assert.equal(opted.stdout, "wiki/concepts/a.md\n");
+  assert.match(fs.readFileSync(a, "utf8"), /^## About \[B\]\(b\.md\)$/m);
+});
+
+test("fix: --include-headings on a fix that ignores it errors rather than no-oping", () => {
+  const root = buildLintableVault();
+  const { status, stderr } = runEnv(
+    ["fix", "split-links", "--include-headings"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /--include-headings applies only to/);
+});
+
 test("fix duplicate-frontmatter: collapses the redundant block", () => {
   const root = buildLintableVault();
   const block = "---\ntitle: A\nsummary: s\n---\n";
