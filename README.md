@@ -100,47 +100,50 @@ flow) — with a short rationale. Assessment writes nothing; on yes to a
 `consolidate` it hands off to the `wiki-ingest` procedure, which reads the same
 members, authors the merged survivor, and pins the plan to the assessed snapshot
 so a cluster that changed before the write is refused rather than merged stale.
+On no it offers to remember the decision as a Consolidation exclusion.
 
 ### Consolidation exclusions
 
-Decline a proposed cluster and lint offers to remember it, so the same unchanged
-cluster is not proposed again. On yes it runs
-
-```bash
-enchiridion exclusion add wiki/concepts/a.md wiki/concepts/b.md --reason "Distinct concepts: …"
-```
-
-which records the members' committed revisions in the kind-folder's
-`CONSOLIDATION_EXCLUSIONS.yaml` and commits that file on its own. Declining the
-offer leaves the vault unchanged.
-
-The registry is plain YAML, committed with your vault, and safe to **inspect or
-edit by hand** — delete a record to let its cluster be proposed again:
+A remembered decline lives in `CONSOLIDATION_EXCLUSIONS.yaml` in the pages'
+kind-folder — committed with the vault, and safe to inspect or edit by hand:
 
 ```yaml
 exclusions:
   - members:
       - page_ref: wiki/concepts/authentication.md
-        blob_oid: 8f3c…            # the member's blob object ID at HEAD
-        fingerprint: sha256:41ab…  # its semantic fingerprint
+        blob_oid: 9574fbc08f                  # the blob object ID at HEAD
+        fingerprint: sha256:0123456789abcdef  # the semantic fingerprint
       - page_ref: wiki/concepts/authorization.md
-        blob_oid: 0d71…
-        fingerprint: sha256:9c02…
+        blob_oid: 53a7d7365a
+        fingerprint: sha256:fedcba9876543210
     reason: "Distinct concepts: authentication establishes identity; authorization grants access."
 ```
 
-The unordered member set is the record's identity, and only an exact match
-suppresses a proposal: a different subset, or a superset once a third
-near-duplicate joins, is assessed afresh. Cached values need no hand
-maintenance — `enchiridion fix consolidation-exclusions` refreshes a blob ID
-whose page changed only in ways outside the fingerprint (tags, dates,
-formatting) and collapses identical records, while
-`enchiridion fix consolidation-exclusions --prune` drops members that no longer
-match `HEAD` and deletes a record left with fewer than two. Add records with
-`enchiridion exclusion add`, never by hand: the script captures and verifies one
-committed snapshot, and a malformed registry suppresses nothing and is reported
-as a HIGH finding. Any `contradicts:` or `supersedes:` edge between two candidate
-pages excludes them from a proposal automatically, with no registry record.
+The object IDs shown are illustrative; the plugin writes their full Git value
+and the full semantic digest. A matching `blob_oid` is the fast path. If the
+blob changed, the plugin compares the semantic fingerprint, which covers the
+title, summary, typed relationships, `supersedes` and body while ignoring tags,
+source date, volatility, YAML formatting and field order. An irrelevant edit
+therefore preserves the decision and refreshes the cached object ID, while a
+content change removes that member from the effective exclusion — unchanged
+members remain excluded while at least two remain, and only a matching member
+set suppresses a proposal.
+
+On yes to the offer it runs
+
+```bash
+enchiridion exclusion add wiki/concepts/a.md wiki/concepts/b.md --reason "Distinct concepts: …"
+```
+
+which records the members' committed revisions and commits the registry on its
+own; deleting a record by hand lets its cluster be proposed again. Cached values
+need no hand maintenance — `enchiridion fix consolidation-exclusions` refreshes
+a blob ID whose page changed only in ways outside the fingerprint and collapses
+identical records, while `--prune` drops members that no longer match `HEAD` and
+deletes a record left with fewer than two. A malformed registry never suppresses
+a candidate and is reported as a HIGH finding. Any `contradicts:` or
+`supersedes:` edge between two candidate pages excludes them from a proposal
+automatically, with no registry record.
 
 Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
 path argument, else the current directory.

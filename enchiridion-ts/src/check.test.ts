@@ -1213,6 +1213,53 @@ test("fix missing-cross-references: skips ambiguous titles (multiple pages same 
   assert.deepEqual(changed, []);
 });
 
+test("fix missing-cross-references: skips a heading mention and links the prose one", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md": page(
+      "Alpha",
+      "",
+      "# Beta overview\n\nSome text about Beta here.\n",
+    ),
+    "wiki/concepts/beta.md": page("Beta"),
+  });
+  const changed = await fixMissingCrossReferences(root);
+  assert.deepEqual(changed, ["wiki/concepts/alpha.md"]);
+  const text = fs.readFileSync(
+    path.join(root, "wiki/concepts/alpha.md"),
+    "utf8",
+  );
+  assert.match(text, /^# Beta overview$/m);
+  assert.match(text, /about \[Beta\]\(beta\.md\) here\./);
+});
+
+test("fix missing-cross-references: an H1 mirroring another page's title is left alone", async () => {
+  const title = "Riverside Planning Application: Official Findings";
+  const root = writeVault({
+    "wiki/sources/riverside.md": page("Riverside", "", `# ${title}\n\nBody.\n`),
+    "wiki/notes/riverside-planning-application-official-findings.md": page(
+      `"${title}"`,
+    ),
+  });
+  const changed = await fixMissingCrossReferences(root);
+  assert.deepEqual(changed, []);
+});
+
+test("fix missing-cross-references: --include-headings links a heading mention", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md": page("Alpha", "", "## About Beta\n"),
+    "wiki/concepts/beta.md": page("Beta"),
+  });
+  const changed = await fixMissingCrossReferences(root, {
+    includeHeadings: true,
+  });
+  assert.deepEqual(changed, ["wiki/concepts/alpha.md"]);
+  const text = fs.readFileSync(
+    path.join(root, "wiki/concepts/alpha.md"),
+    "utf8",
+  );
+  assert.match(text, /^## About \[Beta\]\(beta\.md\)$/m);
+});
+
 // ---------------------------------------------------------------------------
 // Fix — fixSplitLinks
 // ---------------------------------------------------------------------------

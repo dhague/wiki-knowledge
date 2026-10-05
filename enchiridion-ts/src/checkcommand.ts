@@ -9,6 +9,7 @@ import {
   CHECKS,
   DefaultMinSimilarity,
   FIXES,
+  IncludeHeadingsFix,
   PruneFix,
   runAllChecks,
   type FixOptions,
@@ -88,6 +89,10 @@ export function registerCheckFixCommands(program: Command): void {
     .description(`Apply an auto-fix by name; names: ${fixNames}`)
     .argument("<name>", "fix name")
     .option(
+      "--include-headings",
+      "missing-cross-references: also link a mention on a heading line",
+    )
+    .option(
       "--prune",
       "consolidation-exclusions: also drop members that no longer match HEAD (confirm first)",
     )
@@ -96,9 +101,16 @@ export function registerCheckFixCommands(program: Command): void {
       if (!fn) {
         fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
       }
+      // Each flag belongs to one fix; on any other it is an error rather than a
+      // silent no-op.
+      if (opts.includeHeadings && name !== IncludeHeadingsFix) {
+        fail(
+          `enchiridion fix: --include-headings applies only to fix "${IncludeHeadingsFix}", not "${name}"`,
+        );
+      }
       if (opts.prune && name !== PruneFix) {
         fail(
-          `enchiridion fix: --prune only applies to fix "${PruneFix}", not "${name}"`,
+          `enchiridion fix: --prune applies only to fix "${PruneFix}", not "${name}"`,
         );
       }
       const root = resolveRoot();

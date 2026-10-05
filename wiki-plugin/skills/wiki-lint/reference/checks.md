@@ -196,3 +196,13 @@ means the fix cannot know which target the author meant, and a wrong guess is
 silent — a link that resolves to the wrong page passes every later check. So the
 fix leaves the page alone and the check reports it, and the invoking session
 proposes the repair instead.
+
+## Why a heading mention is left alone
+
+`missing-cross-references` links the first mention it can use, and a heading is
+not one by default. A heading that equals another page's title is far more often
+the page's own title — the conventions' own examples mirror the title into the
+H1 — so linking it either rewrites a page's title into a link or points that
+title at a neighbour. The first prose mention is the reference the check is
+after, so the fix reads on rather than giving up on a title whose first mention
+is a heading. `--include-headings` opts back in for a vault that wants them.

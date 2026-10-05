@@ -123,7 +123,7 @@ For each auto-fix finding, apply without asking:
 "$RUNTIME" "$ENCHIRIDION" fix consolidation-exclusions
 ```
 
-Each prints the vault-relative refs it modified, one per line, or nothing if no change was needed. Ambiguous cases are skipped by the fix — surface them as report-only findings. Note each changed ref in the summary (file, what changed).
+Each prints the vault-relative refs it modified, one per line, or nothing if no change was needed. Ambiguous cases are skipped by the fix — surface them as report-only findings. `fix missing-cross-references` also skips a mention on a heading line and links the first prose mention instead; `--include-headings` overrides that. Note each changed ref in the summary (file, what changed).
 
 ### 6. Confirm-first proposals
 
