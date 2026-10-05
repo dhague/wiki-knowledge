@@ -13,6 +13,7 @@ import { VaultGit } from "./vaultgit.js";
 import { scan as scanIngest } from "./ingestscan.js";
 import { commit as commitManifest, type Manifest } from "./commit.js";
 import { decodePlan, resolve, type Plan } from "./ingest.js";
+import { assessmentErrors } from "./assess.js";
 import { append as appendIngestignore } from "./ingestignore.js";
 import { Index } from "./searchindex.js";
 import {
@@ -91,6 +92,16 @@ async function runPlan(
   const plan: Plan = decodePlan(text);
   const resolved = resolve(plan, root);
   resolved.validate();
+  // A plan that pinned the snapshot it was assessed at must still find it: the
+  // merged body was authored against those exact revisions (ADR-0028).
+  if (plan.assessed !== null) {
+    const stale = await assessmentErrors(
+      plan.assessed,
+      plan.consolidates,
+      root,
+    );
+    if (stale.length > 0) fail(`stale assessment: ${stale.join("; ")}`);
+  }
   if (dryRun) {
     console.log(resolved.describe());
     return;

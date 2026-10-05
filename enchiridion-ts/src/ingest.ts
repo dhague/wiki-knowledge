@@ -33,6 +33,12 @@
  * mechanical: validation, and the executor again immediately before the delete,
  * refuses a survivor body that no longer reads an absorbed page's content.
  *
+ * A `consolidate` plan may pin the snapshot the cluster was assessed at —
+ * `"assessed": {"head": "<sha>", "members": [{"page_ref", "blob_oid"}]}` — and
+ * the `ingest` command refuses to run it once HEAD or any assessed member has
+ * moved, because the merged body was authored against that snapshot. Every ref
+ * in `consolidates` must be named there.
+ *
  * Pipeline: [resolve] -> [Resolved.validate] -> [Resolved.execute] -> derive a
  * [commit.Manifest] -> commit. [resolve] is the single place placement,
  * frontmatter projection and edge/`raw_source` link composition happen;
@@ -74,6 +80,7 @@ import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
 import { Volatilities } from "./pagerecord.js";
+import { decodeAssessment, type PlanAssessment } from "./assess.js";
 
 /** Windows' 255-char path limit, measured against root plus vault-relative path. */
 export const MaxPathLength = 255;
@@ -175,6 +182,9 @@ export interface Plan {
   pages: PagePlan[];
   /** For `consolidate`, the vault-relative refs the survivor absorbs; empty otherwise. */
   consolidates: string[];
+  /** For `consolidate`, the committed snapshot the cluster was assessed at;
+   * null to write without that guard. */
+  assessed: PlanAssessment | null;
 }
 
 /** Read one plan from JSON; `action` defaults to `ingest`. */
@@ -219,6 +229,7 @@ export function decodePlan(jsonText: string): Plan {
     raw: typeof data["raw"] === "string" ? data["raw"] : "",
     pages,
     consolidates,
+    assessed: decodeAssessment(data["assessed"]),
   };
 }
 
@@ -436,6 +447,53 @@ export class Resolved {
         problems.push(
           `plan.raw must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
         );
+      }
+    }
+
+    // A pinned assessment is the cluster's snapshot guard: it only makes sense
+    // on a Consolidation, and it must name every page the plan absorbs.
+    if (this.plan.assessed !== null) {
+      const assessed = this.plan.assessed;
+      if (this.plan.action !== ActionConsolidate) {
+        problems.push(
+          `plan.assessed is only valid when action is '${ActionConsolidate}'`,
+        );
+      }
+      if (assessed.head === "") {
+        problems.push("plan.assessed.head is required");
+      }
+      if (assessed.members.length === 0) {
+        problems.push(
+          "plan.assessed.members must name at least one assessed page",
+        );
+      }
+      const named = new Set<string>();
+      for (let i = 0; i < assessed.members.length; i++) {
+        const member = assessed.members[i];
+        if (member.page_ref === "") {
+          problems.push(`plan.assessed.members[${i}].page_ref is required`);
+          continue;
+        }
+        if (named.has(member.page_ref)) {
+          problems.push(
+            `plan.assessed.members names ${member.page_ref} more than once`,
+          );
+          continue;
+        }
+        named.add(member.page_ref);
+        if (member.blob_oid === "") {
+          problems.push(
+            `plan.assessed.members[${i}].blob_oid is required for ${member.page_ref}`,
+          );
+        }
+      }
+      for (let i = 0; i < this.plan.consolidates.length; i++) {
+        const ref = this.plan.consolidates[i];
+        if (ref !== "" && !named.has(ref)) {
+          problems.push(
+            `plan.consolidates[${i}] ${ref} is not named by plan.assessed`,
+          );
+        }
       }
     }
 

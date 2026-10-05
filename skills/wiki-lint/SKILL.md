@@ -57,11 +57,24 @@ One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row na
 - **Orphans** (`orphans`) — pages with no inbound link, body or frontmatter; the repair deletes committed pages.
 - **Split links** (`split-links`) — no link split across lines, in frontmatter or body. A body split is reported but never joined: a break after a destination is legal markdown, and joining on sight can silently repoint the link. Scoped to double-quoted frontmatter scalars: raw text cannot tell a block scalar (`related: |`) from a fold, so nothing outside that shape is reported or joined.
 - **Duplicate frontmatter** (`duplicate-frontmatter`) — a page's frontmatter is exactly one leading `---` block. A second block is invisible: the parser reads only the first, so its edges reach no check and its text renders as body.
-- **Concept fragmentation** (`concept-fragmentation`) — clusters of small, closely-related pages whose knowledge reads better as one page with sections ([definition](reference/checks.md#concept-fragmentation)). Scope is an allowlist: `concept`, plus any kind whose `wiki/<kind>/KIND.md` declares `consolidatable: true`; `entity` and `source` are never in scope, and a cluster never mixes kinds. One finding per cluster, whose `cluster` payload carries the members with committed byte size and inbound-link count, the shared basis (tags / title words), the weakest pairwise similarity holding the cluster together, and a suggested survivor (most inbound links, largest body as tie-break). The `pageRef` is that survivor and the `detail` a one-line summary. `--min-similarity <n>` (default `0.5`) is the one cutoff. Reads the index, so it sees only committed pages — an uncommitted draft is invisible until committed. A Consolidation, always one cluster per handoff.
+- **Concept fragmentation** (`concept-fragmentation`) — clusters of small, closely-related pages whose knowledge reads better as one page with sections ([definition](reference/checks.md#concept-fragmentation)). Scope is an allowlist: `concept`, plus any kind whose `wiki/<kind>/KIND.md` declares `consolidatable: true`; `entity` and `source` are never in scope, and a cluster never mixes kinds. One finding per cluster, whose `cluster` payload carries the members with committed byte size and inbound-link count, the shared basis (tags / title words), the weakest pairwise similarity holding the cluster together, and a suggested survivor (most inbound links, largest body as tie-break). The `pageRef` is that survivor and the `detail` a one-line summary. `--min-similarity <n>` (default `0.5`) is the one cutoff. Reads the index, so it sees only committed pages — an uncommitted draft is invisible until committed. Two things suppress a cluster outright: a `contradicts` or `supersedes` edge between any two of its members, and an exact member-set match in that kind-folder's Consolidation-exclusion registry. A Consolidation, always one cluster per handoff.
+- **Consolidation exclusions** (`consolidation-exclusions`) — the registry's own integrity ([definition](reference/checks.md#consolidation-exclusions)). A malformed `CONSOLIDATION_EXCLUSIONS.yaml` suppresses nothing and is reported for a hand edit; records whose members no longer match `HEAD` are reported for the confirm-first prune; identical duplicate records are auto-fixed. Never raises a Consolidation proposal of its own.
 
 Per-check semantics and the rationale behind each fix: [`reference/checks.md`](reference/checks.md) — read before explaining a finding you cannot classify.
 
-### 3. Run judgment checks
+### 3. Assess every fragmentation cluster
+
+Before judging anything else, read each `concept-fragmentation` cluster and return one content-based disposition. Read all members of one cluster in one call, from one committed snapshot:
+
+```bash
+"$RUNTIME" "$ENCHIRIDION" assess <member-ref-1> <member-ref-2> [<member-ref-3> ...]
+```
+
+One JSON document — `{head, members: [{page_ref, blob_oid, fingerprint, title, bytes, text}]}` — reading `HEAD` only, so an uncommitted draft is invisible. When it fails, the cluster **could not be assessed**: report that, recommend nothing and offer no exclusion, and let a later run against a fresh snapshot retry.
+
+Then judge the cluster from the bodies you just read and emit one assessment: [`reference/consolidation.md`](reference/consolidation.md) — the three dispositions, the rationale, and the exclusion offer. Assessment is **read-only**: it writes nothing, and every disposition it recommends still needs its own confirmation. Never dump page content into the report.
+
+### 4. Run judgment checks
 
 Run after the mechanical pass. Get the full page list first, then limit to pages not already flagged:
 
@@ -97,7 +110,7 @@ Compare `git_date`; where a related page is substantially newer and covers the s
 
 Direction is the tell: fragmentation collapses pages that exist, implicit concepts creates the missing one, cross-references joins two that already exist. A pair below the fragmentation bar is never a Consolidation — it is an edge, and Missing cross-references owns proposing it. Never downgrade a declined cluster to an edge.
 
-### 4. Apply auto-fixes
+### 5. Apply auto-fixes
 
 For each auto-fix finding, apply without asking:
 
@@ -107,11 +120,12 @@ For each auto-fix finding, apply without asking:
 "$RUNTIME" "$ENCHIRIDION" fix missing-cross-references
 "$RUNTIME" "$ENCHIRIDION" fix split-links
 "$RUNTIME" "$ENCHIRIDION" fix duplicate-frontmatter
+"$RUNTIME" "$ENCHIRIDION" fix consolidation-exclusions
 ```
 
 Each prints the vault-relative refs it modified, one per line, or nothing if no change was needed. Ambiguous cases are skipped by the fix — surface them as report-only findings. `fix missing-cross-references` also skips a mention on a heading line and links the first prose mention instead; `--include-headings` overrides that. Note each changed ref in the summary (file, what changed).
 
-### 5. Confirm-first proposals
+### 6. Confirm-first proposals
 
 Add every confirm-first finding to the report's **confirm-first proposals** section. Each entry must include:
 - The check name and finding description.
@@ -120,11 +134,11 @@ Add every confirm-first finding to the report's **confirm-first proposals** sect
 
 Proposal shapes — present the entry, wait for a yes/no, apply the stated command on yes:
 
-[`reference/proposals.md`](reference/proposals.md) — the exact wording and command for each confirm-first shape; read before writing a proposal.
+[`reference/proposals.md`](reference/proposals.md) — the exact wording and command for each confirm-first shape; [`reference/consolidation.md`](reference/consolidation.md) — the Consolidation assessment, its three dispositions, and the exclusion offer; read both before writing a proposal.
 
 Never author the merged body here: the merge is a judgment call that belongs to the ingest flow. Never batch two clusters into one handoff.
 
-### 6. Report
+### 7. Report
 
 After auto-fixes and confirms, emit the final report:
 
@@ -143,7 +157,7 @@ After auto-fixes and confirms, emit the final report:
 ```
 
 Priority ordering in the report:
-1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter.
+1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter, a malformed Consolidation-exclusion registry.
 2. **MEDIUM** — orphans, concept fragmentation, under-typed edges, over-typed and stale edges, stale synthesis, missing `volatility`/`source_date`.
 3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession.
 
@@ -167,6 +181,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `split-links` | auto-fix (frontmatter) / report only (body) |
 | `duplicate-frontmatter` | auto-fix (redundant) / report only (divergent) |
 | `concept-fragmentation` | confirm first |
+| `consolidation-exclusions` | auto-fix (duplicates, ordering, cache refresh) / confirm first (stale-member pruning) |
 | Stale claims | report only |
 | Implicit concepts | confirm first |
 | Missing cross-references (`missing-cross-references`) | auto-fix (unambiguous) / confirm first |

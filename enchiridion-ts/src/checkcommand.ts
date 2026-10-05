@@ -5,7 +5,15 @@
  */
 
 import { InvalidArgumentError, type Command } from "commander";
-import { CHECKS, DefaultMinSimilarity, FIXES, runAllChecks } from "./check.js";
+import {
+  CHECKS,
+  DefaultMinSimilarity,
+  FIXES,
+  IncludeHeadingsFix,
+  PruneFix,
+  runAllChecks,
+  type FixOptions,
+} from "./check.js";
 import { VaultRead } from "./vaultread.js";
 import { emitRows, fail } from "./output.js";
 import { resolveRoot } from "./vault.js";
@@ -84,18 +92,29 @@ export function registerCheckFixCommands(program: Command): void {
       "--include-headings",
       "missing-cross-references: also link a mention on a heading line",
     )
-    .action(async (name: string, opts: { includeHeadings?: boolean }) => {
+    .option(
+      "--prune",
+      "consolidation-exclusions: also drop members that no longer match HEAD (confirm first)",
+    )
+    .action(async (name: string, opts: FixOptions) => {
       const fn = FIXES[name];
       if (!fn) {
         fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
       }
-      if (opts.includeHeadings && name !== "missing-cross-references") {
+      // Each flag belongs to one fix; on any other it is an error rather than a
+      // silent no-op.
+      if (opts.includeHeadings && name !== IncludeHeadingsFix) {
         fail(
-          `enchiridion fix: --include-headings applies only to missing-cross-references`,
+          `enchiridion fix: --include-headings applies only to fix "${IncludeHeadingsFix}", not "${name}"`,
+        );
+      }
+      if (opts.prune && name !== PruneFix) {
+        fail(
+          `enchiridion fix: --prune applies only to fix "${PruneFix}", not "${name}"`,
         );
       }
       const root = resolveRoot();
-      const changed = await fn(root, { includeHeadings: opts.includeHeadings });
+      const changed = await fn(root, opts);
       for (const ref of changed) console.log(ref);
     });
 }

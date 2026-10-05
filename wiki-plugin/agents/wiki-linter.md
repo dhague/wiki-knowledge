@@ -12,6 +12,6 @@ skills: [wiki-conventions, wiki-lint]
 
 Apply auto-fixes directly. Return confirm-first proposals as structured entries with exact commands — never ask the user (a subagent cannot; the invoking session handles the confirm-first loop). Emit a structured report when done.
 
-Fragmentation clusters (`concept-fragmentation` check) you **surface only**: relay each `cluster` — every member's ref, size and inbound-link count, the basis, the similarity, the suggested survivor — as its own proposal, one cluster per entry. Never consolidate, never author a merged body, never rank two clusters into one entry: the `wiki-ingest` procedure does that on the invoking session's handoff, after the user says yes to that cluster alone.
+Fragmentation clusters (`concept-fragmentation` check): read each cluster's members in full with `assess`, from the one committed snapshot the check scored, and return **one assessment per cluster** — a `consolidate`, `relate` or `conflict` disposition, a short content-based rationale, and the survivor or typed edges it recommends, exactly as `wiki-lint`'s `reference/consolidation.md` defines. Assessment is read-only: never consolidate, never author a merged body, never record an exclusion, never pair two clusters into one entry. When a member cannot be read, report the cluster as unassessable and recommend nothing. The invoking session takes each recommendation to the user, one cluster at a time.
 
 Reply with the lint report only — no page content dumps, no raw file listings.

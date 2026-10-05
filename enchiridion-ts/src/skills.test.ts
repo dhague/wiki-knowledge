@@ -248,6 +248,41 @@ test("wiki-lint's run block reports every check in one call", () => {
   );
 });
 
+test("wiki-lint reads every cluster member before it recommends, and writes nothing", () => {
+  const text = readFileSync(
+    path.join(skillsDir, "wiki-lint", "SKILL.md"),
+    "utf8",
+  );
+  const start = text.indexOf("### 3. Assess every fragmentation cluster");
+  const end = text.indexOf("\n### ", start + 1);
+  assert.ok(start >= 0 && end > start, "the assessment must be its own step");
+  const step = text.slice(start, end);
+  assert.match(
+    step,
+    /"\$RUNTIME"\s+"\$ENCHIRIDION"\s+assess\s/,
+    "the assessment step must read members in full with `assess`",
+  );
+  // Read-only: the step runs no subcommand that writes.
+  const writes = [
+    ...step.matchAll(/"\$ENCHIRIDION"\s+(?!assess\b)([a-z-]+)/g),
+  ].map((match) => match[1]);
+  assert.deepEqual(writes, [], "assessment must run no writing subcommand");
+  // And the read precedes every proposal the session presents.
+  const proposals = text.indexOf("### 6. Confirm-first proposals");
+  assert.ok(
+    proposals > start,
+    "the assessment step must come before the confirm-first proposals",
+  );
+
+  const agent = proseFor("wiki-plugin/agents/wiki-linter.md");
+  for (const needle of ["assess", "reference/consolidation.md", "read-only"]) {
+    assert.ok(
+      agent.includes(needle),
+      `wiki-linter.md must carry the assessment contract's "${needle}"`,
+    );
+  }
+});
+
 test("wiki-lint's catalogue keys every CHECKS check by slug", () => {
   const text = readFileSync(
     path.join(skillsDir, "wiki-lint", "SKILL.md"),

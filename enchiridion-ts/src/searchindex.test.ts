@@ -2,6 +2,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,6 +51,12 @@ function page(
   return text;
 }
 
+/** A content-derived stand-in for a git blob oid: distinct content gets a
+ * distinct oid, as a real HEAD tree would. */
+function fakeOid(content: string): string {
+  return createHash("sha1").update(content).digest("hex");
+}
+
 function pageChange(
   pageRef: string,
   title: string,
@@ -59,9 +66,11 @@ function pageChange(
   extra: string,
   date: string,
 ): PageChange {
+  const content = page(title, summary, body, tags, extra);
   return {
     pageRef,
-    content: page(title, summary, body, tags, extra),
+    content,
+    oid: fakeOid(content),
     date,
     deleted: false,
   };
@@ -609,6 +618,7 @@ describe("search", () => {
           {
             pageRef: "wiki/concepts/a.md",
             content: "",
+            oid: "",
             date: "",
             deleted: true,
           },
@@ -862,6 +872,7 @@ describe("reindex", () => {
           {
             pageRef: "wiki/concepts/b.md",
             content: "",
+            oid: "",
             date: "",
             deleted: true,
           },
@@ -1502,6 +1513,92 @@ describe("sharedTagPairs", () => {
       ]);
     } finally {
       index.close();
+    }
+  });
+});
+
+describe("pageFacts", () => {
+  it("returns the blob oid and fingerprint for the named pages only", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "A", "s", "body", ["x"], "", ""),
+      pageChange("wiki/concepts/b.md", "B", "s", "body", ["y"], "", ""),
+    );
+    const index = await openIndex(fake);
+    try {
+      const facts = await index.pageFacts([
+        "wiki/concepts/a.md",
+        "wiki/concepts/gone.md",
+      ]);
+      assert.deepEqual([...facts.keys()], ["wiki/concepts/a.md"]);
+      const fact = facts.get("wiki/concepts/a.md")!;
+      assert.equal(fact.blobOid, fakeOid(page("A", "s", "body", ["x"], "")));
+      assert.match(fact.fingerprint, /^sha256:[0-9a-f]{64}$/);
+      assert.deepEqual(await index.pageFacts([]), new Map());
+    } finally {
+      index.close();
+    }
+  });
+
+  it("keeps the fingerprint across a tag-only edit and refreshes the blob oid", async () => {
+    const { root } = await seedCommittedVault({
+      "wiki/concepts/a.md": page("A", "s", "body", ["x"], ""),
+    });
+    try {
+      const index = await Index.open(root);
+      const before = (await index.pageFacts(["wiki/concepts/a.md"])).get(
+        "wiki/concepts/a.md",
+      )!;
+      index.close();
+
+      writeVaultFile(
+        root,
+        "wiki/concepts/a.md",
+        page("A", "s", "body", ["x", "y"], ""),
+      );
+      await new VaultGit(root).stageAndCommit(["wiki/concepts/a.md"], "retag");
+
+      const reopened = await Index.open(root);
+      try {
+        await reopened.reindex(false);
+        const after = (await reopened.pageFacts(["wiki/concepts/a.md"])).get(
+          "wiki/concepts/a.md",
+        )!;
+        assert.notEqual(after.blobOid, before.blobOid);
+        assert.equal(after.fingerprint, before.fingerprint);
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("is a view of HEAD: an uncommitted edit is invisible", async () => {
+    const { root } = await seedCommittedVault({
+      "wiki/concepts/a.md": page("A", "s", "body", ["x"], ""),
+    });
+    try {
+      const index = await Index.open(root);
+      try {
+        const before = (await index.pageFacts(["wiki/concepts/a.md"])).get(
+          "wiki/concepts/a.md",
+        )!;
+        writeVaultFile(
+          root,
+          "wiki/concepts/a.md",
+          page("A", "s", "rewritten", ["x"], ""),
+        );
+        await index.reindex(false);
+        const after = (await index.pageFacts(["wiki/concepts/a.md"])).get(
+          "wiki/concepts/a.md",
+        )!;
+        assert.deepEqual(after, before);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 });

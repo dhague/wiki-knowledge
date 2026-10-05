@@ -74,14 +74,14 @@ against the plugin's own copy of the bundle.
 
 ### Vault lint
 
-`/wiki-lint` runs 19 checks in two dimensions — structural (kind-folder
+`/wiki-lint` runs 20 checks in two dimensions — structural (kind-folder
 conformance, frontmatter link format, split links, duplicate frontmatter,
-orphans, concept fragmentation) and retrievability (missing
-`volatility`/`source_date`, unresolved supersession, data gaps, summary quality,
-under-typed edges, over-typed and stale edges) — and reports what it finds
-ordered HIGH, MEDIUM, LOW.
+orphans, concept fragmentation, Consolidation-exclusion registry integrity) and
+retrievability (missing `volatility`/`source_date`, unresolved supersession, data
+gaps, summary quality, under-typed edges, over-typed and stale edges) — and
+reports what it finds ordered HIGH, MEDIUM, LOW.
 
-Twelve of the checks are mechanical, run through `enchiridion check <name> --json`;
+Thirteen of the checks are mechanical, run through `enchiridion check <name> --json`;
 the other seven need page judgment. Every finding carries a fix level:
 **auto-fix** (applied without asking — link format, unambiguous `raw_source`
 and cross-reference repairs, folded frontmatter links, redundant frontmatter
@@ -91,24 +91,28 @@ skip — a page move, an edge retype, an orphan delete, or a concept
 consolidation).
 
 A concept consolidation (`concept-fragmentation` check) is proposed one cluster at a time and never
-batched, because it deletes committed pages. Before asking, the linter reads
-every member and recommends whether to consolidate, relate the pages, or treat
-them as conflicting. On yes it hands off to the `wiki-ingest` procedure, which
-authors the merged survivor. On no it offers to remember the decision as a
-Consolidation exclusion.
+batched, because it deletes committed pages. Each cluster is first **assessed**:
+`enchiridion assess <refs...>` reads every member in full from one committed
+snapshot, and the assessment returns one of three dispositions — `consolidate`
+(one concept: recommend a survivor), `relate` (distinct but related: recommend
+typed edges), or `conflict` (the claims disagree: recommend the supersession
+flow) — with a short rationale. Assessment writes nothing; on yes to a
+`consolidate` it hands off to the `wiki-ingest` procedure, which reads the same
+members, authors the merged survivor, and pins the plan to the assessed snapshot
+so a cluster that changed before the write is refused rather than merged stale.
+On no it offers to remember the decision as a Consolidation exclusion.
 
 ### Consolidation exclusions
 
 A remembered decline lives in `CONSOLIDATION_EXCLUSIONS.yaml` in the pages'
-kind-folder. The file is committed with the vault and may hold several exact
-cluster decisions:
+kind-folder — committed with the vault, and safe to inspect or edit by hand:
 
 ```yaml
 exclusions:
   - members:
       - page_ref: wiki/concepts/authentication.md
-        blob_oid: 9574fbc08f
-        fingerprint: sha256:0123456789abcdef
+        blob_oid: 9574fbc08f                  # the blob object ID at HEAD
+        fingerprint: sha256:0123456789abcdef  # the semantic fingerprint
       - page_ref: wiki/concepts/authorization.md
         blob_oid: 53a7d7365a
         fingerprint: sha256:fedcba9876543210
@@ -118,16 +122,28 @@ exclusions:
 The object IDs shown are illustrative; the plugin writes their full Git value
 and the full semantic digest. A matching `blob_oid` is the fast path. If the
 blob changed, the plugin compares the semantic fingerprint, which covers the
-title, summary, typed relationships, `supersedes`, and body while ignoring
-tags, source date, volatility, YAML formatting, and field order. An irrelevant
-edit therefore preserves the decision and refreshes the cached object ID. A
-content change removes that member from the effective exclusion; unchanged
-members remain excluded while at least two remain.
+title, summary, typed relationships, `supersedes` and body while ignoring tags,
+source date, volatility, YAML formatting and field order. An irrelevant edit
+therefore preserves the decision and refreshes the cached object ID, while a
+content change removes that member from the effective exclusion — unchanged
+members remain excluded while at least two remain, and only a matching member
+set suppresses a proposal.
 
-You can inspect this file directly or delete an exclusion record to reconsider
-it. Let `/wiki-lint` create, refresh, and prune records so hashes and canonical
-ordering stay correct. A malformed record never suppresses a candidate and is
-reported as a registry-integrity finding.
+On yes to the offer it runs
+
+```bash
+enchiridion exclusion add wiki/concepts/a.md wiki/concepts/b.md --reason "Distinct concepts: …"
+```
+
+which records the members' committed revisions and commits the registry on its
+own; deleting a record by hand lets its cluster be proposed again. Cached values
+need no hand maintenance — `enchiridion fix consolidation-exclusions` refreshes
+a blob ID whose page changed only in ways outside the fingerprint and collapses
+identical records, while `--prune` drops members that no longer match `HEAD` and
+deletes a record left with fewer than two. A malformed registry never suppresses
+a candidate and is reported as a HIGH finding. Any `contradicts:` or
+`supersedes:` edge between two candidate pages excludes them from a proposal
+automatically, with no registry record.
 
 Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
 path argument, else the current directory.
