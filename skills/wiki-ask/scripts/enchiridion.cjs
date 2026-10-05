@@ -111,17 +111,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path32) {
-      const ctrl = callVisitor(key, node, visitor, path32);
+    function visit_(key, node, visitor, path34) {
+      const ctrl = callVisitor(key, node, visitor, path34);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path32, ctrl);
-        return visit_(key, ctrl, visitor, path32);
+        replaceNode(key, path34, ctrl);
+        return visit_(key, ctrl, visitor, path34);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path32 = Object.freeze(path32.concat(node));
+          path34 = Object.freeze(path34.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path32);
+            const ci = visit_(i, node.items[i], visitor, path34);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -132,13 +132,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path32 = Object.freeze(path32.concat(node));
-          const ck = visit_("key", node.key, visitor, path32);
+          path34 = Object.freeze(path34.concat(node));
+          const ck = visit_("key", node.key, visitor, path34);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path32);
+          const cv = visit_("value", node.value, visitor, path34);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -159,17 +159,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path32) {
-      const ctrl = await callVisitor(key, node, visitor, path32);
+    async function visitAsync_(key, node, visitor, path34) {
+      const ctrl = await callVisitor(key, node, visitor, path34);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path32, ctrl);
-        return visitAsync_(key, ctrl, visitor, path32);
+        replaceNode(key, path34, ctrl);
+        return visitAsync_(key, ctrl, visitor, path34);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path32 = Object.freeze(path32.concat(node));
+          path34 = Object.freeze(path34.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path32);
+            const ci = await visitAsync_(i, node.items[i], visitor, path34);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -180,13 +180,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path32 = Object.freeze(path32.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path32);
+          path34 = Object.freeze(path34.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path34);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path32);
+          const cv = await visitAsync_("value", node.value, visitor, path34);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -213,23 +213,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path32) {
+    function callVisitor(key, node, visitor, path34) {
       if (typeof visitor === "function")
-        return visitor(key, node, path32);
+        return visitor(key, node, path34);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path32);
+        return visitor.Map?.(key, node, path34);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path32);
+        return visitor.Seq?.(key, node, path34);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path32);
+        return visitor.Pair?.(key, node, path34);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path32);
+        return visitor.Scalar?.(key, node, path34);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path32);
+        return visitor.Alias?.(key, node, path34);
       return void 0;
     }
-    function replaceNode(key, path32, node) {
-      const parent = path32[path32.length - 1];
+    function replaceNode(key, path34, node) {
+      const parent = path34[path34.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -839,10 +839,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path32, value) {
+    function collectionFromPath(schema, path34, value) {
       let v = value;
-      for (let i = path32.length - 1; i >= 0; --i) {
-        const k = path32[i];
+      for (let i = path34.length - 1; i >= 0; --i) {
+        const k = path34[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -861,7 +861,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path32) => path32 == null || typeof path32 === "object" && !!path32[Symbol.iterator]().next().done;
+    var isEmptyPath = (path34) => path34 == null || typeof path34 === "object" && !!path34[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -891,11 +891,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path32, value) {
-        if (isEmptyPath(path32))
+      addIn(path34, value) {
+        if (isEmptyPath(path34))
           this.add(value);
         else {
-          const [key, ...rest] = path32;
+          const [key, ...rest] = path34;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -909,8 +909,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path32) {
-        const [key, ...rest] = path32;
+      deleteIn(path34) {
+        const [key, ...rest] = path34;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -924,8 +924,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path32, keepScalar) {
-        const [key, ...rest] = path32;
+      getIn(path34, keepScalar) {
+        const [key, ...rest] = path34;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -943,8 +943,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path32) {
-        const [key, ...rest] = path32;
+      hasIn(path34) {
+        const [key, ...rest] = path34;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -954,8 +954,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path32, value) {
-        const [key, ...rest] = path32;
+      setIn(path34, value) {
+        const [key, ...rest] = path34;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -3470,9 +3470,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path32, value) {
+      addIn(path34, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path32, value);
+          this.contents.addIn(path34, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -3547,14 +3547,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path32) {
-        if (Collection.isEmptyPath(path32)) {
+      deleteIn(path34) {
+        if (Collection.isEmptyPath(path34)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path32) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path34) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -3569,10 +3569,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path32, keepScalar) {
-        if (Collection.isEmptyPath(path32))
+      getIn(path34, keepScalar) {
+        if (Collection.isEmptyPath(path34))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path32, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path34, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -3583,10 +3583,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path32) {
-        if (Collection.isEmptyPath(path32))
+      hasIn(path34) {
+        if (Collection.isEmptyPath(path34))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path32) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path34) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -3603,13 +3603,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path32, value) {
-        if (Collection.isEmptyPath(path32)) {
+      setIn(path34, value) {
+        if (Collection.isEmptyPath(path34)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path32), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path34), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path32, value);
+          this.contents.setIn(path34, value);
         }
       }
       /**
@@ -3706,22 +3706,22 @@ var require_errors = __commonJS({
   "node_modules/yaml/dist/errors.js"(exports2) {
     "use strict";
     var YAMLError = class extends Error {
-      constructor(name, pos, code2, message) {
+      constructor(name, pos, code2, message2) {
         super();
         this.name = name;
         this.code = code2;
-        this.message = message;
+        this.message = message2;
         this.pos = pos;
       }
     };
     var YAMLParseError = class extends YAMLError {
-      constructor(pos, code2, message) {
-        super("YAMLParseError", pos, code2, message);
+      constructor(pos, code2, message2) {
+        super("YAMLParseError", pos, code2, message2);
       }
     };
     var YAMLWarning = class extends YAMLError {
-      constructor(pos, code2, message) {
-        super("YAMLWarning", pos, code2, message);
+      constructor(pos, code2, message2) {
+        super("YAMLWarning", pos, code2, message2);
       }
     };
     var prettifyError = (src, lc) => (error) => {
@@ -4401,8 +4401,8 @@ var require_compose_collection = __commonJS({
         const { anchor, newlineAfterProp: nl } = props;
         const lastProp = anchor && tagToken ? anchor.offset > tagToken.offset ? anchor : tagToken : anchor ?? tagToken;
         if (lastProp && (!nl || nl.offset < lastProp.offset)) {
-          const message = "Missing newline after block sequence props";
-          onError(lastProp, "MISSING_CHAR", message);
+          const message2 = "Missing newline after block sequence props";
+          onError(lastProp, "MISSING_CHAR", message2);
         }
       }
       const expType = token.type === "block-map" ? "map" : token.type === "block-seq" ? "seq" : token.start.source === "{" ? "map" : "seq";
@@ -4442,13 +4442,13 @@ var require_resolve_block_scalar = __commonJS({
   "node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports2) {
     "use strict";
     var Scalar2 = require_Scalar();
-    function resolveBlockScalar(ctx, scalar2, onError) {
-      const start = scalar2.offset;
-      const header = parseBlockScalarHeader(scalar2, ctx.options.strict, onError);
+    function resolveBlockScalar(ctx, scalar3, onError) {
+      const start = scalar3.offset;
+      const header = parseBlockScalarHeader(scalar3, ctx.options.strict, onError);
       if (!header)
         return { value: "", type: null, comment: "", range: [start, start, start] };
       const type = header.mode === ">" ? Scalar2.Scalar.BLOCK_FOLDED : Scalar2.Scalar.BLOCK_LITERAL;
-      const lines = scalar2.source ? splitLines(scalar2.source) : [];
+      const lines = scalar3.source ? splitLines(scalar3.source) : [];
       let chompStart = lines.length;
       for (let i = lines.length - 1; i >= 0; --i) {
         const content = lines[i][1];
@@ -4460,12 +4460,12 @@ var require_resolve_block_scalar = __commonJS({
       if (chompStart === 0) {
         const value2 = header.chomp === "+" && lines.length > 0 ? "\n".repeat(Math.max(1, lines.length - 1)) : "";
         let end2 = start + header.length;
-        if (scalar2.source)
-          end2 += scalar2.source.length;
+        if (scalar3.source)
+          end2 += scalar3.source.length;
         return { value: value2, type, comment: header.comment, range: [start, end2, end2] };
       }
-      let trimIndent = scalar2.indent + header.indent;
-      let offset = scalar2.offset + header.length;
+      let trimIndent = scalar3.indent + header.indent;
+      let offset = scalar3.offset + header.length;
       let contentStart = 0;
       for (let i = 0; i < chompStart; ++i) {
         const [indent, content] = lines[i];
@@ -4474,15 +4474,15 @@ var require_resolve_block_scalar = __commonJS({
             trimIndent = indent.length;
         } else {
           if (indent.length < trimIndent) {
-            const message = "Block scalars with more-indented leading empty lines must use an explicit indentation indicator";
-            onError(offset + indent.length, "MISSING_CHAR", message);
+            const message2 = "Block scalars with more-indented leading empty lines must use an explicit indentation indicator";
+            onError(offset + indent.length, "MISSING_CHAR", message2);
           }
           if (header.indent === 0)
             trimIndent = indent.length;
           contentStart = i;
           if (trimIndent === 0 && !ctx.atRoot) {
-            const message = "Block scalar values in collections must be indented";
-            onError(offset, "BAD_INDENT", message);
+            const message2 = "Block scalar values in collections must be indented";
+            onError(offset, "BAD_INDENT", message2);
           }
           break;
         }
@@ -4505,8 +4505,8 @@ var require_resolve_block_scalar = __commonJS({
           content = content.slice(0, -1);
         if (content && indent.length < trimIndent) {
           const src = header.indent ? "explicit indentation indicator" : "first line";
-          const message = `Block scalar lines must not be less indented than their ${src}`;
-          onError(offset - content.length - (crlf ? 2 : 1), "BAD_INDENT", message);
+          const message2 = `Block scalar lines must not be less indented than their ${src}`;
+          onError(offset - content.length - (crlf ? 2 : 1), "BAD_INDENT", message2);
           indent = "";
         }
         if (type === Scalar2.Scalar.BLOCK_LITERAL) {
@@ -4543,7 +4543,7 @@ var require_resolve_block_scalar = __commonJS({
         default:
           value += "\n";
       }
-      const end = start + header.length + scalar2.source.length;
+      const end = start + header.length + scalar3.source.length;
       return { value, type, comment: header.comment, range: [start, end, end] };
     }
     function parseBlockScalarHeader({ offset, props }, strict, onError) {
@@ -4584,8 +4584,8 @@ var require_resolve_block_scalar = __commonJS({
             break;
           case "comment":
             if (strict && !hasSpace) {
-              const message = "Comments must be separated from other tokens by white space characters";
-              onError(token, "MISSING_CHAR", message);
+              const message2 = "Comments must be separated from other tokens by white space characters";
+              onError(token, "MISSING_CHAR", message2);
             }
             length += token.source.length;
             comment = token.source.substring(1);
@@ -4596,8 +4596,8 @@ var require_resolve_block_scalar = __commonJS({
             break;
           /* istanbul ignore next should not happen */
           default: {
-            const message = `Unexpected token in block scalar header: ${token.type}`;
-            onError(token, "UNEXPECTED_TOKEN", message);
+            const message2 = `Unexpected token in block scalar header: ${token.type}`;
+            onError(token, "UNEXPECTED_TOKEN", message2);
             const ts = token.source;
             if (ts && typeof ts === "string")
               length += ts.length;
@@ -4626,8 +4626,8 @@ var require_resolve_flow_scalar = __commonJS({
     "use strict";
     var Scalar2 = require_Scalar();
     var resolveEnd = require_resolve_end();
-    function resolveFlowScalar(scalar2, strict, onError) {
-      const { offset, type, source, end } = scalar2;
+    function resolveFlowScalar(scalar3, strict, onError) {
+      const { offset, type, source, end } = scalar3;
       let _type;
       let value;
       const _onError = (rel, code2, msg) => onError(offset + rel, code2, msg);
@@ -4646,7 +4646,7 @@ var require_resolve_flow_scalar = __commonJS({
           break;
         /* istanbul ignore next should not happen */
         default:
-          onError(scalar2, "UNEXPECTED_TOKEN", `Expected a flow scalar value, but found: ${type}`);
+          onError(scalar3, "UNEXPECTED_TOKEN", `Expected a flow scalar value, but found: ${type}`);
           return {
             value: "",
             type: null,
@@ -4860,26 +4860,26 @@ var require_compose_scalar = __commonJS({
         tag = findScalarTagByTest(ctx, value, token, onError);
       else
         tag = ctx.schema[identity.SCALAR];
-      let scalar2;
+      let scalar3;
       try {
         const res = tag.resolve(value, (msg) => onError(tagToken ?? token, "TAG_RESOLVE_FAILED", msg), ctx.options);
-        scalar2 = identity.isScalar(res) ? res : new Scalar2.Scalar(res);
+        scalar3 = identity.isScalar(res) ? res : new Scalar2.Scalar(res);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         onError(tagToken ?? token, "TAG_RESOLVE_FAILED", msg);
-        scalar2 = new Scalar2.Scalar(value);
+        scalar3 = new Scalar2.Scalar(value);
       }
-      scalar2.range = range;
-      scalar2.source = value;
+      scalar3.range = range;
+      scalar3.source = value;
       if (type)
-        scalar2.type = type;
+        scalar3.type = type;
       if (tagName)
-        scalar2.tag = tagName;
+        scalar3.tag = tagName;
       if (tag.format)
-        scalar2.format = tag.format;
+        scalar3.format = tag.format;
       if (comment)
-        scalar2.comment = comment;
-      return scalar2;
+        scalar3.comment = comment;
+      return scalar3;
     }
     function findScalarTagByName(schema, value, tagName, tagToken, onError) {
       if (tagName === "!")
@@ -4989,13 +4989,13 @@ var require_compose_node = __commonJS({
             if (anchor)
               node.anchor = anchor.source.substring(1);
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            onError(token, "RESOURCE_EXHAUSTION", message);
+            const message2 = error instanceof Error ? error.message : String(error);
+            onError(token, "RESOURCE_EXHAUSTION", message2);
           }
           break;
         default: {
-          const message = token.type === "error" ? token.message : `Unsupported token (type: ${token.type})`;
-          onError(token, "UNEXPECTED_TOKEN", message);
+          const message2 = token.type === "error" ? token.message : `Unsupported token (type: ${token.type})`;
+          onError(token, "UNEXPECTED_TOKEN", message2);
           isSrcToken = false;
         }
       }
@@ -5151,12 +5151,12 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code2, message, warning) => {
+        this.onError = (source, code2, message2, warning) => {
           const pos = getErrorPos(source);
           if (warning)
-            this.warnings.push(new errors.YAMLWarning(pos, code2, message));
+            this.warnings.push(new errors.YAMLWarning(pos, code2, message2));
           else
-            this.errors.push(new errors.YAMLParseError(pos, code2, message));
+            this.errors.push(new errors.YAMLParseError(pos, code2, message2));
         };
         this.directives = new directives.Directives({ version: options.version || "1.2" });
         this.options = options;
@@ -5226,10 +5226,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning) => {
+            this.directives.add(token.source, (offset, message2, warning) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning);
+              this.onError(pos, "BAD_DIRECTIVE", message2, warning);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -5318,12 +5318,12 @@ var require_cst_scalar = __commonJS({
     var stringifyString = require_stringifyString();
     function resolveAsScalar(token, strict = true, onError) {
       if (token) {
-        const _onError = (pos, code2, message) => {
+        const _onError = (pos, code2, message2) => {
           const offset = typeof pos === "number" ? pos : Array.isArray(pos) ? pos[0] : pos.offset;
           if (onError)
-            onError(offset, code2, message);
+            onError(offset, code2, message2);
           else
-            throw new errors.YAMLParseError([offset, offset + 1], code2, message);
+            throw new errors.YAMLParseError([offset, offset + 1], code2, message2);
         };
         switch (token.type) {
           case "scalar":
@@ -5569,9 +5569,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path32) => {
+    visit.itemAtPath = (cst, path34) => {
       let item = cst;
-      for (const [field, index] of path32) {
+      for (const [field, index] of path34) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -5580,23 +5580,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path32) => {
-      const parent = visit.itemAtPath(cst, path32.slice(0, -1));
-      const field = path32[path32.length - 1][0];
+    visit.parentCollection = (cst, path34) => {
+      const parent = visit.itemAtPath(cst, path34.slice(0, -1));
+      const field = path34[path34.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path32, item, visitor) {
-      let ctrl = visitor(item, path32);
+    function _visit(path34, item, visitor) {
+      let ctrl = visitor(item, path34);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path32.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path34.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -5607,10 +5607,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path32);
+            ctrl = ctrl(item, path34);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path32) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path34) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -6483,8 +6483,8 @@ var require_parser = __commonJS({
         }
         const type = cst.tokenType(source);
         if (!type) {
-          const message = `Not a YAML token: ${source}`;
-          yield* this.pop({ type: "error", offset: this.offset, message, source });
+          const message2 = `Not a YAML token: ${source}`;
+          yield* this.pop({ type: "error", offset: this.offset, message: message2, source });
           this.offset += source.length;
         } else if (type === "scalar") {
           this.atNewLine = false;
@@ -6574,8 +6574,8 @@ var require_parser = __commonJS({
       *pop(error) {
         const token = error ?? this.stack.pop();
         if (!token) {
-          const message = "Tried to pop an empty stack";
-          yield { type: "error", offset: this.offset, source: "", message };
+          const message2 = "Tried to pop an empty stack";
+          yield { type: "error", offset: this.offset, source: "", message: message2 };
         } else if (this.stack.length === 0) {
           yield token;
         } else {
@@ -6707,37 +6707,37 @@ var require_parser = __commonJS({
           };
         }
       }
-      *scalar(scalar2) {
+      *scalar(scalar3) {
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
           let sep;
-          if (scalar2.end) {
-            sep = scalar2.end;
+          if (scalar3.end) {
+            sep = scalar3.end;
             sep.push(this.sourceToken);
-            delete scalar2.end;
+            delete scalar3.end;
           } else
             sep = [this.sourceToken];
           const map = {
             type: "block-map",
-            offset: scalar2.offset,
-            indent: scalar2.indent,
-            items: [{ start, key: scalar2, sep }]
+            offset: scalar3.offset,
+            indent: scalar3.indent,
+            items: [{ start, key: scalar3, sep }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map;
         } else
-          yield* this.lineEnd(scalar2);
+          yield* this.lineEnd(scalar3);
       }
-      *blockScalar(scalar2) {
+      *blockScalar(scalar3) {
         switch (this.type) {
           case "space":
           case "comment":
           case "newline":
-            scalar2.props.push(this.sourceToken);
+            scalar3.props.push(this.sourceToken);
             return;
           case "scalar":
-            scalar2.source = this.source;
+            scalar3.source = this.source;
             this.atNewLine = true;
             this.indent = 0;
             if (this.onNewLine) {
@@ -6912,14 +6912,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs23 = this.flowScalar(this.type);
+              const fs24 = this.flowScalar(this.type);
               if (atNextItem || it.value) {
-                map.items.push({ start, key: fs23, sep: [] });
+                map.items.push({ start, key: fs24, sep: [] });
                 this.onKeyLine = true;
               } else if (it.sep) {
-                this.stack.push(fs23);
+                this.stack.push(fs24);
               } else {
-                Object.assign(it, { key: fs23, sep: [] });
+                Object.assign(it, { key: fs24, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -7047,13 +7047,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs23 = this.flowScalar(this.type);
+              const fs24 = this.flowScalar(this.type);
               if (!it || it.value)
-                fc.items.push({ start: [], key: fs23, sep: [] });
+                fc.items.push({ start: [], key: fs24, sep: [] });
               else if (it.sep)
-                this.stack.push(fs23);
+                this.stack.push(fs24);
               else
-                Object.assign(it, { key: fs23, sep: [] });
+                Object.assign(it, { key: fs24, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -7686,8 +7686,8 @@ var require_node_sqlite3_wasm = __commonJS({
       }
     };
     var SQLite3Error = class extends Error {
-      constructor(message) {
-        super(message);
+      constructor(message2) {
+        super(message2);
         this.name = "SQLite3Error";
       }
     };
@@ -8070,7 +8070,7 @@ var require_node_sqlite3_wasm = __commonJS({
     };
     Module.Database = Database2;
     Module.SQLite3Error = SQLite3Error;
-    var path32 = require("node:path");
+    var path34 = require("node:path");
     var crypto2 = require("node:crypto");
     var SQLITE_CANTOPEN = 14;
     var SQLITE_IOERR_READ = 266;
@@ -8118,25 +8118,25 @@ var require_node_sqlite3_wasm = __commonJS({
     } else {
     }
     var scriptDirectory = "";
-    function locateFile(path33) {
+    function locateFile(path35) {
       if (Module["locateFile"]) {
-        return Module["locateFile"](path33, scriptDirectory);
+        return Module["locateFile"](path35, scriptDirectory);
       }
-      return scriptDirectory + path33;
+      return scriptDirectory + path35;
     }
     var readAsync;
     var readBinary;
     if (ENVIRONMENT_IS_NODE) {
-      fs23 = require("node:fs");
+      fs24 = require("node:fs");
       scriptDirectory = __dirname + "/";
       readBinary = (filename) => {
         filename = isFileURI(filename) ? new URL(filename) : filename;
-        var ret = fs23.readFileSync(filename);
+        var ret = fs24.readFileSync(filename);
         return ret;
       };
       readAsync = async (filename, binary = true) => {
         filename = isFileURI(filename) ? new URL(filename) : filename;
-        var ret = fs23.readFileSync(filename, binary ? void 0 : "utf8");
+        var ret = fs24.readFileSync(filename, binary ? void 0 : "utf8");
         return ret;
       };
       if (process.argv.length > 1) {
@@ -8152,7 +8152,7 @@ var require_node_sqlite3_wasm = __commonJS({
       };
     } else {
     }
-    var fs23;
+    var fs24;
     var out = console.log.bind(console);
     var err = console.error.bind(console);
     var wasmBinary;
@@ -8528,11 +8528,11 @@ var require_node_sqlite3_wasm = __commonJS({
       }
     }
     function _nodejsAccess(vfs, filePath, flags, outResult) {
-      let aflags = fs23.constants.F_OK;
-      if (flags == SQLITE_ACCESS_READWRITE) aflags = fs23.constants.R_OK | fs23.constants.W_OK;
-      if (flags == SQLITE_ACCESS_READ) aflags = fs23.constants.R_OK;
+      let aflags = fs24.constants.F_OK;
+      if (flags == SQLITE_ACCESS_READWRITE) aflags = fs24.constants.R_OK | fs24.constants.W_OK;
+      if (flags == SQLITE_ACCESS_READ) aflags = fs24.constants.R_OK;
       try {
-        fs23.accessSync(UTF8ToString(filePath), aflags);
+        fs24.accessSync(UTF8ToString(filePath), aflags);
         setValue(outResult, 1, "i32");
       } catch {
         setValue(outResult, 0, "i32");
@@ -8541,7 +8541,7 @@ var require_node_sqlite3_wasm = __commonJS({
     }
     function _nodejsCheckReservedLock(fi, outResult) {
       try {
-        fs23.accessSync(`${_path(fi)}.lock`, fs23.constants.F_OK);
+        fs24.accessSync(`${_path(fi)}.lock`, fs24.constants.F_OK);
         setValue(outResult, 1, "i32");
       } catch {
         setValue(outResult, 0, "i32");
@@ -8551,7 +8551,7 @@ var require_node_sqlite3_wasm = __commonJS({
     function _nodejsClose(fi) {
       _nodejsUnlock(fi, SQLITE_LOCK_NONE);
       try {
-        fs23.closeSync(_fd(fi));
+        fs24.closeSync(_fd(fi));
       } catch {
         return SQLITE_IOERR_CLOSE;
       }
@@ -8560,20 +8560,20 @@ var require_node_sqlite3_wasm = __commonJS({
     function _nodejsDelete(vfs, filePath, dirSync) {
       const pathStr = UTF8ToString(filePath);
       try {
-        fs23.unlinkSync(pathStr);
+        fs24.unlinkSync(pathStr);
       } catch (err2) {
         if (err2.code != "ENOENT") return SQLITE_IOERR_DELETE;
       }
       if (dirSync) {
         let fd = -1;
         try {
-          fd = fs23.openSync(path32.dirname(pathStr), "r");
-          fs23.fsyncSync(fd);
+          fd = fs24.openSync(path34.dirname(pathStr), "r");
+          fs24.fsyncSync(fd);
         } catch {
           return SQLITE_IOERR_FSYNC;
         } finally {
           try {
-            fs23.closeSync(fd);
+            fs24.closeSync(fd);
           } catch {
             return SQLITE_IOERR_FSYNC;
           }
@@ -8583,21 +8583,21 @@ var require_node_sqlite3_wasm = __commonJS({
     }
     function _nodejsFileSize(fi, outSize) {
       try {
-        setValue(outSize, fs23.fstatSync(_fd(fi)).size, "i64");
+        setValue(outSize, fs24.fstatSync(_fd(fi)).size, "i64");
       } catch {
         return SQLITE_IOERR_FSTAT;
       }
       return SQLITE_OK;
     }
     function _nodejsFullPathname(vfs, relPath2, sizeFullPath, outFullPath) {
-      const full = path32.resolve(UTF8ToString(relPath2));
+      const full = path34.resolve(UTF8ToString(relPath2));
       stringToUTF8(full, outFullPath, sizeFullPath);
       return full.length < sizeFullPath ? SQLITE_OK : SQLITE_CANTOPEN;
     }
     function _nodejsLock(fi, level) {
       if (!_isLocked(fi)) {
         try {
-          fs23.mkdirSync(`${_path(fi)}.lock`);
+          fs24.mkdirSync(`${_path(fi)}.lock`);
         } catch (err2) {
           return err2.code == "EEXIST" ? SQLITE_BUSY : SQLITE_IOERR_LOCK;
         }
@@ -8614,7 +8614,7 @@ var require_node_sqlite3_wasm = __commonJS({
       const buf = HEAPU8.subarray(outBuffer, outBuffer + bytes);
       let bytesRead;
       try {
-        bytesRead = fs23.readSync(_fd(fi), buf, 0, bytes, offset);
+        bytesRead = fs24.readSync(_fd(fi), buf, 0, bytes, offset);
       } catch {
         return SQLITE_IOERR_READ;
       }
@@ -8634,7 +8634,7 @@ var require_node_sqlite3_wasm = __commonJS({
     }
     function _nodejsSync(fi, flags) {
       try {
-        fs23.fsyncSync(_fd(fi));
+        fs24.fsyncSync(_fd(fi));
       } catch {
         return SQLITE_IOERR_FSYNC;
       }
@@ -8642,7 +8642,7 @@ var require_node_sqlite3_wasm = __commonJS({
     }
     function _nodejsTruncate(fi, size) {
       try {
-        fs23.ftruncateSync(_fd(fi), _safeInt(size));
+        fs24.ftruncateSync(_fd(fi), _safeInt(size));
       } catch {
         return SQLITE_IOERR_TRUNCATE;
       }
@@ -8651,7 +8651,7 @@ var require_node_sqlite3_wasm = __commonJS({
     function _nodejsUnlock(fi, level) {
       if (level == SQLITE_LOCK_NONE && _isLocked(fi)) {
         try {
-          fs23.rmdirSync(`${_path(fi)}.lock`);
+          fs24.rmdirSync(`${_path(fi)}.lock`);
         } catch (err2) {
           if (err2.code != "ENOENT") return SQLITE_IOERR_UNLOCK;
         }
@@ -8661,7 +8661,7 @@ var require_node_sqlite3_wasm = __commonJS({
     }
     function _nodejsWrite(fi, buffer, bytes, offset) {
       try {
-        const bytesWritten = fs23.writeSync(_fd(fi), HEAPU8.subarray(buffer, buffer + bytes), 0, bytes, _safeInt(offset));
+        const bytesWritten = fs24.writeSync(_fd(fi), HEAPU8.subarray(buffer, buffer + bytes), 0, bytes, _safeInt(offset));
         return bytesWritten != bytes ? SQLITE_IOERR_WRITE : SQLITE_OK;
       } catch {
         return SQLITE_IOERR_WRITE;
@@ -8672,12 +8672,12 @@ var require_node_sqlite3_wasm = __commonJS({
     }
     function _nodejs_open(filePath, flags, mode) {
       let oflags = 0;
-      if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= fs23.constants.O_EXCL;
-      if (flags & SQLITE_OPEN_CREATE) oflags |= fs23.constants.O_CREAT;
-      if (flags & SQLITE_OPEN_READONLY) oflags |= fs23.constants.O_RDONLY;
-      if (flags & SQLITE_OPEN_READWRITE) oflags |= fs23.constants.O_RDWR;
+      if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= fs24.constants.O_EXCL;
+      if (flags & SQLITE_OPEN_CREATE) oflags |= fs24.constants.O_CREAT;
+      if (flags & SQLITE_OPEN_READONLY) oflags |= fs24.constants.O_RDONLY;
+      if (flags & SQLITE_OPEN_READWRITE) oflags |= fs24.constants.O_RDWR;
       try {
-        return fs23.openSync(UTF8ToString(filePath), oflags, mode);
+        return fs24.openSync(UTF8ToString(filePath), oflags, mode);
       } catch {
         return -1;
       }
@@ -15547,20 +15547,20 @@ var require_ignore = __commonJS({
         regex
       );
     };
-    var throwError = (message, Ctor) => {
-      throw new Ctor(message);
+    var throwError = (message2, Ctor) => {
+      throw new Ctor(message2);
     };
-    var checkPath = (path32, originalPath, doThrow) => {
-      if (!isString(path32)) {
+    var checkPath = (path34, originalPath, doThrow) => {
+      if (!isString(path34)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path32) {
+      if (!path34) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path32)) {
+      if (checkPath.isNotRelative(path34)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -15569,7 +15569,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path32) => REGEX_TEST_INVALID_PATH.test(path32);
+    var isNotRelative = (path34) => REGEX_TEST_INVALID_PATH.test(path34);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore = class {
@@ -15628,7 +15628,7 @@ var require_ignore = __commonJS({
       //   setting `checkUnignored` to `false` could reduce additional
       //   path matching.
       // @returns {TestResult} true if a file is ignored
-      _testOne(path32, checkUnignored) {
+      _testOne(path34, checkUnignored) {
         let ignored = false;
         let unignored = false;
         this._rules.forEach((rule) => {
@@ -15636,7 +15636,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule.regex.test(path32);
+          const matched = rule.regex.test(path34);
           if (matched) {
             ignored = !negative;
             unignored = negative;
@@ -15649,24 +15649,24 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path32 = originalPath && checkPath.convert(originalPath);
+        const path34 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path32,
+          path34,
           originalPath,
           this._allowRelativePaths ? RETURN_FALSE : throwError
         );
-        return this._t(path32, cache, checkUnignored, slices);
+        return this._t(path34, cache, checkUnignored, slices);
       }
-      _t(path32, cache, checkUnignored, slices) {
-        if (path32 in cache) {
-          return cache[path32];
+      _t(path34, cache, checkUnignored, slices) {
+        if (path34 in cache) {
+          return cache[path34];
         }
         if (!slices) {
-          slices = path32.split(SLASH2);
+          slices = path34.split(SLASH2);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path32] = this._testOne(path32, checkUnignored);
+          return cache[path34] = this._testOne(path34, checkUnignored);
         }
         const parent = this._t(
           slices.join(SLASH2) + SLASH2,
@@ -15674,24 +15674,24 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path32] = parent.ignored ? parent : this._testOne(path32, checkUnignored);
+        return cache[path34] = parent.ignored ? parent : this._testOne(path34, checkUnignored);
       }
-      ignores(path32) {
-        return this._test(path32, this._ignoreCache, false).ignored;
+      ignores(path34) {
+        return this._test(path34, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path32) => !this.ignores(path32);
+        return (path34) => !this.ignores(path34);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path32) {
-        return this._test(path32, this._testCache, true);
+      test(path34) {
+        return this._test(path34, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore(options);
-    var isPathValid = (path32) => checkPath(path32 && checkPath.convert(path32), path32, RETURN_FALSE);
+    var isPathValid = (path34) => checkPath(path34 && checkPath.convert(path34), path34, RETURN_FALSE);
     factory.isPathValid = isPathValid;
     factory.default = factory;
     module2.exports = factory;
@@ -15702,7 +15702,7 @@ var require_ignore = __commonJS({
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGIX_IS_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path32) => REGIX_IS_WINDOWS_PATH_ABSOLUTE.test(path32) || isNotRelative(path32);
+      checkPath.isNotRelative = (path34) => REGIX_IS_WINDOWS_PATH_ABSOLUTE.test(path34) || isNotRelative(path34);
     }
   }
 });
@@ -15744,7 +15744,7 @@ var require_lib2 = __commonJS({
 var require_onp = __commonJS({
   "node_modules/diff3/onp.js"(exports2, module2) {
     module2.exports = function(a_, b_) {
-      var a = a_, b = b_, m = a.length, n = b.length, reverse = false, ed = null, offset = m + 1, path32 = [], pathposi = [], ses = [], lcs = "", SES_DELETE = -1, SES_COMMON = 0, SES_ADD = 1;
+      var a = a_, b = b_, m = a.length, n = b.length, reverse = false, ed = null, offset = m + 1, path34 = [], pathposi = [], ses = [], lcs = "", SES_DELETE = -1, SES_COMMON = 0, SES_ADD = 1;
       var tmp1, tmp2;
       var init3 = function() {
         if (m >= n) {
@@ -15774,9 +15774,9 @@ var require_onp = __commonJS({
       var snake = function(k, p, pp) {
         var r, x, y;
         if (p > pp) {
-          r = path32[k - 1 + offset];
+          r = path34[k - 1 + offset];
         } else {
-          r = path32[k + 1 + offset];
+          r = path34[k + 1 + offset];
         }
         y = Math.max(p, pp);
         x = y - k;
@@ -15784,7 +15784,7 @@ var require_onp = __commonJS({
           ++x;
           ++y;
         }
-        path32[k + offset] = pathposi.length;
+        path34[k + offset] = pathposi.length;
         pathposi[pathposi.length] = new P2(x, y, r);
         return y;
       };
@@ -15842,7 +15842,7 @@ var require_onp = __commonJS({
           fp = {};
           for (i = 0; i < size; ++i) {
             fp[i] = -1;
-            path32[i] = -1;
+            path34[i] = -1;
           }
           p = -1;
           do {
@@ -15856,7 +15856,7 @@ var require_onp = __commonJS({
             fp[delta + offset] = snake(delta, fp[delta - 1 + offset] + 1, fp[delta + 1 + offset]);
           } while (fp[delta + offset] !== n);
           ed = delta + 2 * p;
-          r = path32[delta + offset];
+          r = path34[delta + offset];
           epc = [];
           while (r !== -1) {
             epc[epc.length] = new P2(pathposi[r].x, pathposi[r].y, null);
@@ -16089,8 +16089,8 @@ var require_isomorphic_git = __commonJS({
     var cleanGitRef = _interopDefault(require_lib2());
     var diff3Merge = _interopDefault(require_diff3());
     var BaseError = class _BaseError extends Error {
-      constructor(message) {
-        super(message);
+      constructor(message2) {
+        super(message2);
         this.caller = "";
       }
       toJSON() {
@@ -16131,16 +16131,16 @@ var require_isomorphic_git = __commonJS({
       /**
        * @param {string} message
        */
-      constructor(message) {
+      constructor(message2) {
         super(
           `An internal error caused this command to fail.
 
 If you're using an application that depends on isomorphic-git, please report this error to that application's developers.
 
-If you're a developer and you believe this is a bug in isomorphic-git, please file an issue at https://github.com/isomorphic-git/isomorphic-git/issues with a minimal reproduction, version and environment details, and this error message: ${message}`
+If you're a developer and you believe this is a bug in isomorphic-git, please file an issue at https://github.com/isomorphic-git/isomorphic-git/issues with a minimal reproduction, version and environment details, and this error message: ${message2}`
         );
         this.code = this.name = _InternalError.code;
-        this.data = { message };
+        this.data = { message: message2 };
       }
     };
     InternalError.code = "InternalError";
@@ -16576,20 +16576,20 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         stats: /* @__PURE__ */ new Map()
       };
     }
-    async function updateCachedIndexFile(fs23, filepath, cache) {
+    async function updateCachedIndexFile(fs24, filepath, cache) {
       const [stat4, rawIndexFile] = await Promise.all([
-        fs23.lstat(filepath),
-        fs23.read(filepath)
+        fs24.lstat(filepath),
+        fs24.read(filepath)
       ]);
       const index2 = await GitIndex.from(rawIndexFile);
       cache.map.set(filepath, index2);
       cache.stats.set(filepath, stat4);
     }
-    async function isIndexStale(fs23, filepath, cache) {
+    async function isIndexStale(fs24, filepath, cache) {
       const savedStats = cache.stats.get(filepath);
       if (savedStats === void 0) return true;
       if (savedStats === null) return false;
-      const currStats = await fs23.lstat(filepath);
+      const currStats = await fs24.lstat(filepath);
       if (currStats === null) return false;
       return compareStats(savedStats, currStats);
     }
@@ -16606,7 +16606,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<any>} The result of the closure function.
        * @throws {UnmergedPathsError} If unmerged paths exist and `allowUnmerged` is `false`.
        */
-      static async acquire({ fs: fs23, gitdir, cache, allowUnmerged = true }, closure) {
+      static async acquire({ fs: fs24, gitdir, cache, allowUnmerged = true }, closure) {
         if (!cache[IndexCache]) {
           cache[IndexCache] = createCache();
         }
@@ -16615,8 +16615,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         let unmergedPaths = [];
         await acquireLock2(filepath, async () => {
           const theIndexCache = cache[IndexCache];
-          if (await isIndexStale(fs23, filepath, theIndexCache)) {
-            await updateCachedIndexFile(fs23, filepath, theIndexCache);
+          if (await isIndexStale(fs24, filepath, theIndexCache)) {
+            await updateCachedIndexFile(fs24, filepath, theIndexCache);
           }
           const index2 = theIndexCache.map.get(filepath);
           unmergedPaths = index2.unmergedPaths;
@@ -16625,26 +16625,26 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           result = await closure(index2);
           if (index2._dirty) {
             const buffer = await index2.toObject();
-            await fs23.write(filepath, buffer);
-            theIndexCache.stats.set(filepath, await fs23.lstat(filepath));
+            await fs24.write(filepath, buffer);
+            theIndexCache.stats.set(filepath, await fs24.lstat(filepath));
             index2._dirty = false;
           }
         });
         return result;
       }
     };
-    function basename3(path32) {
-      const last = Math.max(path32.lastIndexOf("/"), path32.lastIndexOf("\\"));
+    function basename3(path34) {
+      const last = Math.max(path34.lastIndexOf("/"), path34.lastIndexOf("\\"));
       if (last > -1) {
-        path32 = path32.slice(last + 1);
+        path34 = path34.slice(last + 1);
       }
-      return path32;
+      return path34;
     }
-    function dirname3(path32) {
-      const last = Math.max(path32.lastIndexOf("/"), path32.lastIndexOf("\\"));
+    function dirname3(path34) {
+      const last = Math.max(path34.lastIndexOf("/"), path34.lastIndexOf("\\"));
       if (last === -1) return ".";
       if (last === 0) return "/";
-      return path32.slice(0, last);
+      return path34.slice(0, last);
     }
     function flatFileListToDirectoryStructure(files) {
       const inodes = /* @__PURE__ */ new Map();
@@ -16701,9 +16701,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       throw new InternalError(`Unexpected GitTree entry mode: ${mode.toString(8)}`);
     }
     var GitWalkerIndex = class {
-      constructor({ fs: fs23, gitdir, cache }) {
+      constructor({ fs: fs24, gitdir, cache }) {
         this.treePromise = GitIndexManager.acquire(
-          { fs: fs23, gitdir, cache },
+          { fs: fs24, gitdir, cache },
           async function(index2) {
             return flatFileListToDirectoryStructure(index2.entries);
           }
@@ -16794,8 +16794,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     function STAGE2() {
       const o = /* @__PURE__ */ Object.create(null);
       Object.defineProperty(o, GitWalkSymbol, {
-        value: function({ fs: fs23, gitdir, cache }) {
-          return new GitWalkerIndex({ fs: fs23, gitdir, cache });
+        value: function({ fs: fs24, gitdir, cache }) {
+          return new GitWalkerIndex({ fs: fs24, gitdir, cache });
         }
       });
       Object.freeze(o);
@@ -16999,14 +16999,14 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       }
       return tmp;
     }
-    function normalizeString(path32, aar) {
+    function normalizeString(path34, aar) {
       let res = "";
       let lastSegmentLength = 0;
       let lastSlash = -1;
       let dots = 0;
       let char = "\0";
-      for (let i = 0; i <= path32.length; ++i) {
-        if (i < path32.length) char = path32[i];
+      for (let i = 0; i <= path34.length; ++i) {
+        if (i < path34.length) char = path34[i];
         else if (char === "/") break;
         else char = "/";
         if (char === "/") {
@@ -17038,8 +17038,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
               lastSegmentLength = 2;
             }
           } else {
-            if (res.length > 0) res += "/" + path32.slice(lastSlash + 1, i);
-            else res = path32.slice(lastSlash + 1, i);
+            if (res.length > 0) res += "/" + path34.slice(lastSlash + 1, i);
+            else res = path34.slice(lastSlash + 1, i);
             lastSegmentLength = i - lastSlash - 1;
           }
           lastSlash = i;
@@ -17052,19 +17052,19 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       }
       return res;
     }
-    function getWindowsDrivePrefix(path32) {
-      if (path32.length >= 2 && /^[a-zA-Z]:/.test(path32)) {
-        return path32.slice(0, 2);
+    function getWindowsDrivePrefix(path34) {
+      if (path34.length >= 2 && /^[a-zA-Z]:/.test(path34)) {
+        return path34.slice(0, 2);
       }
       return null;
     }
-    function normalize3(path32) {
-      if (!path32.length) return ".";
-      path32 = path32.replace(/\\/g, "/");
-      const drivePrefix = getWindowsDrivePrefix(path32);
-      const isAbsolute3 = path32[0] === "/" || drivePrefix !== null && path32[2] === "/";
-      const trailingSeparator = path32.at(-1) === "/";
-      const pathBody = drivePrefix ? path32.slice(2) : path32;
+    function normalize3(path34) {
+      if (!path34.length) return ".";
+      path34 = path34.replace(/\\/g, "/");
+      const drivePrefix = getWindowsDrivePrefix(path34);
+      const isAbsolute3 = path34[0] === "/" || drivePrefix !== null && path34[2] === "/";
+      const trailingSeparator = path34.at(-1) === "/";
+      const pathBody = drivePrefix ? path34.slice(2) : path34;
       let normalized = normalizeString(pathBody, !isAbsolute3);
       if (!normalized.length) {
         const root = drivePrefix ? isAbsolute3 ? drivePrefix + "/" : drivePrefix : isAbsolute3 ? "/" : ".";
@@ -17178,8 +17178,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     var getPath = (section, subsection, name) => {
       return [lower(section), subsection, lower(name)].filter((a) => a != null).join(".");
     };
-    var normalizePath2 = (path32) => {
-      const pathSegments = path32.split(".");
+    var normalizePath2 = (path34) => {
+      const pathSegments = path34.split(".");
       const section = pathSegments.shift();
       const name = pathSegments.pop();
       const subsection = pathSegments.length ? pathSegments.join(".") : void 0;
@@ -17218,23 +17218,23 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
               [name, value] = extractedVariable;
             }
           }
-          const path32 = getPath(section, subsection, name);
-          return { line, isSection, section, subsection, name, value, path: path32 };
+          const path34 = getPath(section, subsection, name);
+          return { line, isSection, section, subsection, name, value, path: path34 };
         }) : [];
       }
       static from(text2) {
         return new _GitConfig(text2);
       }
-      async get(path32, getall = false) {
-        const normalizedPath = normalizePath2(path32).path;
+      async get(path34, getall = false) {
+        const normalizedPath = normalizePath2(path34).path;
         const allValues = this.parsedConfig.filter((config2) => config2.path === normalizedPath).map(({ section, name, value }) => {
           const fn = schema[section] && schema[section][name];
           return fn ? fn(value) : value;
         });
         return getall ? allValues : allValues.pop();
       }
-      async getall(path32) {
-        return this.get(path32, true);
+      async getall(path34) {
+        return this.get(path34, true);
       }
       async getSubsections(section) {
         return this.parsedConfig.filter((config2) => config2.isSection && config2.section === section).map((config2) => config2.subsection);
@@ -17244,10 +17244,10 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           (config2) => !(config2.section === section && config2.subsection === subsection)
         );
       }
-      async append(path32, value) {
-        return this.set(path32, value, true);
+      async append(path34, value) {
+        return this.set(path34, value, true);
       }
-      async set(path32, value, append2 = false) {
+      async set(path34, value, append2 = false) {
         const {
           section,
           subsection,
@@ -17255,7 +17255,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           path: normalizedPath,
           sectionPath,
           isSection
-        } = normalizePath2(path32);
+        } = normalizePath2(path34);
         const configIndex = findLastIndex(
           this.parsedConfig,
           (config2) => config2.path === normalizedPath
@@ -17333,8 +17333,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} opts.gitdir - The path to the `.git` directory.
        * @returns {Promise<GitConfig>} A `GitConfig` object representing the parsed configuration.
        */
-      static async get({ fs: fs23, gitdir }) {
-        const text2 = await fs23.read(`${gitdir}/config`, { encoding: "utf8" });
+      static async get({ fs: fs24, gitdir }) {
+        const text2 = await fs24.read(`${gitdir}/config`, { encoding: "utf8" });
         return GitConfig.from(text2);
       }
       /**
@@ -17346,8 +17346,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {GitConfig} opts.config - The `GitConfig` object to save.
        * @returns {Promise<void>} Resolves when the configuration has been successfully saved.
        */
-      static async save({ fs: fs23, gitdir, config: config2 }) {
-        await fs23.write(`${gitdir}/config`, config2.toString(), {
+      static async save({ fs: fs24, gitdir, config: config2 }) {
+        await fs24.write(`${gitdir}/config`, config2.toString(), {
           encoding: "utf8"
         });
       }
@@ -17383,7 +17383,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<Object>} - An object containing pruned refs.
        */
       static async updateRemoteRefs({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         remote,
         refs,
@@ -17398,7 +17398,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
             throw new InvalidOidError(value);
           }
         }
-        const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+        const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
         if (!refspecs) {
           refspecs = await config2.getall(`remote.${remote}.fetch`);
           if (refspecs.length === 0) {
@@ -17426,12 +17426,12 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         }
         if (pruneTags) {
           const tags2 = await _GitRefManager.listRefs({
-            fs: fs23,
+            fs: fs24,
             gitdir,
             filepath: "refs/tags"
           });
           await _GitRefManager.deleteRefs({
-            fs: fs23,
+            fs: fs24,
             gitdir,
             refs: tags2.map((tag2) => `refs/tags/${tag2}`)
           });
@@ -17439,7 +17439,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         if (tags) {
           for (const serverRef of refs.keys()) {
             if (serverRef.startsWith("refs/tags") && !serverRef.endsWith("^{}")) {
-              if (!await _GitRefManager.exists({ fs: fs23, gitdir, ref: serverRef })) {
+              if (!await _GitRefManager.exists({ fs: fs24, gitdir, ref: serverRef })) {
                 const oid = refs.get(serverRef);
                 actualRefsToWrite.set(serverRef, oid);
               }
@@ -17457,7 +17457,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         if (prune) {
           for (const filepath of refspec.localNamespaces()) {
             const refs2 = (await _GitRefManager.listRefs({
-              fs: fs23,
+              fs: fs24,
               gitdir,
               filepath
             })).map((file) => `${filepath}/${file}`);
@@ -17468,13 +17468,13 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
             }
           }
           if (pruned.length > 0) {
-            await _GitRefManager.deleteRefs({ fs: fs23, gitdir, refs: pruned });
+            await _GitRefManager.deleteRefs({ fs: fs24, gitdir, refs: pruned });
           }
         }
         for (const [key, value] of actualRefsToWrite) {
           await acquireLock2(
             key,
-            async () => fs23.write(join3(gitdir, key), `${value.trim()}
+            async () => fs24.write(join3(gitdir, key), `${value.trim()}
 `, "utf8")
           );
         }
@@ -17491,14 +17491,14 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<void>}
        */
       // TODO: make this less crude?
-      static async writeRef({ fs: fs23, gitdir, ref, value }) {
+      static async writeRef({ fs: fs24, gitdir, ref, value }) {
         assertWritableRef(ref);
         if (!value.match(/[0-9a-f]{40}/)) {
           throw new InvalidOidError(value);
         }
         await acquireLock2(
           ref,
-          async () => fs23.write(join3(gitdir, ref), `${value.trim()}
+          async () => fs24.write(join3(gitdir, ref), `${value.trim()}
 `, "utf8")
         );
       }
@@ -17512,11 +17512,11 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.value - The target ref.
        * @returns {Promise<void>}
        */
-      static async writeSymbolicRef({ fs: fs23, gitdir, ref, value }) {
+      static async writeSymbolicRef({ fs: fs24, gitdir, ref, value }) {
         assertWritableRef(ref);
         await acquireLock2(
           ref,
-          async () => fs23.write(join3(gitdir, ref), `ref: ${value.trim()}
+          async () => fs24.write(join3(gitdir, ref), `ref: ${value.trim()}
 `, "utf8")
         );
       }
@@ -17529,8 +17529,8 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.ref - The ref to delete.
        * @returns {Promise<void>}
        */
-      static async deleteRef({ fs: fs23, gitdir, ref }) {
-        return _GitRefManager.deleteRefs({ fs: fs23, gitdir, refs: [ref] });
+      static async deleteRef({ fs: fs24, gitdir, ref }) {
+        return _GitRefManager.deleteRefs({ fs: fs24, gitdir, refs: [ref] });
       }
       /**
        * Deletes multiple refs.
@@ -17541,12 +17541,12 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string[]} args.refs - The refs to delete.
        * @returns {Promise<void>}
        */
-      static async deleteRefs({ fs: fs23, gitdir, refs }) {
+      static async deleteRefs({ fs: fs24, gitdir, refs }) {
         refs.forEach(assertWritableRef);
-        await Promise.all(refs.map((ref) => fs23.rm(join3(gitdir, ref))));
+        await Promise.all(refs.map((ref) => fs24.rm(join3(gitdir, ref))));
         let text2 = await acquireLock2(
           "packed-refs",
-          async () => fs23.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
+          async () => fs24.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
         );
         const packed = GitPackedRefs.from(text2);
         const beforeSize = packed.refs.size;
@@ -17559,7 +17559,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           text2 = packed.toString();
           await acquireLock2(
             "packed-refs",
-            async () => fs23.write(`${gitdir}/packed-refs`, text2, { encoding: "utf8" })
+            async () => fs24.write(`${gitdir}/packed-refs`, text2, { encoding: "utf8" })
           );
         }
       }
@@ -17574,7 +17574,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @returns {Promise<string>} - The resolved object ID.
        */
       static async resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref,
         depth = void 0,
@@ -17588,17 +17588,17 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         }
         if (ref.startsWith("ref: ")) {
           ref = ref.slice("ref: ".length);
-          return _GitRefManager.resolve({ fs: fs23, gitdir, ref, depth, visited });
+          return _GitRefManager.resolve({ fs: fs24, gitdir, ref, depth, visited });
         }
         if (ref.length === 40 && /[0-9a-f]{40}/.test(ref)) {
           return ref;
         }
-        const packedMap = await _GitRefManager.packedRefs({ fs: fs23, gitdir });
+        const packedMap = await _GitRefManager.packedRefs({ fs: fs24, gitdir });
         const allpaths = refpaths(ref).filter((p) => !GIT_FILES.includes(p));
         for (const ref2 of allpaths) {
           const sha = await acquireLock2(
             ref2,
-            async () => await fs23.read(`${gitdir}/${ref2}`, { encoding: "utf8" }) || packedMap.get(ref2)
+            async () => await fs24.read(`${gitdir}/${ref2}`, { encoding: "utf8" }) || packedMap.get(ref2)
           );
           if (sha) {
             if (visited.has(ref2)) {
@@ -17608,7 +17608,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
             }
             visited.add(ref2);
             return _GitRefManager.resolve({
-              fs: fs23,
+              fs: fs24,
               gitdir,
               ref: sha.trim(),
               depth,
@@ -17627,9 +17627,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.ref - The ref to check.
        * @returns {Promise<boolean>} - True if the ref exists, false otherwise.
        */
-      static async exists({ fs: fs23, gitdir, ref }) {
+      static async exists({ fs: fs24, gitdir, ref }) {
         try {
-          await _GitRefManager.expand({ fs: fs23, gitdir, ref });
+          await _GitRefManager.expand({ fs: fs24, gitdir, ref });
           return true;
         } catch (err) {
           return false;
@@ -17644,16 +17644,16 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.ref - The ref to expand.
        * @returns {Promise<string>} - The full ref name.
        */
-      static async expand({ fs: fs23, gitdir, ref }) {
+      static async expand({ fs: fs24, gitdir, ref }) {
         if (ref.length === 40 && /[0-9a-f]{40}/.test(ref)) {
           return ref;
         }
-        const packedMap = await _GitRefManager.packedRefs({ fs: fs23, gitdir });
+        const packedMap = await _GitRefManager.packedRefs({ fs: fs24, gitdir });
         const allpaths = refpaths(ref).filter((p) => !GIT_FILES.includes(p));
         for (const ref2 of allpaths) {
           const refExists = await acquireLock2(
             ref2,
-            async () => fs23.exists(`${gitdir}/${ref2}`)
+            async () => fs24.exists(`${gitdir}/${ref2}`)
           );
           if (refExists) return ref2;
           if (packedMap.has(ref2)) return ref2;
@@ -17721,10 +17721,10 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        * @returns {Promise<Map<string, string>>} - A map of packed refs.
        */
-      static async packedRefs({ fs: fs23, gitdir }) {
+      static async packedRefs({ fs: fs24, gitdir }) {
         const text2 = await acquireLock2(
           "packed-refs",
-          async () => fs23.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
+          async () => fs24.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
         );
         const packed = GitPackedRefs.from(text2);
         return packed.refs;
@@ -17738,11 +17738,11 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} args.filepath - The filepath prefix to match.
        * @returns {Promise<string[]>} - A sorted list of refs.
        */
-      static async listRefs({ fs: fs23, gitdir, filepath }) {
-        const packedMap = _GitRefManager.packedRefs({ fs: fs23, gitdir });
+      static async listRefs({ fs: fs24, gitdir, filepath }) {
+        const packedMap = _GitRefManager.packedRefs({ fs: fs24, gitdir });
         let files = null;
         try {
-          files = await fs23.readdirDeep(`${gitdir}/${filepath}`);
+          files = await fs24.readdirDeep(`${gitdir}/${filepath}`);
           files = files.map((x) => x.replace(`${gitdir}/${filepath}/`, ""));
         } catch (err) {
           files = [];
@@ -17767,15 +17767,15 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} [args.remote] - The remote to filter branches by.
        * @returns {Promise<string[]>} - A list of branch names.
        */
-      static async listBranches({ fs: fs23, gitdir, remote }) {
+      static async listBranches({ fs: fs24, gitdir, remote }) {
         if (remote) {
           return _GitRefManager.listRefs({
-            fs: fs23,
+            fs: fs24,
             gitdir,
             filepath: `refs/remotes/${remote}`
           });
         } else {
-          return _GitRefManager.listRefs({ fs: fs23, gitdir, filepath: `refs/heads` });
+          return _GitRefManager.listRefs({ fs: fs24, gitdir, filepath: `refs/heads` });
         }
       }
       /**
@@ -17786,9 +17786,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {string} [args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        * @returns {Promise<string[]>} - A list of tag names.
        */
-      static async listTags({ fs: fs23, gitdir }) {
+      static async listTags({ fs: fs24, gitdir }) {
         const tags = await _GitRefManager.listRefs({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           filepath: `refs/tags`
         });
@@ -17835,19 +17835,19 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         let mode = buffer.slice(cursor, space).toString("utf8");
         if (mode === "40000") mode = "040000";
         const type = mode2type$1(mode);
-        const path32 = buffer.slice(space + 1, nullchar).toString("utf8");
-        const hfsClean = path32.replace(
+        const path34 = buffer.slice(space + 1, nullchar).toString("utf8");
+        const hfsClean = path34.replace(
           /[\u200C-\u200F\u202A-\u202E\u206A-\u206F\uFEFF]/g,
           ""
         );
         const ntfsClean = hfsClean.split(":")[0];
         const normalized = ntfsClean.toLowerCase().replace(/[. ]+$/, "");
-        if (path32.includes("\\") || path32.includes("/") || hfsClean === "." || hfsClean === ".." || normalized === ".git" || /^\.?git~[1-9]$/.test(normalized)) {
-          throw new UnsafeFilepathError(path32);
+        if (path34.includes("\\") || path34.includes("/") || hfsClean === "." || hfsClean === ".." || normalized === ".git" || /^\.?git~[1-9]$/.test(normalized)) {
+          throw new UnsafeFilepathError(path34);
         }
         const oid = buffer.slice(nullchar + 1, nullchar + 21).toString("hex");
         cursor = nullchar + 21;
-        _entries.push({ mode, path: path32, oid, type });
+        _entries.push({ mode, path: path34, oid, type });
       }
       return _entries;
     }
@@ -17896,10 +17896,10 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
           entries.map((entry) => {
             const mode = Buffer.from(entry.mode.replace(/^0/, ""));
             const space = Buffer.from(" ");
-            const path32 = Buffer.from(entry.path, "utf8");
+            const path34 = Buffer.from(entry.path, "utf8");
             const nullchar = Buffer.from([0]);
             const oid = Buffer.from(entry.oid, "hex");
-            return Buffer.concat([mode, space, path32, nullchar, oid]);
+            return Buffer.concat([mode, space, path34, nullchar, oid]);
           })
         );
       }
@@ -17959,9 +17959,9 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         };
       }
     };
-    async function readObjectLoose({ fs: fs23, gitdir, oid }) {
+    async function readObjectLoose({ fs: fs24, gitdir, oid }) {
       const source = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
-      const file = await fs23.read(`${gitdir}/${source}`);
+      const file = await fs24.read(`${gitdir}/${source}`);
       if (!file) {
         return null;
       }
@@ -18553,17 +18553,17 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     };
     var PackfileCache = Symbol("PackfileCache");
     async function loadPackIndex({
-      fs: fs23,
+      fs: fs24,
       filename,
       getExternalRefDelta,
       emitter,
       emitterPrefix
     }) {
-      const idx = await fs23.read(filename);
+      const idx = await fs24.read(filename);
       return GitPackIndex.fromIdx({ idx, getExternalRefDelta });
     }
     function readPackIndex({
-      fs: fs23,
+      fs: fs24,
       cache,
       filename,
       getExternalRefDelta,
@@ -18574,7 +18574,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       let p = cache[PackfileCache].get(filename);
       if (!p) {
         p = loadPackIndex({
-          fs: fs23,
+          fs: fs24,
           filename,
           getExternalRefDelta,
           emitter,
@@ -18593,19 +18593,19 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       return hash.digest("hex");
     }
     async function readObjectPacked({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       format: format2 = "content",
       getExternalRefDelta
     }) {
-      let list2 = await fs23.readdir(join3(gitdir, "objects/pack"));
+      let list2 = await fs24.readdir(join3(gitdir, "objects/pack"));
       list2 = list2.filter((x) => x.endsWith(".idx"));
       for (const filename of list2) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
         const p = await readPackIndex({
-          fs: fs23,
+          fs: fs24,
           cache,
           filename: indexFile,
           getExternalRefDelta
@@ -18614,7 +18614,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         if (p.offsets.has(oid)) {
           const packFile = indexFile.replace(/idx$/, "pack");
           if (!p.pack) {
-            p.pack = fs23.read(packFile);
+            p.pack = fs24.read(packFile);
           }
           const pack = await p.pack;
           if (!pack) {
@@ -18652,7 +18652,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       return null;
     }
     async function _readObject({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
@@ -18661,17 +18661,17 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       if (!["deflated", "wrapped", "content"].includes(format2)) {
         throw new InternalError(`invalid requested format "${format2}"`);
       }
-      const getExternalRefDelta = (oid2) => _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
+      const getExternalRefDelta = (oid2) => _readObject({ fs: fs24, cache, gitdir, oid: oid2 });
       let result;
       if (oid === "4b825dc642cb6eb9a060e54bf8d69288fbee4904") {
         result = { format: "wrapped", object: Buffer.from(`tree 0\0`) };
       }
       if (!result) {
-        result = await readObjectLoose({ fs: fs23, gitdir, oid });
+        result = await readObjectLoose({ fs: fs24, gitdir, oid });
       }
       if (!result) {
         result = await readObjectPacked({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           oid,
@@ -18846,13 +18846,13 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {'leading-slash'|'trailing-slash'|'directory'} [reason]
        */
       constructor(reason) {
-        let message = "invalid filepath";
+        let message2 = "invalid filepath";
         if (reason === "leading-slash" || reason === "trailing-slash") {
-          message = `"filepath" parameter should not include leading or trailing directory separators because these can cause problems on some platforms.`;
+          message2 = `"filepath" parameter should not include leading or trailing directory separators because these can cause problems on some platforms.`;
         } else if (reason === "directory") {
-          message = `"filepath" should not be a directory.`;
+          message2 = `"filepath" should not be a directory.`;
         }
-        super(message);
+        super(message2);
         this.code = this.name = _InvalidFilepathError.code;
         this.data = { reason };
       }
@@ -18951,13 +18951,13 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        * @param {'not-fast-forward'|'tag-exists'} reason
        */
       constructor(reason) {
-        let message = "";
+        let message2 = "";
         if (reason === "not-fast-forward") {
-          message = " because it was not a simple fast-forward";
+          message2 = " because it was not a simple fast-forward";
         } else if (reason === "tag-exists") {
-          message = " because tag already exists";
+          message2 = " because tag already exists";
         }
-        super(`Push rejected${message}. Use "force: true" to override.`);
+        super(`Push rejected${message2}. Use "force: true" to override.`);
         this.code = this.name = _PushRejectedError.code;
         this.data = { reason };
       }
@@ -19110,7 +19110,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
     function negateExceptForZero(n) {
       return n === 0 ? n : -n;
     }
-    function normalizeNewlines(str) {
+    function normalizeNewlines2(str) {
       str = str.replace(/\r/g, "");
       str = str.replace(/^\n+/, "");
       str = str.replace(/\n+$/, "") + "\n";
@@ -19206,7 +19206,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return obj;
       }
       withoutSignature() {
-        const tag2 = normalizeNewlines(this._tag);
+        const tag2 = normalizeNewlines2(this._tag);
         if (tag2.indexOf("\n-----BEGIN PGP SIGNATURE-----") === -1) return tag2;
         return tag2.slice(0, tag2.lastIndexOf("\n-----BEGIN PGP SIGNATURE-----"));
       }
@@ -19216,7 +19216,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           this._tag.indexOf("-----BEGIN PGP SIGNATURE-----"),
           this._tag.indexOf("-----END PGP SIGNATURE-----") + "-----END PGP SIGNATURE-----".length
         );
-        return normalizeNewlines(signature);
+        return normalizeNewlines2(signature);
       }
       payload() {
         return this.withoutSignature() + "\n";
@@ -19227,7 +19227,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       static async sign(tag2, sign, secretKey) {
         const payload = tag2.payload();
         let { signature } = await sign({ payload, secretKey });
-        signature = normalizeNewlines(signature);
+        signature = normalizeNewlines2(signature);
         const signedTag = payload + signature;
         return _GitAnnotatedTag.from(signedTag);
       }
@@ -19252,9 +19252,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       static fromPayloadSignature({ payload, signature }) {
         const headers = _GitCommit.justHeaders(payload);
-        const message = _GitCommit.justMessage(payload);
-        const commit4 = normalizeNewlines(
-          headers + "\ngpgsig" + indent(signature) + "\n" + message
+        const message2 = _GitCommit.justMessage(payload);
+        const commit4 = normalizeNewlines2(
+          headers + "\ngpgsig" + indent(signature) + "\n" + message2
         );
         return new _GitCommit(commit4);
       }
@@ -19276,7 +19276,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return Object.assign({ message: this.message() }, this.headers());
       }
       static justMessage(commit4) {
-        return normalizeNewlines(commit4.slice(commit4.indexOf("\n\n") + 2));
+        return normalizeNewlines2(commit4.slice(commit4.indexOf("\n\n") + 2));
       }
       static justHeaders(commit4) {
         return commit4.slice(0, commit4.indexOf("\n\n"));
@@ -19341,19 +19341,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return headers;
       }
       static render(obj) {
-        return _GitCommit.renderHeaders(obj) + "\n" + normalizeNewlines(obj.message);
+        return _GitCommit.renderHeaders(obj) + "\n" + normalizeNewlines2(obj.message);
       }
       render() {
         return this._commit;
       }
       withoutSignature() {
-        const commit4 = normalizeNewlines(this._commit);
+        const commit4 = normalizeNewlines2(this._commit);
         if (commit4.indexOf("\ngpgsig") === -1) return commit4;
         const headers = commit4.slice(0, commit4.indexOf("\ngpgsig"));
-        const message = commit4.slice(
+        const message2 = commit4.slice(
           commit4.indexOf("-----END PGP SIGNATURE-----\n") + "-----END PGP SIGNATURE-----\n".length
         );
-        return normalizeNewlines(headers + "\n" + message);
+        return normalizeNewlines2(headers + "\n" + message2);
       }
       isolateSignature() {
         const signature = this._commit.slice(
@@ -19364,26 +19364,26 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       static async sign(commit4, sign, secretKey) {
         const payload = commit4.withoutSignature();
-        const message = _GitCommit.justMessage(commit4._commit);
+        const message2 = _GitCommit.justMessage(commit4._commit);
         let { signature } = await sign({ payload, secretKey });
-        signature = normalizeNewlines(signature);
+        signature = normalizeNewlines2(signature);
         const headers = _GitCommit.justHeaders(commit4._commit);
-        const signedCommit = headers + "\ngpgsig" + indent(signature) + "\n" + message;
+        const signedCommit = headers + "\ngpgsig" + indent(signature) + "\n" + message2;
         return _GitCommit.from(signedCommit);
       }
     };
-    async function resolveTree({ fs: fs23, cache, gitdir, oid }) {
+    async function resolveTree({ fs: fs24, cache, gitdir, oid }) {
       if (oid === "4b825dc642cb6eb9a060e54bf8d69288fbee4904") {
         return { tree: GitTree.from([]), oid };
       }
-      const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+      const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
       if (type === "tag") {
         oid = GitAnnotatedTag.from(object).parse().object;
-        return resolveTree({ fs: fs23, cache, gitdir, oid });
+        return resolveTree({ fs: fs24, cache, gitdir, oid });
       }
       if (type === "commit") {
         oid = GitCommit.from(object).parse().tree;
-        return resolveTree({ fs: fs23, cache, gitdir, oid });
+        return resolveTree({ fs: fs24, cache, gitdir, oid });
       }
       if (type !== "tree") {
         throw new ObjectTypeError(oid, type, "tree");
@@ -19391,21 +19391,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return { tree: GitTree.from(object), oid };
     }
     var GitWalkerRepo = class {
-      constructor({ fs: fs23, gitdir, ref, cache }) {
-        this.fs = fs23;
+      constructor({ fs: fs24, gitdir, ref, cache }) {
+        this.fs = fs24;
         this.cache = cache;
         this.gitdir = gitdir;
         this.mapPromise = (async () => {
           const map = /* @__PURE__ */ new Map();
           let oid;
           try {
-            oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
+            oid = await GitRefManager.resolve({ fs: fs24, gitdir, ref });
           } catch (e) {
             if (e instanceof NotFoundError) {
               oid = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
             }
           }
-          const tree = await resolveTree({ fs: fs23, cache: this.cache, gitdir, oid });
+          const tree = await resolveTree({ fs: fs24, cache: this.cache, gitdir, oid });
           tree.type = "tree";
           tree.mode = "40000";
           map.set(".", tree);
@@ -19440,7 +19440,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       async readdir(entry) {
         const filepath = entry._fullpath;
-        const { fs: fs23, cache, gitdir } = this;
+        const { fs: fs24, cache, gitdir } = this;
         const map = await this.mapPromise;
         const obj = map.get(filepath);
         if (!obj) throw new Error(`No obj for ${filepath}`);
@@ -19449,7 +19449,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (obj.type !== "tree") {
           return null;
         }
-        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
         if (type !== obj.type) {
           throw new ObjectTypeError(oid, type, obj.type);
         }
@@ -19480,10 +19480,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async content(entry) {
         if (entry._content === false) {
           const map = await this.mapPromise;
-          const { fs: fs23, cache, gitdir } = this;
+          const { fs: fs24, cache, gitdir } = this;
           const obj = map.get(entry._fullpath);
           const oid = obj.oid;
-          const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+          const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
           if (type !== "blob") {
             entry._content = void 0;
           } else {
@@ -19504,16 +19504,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     function TREE2({ ref = "HEAD" } = {}) {
       const o = /* @__PURE__ */ Object.create(null);
       Object.defineProperty(o, GitWalkSymbol, {
-        value: function({ fs: fs23, gitdir, cache }) {
-          return new GitWalkerRepo({ fs: fs23, gitdir, ref, cache });
+        value: function({ fs: fs24, gitdir, cache }) {
+          return new GitWalkerRepo({ fs: fs24, gitdir, ref, cache });
         }
       });
       Object.freeze(o);
       return o;
     }
     var GitWalkerFs = class {
-      constructor({ fs: fs23, dir, gitdir, cache, refresh = true }) {
-        this.fs = fs23;
+      constructor({ fs: fs24, dir, gitdir, cache, refresh = true }) {
+        this.fs = fs24;
         this.cache = cache;
         this.dir = dir;
         this.gitdir = gitdir;
@@ -19549,8 +19549,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async readdir(entry) {
         if (await entry.type() !== "tree") return null;
         const filepath = entry._fullpath;
-        const { fs: fs23, dir } = this;
-        const names = await fs23.readdir(join3(dir, filepath));
+        const { fs: fs24, dir } = this;
+        const names = await fs24.readdir(join3(dir, filepath));
         if (names === null) return null;
         return names.map((name) => join3(filepath, name));
       }
@@ -19568,8 +19568,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       async stat(entry) {
         if (entry._stat === false) {
-          const { fs: fs23, dir } = this;
-          let stat4 = await fs23.lstat(`${dir}/${entry._fullpath}`);
+          const { fs: fs24, dir } = this;
+          let stat4 = await fs24.lstat(`${dir}/${entry._fullpath}`);
           if (!stat4) {
             throw new Error(
               `ENOENT: no such file or directory, lstat '${entry._fullpath}'`
@@ -19591,17 +19591,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       async content(entry) {
         if (entry._content === false) {
-          const { fs: fs23, dir, gitdir } = this;
+          const { fs: fs24, dir, gitdir } = this;
           if (await entry.type() === "tree") {
             entry._content = void 0;
           } else {
             let content;
             if (await entry.mode() >> 12 === 10) {
-              content = await fs23.readlink(`${dir}/${entry._fullpath}`);
+              content = await fs24.readlink(`${dir}/${entry._fullpath}`);
             } else {
-              const config2 = await this._getGitConfig(fs23, gitdir);
+              const config2 = await this._getGitConfig(fs24, gitdir);
               const autocrlf = await config2.get("core.autocrlf");
-              content = await fs23.read(`${dir}/${entry._fullpath}`, { autocrlf });
+              content = await fs24.read(`${dir}/${entry._fullpath}`, { autocrlf });
             }
             entry._actualSize = content.length;
             if (entry._stat && entry._stat.size === -1) {
@@ -19615,14 +19615,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async oid(entry) {
         if (entry._oid === false) {
           const self = this;
-          const { fs: fs23, gitdir, cache } = this;
+          const { fs: fs24, gitdir, cache } = this;
           let oid;
           await GitIndexManager.acquire(
-            { fs: fs23, gitdir, cache },
+            { fs: fs24, gitdir, cache },
             async function(index2) {
               const stage = index2.entriesMap.get(entry._fullpath);
               const stats = await entry.stat();
-              const config2 = await self._getGitConfig(fs23, gitdir);
+              const config2 = await self._getGitConfig(fs24, gitdir);
               const filemode = await config2.get("core.filemode");
               const trustino = typeof process !== "undefined" ? !(process.platform === "win32") : true;
               if (!stage || compareStats(stats, stage, filemode, trustino)) {
@@ -19650,19 +19650,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         return entry._oid;
       }
-      async _getGitConfig(fs23, gitdir) {
+      async _getGitConfig(fs24, gitdir) {
         if (this.config) {
           return this.config;
         }
-        this.config = await GitConfigManager.get({ fs: fs23, gitdir });
+        this.config = await GitConfigManager.get({ fs: fs24, gitdir });
         return this.config;
       }
     };
     function WORKDIR({ refresh = true } = {}) {
       const o = /* @__PURE__ */ Object.create(null);
       Object.defineProperty(o, GitWalkSymbol, {
-        value: function({ fs: fs23, dir, gitdir, cache }) {
-          return new GitWalkerFs({ fs: fs23, dir, gitdir, cache, refresh });
+        value: function({ fs: fs24, dir, gitdir, cache }) {
+          return new GitWalkerFs({ fs: fs24, dir, gitdir, cache, refresh });
         }
       });
       Object.freeze(o);
@@ -19721,7 +19721,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _walk({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir,
@@ -19738,7 +19738,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       iterate = (walk3, children) => Promise.all([...children].map(walk3))
     }) {
       const walkers = trees.map(
-        (proxy) => proxy[GitWalkSymbol]({ fs: fs23, dir, gitdir, cache })
+        (proxy) => proxy[GitWalkSymbol]({ fs: fs24, dir, gitdir, cache })
       );
       const root = new Array(walkers.length).fill(".");
       const range = arrayRange(0, walkers.length);
@@ -19798,22 +19798,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       }
     }
-    async function rmRecursive(fs23, filepath) {
-      const entries = await fs23.readdir(filepath);
+    async function rmRecursive(fs24, filepath) {
+      const entries = await fs24.readdir(filepath);
       if (entries == null) {
-        await fs23.rm(filepath);
+        await fs24.rm(filepath);
       } else if (entries.length) {
         await Promise.all(
           entries.map((entry) => {
             const subpath = join3(filepath, entry);
-            return fs23.lstat(subpath).then((stat4) => {
+            return fs24.lstat(subpath).then((stat4) => {
               if (!stat4) return;
-              return stat4.isDirectory() ? rmRecursive(fs23, subpath) : fs23.rm(subpath);
+              return stat4.isDirectory() ? rmRecursive(fs24, subpath) : fs24.rm(subpath);
             });
           })
-        ).then(() => fs23.rmdir(filepath));
+        ).then(() => fs24.rmdir(filepath));
       } else {
-        await fs23.rmdir(filepath);
+        await fs24.rmdir(filepath);
       }
     }
     function isPromiseLike(obj) {
@@ -19825,7 +19825,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     function isFunction(obj) {
       return typeof obj === "function";
     }
-    function isPromiseFs(fs23) {
+    function isPromiseFs(fs24) {
       const test = (targetFs) => {
         try {
           return targetFs.readFile().catch((e) => e);
@@ -19833,7 +19833,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           return e;
         }
       };
-      return isPromiseLike(test(fs23));
+      return isPromiseLike(test(fs24));
     }
     var commands = [
       "readFile",
@@ -19847,25 +19847,25 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       "readlink",
       "symlink"
     ];
-    function bindFs(target, fs23) {
-      if (isPromiseFs(fs23)) {
+    function bindFs(target, fs24) {
+      if (isPromiseFs(fs24)) {
         for (const command of commands) {
-          target[`_${command}`] = fs23[command].bind(fs23);
+          target[`_${command}`] = fs24[command].bind(fs24);
         }
       } else {
         for (const command of commands) {
-          target[`_${command}`] = pify(fs23[command].bind(fs23));
+          target[`_${command}`] = pify(fs24[command].bind(fs24));
         }
       }
-      if (isPromiseFs(fs23)) {
-        if (fs23.cp) target._cp = fs23.cp.bind(fs23);
-        if (fs23.rm) target._rm = fs23.rm.bind(fs23);
-        else if (fs23.rmdir.length > 1) target._rm = fs23.rmdir.bind(fs23);
+      if (isPromiseFs(fs24)) {
+        if (fs24.cp) target._cp = fs24.cp.bind(fs24);
+        if (fs24.rm) target._rm = fs24.rm.bind(fs24);
+        else if (fs24.rmdir.length > 1) target._rm = fs24.rmdir.bind(fs24);
         else target._rm = rmRecursive.bind(null, target);
       } else {
-        if (fs23.cp) target._cp = pify(fs23.cp.bind(fs23));
-        if (fs23.rm) target._rm = pify(fs23.rm.bind(fs23));
-        else if (fs23.rmdir.length > 2) target._rm = pify(fs23.rmdir.bind(fs23));
+        if (fs24.cp) target._cp = pify(fs24.cp.bind(fs24));
+        if (fs24.rm) target._rm = pify(fs24.rm.bind(fs24));
+        else if (fs24.rmdir.length > 2) target._rm = pify(fs24.rmdir.bind(fs24));
         else target._rm = rmRecursive.bind(null, target);
       }
     }
@@ -19875,15 +19875,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        *
        * @param {Object} fs - A file system implementation to wrap.
        */
-      constructor(fs23) {
-        if (typeof fs23._original_unwrapped_fs !== "undefined") return fs23;
-        const promises = Object.getOwnPropertyDescriptor(fs23, "promises");
+      constructor(fs24) {
+        if (typeof fs24._original_unwrapped_fs !== "undefined") return fs24;
+        const promises = Object.getOwnPropertyDescriptor(fs24, "promises");
         if (promises && promises.enumerable) {
-          bindFs(this, fs23.promises);
+          bindFs(this, fs24.promises);
         } else {
-          bindFs(this, fs23);
+          bindFs(this, fs24);
         }
-        this._original_unwrapped_fs = fs23;
+        this._original_unwrapped_fs = fs24;
       }
       /**
        * Return true if a file exists, false if it doesn't exist.
@@ -20120,29 +20120,29 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
-        const fs23 = new FileSystem(_fs);
+        const fs24 = new FileSystem(_fs);
         const trees = [TREE2({ ref: commit4 }), WORKDIR(), STAGE2()];
         let unmergedPaths = [];
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         await GitIndexManager.acquire(
-          { fs: fs23, gitdir: updatedGitdir, cache },
+          { fs: fs24, gitdir: updatedGitdir, cache },
           async function(index2) {
             unmergedPaths = index2.unmergedPaths;
           }
         );
         const results = await _walk({
-          fs: fs23,
+          fs: fs24,
           cache,
           dir,
           gitdir: updatedGitdir,
           trees,
-          map: async function(path32, [head, workdir, index2]) {
+          map: async function(path34, [head, workdir, index2]) {
             const staged = !await modified(workdir, index2);
-            const unmerged = unmergedPaths.includes(path32);
+            const unmerged = unmergedPaths.includes(path34);
             const unmodified = !await modified(index2, head);
             if (staged || unmerged) {
               return head ? {
-                path: path32,
+                path: path34,
                 mode: await head.mode(),
                 oid: await head.oid(),
                 type: await head.type(),
@@ -20150,22 +20150,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               } : void 0;
             }
             if (unmodified) return false;
-            else throw new IndexResetError(path32);
+            else throw new IndexResetError(path34);
           }
         });
         await GitIndexManager.acquire(
-          { fs: fs23, gitdir: updatedGitdir, cache },
+          { fs: fs24, gitdir: updatedGitdir, cache },
           async function(index2) {
             for (const entry of results) {
               if (entry === false) continue;
               if (!entry) {
-                await fs23.rmdir(`${dir}/${entry.path}`, { recursive: true });
+                await fs24.rmdir(`${dir}/${entry.path}`, { recursive: true });
                 index2.delete({ filepath: entry.path });
                 continue;
               }
               if (entry.type === "blob") {
                 const content = new TextDecoder().decode(entry.content);
-                await fs23.write(`${dir}/${entry.path}`, content, {
+                await fs24.write(`${dir}/${entry.path}`, content, {
                   mode: entry.mode
                 });
                 index2.insert({
@@ -20193,13 +20193,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.filepath - The path of the file to check.
        * @returns {Promise<boolean>} - `true` if the file is ignored, `false` otherwise.
        */
-      static async isIgnored({ fs: fs23, dir, gitdir = join3(dir, ".git"), filepath }) {
+      static async isIgnored({ fs: fs24, dir, gitdir = join3(dir, ".git"), filepath }) {
         if (basename3(filepath) === ".git") return true;
         if (filepath === ".") return false;
         let excludes = "";
         const excludesFile = join3(gitdir, "info", "exclude");
-        if (await fs23.exists(excludesFile)) {
-          excludes = await fs23.read(excludesFile, "utf8");
+        if (await fs24.exists(excludesFile)) {
+          excludes = await fs24.read(excludesFile, "utf8");
         }
         const pairs = [
           {
@@ -20220,7 +20220,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         for (const p of pairs) {
           let file;
           try {
-            file = await fs23.read(p.gitignore, "utf8");
+            file = await fs24.read(p.gitignore, "utf8");
           } catch (err) {
             if (err.code === "NOENT") continue;
           }
@@ -20237,7 +20237,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return ignoredStatus;
       }
     };
-    async function writeObjectLoose({ fs: fs23, gitdir, object, format: format2, oid }) {
+    async function writeObjectLoose({ fs: fs24, gitdir, object, format: format2, oid }) {
       if (format2 !== "deflated") {
         throw new InternalError(
           "GitObjectStoreLoose expects objects to write to be in deflated format"
@@ -20245,7 +20245,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       const source = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
       const filepath = `${gitdir}/${source}`;
-      if (!await fs23.exists(filepath)) await fs23.write(filepath, object);
+      if (!await fs24.exists(filepath)) await fs24.write(filepath, object);
     }
     var supportsCompressionStream = null;
     async function deflate(buffer) {
@@ -20271,7 +20271,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _writeObject({
-      fs: fs23,
+      fs: fs24,
       gitdir,
       type,
       object,
@@ -20287,7 +20287,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         object = Buffer.from(await deflate(object));
       }
       if (!dryRun) {
-        await writeObjectLoose({ fs: fs23, gitdir, object, format: "deflated", oid });
+        await writeObjectLoose({ fs: fs24, gitdir, object, format: "deflated", oid });
       }
       return oid;
     }
@@ -20310,17 +20310,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         await GitIndexManager.acquire(
-          { fs: fs23, gitdir: updatedGitdir, cache },
+          { fs: fs24, gitdir: updatedGitdir, cache },
           async (index2) => {
-            const config2 = await GitConfigManager.get({ fs: fs23, gitdir: updatedGitdir });
+            const config2 = await GitConfigManager.get({ fs: fs24, gitdir: updatedGitdir });
             const autocrlf = await config2.get("core.autocrlf");
             return addToIndex({
               dir,
               gitdir: updatedGitdir,
-              fs: fs23,
+              fs: fs24,
               filepath,
               index: index2,
               force,
@@ -20345,7 +20345,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function addToIndex({
       dir,
       gitdir,
-      fs: fs23,
+      fs: fs24,
       filepath,
       index: index2,
       force,
@@ -20356,23 +20356,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const promises = filepath.map(async (currentFilepath) => {
         if (!force && !isTracked(index2, currentFilepath)) {
           const ignored = await GitIgnoreManager.isIgnored({
-            fs: fs23,
+            fs: fs24,
             dir,
             gitdir,
             filepath: currentFilepath
           });
           if (ignored) return;
         }
-        const stats = await fs23.lstat(join3(dir, currentFilepath));
+        const stats = await fs24.lstat(join3(dir, currentFilepath));
         if (!stats) throw new NotFoundError(currentFilepath);
         if (stats.isDirectory()) {
-          const children = await fs23.readdir(join3(dir, currentFilepath));
+          const children = await fs24.readdir(join3(dir, currentFilepath));
           if (parallel) {
             const promises2 = children.map(
               (child) => addToIndex({
                 dir,
                 gitdir,
-                fs: fs23,
+                fs: fs24,
                 filepath: [join3(currentFilepath, child)],
                 index: index2,
                 force,
@@ -20386,7 +20386,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               await addToIndex({
                 dir,
                 gitdir,
-                fs: fs23,
+                fs: fs24,
                 filepath: [join3(currentFilepath, child)],
                 index: index2,
                 force,
@@ -20396,9 +20396,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             }
           }
         } else {
-          const object = stats.isSymbolicLink() ? await fs23.readlink(join3(dir, currentFilepath)).then(posixifyPathBuffer) : await fs23.read(join3(dir, currentFilepath), { autocrlf });
+          const object = stats.isSymbolicLink() ? await fs24.readlink(join3(dir, currentFilepath)).then(posixifyPathBuffer) : await fs24.read(join3(dir, currentFilepath), { autocrlf });
           if (object === null) throw new NotFoundError(currentFilepath);
-          const oid = await _writeObject({ fs: fs23, gitdir, type: "blob", object });
+          const oid = await _writeObject({ fs: fs24, gitdir, type: "blob", object });
           index2.insert({ filepath: currentFilepath, stats, oid });
         }
       });
@@ -20413,9 +20413,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const fulfilledPromises = settledPromises.filter((settle) => settle.status === "fulfilled" && settle.value).map((settle) => settle.value);
       return fulfilledPromises;
     }
-    async function _getConfig({ fs: fs23, gitdir, path: path32 }) {
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
-      return config2.get(path32);
+    async function _getConfig({ fs: fs24, gitdir, path: path34 }) {
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
+      return config2.get(path34);
     }
     function assignDefined(target, ...sources) {
       for (const source of sources) {
@@ -20430,11 +20430,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return target;
     }
-    async function normalizeAuthorObject({ fs: fs23, gitdir, author, commit: commit4 }) {
+    async function normalizeAuthorObject({ fs: fs24, gitdir, author, commit: commit4 }) {
       const timestamp = Math.floor(Date.now() / 1e3);
       const defaultAuthor = {
-        name: await _getConfig({ fs: fs23, gitdir, path: "user.name" }),
-        email: await _getConfig({ fs: fs23, gitdir, path: "user.email" }) || "",
+        name: await _getConfig({ fs: fs24, gitdir, path: "user.name" }),
+        email: await _getConfig({ fs: fs24, gitdir, path: "user.email" }) || "",
         // author.email is allowed to be empty string
         timestamp,
         timezoneOffset: new Date(timestamp * 1e3).getTimezoneOffset()
@@ -20451,7 +20451,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return normalizedAuthor;
     }
     async function normalizeCommitterObject({
-      fs: fs23,
+      fs: fs24,
       gitdir,
       author,
       committer,
@@ -20459,8 +20459,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       const timestamp = Math.floor(Date.now() / 1e3);
       const defaultCommitter = {
-        name: await _getConfig({ fs: fs23, gitdir, path: "user.name" }),
-        email: await _getConfig({ fs: fs23, gitdir, path: "user.email" }) || "",
+        name: await _getConfig({ fs: fs24, gitdir, path: "user.name" }),
+        email: await _getConfig({ fs: fs24, gitdir, path: "user.email" }) || "",
         // committer.email is allowed to be empty string
         timestamp,
         timezoneOffset: new Date(timestamp * 1e3).getTimezoneOffset()
@@ -20477,20 +20477,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return normalizedCommitter;
     }
-    async function resolveCommit({ fs: fs23, cache, gitdir, oid }) {
-      const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+    async function resolveCommit({ fs: fs24, cache, gitdir, oid }) {
+      const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
       if (type === "tag") {
         oid = GitAnnotatedTag.from(object).parse().object;
-        return resolveCommit({ fs: fs23, cache, gitdir, oid });
+        return resolveCommit({ fs: fs24, cache, gitdir, oid });
       }
       if (type !== "commit") {
         throw new ObjectTypeError(oid, type, "commit");
       }
       return { commit: GitCommit.from(object), oid };
     }
-    async function _readCommit({ fs: fs23, cache, gitdir, oid }) {
+    async function _readCommit({ fs: fs24, cache, gitdir, oid }) {
       const { commit: commit4, oid: commitOid } = await resolveCommit({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid
@@ -20504,11 +20504,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }
     var EMPTY_TREE_OID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
     async function _commit({
-      fs: fs23,
+      fs: fs24,
       cache,
       onSign,
       gitdir,
-      message,
+      message: message2,
       author: _author,
       committer: _committer,
       signingKey,
@@ -20523,10 +20523,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let initialCommit = false;
       let detachedHead = false;
       if (!ref) {
-        const headContent = await fs23.read(`${gitdir}/HEAD`, { encoding: "utf8" });
+        const headContent = await fs24.read(`${gitdir}/HEAD`, { encoding: "utf8" });
         detachedHead = !headContent.startsWith("ref:");
         ref = await GitRefManager.resolve({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           ref: "HEAD",
           depth: 2
@@ -20535,31 +20535,31 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let refOid, refCommit;
       try {
         refOid = await GitRefManager.resolve({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           ref
         });
-        refCommit = await _readCommit({ fs: fs23, gitdir, oid: refOid, cache: {} });
+        refCommit = await _readCommit({ fs: fs24, gitdir, oid: refOid, cache: {} });
       } catch {
         initialCommit = true;
       }
       if (amend && initialCommit) {
         throw new NoCommitError(ref);
       }
-      const author = !amend ? await normalizeAuthorObject({ fs: fs23, gitdir, author: _author }) : await normalizeAuthorObject({
-        fs: fs23,
+      const author = !amend ? await normalizeAuthorObject({ fs: fs24, gitdir, author: _author }) : await normalizeAuthorObject({
+        fs: fs24,
         gitdir,
         author: _author,
         commit: refCommit.commit
       });
       if (!author) throw new MissingNameError("author");
       const committer = !amend ? await normalizeCommitterObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         author,
         committer: _committer
       }) : await normalizeCommitterObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         author,
         committer: _committer,
@@ -20567,12 +20567,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       if (!committer) throw new MissingNameError("committer");
       return GitIndexManager.acquire(
-        { fs: fs23, gitdir, cache, allowUnmerged: false },
+        { fs: fs24, gitdir, cache, allowUnmerged: false },
         async function(index2) {
           const inodes = flatFileListToDirectoryStructure(index2.entries);
           const inode = inodes.get(".");
           if (!tree) {
-            tree = await constructTree({ fs: fs23, gitdir, inode, dryRun });
+            tree = await constructTree({ fs: fs24, gitdir, inode, dryRun });
           }
           if (!parent) {
             if (!amend) {
@@ -20583,18 +20583,18 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           } else {
             parent = await Promise.all(
               parent.map((p) => {
-                return GitRefManager.resolve({ fs: fs23, gitdir, ref: p });
+                return GitRefManager.resolve({ fs: fs24, gitdir, ref: p });
               })
             );
           }
           if (disallowEmpty && !amend && (initialCommit && tree === EMPTY_TREE_OID || !initialCommit && tree === refCommit.commit.tree)) {
             throw new EmptyCommitError();
           }
-          if (!message) {
+          if (!message2) {
             if (!amend) {
               throw new MissingParameterError("message");
             } else {
-              message = refCommit.commit.message;
+              message2 = refCommit.commit.message;
             }
           }
           let comm = GitCommit.from({
@@ -20602,13 +20602,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             parent,
             author,
             committer,
-            message
+            message: message2
           });
           if (signingKey) {
             comm = await GitCommit.sign(comm, onSign, signingKey);
           }
           const oid = await _writeObject({
-            fs: fs23,
+            fs: fs24,
             gitdir,
             type: "commit",
             object: comm.toObject(),
@@ -20616,7 +20616,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           });
           if (!noUpdateBranch && !dryRun) {
             await GitRefManager.writeRef({
-              fs: fs23,
+              fs: fs24,
               gitdir,
               ref: detachedHead ? "HEAD" : ref,
               value: oid
@@ -20626,12 +20626,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       );
     }
-    async function constructTree({ fs: fs23, gitdir, inode, dryRun }) {
+    async function constructTree({ fs: fs24, gitdir, inode, dryRun }) {
       const children = inode.children;
       for (const inode2 of children) {
         if (inode2.type === "tree") {
           inode2.metadata.mode = "040000";
-          inode2.metadata.oid = await constructTree({ fs: fs23, gitdir, inode: inode2, dryRun });
+          inode2.metadata.oid = await constructTree({ fs: fs24, gitdir, inode: inode2, dryRun });
         }
       }
       const entries = children.map((inode2) => ({
@@ -20642,7 +20642,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }));
       const tree = GitTree.from(entries);
       const oid = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "tree",
         object: tree.toObject(),
@@ -20650,9 +20650,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return oid;
     }
-    async function resolveFilepath({ fs: fs23, cache, gitdir, oid, filepath }) {
+    async function resolveFilepath({ fs: fs24, cache, gitdir, oid, filepath }) {
       const entry = await resolveFilepathEntry({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid,
@@ -20661,7 +20661,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return entry.oid;
     }
     async function resolveFilepathEntry({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
@@ -20673,14 +20673,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw new InvalidFilepathError("trailing-slash");
       }
       const _oid = oid;
-      const result = await resolveTree({ fs: fs23, cache, gitdir, oid });
+      const result = await resolveTree({ fs: fs24, cache, gitdir, oid });
       const tree = result.tree;
       if (filepath === "") {
         return { mode: "040000", oid: result.oid, path: "", type: "tree" };
       } else {
         const pathArray = filepath.split("/");
         return _resolveFilepath({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           tree,
@@ -20691,7 +20691,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _resolveFilepath({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       tree,
@@ -20706,7 +20706,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             return entry;
           } else {
             const { type, object } = await _readObject({
-              fs: fs23,
+              fs: fs24,
               cache,
               gitdir,
               oid: entry.oid
@@ -20716,7 +20716,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             }
             tree = GitTree.from(object);
             return _resolveFilepath({
-              fs: fs23,
+              fs: fs24,
               cache,
               gitdir,
               tree,
@@ -20730,26 +20730,26 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       throw new NotFoundError(`file or directory found at "${oid}:${filepath}"`);
     }
     async function _readTree({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       filepath = void 0
     }) {
       if (filepath !== void 0) {
-        oid = await resolveFilepath({ fs: fs23, cache, gitdir, oid, filepath });
+        oid = await resolveFilepath({ fs: fs24, cache, gitdir, oid, filepath });
       }
-      const { tree, oid: treeOid } = await resolveTree({ fs: fs23, cache, gitdir, oid });
+      const { tree, oid: treeOid } = await resolveTree({ fs: fs24, cache, gitdir, oid });
       const result = {
         oid: treeOid,
         tree: tree.entries()
       };
       return result;
     }
-    async function _writeTree({ fs: fs23, gitdir, tree }) {
+    async function _writeTree({ fs: fs24, gitdir, tree }) {
       const object = GitTree.from(tree).toObject();
       const oid = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "tree",
         object,
@@ -20758,7 +20758,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return oid;
     }
     async function _addNote({
-      fs: fs23,
+      fs: fs24,
       cache,
       onSign,
       gitdir,
@@ -20772,14 +20772,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       let parent;
       try {
-        parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
+        parent = await GitRefManager.resolve({ gitdir, fs: fs24, ref });
       } catch (err) {
         if (!(err instanceof NotFoundError)) {
           throw err;
         }
       }
       const result = await _readTree({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: parent || "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -20798,7 +20798,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         note = Buffer.from(note, "utf8");
       }
       const noteOid = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "blob",
         object: note,
@@ -20806,12 +20806,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       tree.push({ mode: "100644", path: oid, oid: noteOid, type: "blob" });
       const treeOid = await _writeTree({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         tree
       });
       const commitOid = await _commit({
-        fs: fs23,
+        fs: fs24,
         cache,
         onSign,
         gitdir,
@@ -20848,19 +20848,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs23 = new FileSystem(_fs);
-        const author = await normalizeAuthorObject({ fs: fs23, gitdir, author: _author });
+        const fs24 = new FileSystem(_fs);
+        const author = await normalizeAuthorObject({ fs: fs24, gitdir, author: _author });
         if (!author) throw new MissingNameError("author");
         const committer = await normalizeCommitterObject({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           author,
           committer: _committer
         });
         if (!committer) throw new MissingNameError("committer");
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         return await _addNote({
-          fs: fs23,
+          fs: fs24,
           cache,
           onSign,
           gitdir: updatedGitdir,
@@ -20883,11 +20883,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw new TypeError("Reference name must be a string");
       return !bad.test(name) && (!!onelevel || name.includes("/"));
     }
-    async function _addRemote({ fs: fs23, gitdir, remote, url, force }) {
+    async function _addRemote({ fs: fs24, gitdir, remote, url, force }) {
       if (!isValidRef(remote, true)) {
         throw new InvalidRefNameError(remote, cleanGitRef.clean(remote));
       }
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
       if (!force) {
         const remoteNames = await config2.getSubsections("remote");
         if (remoteNames.includes(remote)) {
@@ -20901,10 +20901,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         `remote.${remote}.fetch`,
         `+refs/heads/*:refs/remotes/${remote}/*`
       );
-      await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
+      await GitConfigManager.save({ fs: fs24, gitdir, config: config2 });
     }
     async function addRemote({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       remote,
@@ -20912,11 +20912,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       force = false
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("remote", remote);
         assertParameter("url", url);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _addRemote({
           fs: fsp,
@@ -20931,46 +20931,46 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _annotatedTag({
-      fs: fs23,
+      fs: fs24,
       cache,
       onSign,
       gitdir,
       ref,
       tagger,
-      message = ref,
+      message: message2 = ref,
       gpgsig,
       object,
       signingKey,
       force = false
     }) {
       ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
-      if (!force && await GitRefManager.exists({ fs: fs23, gitdir, ref })) {
+      if (!force && await GitRefManager.exists({ fs: fs24, gitdir, ref })) {
         throw new AlreadyExistsError("tag", ref);
       }
       const oid = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: object || "HEAD"
       });
-      const { type } = await _readObject({ fs: fs23, cache, gitdir, oid });
+      const { type } = await _readObject({ fs: fs24, cache, gitdir, oid });
       let tagObject = GitAnnotatedTag.from({
         object: oid,
         type,
         tag: ref.replace("refs/tags/", ""),
         tagger,
-        message,
+        message: message2,
         gpgsig
       });
       if (signingKey) {
         tagObject = await GitAnnotatedTag.sign(tagObject, onSign, signingKey);
       }
       const value = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "tag",
         object: tagObject.toObject()
       });
-      await GitRefManager.writeRef({ fs: fs23, gitdir, ref, value });
+      await GitRefManager.writeRef({ fs: fs24, gitdir, ref, value });
     }
     async function annotatedTag({
       fs: _fs,
@@ -20979,7 +20979,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       gitdir = join3(dir, ".git"),
       ref,
       tagger: _tagger,
-      message = ref,
+      message: message2 = ref,
       gpgsig,
       object,
       signingKey,
@@ -20993,22 +20993,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         const tagger = await normalizeAuthorObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author: _tagger
         });
         if (!tagger) throw new MissingNameError("tagger");
         return await _annotatedTag({
-          fs: fs23,
+          fs: fs24,
           cache,
           onSign,
           gitdir: updatedGitdir,
           ref,
           tagger,
-          message,
+          message: message2,
           gpgsig,
           object,
           signingKey,
@@ -21020,7 +21020,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _branch({
-      fs: fs23,
+      fs: fs24,
       gitdir,
       ref,
       object,
@@ -21032,22 +21032,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       const fullref = `refs/heads/${ref}`;
       if (!force) {
-        const exist = await GitRefManager.exists({ fs: fs23, gitdir, ref: fullref });
+        const exist = await GitRefManager.exists({ fs: fs24, gitdir, ref: fullref });
         if (exist) {
           throw new AlreadyExistsError("branch", ref, false);
         }
       }
       let oid;
       try {
-        oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref: object || "HEAD" });
+        oid = await GitRefManager.resolve({ fs: fs24, gitdir, ref: object || "HEAD" });
       } catch (e) {
       }
       if (oid) {
-        await GitRefManager.writeRef({ fs: fs23, gitdir, ref: fullref, value: oid });
+        await GitRefManager.writeRef({ fs: fs24, gitdir, ref: fullref, value: oid });
       }
       if (checkout2) {
         await GitRefManager.writeSymbolicRef({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           ref: "HEAD",
           value: fullref
@@ -21055,7 +21055,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function branch({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
@@ -21064,10 +21064,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       force = false
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _branch({
           fs: fsp,
@@ -21082,14 +21082,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function assertNoSymlinkInLeadingPath(fs23, dir, fullpath) {
+    async function assertNoSymlinkInLeadingPath(fs24, dir, fullpath) {
       const parts = fullpath.split("/");
       parts.pop();
       let current = dir;
       for (const part of parts) {
         if (part === "" || part === ".") continue;
         current = `${current}/${part}`;
-        const stats = await fs23.lstat(current);
+        const stats = await fs24.lstat(current);
         if (stats && stats.isSymbolicLink()) {
           throw new UnsafeFilepathError(fullpath);
         }
@@ -21106,7 +21106,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     };
     async function _checkout({
-      fs: fs23,
+      fs: fs24,
       cache,
       onProgress,
       onPostCheckout,
@@ -21127,30 +21127,30 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let oldOid;
       if (onPostCheckout) {
         try {
-          oldOid = await GitRefManager.resolve({ fs: fs23, gitdir, ref: "HEAD" });
+          oldOid = await GitRefManager.resolve({ fs: fs24, gitdir, ref: "HEAD" });
         } catch (err) {
           oldOid = "0000000000000000000000000000000000000000";
         }
       }
       let oid;
       try {
-        oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
+        oid = await GitRefManager.resolve({ fs: fs24, gitdir, ref });
       } catch (err) {
         if (ref === "HEAD") throw err;
         const remoteRef = `${remote}/${ref}`;
         oid = await GitRefManager.resolve({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           ref: remoteRef
         });
         if (track) {
-          const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+          const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
           await config2.set(`branch.${ref}.remote`, remote);
           await config2.set(`branch.${ref}.merge`, `refs/heads/${ref}`);
-          await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
+          await GitConfigManager.save({ fs: fs24, gitdir, config: config2 });
         }
         await GitRefManager.writeRef({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           ref: `refs/heads/${ref}`,
           value: oid
@@ -21160,7 +21160,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         let ops;
         try {
           ops = await analyze({
-            fs: fs23,
+            fs: fs24,
             cache,
             onProgress,
             dir,
@@ -21198,7 +21198,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         let count = 0;
         const total = ops.length;
         await GitIndexManager.acquire(
-          { fs: fs23, gitdir, cache },
+          { fs: fs24, gitdir, cache },
           async function(index2) {
             await Promise.all(
               ops.filter(
@@ -21206,7 +21206,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               ).map(async function([method, fullpath]) {
                 const filepath = `${dir}/${fullpath}`;
                 if (method === "delete") {
-                  await fs23.rm(filepath);
+                  await fs24.rm(filepath);
                 }
                 index2.delete({ filepath: fullpath });
                 if (onProgress) {
@@ -21221,14 +21221,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         );
         await GitIndexManager.acquire(
-          { fs: fs23, gitdir, cache },
+          { fs: fs24, gitdir, cache },
           async function(index2) {
             for (const [method, fullpath] of ops) {
               if (method === "rmdir" || method === "rmdir-index") {
                 const filepath = `${dir}/${fullpath}`;
                 try {
                   if (method === "rmdir") {
-                    await fs23.rmdir(filepath);
+                    await fs24.rmdir(filepath);
                   }
                   index2.delete({ filepath: fullpath });
                   if (onProgress) {
@@ -21254,8 +21254,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         await Promise.all(
           ops.filter(([method]) => method === "mkdir" || method === "mkdir-index").map(async function([_, fullpath]) {
             const filepath = `${dir}/${fullpath}`;
-            await assertNoSymlinkInLeadingPath(fs23, dir, fullpath);
-            await fs23.mkdir(filepath);
+            await assertNoSymlinkInLeadingPath(fs24, dir, fullpath);
+            await fs24.mkdir(filepath);
             if (onProgress) {
               await onProgress({
                 phase: "Updating workdir",
@@ -21272,7 +21272,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const updateWorkingDirResults = await batchAllSettled(
             "Update Working Dir",
             eligibleOps.map(
-              ([method, fullpath, oid2, mode, chmod]) => () => updateWorkingDir({ fs: fs23, cache, gitdir, dir }, [
+              ([method, fullpath, oid2, mode, chmod]) => () => updateWorkingDir({ fs: fs24, cache, gitdir, dir }, [
                 method,
                 fullpath,
                 oid2,
@@ -21284,7 +21284,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             batchSize
           );
           await GitIndexManager.acquire(
-            { fs: fs23, gitdir, cache, allowUnmerged: true },
+            { fs: fs24, gitdir, cache, allowUnmerged: true },
             async function(index2) {
               await batchAllSettled(
                 "Update Index",
@@ -21298,7 +21298,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           );
         } else {
           await GitIndexManager.acquire(
-            { fs: fs23, gitdir, cache, allowUnmerged: true },
+            { fs: fs24, gitdir, cache, allowUnmerged: true },
             async function(index2) {
               const settled = await Promise.allSettled(
                 ops.filter(
@@ -21306,22 +21306,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                 ).map(async function([method, fullpath, oid2, mode, chmod]) {
                   const filepath = `${dir}/${fullpath}`;
                   if (method !== "create-index" && method !== "mkdir-index") {
-                    await assertNoSymlinkInLeadingPath(fs23, dir, fullpath);
+                    await assertNoSymlinkInLeadingPath(fs24, dir, fullpath);
                     const { object } = await _readObject({
-                      fs: fs23,
+                      fs: fs24,
                       cache,
                       gitdir,
                       oid: oid2
                     });
                     if (chmod) {
-                      await fs23.rm(filepath);
+                      await fs24.rm(filepath);
                     }
                     if (mode === 33188) {
-                      await fs23.write(filepath, object);
+                      await fs24.write(filepath, object);
                     } else if (mode === 33261) {
-                      await fs23.write(filepath, object, { mode: 511 });
+                      await fs24.write(filepath, object, { mode: 511 });
                     } else if (mode === 40960) {
-                      await fs23.writelink(filepath, object);
+                      await fs24.writelink(filepath, object);
                     } else {
                       throw new InternalError(
                         `Invalid mode 0o${mode.toString(
@@ -21330,7 +21330,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                       );
                     }
                   }
-                  const stats = await fs23.lstat(filepath);
+                  const stats = await fs24.lstat(filepath);
                   if (mode === 33261) {
                     stats.mode = 493;
                   }
@@ -21376,21 +21376,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       }
       if (!noUpdateHead) {
-        const fullRef = await GitRefManager.expand({ fs: fs23, gitdir, ref });
+        const fullRef = await GitRefManager.expand({ fs: fs24, gitdir, ref });
         if (fullRef.startsWith("refs/heads")) {
           await GitRefManager.writeSymbolicRef({
-            fs: fs23,
+            fs: fs24,
             gitdir,
             ref: "HEAD",
             value: fullRef
           });
         } else {
-          await GitRefManager.writeRef({ fs: fs23, gitdir, ref: "HEAD", value: oid });
+          await GitRefManager.writeRef({ fs: fs24, gitdir, ref: "HEAD", value: oid });
         }
       }
     }
     async function analyze({
-      fs: fs23,
+      fs: fs24,
       cache,
       onProgress,
       dir,
@@ -21402,7 +21402,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       let count = 0;
       return _walk({
-        fs: fs23,
+        fs: fs24,
         cache,
         dir,
         gitdir,
@@ -21654,27 +21654,27 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         console.warn(`Error inserting ${fullpath} into index:`, e);
       }
     }
-    async function updateWorkingDir({ fs: fs23, cache, gitdir, dir }, [method, fullpath, oid, mode, chmod]) {
+    async function updateWorkingDir({ fs: fs24, cache, gitdir, dir }, [method, fullpath, oid, mode, chmod]) {
       const filepath = `${dir}/${fullpath}`;
       if (method !== "create-index" && method !== "mkdir-index") {
-        await assertNoSymlinkInLeadingPath(fs23, dir, fullpath);
-        const { object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+        await assertNoSymlinkInLeadingPath(fs24, dir, fullpath);
+        const { object } = await _readObject({ fs: fs24, cache, gitdir, oid });
         if (chmod) {
-          await fs23.rm(filepath);
+          await fs24.rm(filepath);
         }
         if (mode === 33188) {
-          await fs23.write(filepath, object);
+          await fs24.write(filepath, object);
         } else if (mode === 33261) {
-          await fs23.write(filepath, object, { mode: 511 });
+          await fs24.write(filepath, object, { mode: 511 });
         } else if (mode === 40960) {
-          await fs23.writelink(filepath, object);
+          await fs24.writelink(filepath, object);
         } else {
           throw new InternalError(
             `Invalid mode 0o${mode.toString(8)} detected in blob ${oid}`
           );
         }
       }
-      const stats = await fs23.lstat(filepath);
+      const stats = await fs24.lstat(filepath);
       if (mode === 33261) {
         stats.mode = 493;
       }
@@ -21714,7 +21714,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return results;
     }
     async function checkout({
-      fs: fs23,
+      fs: fs24,
       onProgress,
       onPostCheckout,
       dir,
@@ -21732,12 +21732,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       batchSize = 100
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
         const ref = _ref || "HEAD";
         const restoreFromIndex = _ref === void 0 && filepaths != null && filepaths.length > 0;
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _checkout({
           fs: fsp,
@@ -21796,7 +21796,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return { cleanMerge, mergedText };
     }
     async function mergeTree({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
@@ -21819,20 +21819,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const deleteByUs = [];
       const deleteByTheirs = [];
       const results = await _walk({
-        fs: fs23,
+        fs: fs24,
         cache,
         dir,
         gitdir,
         trees: [ourTree, baseTree, theirTree],
         map: async function(filepath, [ours, base, theirs]) {
-          const path32 = basename3(filepath);
+          const path34 = basename3(filepath);
           const ourChange = await modified(ours, base);
           const theirChange = await modified(theirs, base);
           switch (`${ourChange}-${theirChange}`) {
             case "false-false": {
               return {
                 mode: await base.mode(),
-                path: path32,
+                path: path34,
                 oid: await base.oid(),
                 type: await base.type()
               };
@@ -21841,14 +21841,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               if (!theirs && await ours.type() === "tree") {
                 return {
                   mode: await ours.mode(),
-                  path: path32,
+                  path: path34,
                   oid: await ours.oid(),
                   type: await ours.type()
                 };
               }
               return theirs ? {
                 mode: await theirs.mode(),
-                path: path32,
+                path: path34,
                 oid: await theirs.oid(),
                 type: await theirs.type()
               } : void 0;
@@ -21857,14 +21857,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               if (!ours && await theirs.type() === "tree") {
                 return {
                   mode: await theirs.mode(),
-                  path: path32,
+                  path: path34,
                   oid: await theirs.oid(),
                   type: await theirs.type()
                 };
               }
               return ours ? {
                 mode: await ours.mode(),
-                path: path32,
+                path: path34,
                 oid: await ours.oid(),
                 type: await ours.type()
               } : void 0;
@@ -21873,16 +21873,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               if (ours && theirs && await ours.type() === "tree" && await theirs.type() === "tree") {
                 return {
                   mode: await ours.mode(),
-                  path: path32,
+                  path: path34,
                   oid: await ours.oid(),
                   type: "tree"
                 };
               }
               if (ours && theirs && await ours.type() === "blob" && await theirs.type() === "blob") {
                 return mergeBlobs({
-                  fs: fs23,
+                  fs: fs24,
                   gitdir,
-                  path: path32,
+                  path: path34,
                   ours,
                   base,
                   theirs,
@@ -21928,7 +21928,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                   mode: await theirs.mode(),
                   oid: await theirs.oid(),
                   type: "blob",
-                  path: path32
+                  path: path34
                 };
               }
               if (base && ours && !theirs && await base.type() === "blob" && await ours.type() === "blob") {
@@ -21945,7 +21945,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                   mode: await ours.mode(),
                   oid: await ours.oid(),
                   type: "blob",
-                  path: path32
+                  path: path34
                 };
               }
               if (base && !ours && !theirs && (await base.type() === "blob" || await base.type() === "tree")) {
@@ -21968,7 +21968,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             const tree = new GitTree(entries);
             const object = tree.toObject();
             const oid = await _writeObject({
-              fs: fs23,
+              fs: fs24,
               gitdir,
               type: "tree",
               object,
@@ -21982,17 +21982,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (unmergedFiles.length !== 0) {
         if (dir && !abortOnConflict) {
           await _walk({
-            fs: fs23,
+            fs: fs24,
             cache,
             dir,
             gitdir,
             trees: [TREE2({ ref: results.oid })],
             map: async function(filepath, [entry]) {
-              const path32 = `${dir}/${filepath}`;
+              const path34 = `${dir}/${filepath}`;
               if (await entry.type() === "blob") {
                 const mode = await entry.mode();
                 const content = await entry.content();
-                await fs23.write(path32, content, { mode });
+                await fs24.write(path34, content, { mode });
               }
               return true;
             }
@@ -22008,9 +22008,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return results.oid;
     }
     async function mergeBlobs({
-      fs: fs23,
+      fs: fs24,
       gitdir,
-      path: path32,
+      path: path34,
       ours,
       base,
       theirs,
@@ -22033,19 +22033,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (await ours.oid() === await theirs.oid()) {
         return {
           cleanMerge: true,
-          mergeResult: { mode, path: path32, oid: await ours.oid(), type }
+          mergeResult: { mode, path: path34, oid: await ours.oid(), type }
         };
       }
       if (await ours.oid() === baseOid) {
         return {
           cleanMerge: true,
-          mergeResult: { mode, path: path32, oid: await theirs.oid(), type }
+          mergeResult: { mode, path: path34, oid: await theirs.oid(), type }
         };
       }
       if (await theirs.oid() === baseOid) {
         return {
           cleanMerge: true,
-          mergeResult: { mode, path: path32, oid: await ours.oid(), type }
+          mergeResult: { mode, path: path34, oid: await ours.oid(), type }
         };
       }
       const ourContent = Buffer.from(await ours.content()).toString("utf8");
@@ -22053,47 +22053,47 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const { mergedText, cleanMerge } = await mergeDriver({
         branches: [baseName, ourName, theirName],
         contents: [baseContent, ourContent, theirContent],
-        path: path32
+        path: path34
       });
       const oid = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "blob",
         object: Buffer.from(mergedText, "utf8"),
         dryRun
       });
-      return { cleanMerge, mergeResult: { mode, path: path32, oid, type } };
+      return { cleanMerge, mergeResult: { mode, path: path34, oid, type } };
     }
     var _TreeMap = {
       stage: STAGE2,
       workdir: WORKDIR
     };
-    async function checkAndWriteBlob(fs23, gitdir, dir, filepath, oid = null) {
+    async function checkAndWriteBlob(fs24, gitdir, dir, filepath, oid = null) {
       const currentFilepath = join3(dir, filepath);
-      const stats = await fs23.lstat(currentFilepath);
+      const stats = await fs24.lstat(currentFilepath);
       if (!stats) throw new NotFoundError(currentFilepath);
       if (stats.isDirectory())
         throw new InternalError(
           `${currentFilepath}: file expected, but found directory`
         );
-      const objContent = oid ? await readObjectLoose({ fs: fs23, gitdir, oid }) : void 0;
+      const objContent = oid ? await readObjectLoose({ fs: fs24, gitdir, oid }) : void 0;
       let retOid = objContent ? oid : void 0;
       if (!objContent) {
         await acquireLock2(currentFilepath, async () => {
-          const object = stats.isSymbolicLink() ? await fs23.readlink(currentFilepath).then(posixifyPathBuffer) : await fs23.read(currentFilepath);
+          const object = stats.isSymbolicLink() ? await fs24.readlink(currentFilepath).then(posixifyPathBuffer) : await fs24.read(currentFilepath);
           if (object === null) throw new NotFoundError(currentFilepath);
-          retOid = await _writeObject({ fs: fs23, gitdir, type: "blob", object });
+          retOid = await _writeObject({ fs: fs24, gitdir, type: "blob", object });
         });
       }
       return retOid;
     }
-    async function processTreeEntries({ fs: fs23, dir, gitdir, entries }) {
+    async function processTreeEntries({ fs: fs24, dir, gitdir, entries }) {
       async function processTreeEntry(entry) {
         if (entry.type === "tree") {
           if (!entry.oid) {
             const children = await Promise.all(entry.children.map(processTreeEntry));
             entry.oid = await _writeTree({
-              fs: fs23,
+              fs: fs24,
               gitdir,
               tree: children
             });
@@ -22101,7 +22101,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         } else if (entry.type === "blob") {
           entry.oid = await checkAndWriteBlob(
-            fs23,
+            fs24,
             gitdir,
             dir,
             entry.path,
@@ -22115,7 +22115,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return Promise.all(entries.map(processTreeEntry));
     }
     async function writeTreeChanges({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir,
       treePair
@@ -22125,7 +22125,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const trees = treePair.map((t) => typeof t === "string" ? _TreeMap[t]() : t);
       const changedEntries = [];
       const map = async (filepath, [head, stage]) => {
-        if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs23, dir, gitdir, filepath })) {
+        if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs24, dir, gitdir, filepath })) {
           return;
         }
         if (stage) {
@@ -22155,7 +22155,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const [head, stage] = child;
           if (isStage) {
             if (stage) {
-              if (await fs23.exists(`${dir}/${stage.toString()}`)) {
+              if (await fs24.exists(`${dir}/${stage.toString()}`)) {
                 filtered.push(child);
               } else {
                 changedEntries.push([null, stage]);
@@ -22172,7 +22172,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return filtered.length ? Promise.all(filtered.map(walk3)) : [];
       };
       const entries = await _walk({
-        fs: fs23,
+        fs: fs24,
         cache: {},
         dir,
         gitdir,
@@ -22185,7 +22185,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return null;
       }
       const processedEntries = await processTreeEntries({
-        fs: fs23,
+        fs: fs24,
         dir,
         gitdir,
         entries
@@ -22196,10 +22196,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         oid: entry.oid,
         type: entry.type
       }));
-      return _writeTree({ fs: fs23, gitdir, tree: treeEntries });
+      return _writeTree({ fs: fs24, gitdir, tree: treeEntries });
     }
     async function applyTreeChanges({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir,
       stashCommit,
@@ -22209,13 +22209,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const dirRemoved = [];
       const stageUpdated = [];
       const ops = await _walk({
-        fs: fs23,
+        fs: fs24,
         cache: {},
         dir,
         gitdir,
         trees: [TREE2({ ref: parentCommit }), TREE2({ ref: stashCommit })],
         map: async (filepath, [parent, stash2]) => {
-          if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs23, dir, gitdir, filepath })) {
+          if (filepath === "." || await GitIgnoreManager.isIgnored({ fs: fs24, dir, gitdir, filepath })) {
             return;
           }
           const type = stash2 ? await stash2.type() : await parent.type();
@@ -22238,7 +22238,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                 stageUpdated.push({
                   filepath,
                   oid,
-                  stats: await fs23.lstat(join3(dir, filepath))
+                  stats: await fs24.lstat(join3(dir, filepath))
                 });
               return {
                 method: "write",
@@ -22254,43 +22254,43 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const currentFilepath = join3(dir, op.filepath);
           switch (op.method) {
             case "rmdir":
-              await fs23.rmdir(currentFilepath);
+              await fs24.rmdir(currentFilepath);
               break;
             case "mkdir":
-              await assertNoSymlinkInLeadingPath(fs23, dir, op.filepath);
-              await fs23.mkdir(currentFilepath);
+              await assertNoSymlinkInLeadingPath(fs24, dir, op.filepath);
+              await fs24.mkdir(currentFilepath);
               break;
             case "rm":
-              await fs23.rm(currentFilepath);
+              await fs24.rm(currentFilepath);
               break;
             case "write":
               if (!dirRemoved.some(
                 (removedDir) => currentFilepath.startsWith(removedDir)
               )) {
-                await assertNoSymlinkInLeadingPath(fs23, dir, op.filepath);
+                await assertNoSymlinkInLeadingPath(fs24, dir, op.filepath);
                 const { object } = await _readObject({
-                  fs: fs23,
+                  fs: fs24,
                   cache: {},
                   gitdir,
                   oid: op.oid
                 });
-                if (await fs23.exists(currentFilepath)) {
-                  await fs23.rm(currentFilepath);
+                if (await fs24.exists(currentFilepath)) {
+                  await fs24.rm(currentFilepath);
                 }
-                await fs23.write(currentFilepath, object);
+                await fs24.write(currentFilepath, object);
               }
               break;
           }
         }
       });
-      await GitIndexManager.acquire({ fs: fs23, gitdir, cache: {} }, async (index2) => {
+      await GitIndexManager.acquire({ fs: fs24, gitdir, cache: {} }, async (index2) => {
         stageUpdated.forEach(({ filepath, stats, oid }) => {
           index2.insert({ filepath, stats, oid });
         });
       });
     }
     async function _cherryPick({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir,
@@ -22302,7 +22302,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       mergeDriver
     }) {
       const { commit: cherryCommit, oid: cherryOid } = await _readCommit({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid
@@ -22314,28 +22314,28 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw new CherryPickRootCommitError(cherryOid);
       }
       const currentOid = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: "HEAD"
       });
       const { commit: currentCommit } = await _readCommit({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: currentOid
       });
       const cherryParentOid = cherryCommit.parent[0];
       const { commit: cherryParent } = await _readCommit({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: cherryParentOid
       });
       const mergedTreeOid = await GitIndexManager.acquire(
-        { fs: fs23, gitdir, cache, allowUnmerged: false },
+        { fs: fs24, gitdir, cache, allowUnmerged: false },
         async (index2) => {
           return mergeTree({
-            fs: fs23,
+            fs: fs24,
             cache,
             dir,
             gitdir,
@@ -22356,7 +22356,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw mergedTreeOid;
       }
       const newOid = await _commit({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         message: cherryCommit.message,
@@ -22372,7 +22372,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       if (dir && !dryRun && !noUpdateBranch) {
         await applyTreeChanges({
-          fs: fs23,
+          fs: fs24,
           dir,
           gitdir,
           stashCommit: newOid,
@@ -22398,17 +22398,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         const { commit: cherryCommit } = await _readCommit({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir: updatedGitdir,
           oid
         });
         if (cherryCommit.parent && cherryCommit.parent.length > 1) {
           return await _cherryPick({
-            fs: fs23,
+            fs: fs24,
             cache,
             dir,
             gitdir: updatedGitdir,
@@ -22421,7 +22421,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           });
         }
         const normalizedCommitter = await normalizeCommitterObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           committer
         });
@@ -22429,7 +22429,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new MissingNameError("committer");
         }
         return await _cherryPick({
-          fs: fs23,
+          fs: fs24,
           cache,
           dir,
           gitdir: updatedGitdir,
@@ -22458,20 +22458,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return ref;
     }
     async function _currentBranch({
-      fs: fs23,
+      fs: fs24,
       gitdir,
       fullname = false,
       test = false
     }) {
       const ref = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: "HEAD",
         depth: 2
       });
       if (test) {
         try {
-          await GitRefManager.resolve({ fs: fs23, gitdir, ref });
+          await GitRefManager.resolve({ fs: fs24, gitdir, ref });
         } catch (_) {
           return;
         }
@@ -22883,11 +22883,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} [args.gitdir] - [required] The [git directory](dir-vs-gitdir.md) path
        * @returns {Promise<Set<string>>} - A set of shallow object IDs.
        */
-      static async read({ fs: fs23, gitdir }) {
+      static async read({ fs: fs24, gitdir }) {
         const filepath = join3(gitdir, "shallow");
         const oids = /* @__PURE__ */ new Set();
         await acquireLock2(filepath, async function() {
-          const text2 = await fs23.read(filepath, { encoding: "utf8" });
+          const text2 = await fs24.read(filepath, { encoding: "utf8" });
           if (text2 === null) return oids;
           if (text2.trim() === "") return oids;
           text2.trim().split("\n").map((oid) => oids.add(oid));
@@ -22904,39 +22904,39 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {Set<string>} args.oids - A set of shallow object IDs to write.
        * @returns {Promise<void>}
        */
-      static async write({ fs: fs23, gitdir, oids }) {
+      static async write({ fs: fs24, gitdir, oids }) {
         const filepath = join3(gitdir, "shallow");
         if (oids.size > 0) {
           const text2 = [...oids].join("\n") + "\n";
           await acquireLock2(filepath, async function() {
-            await fs23.write(filepath, text2, {
+            await fs24.write(filepath, text2, {
               encoding: "utf8"
             });
           });
         } else {
           await acquireLock2(filepath, async function() {
-            await fs23.rm(filepath);
+            await fs24.rm(filepath);
           });
         }
       }
     };
-    async function hasObjectLoose({ fs: fs23, gitdir, oid }) {
+    async function hasObjectLoose({ fs: fs24, gitdir, oid }) {
       const source = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
-      return fs23.exists(`${gitdir}/${source}`);
+      return fs24.exists(`${gitdir}/${source}`);
     }
     async function hasObjectPacked({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       getExternalRefDelta
     }) {
-      let list2 = await fs23.readdir(join3(gitdir, "objects/pack"));
+      let list2 = await fs24.readdir(join3(gitdir, "objects/pack"));
       list2 = list2.filter((x) => x.endsWith(".idx"));
       for (const filename of list2) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
         const p = await readPackIndex({
-          fs: fs23,
+          fs: fs24,
           cache,
           filename: indexFile,
           getExternalRefDelta
@@ -22949,17 +22949,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return false;
     }
     async function hasObject({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       format: format2 = "content"
     }) {
-      const getExternalRefDelta = (oid2) => _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
-      let result = await hasObjectLoose({ fs: fs23, gitdir, oid });
+      const getExternalRefDelta = (oid2) => _readObject({ fs: fs24, cache, gitdir, oid: oid2 });
+      let result = await hasObjectLoose({ fs: fs24, gitdir, oid });
       if (!result) {
         result = await hasObjectPacked({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           oid,
@@ -23271,7 +23271,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return packstream;
     }
     async function _fetch({
-      fs: fs23,
+      fs: fs24,
       cache,
       http,
       onProgress,
@@ -23295,8 +23295,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       prune = false,
       pruneTags = false
     }) {
-      const ref = _ref || await _currentBranch({ fs: fs23, gitdir, test: true });
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+      const ref = _ref || await _currentBranch({ fs: fs24, gitdir, test: true });
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
       const remote = _remote || ref && await config2.get(`branch.${ref}.remote`) || "origin";
       const url = _url || await config2.get(`remote.${remote}.url`);
       if (typeof url === "undefined") {
@@ -23367,23 +23367,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (relative3) capabilities.push("deepen-relative");
       const wants = singleBranch ? [oid] : remoteRefs.values();
       const haveRefs = singleBranch ? [ref] : await GitRefManager.listRefs({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         filepath: `refs`
       });
       let haves = [];
       for (let ref2 of haveRefs) {
         try {
-          ref2 = await GitRefManager.expand({ fs: fs23, gitdir, ref: ref2 });
-          const oid2 = await GitRefManager.resolve({ fs: fs23, gitdir, ref: ref2 });
-          if (await hasObject({ fs: fs23, cache, gitdir, oid: oid2 })) {
+          ref2 = await GitRefManager.expand({ fs: fs24, gitdir, ref: ref2 });
+          const oid2 = await GitRefManager.resolve({ fs: fs24, gitdir, ref: ref2 });
+          if (await hasObject({ fs: fs24, cache, gitdir, oid: oid2 })) {
             haves.push(oid2);
           }
         } catch (err) {
         }
       }
       haves = [...new Set(haves)];
-      const oids = await GitShallowManager.read({ fs: fs23, gitdir });
+      const oids = await GitShallowManager.read({ fs: fs24, gitdir });
       const shallows = remoteHTTP.capabilities.has("shallow") ? [...oids] : [];
       const packstream = writeUploadPackRequest({
         capabilities,
@@ -23412,10 +23412,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       for (const oid2 of response.shallows) {
         if (!oids.has(oid2)) {
           try {
-            const { object } = await _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
+            const { object } = await _readObject({ fs: fs24, cache, gitdir, oid: oid2 });
             const commit4 = new GitCommit(object);
             const hasParents = await Promise.all(
-              commit4.headers().parent.map((oid3) => hasObject({ fs: fs23, cache, gitdir, oid: oid3 }))
+              commit4.headers().parent.map((oid3) => hasObject({ fs: fs24, cache, gitdir, oid: oid3 }))
             );
             const haveAllParents = hasParents.length === 0 || hasParents.every((has) => has);
             if (!haveAllParents) {
@@ -23429,7 +23429,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       for (const oid2 of response.unshallows) {
         oids.delete(oid2);
       }
-      await GitShallowManager.write({ fs: fs23, gitdir, oids });
+      await GitShallowManager.write({ fs: fs24, gitdir, oids });
       if (singleBranch) {
         const refs = /* @__PURE__ */ new Map([[fullref, oid]]);
         const symrefs = /* @__PURE__ */ new Map();
@@ -23446,7 +23446,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           refs.set(key, realRef);
         }
         const { pruned } = await GitRefManager.updateRemoteRefs({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           remote,
           refs,
@@ -23459,7 +23459,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
       } else {
         const { pruned } = await GitRefManager.updateRemoteRefs({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           remote,
           refs: remoteRefs,
@@ -23523,25 +23523,25 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (packfileSha !== "" && !emptyPackfile(packfile)) {
         res.packfile = `objects/pack/pack-${packfileSha}.pack`;
         const fullpath = join3(gitdir, res.packfile);
-        await fs23.write(fullpath, packfile);
-        const getExternalRefDelta = (oid2) => _readObject({ fs: fs23, cache, gitdir, oid: oid2 });
+        await fs24.write(fullpath, packfile);
+        const getExternalRefDelta = (oid2) => _readObject({ fs: fs24, cache, gitdir, oid: oid2 });
         const idx = await GitPackIndex.fromPack({
           pack: packfile,
           getExternalRefDelta,
           onProgress
         });
-        await fs23.write(fullpath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
+        await fs24.write(fullpath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
       }
       return res;
     }
     async function _init({
-      fs: fs23,
+      fs: fs24,
       bare = false,
       dir,
       gitdir = bare ? dir : join3(dir, ".git"),
       defaultBranch = "master"
     }) {
-      if (await fs23.exists(gitdir + "/config")) return;
+      if (await fs24.exists(gitdir + "/config")) return;
       let folders = [
         "hooks",
         "info",
@@ -23552,9 +23552,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       ];
       folders = folders.map((dir2) => gitdir + "/" + dir2);
       for (const folder of folders) {
-        await fs23.mkdir(folder);
+        await fs24.mkdir(folder);
       }
-      await fs23.write(
+      await fs24.write(
         gitdir + "/config",
         `[core]
 	repositoryformatversion = 0
@@ -23562,11 +23562,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
 	bare = ${bare}
 ` + (bare ? "" : "	logallrefupdates = true\n") + "	symlinks = false\n	ignorecase = true\n"
       );
-      await fs23.write(gitdir + "/HEAD", `ref: refs/heads/${defaultBranch}
+      await fs24.write(gitdir + "/HEAD", `ref: refs/heads/${defaultBranch}
 `);
     }
     async function _clone({
-      fs: fs23,
+      fs: fs24,
       cache,
       http,
       onProgress,
@@ -23593,15 +23593,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       batchSize = 100
     }) {
       try {
-        await _init({ fs: fs23, gitdir });
-        await _addRemote({ fs: fs23, gitdir, remote, url, force: false });
+        await _init({ fs: fs24, gitdir });
+        await _addRemote({ fs: fs24, gitdir, remote, url, force: false });
         if (corsProxy) {
-          const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+          const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
           await config2.set(`http.corsProxy`, corsProxy);
-          await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
+          await GitConfigManager.save({ fs: fs24, gitdir, config: config2 });
         }
         const { defaultBranch, fetchHead } = await _fetch({
-          fs: fs23,
+          fs: fs24,
           cache,
           http,
           onProgress,
@@ -23625,7 +23625,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         ref = ref || defaultBranch;
         ref = ref.replace("refs/heads/", "");
         await _checkout({
-          fs: fs23,
+          fs: fs24,
           cache,
           onProgress,
           onPostCheckout,
@@ -23638,12 +23638,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           batchSize
         });
       } catch (err) {
-        await fs23.rmdir(gitdir, { recursive: true, maxRetries: 10 }).catch(() => void 0);
+        await fs24.rmdir(gitdir, { recursive: true, maxRetries: 10 }).catch(() => void 0);
         throw err;
       }
     }
     async function clone({
-      fs: fs23,
+      fs: fs24,
       http,
       onProgress,
       onMessage,
@@ -23670,14 +23670,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       batchSize = 100
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
         if (!noCheckout) {
           assertParameter("dir", dir);
         }
         assertParameter("url", url);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _clone({
           fs: fsp,
@@ -23716,7 +23716,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onSign,
       dir,
       gitdir = join3(dir, ".git"),
-      message,
+      message: message2,
       author,
       committer,
       signingKey,
@@ -23732,19 +23732,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       try {
         assertParameter("fs", _fs);
         if (!amend) {
-          assertParameter("message", message);
+          assertParameter("message", message2);
         }
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         return await _commit({
-          fs: fs23,
+          fs: fs24,
           cache,
           onSign,
           gitdir: updatedGitdir,
-          message,
+          message: message2,
           author,
           committer,
           signingKey,
@@ -23762,16 +23762,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function currentBranch({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       fullname = false,
       test = false
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _currentBranch({
           fs: fsp,
@@ -23784,34 +23784,34 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _deleteBranch({ fs: fs23, gitdir, ref }) {
+    async function _deleteBranch({ fs: fs24, gitdir, ref }) {
       ref = ref.startsWith("refs/heads/") ? ref : `refs/heads/${ref}`;
-      const exist = await GitRefManager.exists({ fs: fs23, gitdir, ref });
+      const exist = await GitRefManager.exists({ fs: fs24, gitdir, ref });
       if (!exist) {
         throw new NotFoundError(ref);
       }
-      const fullRef = await GitRefManager.expand({ fs: fs23, gitdir, ref });
-      const currentRef = await _currentBranch({ fs: fs23, gitdir, fullname: true });
+      const fullRef = await GitRefManager.expand({ fs: fs24, gitdir, ref });
+      const currentRef = await _currentBranch({ fs: fs24, gitdir, fullname: true });
       if (fullRef === currentRef) {
-        const value = await GitRefManager.resolve({ fs: fs23, gitdir, ref: fullRef });
-        await GitRefManager.writeRef({ fs: fs23, gitdir, ref: "HEAD", value });
+        const value = await GitRefManager.resolve({ fs: fs24, gitdir, ref: fullRef });
+        await GitRefManager.writeRef({ fs: fs24, gitdir, ref: "HEAD", value });
       }
-      await GitRefManager.deleteRef({ fs: fs23, gitdir, ref: fullRef });
+      await GitRefManager.deleteRef({ fs: fs24, gitdir, ref: fullRef });
       const abbrevRef = abbreviateRef(ref);
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
       await config2.deleteSection("branch", abbrevRef);
-      await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
+      await GitConfigManager.save({ fs: fs24, gitdir, config: config2 });
     }
     async function deleteBranch({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _deleteBranch({
           fs: fsp,
@@ -23823,11 +23823,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function deleteRef({ fs: fs23, dir, gitdir = join3(dir, ".git"), ref }) {
+    async function deleteRef({ fs: fs24, dir, gitdir = join3(dir, ".git"), ref }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         await GitRefManager.deleteRef({ fs: fsp, gitdir: updatedGitdir, ref });
       } catch (err) {
@@ -23835,21 +23835,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _deleteRemote({ fs: fs23, gitdir, remote }) {
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+    async function _deleteRemote({ fs: fs24, gitdir, remote }) {
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
       await config2.deleteSection("remote", remote);
-      await GitConfigManager.save({ fs: fs23, gitdir, config: config2 });
+      await GitConfigManager.save({ fs: fs24, gitdir, config: config2 });
     }
     async function deleteRemote({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       remote
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("remote", remote);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _deleteRemote({
           fs: fsp,
@@ -23861,15 +23861,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _deleteTag({ fs: fs23, gitdir, ref }) {
+    async function _deleteTag({ fs: fs24, gitdir, ref }) {
       ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
-      await GitRefManager.deleteRef({ fs: fs23, gitdir, ref });
+      await GitRefManager.deleteRef({ fs: fs24, gitdir, ref });
     }
-    async function deleteTag({ fs: fs23, dir, gitdir = join3(dir, ".git"), ref }) {
+    async function deleteTag({ fs: fs24, dir, gitdir = join3(dir, ".git"), ref }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _deleteTag({
           fs: fsp,
@@ -23881,25 +23881,25 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function expandOidLoose({ fs: fs23, gitdir, oid: short }) {
+    async function expandOidLoose({ fs: fs24, gitdir, oid: short }) {
       const prefix = short.slice(0, 2);
-      const objectsSuffixes = await fs23.readdir(`${gitdir}/objects/${prefix}`);
+      const objectsSuffixes = await fs24.readdir(`${gitdir}/objects/${prefix}`);
       return objectsSuffixes.map((suffix) => `${prefix}${suffix}`).filter((_oid) => _oid.startsWith(short));
     }
     async function expandOidPacked({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid: short,
       getExternalRefDelta
     }) {
       const results = [];
-      let list2 = await fs23.readdir(join3(gitdir, "objects/pack"));
+      let list2 = await fs24.readdir(join3(gitdir, "objects/pack"));
       list2 = list2.filter((x) => x.endsWith(".idx"));
       for (const filename of list2) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
         const p = await readPackIndex({
-          fs: fs23,
+          fs: fs24,
           cache,
           filename: indexFile,
           getExternalRefDelta
@@ -23911,11 +23911,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return results;
     }
-    async function _expandOid({ fs: fs23, cache, gitdir, oid: short }) {
-      const getExternalRefDelta = (oid) => _readObject({ fs: fs23, cache, gitdir, oid });
-      const results = await expandOidLoose({ fs: fs23, gitdir, oid: short });
+    async function _expandOid({ fs: fs24, cache, gitdir, oid: short }) {
+      const getExternalRefDelta = (oid) => _readObject({ fs: fs24, cache, gitdir, oid });
+      const results = await expandOidLoose({ fs: fs24, gitdir, oid: short });
       const packedOids = await expandOidPacked({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: short,
@@ -23935,17 +23935,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       throw new NotFoundError(`an object matching "${short}"`);
     }
     async function expandOid({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _expandOid({
           fs: fsp,
@@ -23958,12 +23958,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function expandRef({ fs: fs23, dir, gitdir = join3(dir, ".git"), ref }) {
+    async function expandRef({ fs: fs24, dir, gitdir = join3(dir, ".git"), ref }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await GitRefManager.expand({
           fs: fsp,
@@ -23975,15 +23975,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _findMergeBase({ fs: fs23, cache, gitdir, oids }) {
+    async function _findMergeBase({ fs: fs24, cache, gitdir, oids }) {
       const visits = {};
       const passes = oids.length;
       const common = /* @__PURE__ */ new Set();
       const parents = /* @__PURE__ */ new Map();
-      const shallows = await GitShallowManager.read({ fs: fs23, gitdir });
+      const shallows = await GitShallowManager.read({ fs: fs24, gitdir });
       const readParents = async (oid) => {
         if (parents.has(oid)) return parents.get(oid);
-        const { object, type } = await _readObject({ fs: fs23, cache, gitdir, oid });
+        const { object, type } = await _readObject({ fs: fs24, cache, gitdir, oid });
         if (type !== "commit") {
           throw new ObjectTypeError(oid, type, "commit");
         }
@@ -24033,7 +24033,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return [...common].filter((oid) => !redundant.has(oid));
     }
     async function _merge({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir,
@@ -24044,7 +24044,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       dryRun = false,
       noUpdateBranch = false,
       abortOnConflict = true,
-      message,
+      message: message2,
       author,
       committer,
       signingKey,
@@ -24053,30 +24053,30 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       allowUnrelatedHistories = false
     }) {
       if (ours === void 0) {
-        ours = await _currentBranch({ fs: fs23, gitdir, fullname: true });
+        ours = await _currentBranch({ fs: fs24, gitdir, fullname: true });
       }
       ours = await GitRefManager.expand({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: ours
       });
       theirs = await GitRefManager.expand({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: theirs
       });
       const ourOid = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: ours
       });
       const theirOid = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: theirs
       });
       const baseOids = await _findMergeBase({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oids: [ourOid, theirOid]
@@ -24097,7 +24097,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       if (fastForward2 && baseOid === ourOid) {
         if (!dryRun && !noUpdateBranch) {
-          await GitRefManager.writeRef({ fs: fs23, gitdir, ref: ours, value: theirOid });
+          await GitRefManager.writeRef({ fs: fs24, gitdir, ref: ours, value: theirOid });
         }
         return {
           oid: theirOid,
@@ -24108,10 +24108,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new FastForwardError();
         }
         const tree = await GitIndexManager.acquire(
-          { fs: fs23, gitdir, cache, allowUnmerged: false },
+          { fs: fs24, gitdir, cache, allowUnmerged: false },
           async (index2) => {
             return mergeTree({
-              fs: fs23,
+              fs: fs24,
               cache,
               dir,
               gitdir,
@@ -24129,16 +24129,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         );
         if (tree instanceof MergeConflictError) throw tree;
-        if (!message) {
-          message = `Merge branch '${abbreviateRef(theirs)}' into ${abbreviateRef(
+        if (!message2) {
+          message2 = `Merge branch '${abbreviateRef(theirs)}' into ${abbreviateRef(
             ours
           )}`;
         }
         const oid = await _commit({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
-          message,
+          message: message2,
           ref: ours,
           tree,
           parent: [ourOid, theirOid],
@@ -24157,7 +24157,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _pull({
-      fs: fs23,
+      fs: fs24,
       cache,
       http,
       onProgress,
@@ -24184,14 +24184,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       try {
         if (!ref) {
-          const head = await _currentBranch({ fs: fs23, gitdir });
+          const head = await _currentBranch({ fs: fs24, gitdir });
           if (!head) {
             throw new MissingParameterError("ref");
           }
           ref = head;
         }
         const { fetchHead, fetchHeadDescription } = await _fetch({
-          fs: fs23,
+          fs: fs24,
           cache,
           http,
           onProgress,
@@ -24211,7 +24211,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           pruneTags
         });
         await _merge({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           ours: ref,
@@ -24226,7 +24226,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           noUpdateBranch: false
         });
         await _checkout({
-          fs: fs23,
+          fs: fs24,
           cache,
           onProgress,
           dir,
@@ -24241,7 +24241,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function fastForward({
-      fs: fs23,
+      fs: fs24,
       http,
       onProgress,
       onMessage,
@@ -24260,7 +24260,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
         const thisWillNotBeUsed = {
@@ -24269,7 +24269,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           timestamp: Date.now(),
           timezoneOffset: 0
         };
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _pull({
           fs: fsp,
@@ -24299,7 +24299,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function fetch({
-      fs: fs23,
+      fs: fs24,
       http,
       onProgress,
       onMessage,
@@ -24325,10 +24325,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _fetch({
           fs: fsp,
@@ -24361,17 +24361,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function findMergeBase({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oids,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oids", oids);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _findMergeBase({
           fs: fsp,
@@ -24384,64 +24384,64 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _findRoot({ fs: fs23, filepath }) {
-      if (await fs23.exists(join3(filepath, ".git"))) {
+    async function _findRoot({ fs: fs24, filepath }) {
+      if (await fs24.exists(join3(filepath, ".git"))) {
         return filepath;
       } else {
         const parent = dirname3(filepath);
         if (parent === filepath) {
           throw new NotFoundError(`git root for ${filepath}`);
         }
-        return _findRoot({ fs: fs23, filepath: parent });
+        return _findRoot({ fs: fs24, filepath: parent });
       }
     }
-    async function findRoot2({ fs: fs23, filepath }) {
+    async function findRoot2({ fs: fs24, filepath }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("filepath", filepath);
-        return await _findRoot({ fs: new FileSystem(fs23), filepath });
+        return await _findRoot({ fs: new FileSystem(fs24), filepath });
       } catch (err) {
         err.caller = "git.findRoot";
         throw err;
       }
     }
-    async function getConfig2({ fs: fs23, dir, gitdir = join3(dir, ".git"), path: path32 }) {
+    async function getConfig2({ fs: fs24, dir, gitdir = join3(dir, ".git"), path: path34 }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        assertParameter("path", path32);
-        const fsp = new FileSystem(fs23);
+        assertParameter("path", path34);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _getConfig({
           fs: fsp,
           gitdir: updatedGitdir,
-          path: path32
+          path: path34
         });
       } catch (err) {
         err.caller = "git.getConfig";
         throw err;
       }
     }
-    async function _getConfigAll({ fs: fs23, gitdir, path: path32 }) {
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
-      return config2.getall(path32);
+    async function _getConfigAll({ fs: fs24, gitdir, path: path34 }) {
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
+      return config2.getall(path34);
     }
     async function getConfigAll({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
-      path: path32
+      path: path34
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        assertParameter("path", path32);
-        const fsp = new FileSystem(fs23);
+        assertParameter("path", path34);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _getConfigAll({
           fs: fsp,
           gitdir: updatedGitdir,
-          path: path32
+          path: path34
         });
       } catch (err) {
         err.caller = "git.getConfigAll";
@@ -24613,7 +24613,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _indexPack({
-      fs: fs23,
+      fs: fs24,
       cache,
       onProgress,
       dir,
@@ -24622,14 +24622,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       try {
         filepath = join3(dir, filepath);
-        const pack = await fs23.read(filepath);
-        const getExternalRefDelta = (oid) => _readObject({ fs: fs23, cache, gitdir, oid });
+        const pack = await fs24.read(filepath);
+        const getExternalRefDelta = (oid) => _readObject({ fs: fs24, cache, gitdir, oid });
         const idx = await GitPackIndex.fromPack({
           pack,
           getExternalRefDelta,
           onProgress
         });
-        await fs23.write(filepath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
+        await fs24.write(filepath.replace(/\.pack$/, ".idx"), await idx.toBuffer());
         return {
           oids: [...idx.hashes]
         };
@@ -24639,7 +24639,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function indexPack({
-      fs: fs23,
+      fs: fs24,
       onProgress,
       dir,
       gitdir = join3(dir, ".git"),
@@ -24647,11 +24647,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("dir", dir);
         assertParameter("gitdir", dir);
         assertParameter("filepath", filepath);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _indexPack({
           fs: fsp,
@@ -24667,19 +24667,19 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function init3({
-      fs: fs23,
+      fs: fs24,
       bare = false,
       dir,
       gitdir = bare ? dir : join3(dir, ".git"),
       defaultBranch = "master"
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         if (!bare) {
           assertParameter("dir", dir);
         }
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _init({
           fs: fsp,
@@ -24694,14 +24694,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _isDescendent({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       ancestor,
       depth
     }) {
-      const shallows = await GitShallowManager.read({ fs: fs23, gitdir });
+      const shallows = await GitShallowManager.read({ fs: fs24, gitdir });
       if (!oid) {
         throw new MissingParameterError("oid");
       }
@@ -24718,7 +24718,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         const oid2 = queue.shift();
         const { type, object } = await _readObject({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           oid: oid2
@@ -24742,7 +24742,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return false;
     }
     async function isDescendent({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
@@ -24751,11 +24751,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
         assertParameter("ancestor", ancestor);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _isDescendent({
           fs: fsp,
@@ -24771,17 +24771,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function isIgnored({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       filepath
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("dir", dir);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitIgnoreManager.isIgnored({
           fs: fsp,
@@ -24795,15 +24795,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listBranches({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       remote
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitRefManager.listBranches({
           fs: fsp,
@@ -24815,12 +24815,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _listFiles({ fs: fs23, gitdir, ref, cache }) {
+    async function _listFiles({ fs: fs24, gitdir, ref, cache }) {
       if (ref) {
-        const oid = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
+        const oid = await GitRefManager.resolve({ gitdir, fs: fs24, ref });
         const filenames = [];
         await accumulateFilesFromOid({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           oid,
@@ -24830,7 +24830,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return filenames;
       } else {
         return GitIndexManager.acquire(
-          { fs: fs23, gitdir, cache },
+          { fs: fs24, gitdir, cache },
           async function(index2) {
             return index2.entries.map((x) => x.path);
           }
@@ -24838,18 +24838,18 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function accumulateFilesFromOid({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       filenames,
       prefix
     }) {
-      const { tree } = await _readTree({ fs: fs23, cache, gitdir, oid });
+      const { tree } = await _readTree({ fs: fs24, cache, gitdir, oid });
       for (const entry of tree) {
         if (entry.type === "tree") {
           await accumulateFilesFromOid({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir,
             oid: entry.oid,
@@ -24862,16 +24862,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listFiles2({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _listFiles({
           fs: fsp,
@@ -24884,17 +24884,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _listNotes({ fs: fs23, cache, gitdir, ref }) {
+    async function _listNotes({ fs: fs24, cache, gitdir, ref }) {
       let parent;
       try {
-        parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
+        parent = await GitRefManager.resolve({ gitdir, fs: fs24, ref });
       } catch (err) {
         if (err instanceof NotFoundError) {
           return [];
         }
       }
       const result = await _readTree({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: parent
@@ -24906,17 +24906,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return notes;
     }
     async function listNotes({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref = "refs/notes/commits",
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _listNotes({
           fs: fsp,
@@ -24930,15 +24930,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listRefs({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       filepath
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitRefManager.listRefs({ fs: fsp, gitdir: updatedGitdir, filepath });
       } catch (err) {
@@ -24946,8 +24946,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _listRemotes({ fs: fs23, gitdir }) {
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+    async function _listRemotes({ fs: fs24, gitdir }) {
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
       const remoteNames = await config2.getSubsections("remote");
       const remotes = Promise.all(
         remoteNames.map(async (remote) => {
@@ -24957,11 +24957,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       );
       return remotes;
     }
-    async function listRemotes({ fs: fs23, dir, gitdir = join3(dir, ".git") }) {
+    async function listRemotes({ fs: fs24, dir, gitdir = join3(dir, ".git") }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _listRemotes({
           fs: fsp,
@@ -25056,11 +25056,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function listTags({ fs: fs23, dir, gitdir = join3(dir, ".git") }) {
+    async function listTags({ fs: fs24, dir, gitdir = join3(dir, ".git") }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return GitRefManager.listTags({ fs: fsp, gitdir: updatedGitdir });
       } catch (err) {
@@ -25072,17 +25072,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return a.committer.timestamp - b.committer.timestamp;
     }
     var EMPTY_OID = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
-    async function resolveFileIdInTree({ fs: fs23, cache, gitdir, oid, fileId }) {
+    async function resolveFileIdInTree({ fs: fs24, cache, gitdir, oid, fileId }) {
       if (fileId === EMPTY_OID) return;
       const _oid = oid;
       let filepath;
-      const result = await resolveTree({ fs: fs23, cache, gitdir, oid });
+      const result = await resolveTree({ fs: fs24, cache, gitdir, oid });
       const tree = result.tree;
       if (fileId === result.oid) {
         filepath = result.path;
       } else {
         filepath = await _resolveFileId({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir,
           tree,
@@ -25097,7 +25097,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return filepath;
     }
     async function _resolveFileId({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       tree,
@@ -25113,13 +25113,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           filepaths.push(result);
         } else if (entry.type === "tree") {
           result = _readObject({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir,
             oid: entry.oid
           }).then(function({ object }) {
             return _resolveFileId({
-              fs: fs23,
+              fs: fs24,
               cache,
               gitdir,
               tree: GitTree.from(object),
@@ -25136,7 +25136,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return filepaths;
     }
     async function _log({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       filepath,
@@ -25149,9 +25149,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       const sinceTimestamp = typeof since === "undefined" ? void 0 : Math.floor(since.valueOf() / 1e3);
       const commits = [];
-      const shallowCommits = await GitShallowManager.read({ fs: fs23, gitdir });
-      const oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
-      const tips = [await _readCommit({ fs: fs23, cache, gitdir, oid })];
+      const shallowCommits = await GitShallowManager.read({ fs: fs24, gitdir });
+      const oid = await GitRefManager.resolve({ fs: fs24, gitdir, ref });
+      const tips = [await _readCommit({ fs: fs24, cache, gitdir, oid })];
       let lastFileOid;
       let lastFileMode;
       let lastCommit;
@@ -25168,7 +25168,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           let vFileEntry;
           try {
             vFileEntry = await resolveFilepathEntry({
-              fs: fs23,
+              fs: fs24,
               cache,
               gitdir,
               oid: commit4.commit.tree,
@@ -25186,7 +25186,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               let found = follow && lastFileOid;
               if (found) {
                 found = await resolveFileIdInTree({
-                  fs: fs23,
+                  fs: fs24,
                   cache,
                   gitdir,
                   oid: commit4.commit.tree,
@@ -25196,7 +25196,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                   if (Array.isArray(found)) {
                     if (lastCommit) {
                       const lastFound = await resolveFileIdInTree({
-                        fs: fs23,
+                        fs: fs24,
                         cache,
                         gitdir,
                         oid: lastCommit.commit.tree,
@@ -25241,7 +25241,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         if (!shallowCommits.has(commit4.oid)) {
           for (const oid2 of commit4.commit.parent) {
-            const commit5 = await _readCommit({ fs: fs23, cache, gitdir, oid: oid2 });
+            const commit5 = await _readCommit({ fs: fs24, cache, gitdir, oid: oid2 });
             if (!tips.map((commit6) => commit6.oid).includes(commit5.oid)) {
               tips.push(commit5);
             }
@@ -25255,7 +25255,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (includeChanges) {
         for (const commit4 of commits) {
           commit4.commit.changes = await getChanges({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir,
             commit: commit4,
@@ -25265,10 +25265,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       return commits;
     }
-    async function getChanges({ fs: fs23, cache, gitdir, commit: commit4, shallow }) {
+    async function getChanges({ fs: fs24, cache, gitdir, commit: commit4, shallow }) {
       const parent = shallow || !commit4.commit.parent[0] ? "4b825dc642cb6eb9a060e54bf8d69288fbee4904" : commit4.commit.parent[0];
       return _walk({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         trees: [TREE2({ ref: commit4.oid }), TREE2({ ref: parent })],
@@ -25299,7 +25299,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
     }
     async function log2({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       filepath,
@@ -25313,10 +25313,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _log({
           fs: fsp,
@@ -25347,7 +25347,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       dryRun = false,
       noUpdateBranch = false,
       abortOnConflict = true,
-      message,
+      message: message2,
       author: _author,
       committer: _committer,
       signingKey,
@@ -25360,10 +25360,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (signingKey) {
           assertParameter("onSign", onSign);
         }
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         const author = await normalizeAuthorObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author: _author
         });
@@ -25371,7 +25371,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new MissingNameError("author");
         }
         const committer = await normalizeCommitterObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author,
           committer: _committer
@@ -25380,7 +25380,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           throw new MissingNameError("committer");
         }
         return await _merge({
-          fs: fs23,
+          fs: fs24,
           cache,
           dir,
           gitdir: updatedGitdir,
@@ -25391,7 +25391,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           dryRun,
           noUpdateBranch,
           abortOnConflict,
-          message,
+          message: message2,
           author,
           committer,
           signingKey,
@@ -25413,7 +25413,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       ref_delta: 112
     };
     async function _pack({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
@@ -25446,20 +25446,20 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       write("00000002", "hex");
       write(padHex(8, oids.length), "hex");
       for (const oid of oids) {
-        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
         await writeObject2({ write, object, stype: type });
       }
       const digest = hash.digest();
       outputStream.push(digest);
       return outputStream;
     }
-    async function _packObjects({ fs: fs23, cache, gitdir, oids, write }) {
-      const buffers = await _pack({ fs: fs23, cache, gitdir, oids });
+    async function _packObjects({ fs: fs24, cache, gitdir, oids, write }) {
+      const buffers = await _pack({ fs: fs24, cache, gitdir, oids });
       const packfile = Buffer.from(await collect(buffers));
       const packfileSha = packfile.slice(-20).toString("hex");
       const filename = `pack-${packfileSha}.pack`;
       if (write) {
-        await fs23.write(join3(gitdir, `objects/pack/${filename}`), packfile);
+        await fs24.write(join3(gitdir, `objects/pack/${filename}`), packfile);
         return { filename };
       }
       return {
@@ -25468,7 +25468,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       };
     }
     async function packObjects({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oids,
@@ -25476,10 +25476,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oids", oids);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _packObjects({
           fs: fsp,
@@ -25522,23 +25522,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       try {
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         const author = await normalizeAuthorObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author: _author
         });
         if (!author) throw new MissingNameError("author");
         const committer = await normalizeCommitterObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author,
           committer: _committer
         });
         if (!committer) throw new MissingNameError("committer");
         return await _pull({
-          fs: fs23,
+          fs: fs24,
           cache,
           http,
           onProgress,
@@ -25569,22 +25569,22 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function listCommitsAndTags({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
       start,
       finish
     }) {
-      const shallows = await GitShallowManager.read({ fs: fs23, gitdir });
+      const shallows = await GitShallowManager.read({ fs: fs24, gitdir });
       const startingSet = /* @__PURE__ */ new Set();
       const finishingSet = /* @__PURE__ */ new Set();
       for (const ref of start) {
-        startingSet.add(await GitRefManager.resolve({ fs: fs23, gitdir, ref }));
+        startingSet.add(await GitRefManager.resolve({ fs: fs24, gitdir, ref }));
       }
       for (const ref of finish) {
         try {
-          const oid = await GitRefManager.resolve({ fs: fs23, gitdir, ref });
+          const oid = await GitRefManager.resolve({ fs: fs24, gitdir, ref });
           finishingSet.add(oid);
         } catch (err) {
         }
@@ -25592,7 +25592,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const visited = /* @__PURE__ */ new Set();
       async function walk3(oid) {
         visited.add(oid);
-        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
         if (type === "tag") {
           const tag2 = GitAnnotatedTag.from(object);
           const commit4 = tag2.headers().object;
@@ -25617,7 +25617,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return visited;
     }
     async function listObjects({
-      fs: fs23,
+      fs: fs24,
       cache,
       dir,
       gitdir = join3(dir, ".git"),
@@ -25627,7 +25627,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       async function walk3(oid) {
         if (visited.has(oid)) return;
         visited.add(oid);
-        const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+        const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
         if (type === "tag") {
           const tag2 = GitAnnotatedTag.from(object);
           const obj = tag2.headers().object;
@@ -25706,7 +25706,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return packstream;
     }
     async function _push({
-      fs: fs23,
+      fs: fs24,
       cache,
       http,
       onProgress,
@@ -25725,11 +25725,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       corsProxy,
       headers = {}
     }) {
-      const ref = _ref || await _currentBranch({ fs: fs23, gitdir });
+      const ref = _ref || await _currentBranch({ fs: fs24, gitdir });
       if (typeof ref === "undefined") {
         throw new MissingParameterError("ref");
       }
-      const config2 = await GitConfigManager.get({ fs: fs23, gitdir });
+      const config2 = await GitConfigManager.get({ fs: fs24, gitdir });
       remote = remote || await config2.get(`branch.${ref}.pushRemote`) || await config2.get("remote.pushDefault") || await config2.get(`branch.${ref}.remote`) || "origin";
       const url = _url || await config2.get(`remote.${remote}.pushurl`) || await config2.get(`remote.${remote}.url`);
       if (typeof url === "undefined") {
@@ -25742,8 +25742,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (corsProxy === void 0) {
         corsProxy = await config2.get("http.corsProxy");
       }
-      const fullRef = await GitRefManager.expand({ fs: fs23, gitdir, ref });
-      const oid = _delete ? "0000000000000000000000000000000000000000" : await GitRefManager.resolve({ fs: fs23, gitdir, ref: fullRef });
+      const fullRef = await GitRefManager.expand({ fs: fs24, gitdir, ref });
+      const oid = _delete ? "0000000000000000000000000000000000000000" : await GitRefManager.resolve({ fs: fs24, gitdir, ref: fullRef });
       const GitRemoteHTTP2 = GitRemoteManager.getRemoteHelperFor({ url });
       const httpRemote = await GitRemoteHTTP2.discover({
         http,
@@ -25791,30 +25791,30 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         let skipObjects = /* @__PURE__ */ new Set();
         if (oldoid !== "0000000000000000000000000000000000000000") {
           const mergebase = await _findMergeBase({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir,
             oids: [oid, oldoid]
           });
           for (const oid2 of mergebase) finish.push(oid2);
           if (thinPack) {
-            skipObjects = await listObjects({ fs: fs23, cache, gitdir, oids: mergebase });
+            skipObjects = await listObjects({ fs: fs24, cache, gitdir, oids: mergebase });
           }
         }
         if (!finish.includes(oid)) {
           const commits = await listCommitsAndTags({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir,
             start: [oid],
             finish
           });
-          objects = await listObjects({ fs: fs23, cache, gitdir, oids: commits });
+          objects = await listObjects({ fs: fs24, cache, gitdir, oids: commits });
         }
         if (thinPack) {
           try {
             const ref2 = await GitRefManager.resolve({
-              fs: fs23,
+              fs: fs24,
               gitdir,
               ref: `refs/remotes/${remote}/HEAD`,
               depth: 2
@@ -25825,7 +25825,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               map: httpRemote.refs
             });
             const oids = [oid2];
-            for (const oid3 of await listObjects({ fs: fs23, cache, gitdir, oids })) {
+            for (const oid3 of await listObjects({ fs: fs24, cache, gitdir, oids })) {
               skipObjects.add(oid3);
             }
           } catch (e) {
@@ -25840,7 +25840,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             throw new PushRejectedError("tag-exists");
           }
           if (oid !== "0000000000000000000000000000000000000000" && oldoid !== "0000000000000000000000000000000000000000" && !await _isDescendent({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir,
             oid,
@@ -25860,7 +25860,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         triplets: [{ oldoid, oid, fullRef: fullRemoteRef }]
       });
       const packstream2 = _delete ? [] : await _pack({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oids: [...objects]
@@ -25892,9 +25892,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           ""
         )}`;
         if (_delete) {
-          await GitRefManager.deleteRef({ fs: fs23, gitdir, ref: ref2 });
+          await GitRefManager.deleteRef({ fs: fs24, gitdir, ref: ref2 });
         } else {
-          await GitRefManager.writeRef({ fs: fs23, gitdir, ref: ref2, value: oid });
+          await GitRefManager.writeRef({ fs: fs24, gitdir, ref: ref2, value: oid });
         }
       }
       if (result.ok && Object.values(result.refs).every((result2) => result2.ok)) {
@@ -25906,7 +25906,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function push({
-      fs: fs23,
+      fs: fs24,
       http,
       onProgress,
       onMessage,
@@ -25927,10 +25927,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("http", http);
         assertParameter("gitdir", gitdir);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _push({
           fs: fsp,
@@ -25957,11 +25957,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function resolveBlob({ fs: fs23, cache, gitdir, oid }) {
-      const { type, object } = await _readObject({ fs: fs23, cache, gitdir, oid });
+    async function resolveBlob({ fs: fs24, cache, gitdir, oid }) {
+      const { type, object } = await _readObject({ fs: fs24, cache, gitdir, oid });
       if (type === "tag") {
         oid = GitAnnotatedTag.from(object).parse().object;
-        return resolveBlob({ fs: fs23, cache, gitdir, oid });
+        return resolveBlob({ fs: fs24, cache, gitdir, oid });
       }
       if (type !== "blob") {
         throw new ObjectTypeError(oid, type, "blob");
@@ -25969,17 +25969,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return { oid, blob: new Uint8Array(object) };
     }
     async function _readBlob({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       oid,
       filepath = void 0
     }) {
       if (filepath !== void 0) {
-        oid = await resolveFilepath({ fs: fs23, cache, gitdir, oid, filepath });
+        oid = await resolveFilepath({ fs: fs24, cache, gitdir, oid, filepath });
       }
       const blob = await resolveBlob({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid
@@ -25987,7 +25987,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return blob;
     }
     async function readBlob2({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
@@ -25995,10 +25995,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readBlob({
           fs: fsp,
@@ -26013,17 +26013,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function readCommit({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readCommit({
           fs: fsp,
@@ -26037,15 +26037,15 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _readNote({
-      fs: fs23,
+      fs: fs24,
       cache,
       gitdir,
       ref = "refs/notes/commits",
       oid
     }) {
-      const parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
+      const parent = await GitRefManager.resolve({ gitdir, fs: fs24, ref });
       const { blob } = await _readBlob({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: parent,
@@ -26054,7 +26054,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return blob;
     }
     async function readNote({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref = "refs/notes/commits",
@@ -26062,11 +26062,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readNote({
           fs: fsp,
@@ -26094,11 +26094,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         if (filepath !== void 0) {
           oid = await resolveFilepath({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir: updatedGitdir,
             oid,
@@ -26107,7 +26107,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         const _format = format2 === "parsed" ? "content" : format2;
         const result = await _readObject({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir: updatedGitdir,
           oid,
@@ -26150,9 +26150,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _readTag({ fs: fs23, cache, gitdir, oid }) {
+    async function _readTag({ fs: fs24, cache, gitdir, oid }) {
       const { type, object } = await _readObject({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid,
@@ -26170,17 +26170,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       return result;
     }
     async function readTag({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readTag({
           fs: fsp,
@@ -26194,7 +26194,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function readTree({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       oid,
@@ -26202,10 +26202,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _readTree({
           fs: fsp,
@@ -26244,7 +26244,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _removeNote({
-      fs: fs23,
+      fs: fs24,
       cache,
       onSign,
       gitdir,
@@ -26256,14 +26256,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     }) {
       let parent;
       try {
-        parent = await GitRefManager.resolve({ gitdir, fs: fs23, ref });
+        parent = await GitRefManager.resolve({ gitdir, fs: fs24, ref });
       } catch (err) {
         if (!(err instanceof NotFoundError)) {
           throw err;
         }
       }
       const result = await _readTree({
-        fs: fs23,
+        fs: fs24,
         cache,
         gitdir,
         oid: parent || "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -26271,12 +26271,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       let tree = result.tree;
       tree = tree.filter((entry) => entry.path !== oid);
       const treeOid = await _writeTree({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         tree
       });
       const commitOid = await _commit({
-        fs: fs23,
+        fs: fs24,
         cache,
         onSign,
         gitdir,
@@ -26307,23 +26307,23 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("oid", oid);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         const author = await normalizeAuthorObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author: _author
         });
         if (!author) throw new MissingNameError("author");
         const committer = await normalizeCommitterObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           author,
           committer: _committer
         });
         if (!committer) throw new MissingNameError("committer");
         return await _removeNote({
-          fs: fs23,
+          fs: fs24,
           cache,
           onSign,
           gitdir: updatedGitdir,
@@ -26339,7 +26339,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _renameBranch({
-      fs: fs23,
+      fs: fs24,
       gitdir,
       oldref,
       ref,
@@ -26353,27 +26353,27 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       const fulloldref = `refs/heads/${oldref}`;
       const fullnewref = `refs/heads/${ref}`;
-      const newexist = await GitRefManager.exists({ fs: fs23, gitdir, ref: fullnewref });
+      const newexist = await GitRefManager.exists({ fs: fs24, gitdir, ref: fullnewref });
       if (newexist) {
         throw new AlreadyExistsError("branch", ref, false);
       }
       const value = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: fulloldref,
         depth: 1
       });
-      await GitRefManager.writeRef({ fs: fs23, gitdir, ref: fullnewref, value });
-      await GitRefManager.deleteRef({ fs: fs23, gitdir, ref: fulloldref });
+      await GitRefManager.writeRef({ fs: fs24, gitdir, ref: fullnewref, value });
+      await GitRefManager.deleteRef({ fs: fs24, gitdir, ref: fulloldref });
       const fullCurrentBranchRef = await _currentBranch({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         fullname: true
       });
       const isCurrentBranch = fullCurrentBranchRef === fulloldref;
       if (checkout2 || isCurrentBranch) {
         await GitRefManager.writeSymbolicRef({
-          fs: fs23,
+          fs: fs24,
           gitdir,
           ref: "HEAD",
           value: fullnewref
@@ -26381,7 +26381,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function renameBranch({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
@@ -26389,11 +26389,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       checkout: checkout2 = false
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
         assertParameter("oldref", oldref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _renameBranch({
           fs: fsp,
@@ -26422,13 +26422,13 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         let oid;
         let workdirOid;
         try {
           oid = await GitRefManager.resolve({
-            fs: fs23,
+            fs: fs24,
             gitdir: updatedGitdir,
             ref: ref || "HEAD"
           });
@@ -26440,7 +26440,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (oid) {
           try {
             oid = await resolveFilepath({
-              fs: fs23,
+              fs: fs24,
               cache,
               gitdir: updatedGitdir,
               oid,
@@ -26460,7 +26460,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           gid: 0,
           size: 0
         };
-        const object = dir && await fs23.read(join3(dir, filepath));
+        const object = dir && await fs24.read(join3(dir, filepath));
         if (object) {
           workdirOid = await hashObject$1({
             gitdir: updatedGitdir,
@@ -26468,11 +26468,11 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             object
           });
           if (oid === workdirOid) {
-            stats = await fs23.lstat(join3(dir, filepath));
+            stats = await fs24.lstat(join3(dir, filepath));
           }
         }
         await GitIndexManager.acquire(
-          { fs: fs23, gitdir: updatedGitdir, cache },
+          { fs: fs24, gitdir: updatedGitdir, cache },
           async function(index2) {
             index2.delete({ filepath });
             if (oid) {
@@ -26486,17 +26486,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function resolveRef2({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       ref,
       depth
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         const oid = await GitRefManager.resolve({
           fs: fsp,
@@ -26514,32 +26514,32 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       dir,
       gitdir = join3(dir, ".git"),
-      path: path32,
+      path: path34,
       value,
       append: append2 = false
     }) {
       try {
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
-        assertParameter("path", path32);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
-        const config2 = await GitConfigManager.get({ fs: fs23, gitdir: updatedGitdir });
+        assertParameter("path", path34);
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
+        const config2 = await GitConfigManager.get({ fs: fs24, gitdir: updatedGitdir });
         if (append2) {
-          await config2.append(path32, value);
+          await config2.append(path34, value);
         } else {
-          await config2.set(path32, value);
+          await config2.set(path34, value);
         }
-        await GitConfigManager.save({ fs: fs23, gitdir: updatedGitdir, config: config2 });
+        await GitConfigManager.save({ fs: fs24, gitdir: updatedGitdir, config: config2 });
       } catch (err) {
         err.caller = "git.setConfig";
         throw err;
       }
     }
-    async function _writeCommit({ fs: fs23, gitdir, commit: commit4 }) {
+    async function _writeCommit({ fs: fs24, gitdir, commit: commit4 }) {
       const object = GitCommit.from(commit4).toObject();
       const oid = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "commit",
         object,
@@ -26556,12 +26556,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         const sign = offsetMinutes > 0 ? "-" : "+";
         return `${sign}${offsetHours.toString().padStart(2, "0")}${offsetMinutesFormatted}`;
       }
-      static createStashReflogEntry(author, stashCommit, message) {
+      static createStashReflogEntry(author, stashCommit, message2) {
         const nameNoSpace = author.name.replace(/\s/g, "");
         const z40 = "0000000000000000000000000000000000000000";
         const timestamp = Math.floor(Date.now() / 1e3);
         const timezoneOffset = _GitRefStash.timezoneOffsetForRefLogEntry;
-        return `${z40} ${stashCommit} ${nameNoSpace} ${author.email} ${timestamp} ${timezoneOffset}	${message}
+        return `${z40} ${stashCommit} ${nameNoSpace} ${author.email} ${timestamp} ${timezoneOffset}	${message2}
 `;
       }
       static getStashReflogEntry(reflogString, parsed = false) {
@@ -26581,9 +26581,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.dir - The working directory.
        * @param {string}[args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        */
-      constructor({ fs: fs23, dir, gitdir = join3(dir, ".git") }) {
+      constructor({ fs: fs24, dir, gitdir = join3(dir, ".git") }) {
         Object.assign(this, {
-          fs: fs23,
+          fs: fs24,
           dir,
           gitdir,
           _author: null
@@ -26661,12 +26661,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string[]} args.parent - The parent commit object IDs.
        * @returns {Promise<string>} - The object ID of the written commit.
        */
-      async writeStashCommit({ message, tree, parent }) {
+      async writeStashCommit({ message: message2, tree, parent }) {
         return _writeCommit({
           fs: this.fs,
           gitdir: this.gitdir,
           commit: {
-            message,
+            message: message2,
             tree,
             parent,
             author: await this.getAuthor(),
@@ -26724,12 +26724,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.message - The reflog message.
        * @returns {Promise<void>}
        */
-      async writeStashReflogEntry({ stashCommit, message }) {
+      async writeStashReflogEntry({ stashCommit, message: message2 }) {
         const author = await this.getAuthor();
         const entry = GitRefStash.createStashReflogEntry(
           author,
           stashCommit,
-          message
+          message2
         );
         const filepath = this.refLogsStashPath;
         await acquireLock2(filepath, async () => {
@@ -26752,26 +26752,26 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         return GitRefStash.getStashReflogEntry(reflogString, parsed);
       }
     };
-    async function _createStashCommit({ fs: fs23, dir, gitdir, message = "" }) {
-      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
+    async function _createStashCommit({ fs: fs24, dir, gitdir, message: message2 = "" }) {
+      const stashMgr = new GitStashManager({ fs: fs24, dir, gitdir });
       await stashMgr.getAuthor();
       const branch2 = await _currentBranch({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         fullname: false
       });
       const headCommit = await GitRefManager.resolve({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         ref: "HEAD"
       });
-      const headCommitObj = await readCommit({ fs: fs23, dir, gitdir, oid: headCommit });
+      const headCommitObj = await readCommit({ fs: fs24, dir, gitdir, oid: headCommit });
       const headMsg = headCommitObj.commit.message;
       const stashCommitParents = [headCommit];
       let stashCommitTree = null;
       let workDirCompareBase = TREE2({ ref: "HEAD" });
       const indexTree = await writeTreeChanges({
-        fs: fs23,
+        fs: fs24,
         dir,
         gitdir,
         treePair: [TREE2({ ref: "HEAD" }), "stage"]
@@ -26787,7 +26787,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         workDirCompareBase = STAGE2();
       }
       const workingTree = await writeTreeChanges({
-        fs: fs23,
+        fs: fs24,
         dir,
         gitdir,
         treePair: [workDirCompareBase, "workdir"]
@@ -26804,7 +26804,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       if (!stashCommitTree || !indexTree && !workingTree) {
         throw new NotFoundError("changes, nothing to stash");
       }
-      const stashMsg = (message.trim() || `WIP on ${branch2}`) + `: ${headCommit.substring(0, 7)} ${headMsg}`;
+      const stashMsg = (message2.trim() || `WIP on ${branch2}`) + `: ${headCommit.substring(0, 7)} ${headMsg}`;
       const stashCommit = await stashMgr.writeStashCommit({
         message: stashMsg,
         tree: stashCommitTree,
@@ -26812,12 +26812,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return { stashCommit, stashMsg, branch: branch2, stashMgr };
     }
-    async function _stashPush({ fs: fs23, dir, gitdir, message = "" }) {
+    async function _stashPush({ fs: fs24, dir, gitdir, message: message2 = "" }) {
       const { stashCommit, stashMsg, branch: branch2, stashMgr } = await _createStashCommit({
-        fs: fs23,
+        fs: fs24,
         dir,
         gitdir,
-        message
+        message: message2
       });
       await stashMgr.writeStashRef(stashCommit);
       await stashMgr.writeStashReflogEntry({
@@ -26825,7 +26825,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         message: stashMsg
       });
       await checkout({
-        fs: fs23,
+        fs: fs24,
         dir,
         gitdir,
         ref: branch2,
@@ -26835,17 +26835,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return stashCommit;
     }
-    async function _stashCreate({ fs: fs23, dir, gitdir, message = "" }) {
+    async function _stashCreate({ fs: fs24, dir, gitdir, message: message2 = "" }) {
       const { stashCommit } = await _createStashCommit({
-        fs: fs23,
+        fs: fs24,
         dir,
         gitdir,
-        message
+        message: message2
       });
       return stashCommit;
     }
-    async function _stashApply({ fs: fs23, dir, gitdir, refIdx = 0 }) {
-      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
+    async function _stashApply({ fs: fs24, dir, gitdir, refIdx = 0 }) {
+      const stashMgr = new GitStashManager({ fs: fs24, dir, gitdir });
       const stashCommit = await stashMgr.readStashCommit(refIdx);
       const { parent: stashParents = null } = stashCommit.commit ? stashCommit.commit : {};
       if (!stashParents || !Array.isArray(stashParents)) {
@@ -26853,14 +26853,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       for (let i = 0; i < stashParents.length - 1; i++) {
         const applyingCommit = await _readCommit({
-          fs: fs23,
+          fs: fs24,
           cache: {},
           gitdir,
           oid: stashParents[i + 1]
         });
         const wasStaged = applyingCommit.commit.message.startsWith("stash-Index");
         await applyTreeChanges({
-          fs: fs23,
+          fs: fs24,
           dir,
           gitdir,
           stashCommit: stashParents[i + 1],
@@ -26869,16 +26869,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         });
       }
     }
-    async function _stashDrop({ fs: fs23, dir, gitdir, refIdx = 0 }) {
-      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
+    async function _stashDrop({ fs: fs24, dir, gitdir, refIdx = 0 }) {
+      const stashMgr = new GitStashManager({ fs: fs24, dir, gitdir });
       const stashCommit = await stashMgr.readStashCommit(refIdx);
       if (!stashCommit.commit) {
         return;
       }
       const stashRefPath = stashMgr.refStashPath;
       await acquireLock2(stashRefPath, async () => {
-        if (await fs23.exists(stashRefPath)) {
-          await fs23.rm(stashRefPath);
+        if (await fs24.exists(stashRefPath)) {
+          await fs24.rm(stashRefPath);
         }
       });
       const reflogEntries = await stashMgr.readStashReflogs({ parsed: false });
@@ -26889,7 +26889,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const stashReflogPath = stashMgr.refLogsStashPath;
       await acquireLock2(stashReflogPath, async () => {
         if (reflogEntries.length) {
-          await fs23.write(
+          await fs24.write(
             stashReflogPath,
             reflogEntries.reverse().join("\n") + "\n",
             "utf8"
@@ -26897,40 +26897,40 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const lastStashCommit = reflogEntries[reflogEntries.length - 1].split(" ")[1];
           await stashMgr.writeStashRef(lastStashCommit);
         } else {
-          await fs23.rm(stashReflogPath);
+          await fs24.rm(stashReflogPath);
         }
       });
     }
-    async function _stashList({ fs: fs23, dir, gitdir }) {
-      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
+    async function _stashList({ fs: fs24, dir, gitdir }) {
+      const stashMgr = new GitStashManager({ fs: fs24, dir, gitdir });
       return stashMgr.readStashReflogs({ parsed: true });
     }
-    async function _stashClear({ fs: fs23, dir, gitdir }) {
-      const stashMgr = new GitStashManager({ fs: fs23, dir, gitdir });
+    async function _stashClear({ fs: fs24, dir, gitdir }) {
+      const stashMgr = new GitStashManager({ fs: fs24, dir, gitdir });
       const stashRefPath = [stashMgr.refStashPath, stashMgr.refLogsStashPath];
       await acquireLock2(stashRefPath, async () => {
         await Promise.all(
-          stashRefPath.map(async (path32) => {
-            if (await fs23.exists(path32)) {
-              return fs23.rm(path32);
+          stashRefPath.map(async (path34) => {
+            if (await fs24.exists(path34)) {
+              return fs24.rm(path34);
             }
           })
         );
       });
     }
-    async function _stashPop({ fs: fs23, dir, gitdir, refIdx = 0 }) {
-      await _stashApply({ fs: fs23, dir, gitdir, refIdx });
-      await _stashDrop({ fs: fs23, dir, gitdir, refIdx });
+    async function _stashPop({ fs: fs24, dir, gitdir, refIdx = 0 }) {
+      await _stashApply({ fs: fs24, dir, gitdir, refIdx });
+      await _stashDrop({ fs: fs24, dir, gitdir, refIdx });
     }
     async function stash({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       op = "push",
-      message = "",
+      message: message2 = "",
       refIdx = 0
     }) {
-      assertParameter("fs", fs23);
+      assertParameter("fs", fs24);
       assertParameter("dir", dir);
       assertParameter("gitdir", gitdir);
       assertParameter("op", op);
@@ -26945,7 +26945,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       };
       const opsNeedRefIdx = ["apply", "drop", "pop"];
       try {
-        const _fs = new FileSystem(fs23);
+        const _fs = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp: _fs, dotgit: gitdir });
         const folders = ["refs", "logs", "logs/refs"];
         folders.map((f) => join3(updatedGitdir, f)).forEach(async (folder) => {
@@ -26965,7 +26965,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             fs: _fs,
             dir,
             gitdir: updatedGitdir,
-            message,
+            message: message2,
             refIdx
           });
         }
@@ -26987,18 +26987,18 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
-        const headTree = await getHeadTree({ fs: fs23, cache, gitdir: updatedGitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
+        const headTree = await getHeadTree({ fs: fs24, cache, gitdir: updatedGitdir });
         const treeOid = await getOidAtPath({
-          fs: fs23,
+          fs: fs24,
           cache,
           gitdir: updatedGitdir,
           tree: headTree,
           path: filepath
         });
         const indexEntry = await GitIndexManager.acquire(
-          { fs: fs23, gitdir: updatedGitdir, cache },
+          { fs: fs24, gitdir: updatedGitdir, cache },
           async function(index2) {
             for (const entry of index2) {
               if (entry.path === filepath) return entry;
@@ -27008,7 +27008,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         );
         if (treeOid === null && indexEntry === null) {
           const ignored = await GitIgnoreManager.isIgnored({
-            fs: fs23,
+            fs: fs24,
             gitdir: updatedGitdir,
             dir,
             filepath
@@ -27017,7 +27017,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             return "ignored";
           }
         }
-        const stats = await fs23.lstat(join3(dir, filepath));
+        const stats = await fs24.lstat(join3(dir, filepath));
         const H = treeOid !== null;
         const I = indexEntry !== null;
         const W = stats !== null;
@@ -27025,9 +27025,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           if (I && !compareStats(indexEntry, stats)) {
             return indexEntry.oid;
           } else {
-            const config2 = await GitConfigManager.get({ fs: fs23, gitdir: updatedGitdir });
+            const config2 = await GitConfigManager.get({ fs: fs24, gitdir: updatedGitdir });
             const autocrlf = await config2.get("core.autocrlf");
-            const object = await fs23.read(join3(dir, filepath), { autocrlf });
+            const object = await fs24.read(join3(dir, filepath), { autocrlf });
             const workdirOid = await hashObject$1({
               gitdir: updatedGitdir,
               type: "blob",
@@ -27036,7 +27036,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             if (refresh && I && indexEntry.oid === workdirOid) {
               if (stats.size !== -1) {
                 GitIndexManager.acquire(
-                  { fs: fs23, gitdir: updatedGitdir, cache },
+                  { fs: fs24, gitdir: updatedGitdir, cache },
                   async function(index2) {
                     index2.insert({ filepath, stats, oid: workdirOid });
                   }
@@ -27074,36 +27074,36 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function getOidAtPath({ fs: fs23, cache, gitdir: updatedGitdir, tree, path: path32 }) {
-      if (typeof path32 === "string") path32 = path32.split("/");
-      const dirname4 = path32.shift();
+    async function getOidAtPath({ fs: fs24, cache, gitdir: updatedGitdir, tree, path: path34 }) {
+      if (typeof path34 === "string") path34 = path34.split("/");
+      const dirname4 = path34.shift();
       for (const entry of tree) {
         if (entry.path === dirname4) {
-          if (path32.length === 0) {
+          if (path34.length === 0) {
             return entry.oid;
           }
           const { type, object } = await _readObject({
-            fs: fs23,
+            fs: fs24,
             cache,
             gitdir: updatedGitdir,
             oid: entry.oid
           });
           if (type === "tree") {
             const tree2 = GitTree.from(object);
-            return getOidAtPath({ fs: fs23, cache, gitdir: updatedGitdir, tree: tree2, path: path32 });
+            return getOidAtPath({ fs: fs24, cache, gitdir: updatedGitdir, tree: tree2, path: path34 });
           }
           if (type === "blob") {
-            throw new ObjectTypeError(entry.oid, type, "blob", path32.join("/"));
+            throw new ObjectTypeError(entry.oid, type, "blob", path34.join("/"));
           }
         }
       }
       return null;
     }
-    async function getHeadTree({ fs: fs23, cache, gitdir: updatedGitdir }) {
+    async function getHeadTree({ fs: fs24, cache, gitdir: updatedGitdir }) {
       let oid;
       try {
         oid = await GitRefManager.resolve({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           ref: "HEAD"
         });
@@ -27112,7 +27112,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           return [];
         }
       }
-      const { tree } = await _readTree({ fs: fs23, cache, gitdir: updatedGitdir, oid });
+      const { tree } = await _readTree({ fs: fs24, cache, gitdir: updatedGitdir, oid });
       return tree;
     }
     async function statusMatrix2({
@@ -27130,10 +27130,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         return await _walk({
-          fs: fs23,
+          fs: fs24,
           cache,
           dir,
           gitdir: updatedGitdir,
@@ -27142,7 +27142,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             if (!head && !stage && workdir) {
               if (!shouldIgnore) {
                 const isIgnored2 = await GitIgnoreManager.isIgnored({
-                  fs: fs23,
+                  fs: fs24,
                   dir,
                   filepath
                 });
@@ -27200,21 +27200,21 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
-        const fs23 = new FileSystem(_fs);
+        const fs24 = new FileSystem(_fs);
         if (ref === void 0) {
           throw new MissingParameterError("ref");
         }
         ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         const value = await GitRefManager.resolve({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           ref: object || "HEAD"
         });
-        if (!force && await GitRefManager.exists({ fs: fs23, gitdir: updatedGitdir, ref })) {
+        if (!force && await GitRefManager.exists({ fs: fs24, gitdir: updatedGitdir, ref })) {
           throw new AlreadyExistsError("tag", ref);
         }
-        await GitRefManager.writeRef({ fs: fs23, gitdir: updatedGitdir, ref, value });
+        await GitRefManager.writeRef({ fs: fs24, gitdir: updatedGitdir, ref, value });
       } catch (err) {
         err.caller = "git.tag";
         throw err;
@@ -27236,14 +27236,14 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("fs", _fs);
         assertParameter("gitdir", gitdir);
         assertParameter("filepath", filepath);
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         if (remove3) {
           return await GitIndexManager.acquire(
-            { fs: fs23, gitdir: updatedGitdir, cache },
+            { fs: fs24, gitdir: updatedGitdir, cache },
             async function(index2) {
               if (!force) {
-                const fileStats2 = await fs23.lstat(join3(dir, filepath));
+                const fileStats2 = await fs24.lstat(join3(dir, filepath));
                 if (fileStats2) {
                   if (fileStats2.isDirectory()) {
                     throw new InvalidFilepathError("directory");
@@ -27261,7 +27261,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         let fileStats;
         if (!oid) {
-          fileStats = await fs23.lstat(join3(dir, filepath));
+          fileStats = await fs24.lstat(join3(dir, filepath));
           if (!fileStats) {
             throw new NotFoundError(
               `file at "${filepath}" on disk and "remove" not set`
@@ -27272,7 +27272,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           }
         }
         return await GitIndexManager.acquire(
-          { fs: fs23, gitdir: updatedGitdir, cache },
+          { fs: fs24, gitdir: updatedGitdir, cache },
           async function(index2) {
             if (!add3 && !index2.has({ filepath })) {
               throw new NotFoundError(
@@ -27282,9 +27282,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             let stats;
             if (!oid) {
               stats = fileStats;
-              const object = stats.isSymbolicLink() ? await fs23.readlink(join3(dir, filepath)) : await fs23.read(join3(dir, filepath));
+              const object = stats.isSymbolicLink() ? await fs24.readlink(join3(dir, filepath)) : await fs24.read(join3(dir, filepath));
               oid = await _writeObject({
-                fs: fs23,
+                fs: fs24,
                 gitdir: updatedGitdir,
                 type: "blob",
                 format: "content",
@@ -27324,7 +27324,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function walk2({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       trees,
@@ -27334,10 +27334,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       cache = {}
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("trees", trees);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _walk({
           fs: fsp,
@@ -27354,12 +27354,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function writeBlob({ fs: fs23, dir, gitdir = join3(dir, ".git"), blob }) {
+    async function writeBlob({ fs: fs24, dir, gitdir = join3(dir, ".git"), blob }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("blob", blob);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeObject({
           fs: fsp,
@@ -27374,16 +27374,16 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function writeCommit({
-      fs: fs23,
+      fs: fs24,
       dir,
       gitdir = join3(dir, ".git"),
       commit: commit4
     }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("commit", commit4);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeCommit({
           fs: fsp,
@@ -27406,8 +27406,8 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       encoding = void 0
     }) {
       try {
-        const fs23 = new FileSystem(_fs);
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
+        const fs24 = new FileSystem(_fs);
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
         if (format2 === "parsed") {
           switch (type) {
             case "commit":
@@ -27428,7 +27428,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           format2 = "content";
         }
         oid = await _writeObject({
-          fs: fs23,
+          fs: fs24,
           gitdir: updatedGitdir,
           type,
           object,
@@ -27455,29 +27455,29 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         assertParameter("gitdir", gitdir);
         assertParameter("ref", ref);
         assertParameter("value", value);
-        const fs23 = new FileSystem(_fs);
+        const fs24 = new FileSystem(_fs);
         if (!isValidRef(ref, true)) {
           throw new InvalidRefNameError(ref, cleanGitRef.clean(ref));
         }
-        const updatedGitdir = await discoverGitdir({ fsp: fs23, dotgit: gitdir });
-        if (!force && await GitRefManager.exists({ fs: fs23, gitdir: updatedGitdir, ref })) {
+        const updatedGitdir = await discoverGitdir({ fsp: fs24, dotgit: gitdir });
+        if (!force && await GitRefManager.exists({ fs: fs24, gitdir: updatedGitdir, ref })) {
           throw new AlreadyExistsError("ref", ref);
         }
         if (symbolic) {
           await GitRefManager.writeSymbolicRef({
-            fs: fs23,
+            fs: fs24,
             gitdir: updatedGitdir,
             ref,
             value
           });
         } else {
           value = await GitRefManager.resolve({
-            fs: fs23,
+            fs: fs24,
             gitdir: updatedGitdir,
             ref: value
           });
           await GitRefManager.writeRef({
-            fs: fs23,
+            fs: fs24,
             gitdir: updatedGitdir,
             ref,
             value
@@ -27488,10 +27488,10 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function _writeTag({ fs: fs23, gitdir, tag: tag2 }) {
+    async function _writeTag({ fs: fs24, gitdir, tag: tag2 }) {
       const object = GitAnnotatedTag.from(tag2).toObject();
       const oid = await _writeObject({
-        fs: fs23,
+        fs: fs24,
         gitdir,
         type: "tag",
         object,
@@ -27499,12 +27499,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return oid;
     }
-    async function writeTag({ fs: fs23, dir, gitdir = join3(dir, ".git"), tag: tag2 }) {
+    async function writeTag({ fs: fs24, dir, gitdir = join3(dir, ".git"), tag: tag2 }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("tag", tag2);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeTag({
           fs: fsp,
@@ -27516,12 +27516,12 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function writeTree({ fs: fs23, dir, gitdir = join3(dir, ".git"), tree }) {
+    async function writeTree({ fs: fs24, dir, gitdir = join3(dir, ".git"), tree }) {
       try {
-        assertParameter("fs", fs23);
+        assertParameter("fs", fs24);
         assertParameter("gitdir", gitdir);
         assertParameter("tree", tree);
-        const fsp = new FileSystem(fs23);
+        const fsp = new FileSystem(fs24);
         const updatedGitdir = await discoverGitdir({ fsp, dotgit: gitdir });
         return await _writeTree({
           fs: fsp,
@@ -27793,7 +27793,7 @@ function messageOf(err) {
 async function withCommitLock(lockPath, fn) {
   const LOCK_TIMEOUT_MS = 3e4;
   const RETRY_MS = 5;
-  import_node_fs7.default.mkdirSync(import_node_path8.default.dirname(lockPath), { recursive: true });
+  import_node_fs7.default.mkdirSync(import_node_path9.default.dirname(lockPath), { recursive: true });
   const start = Date.now();
   let fd;
   for (; ; ) {
@@ -27842,18 +27842,18 @@ async function resolveFilePath(root, headOid, filePath) {
   if (!foundOid) throw new Error(`${filePath} not found in HEAD`);
   return foundOid;
 }
-var git, import_node_fs7, import_node_os, import_node_path8, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE, KEEP_ALL;
+var git, import_node_fs7, import_node_os, import_node_path9, VaultGitError, VaultGit, ScanFacts, EMPTY_TREE, KEEP_ALL;
 var init_vaultgit = __esm({
   "src/vaultgit.ts"() {
     "use strict";
     git = __toESM(require_isomorphic_git(), 1);
     import_node_fs7 = __toESM(require("node:fs"), 1);
     import_node_os = __toESM(require("node:os"), 1);
-    import_node_path8 = __toESM(require("node:path"), 1);
+    import_node_path9 = __toESM(require("node:path"), 1);
     init_pagepredicate();
     VaultGitError = class extends Error {
-      constructor(message) {
-        super(message);
+      constructor(message2) {
+        super(message2);
         this.name = "VaultGitError";
       }
     };
@@ -27883,7 +27883,7 @@ var init_vaultgit = __esm({
       async add(paths) {
         const tracked = await this.trackedFiles();
         for (const pagePath of paths) {
-          if (!import_node_fs7.default.existsSync(import_node_path8.default.join(this.root, pagePath))) {
+          if (!import_node_fs7.default.existsSync(import_node_path9.default.join(this.root, pagePath))) {
             if (!tracked.some((file) => coveredByPaths(file, [pagePath]))) {
               throw new VaultGitError(
                 `git add ${pagePath}: no such file or directory`
@@ -27911,7 +27911,7 @@ var init_vaultgit = __esm({
       async stageRemovals(tracked, paths) {
         for (const file of tracked) {
           if (!coveredByPaths(file, paths)) continue;
-          if (!import_node_fs7.default.existsSync(import_node_path8.default.join(this.root, file))) {
+          if (!import_node_fs7.default.existsSync(import_node_path9.default.join(this.root, file))) {
             await git.remove({ fs: import_node_fs7.default, dir: this.root, filepath: file });
           }
         }
@@ -27925,17 +27925,17 @@ var init_vaultgit = __esm({
        * long enough for any realistic commit, short enough to surface a stuck
        * process.
        */
-      async stageAndCommit(paths, message) {
-        const lockPath = import_node_path8.default.join(this.root, ".wiki-knowledge", "ingest.lock");
+      async stageAndCommit(paths, message2) {
+        const lockPath = import_node_path9.default.join(this.root, ".wiki-knowledge", "ingest.lock");
         return withCommitLock(lockPath, async () => {
           if (paths.length > 0) {
             await this.add(paths);
           }
-          return this.commit(message);
+          return this.commit(message2);
         });
       }
       /** Write one commit with `message` and return its SHA. Strict: throws. */
-      async commit(message) {
+      async commit(message2) {
         const signature = await this.signature();
         try {
           if (!await this.hasStagedChanges()) {
@@ -27944,7 +27944,7 @@ var init_vaultgit = __esm({
           return await git.commit({
             fs: import_node_fs7.default,
             dir: this.root,
-            message,
+            message: message2,
             author: signature,
             committer: signature
           });
@@ -28066,7 +28066,7 @@ var init_vaultgit = __esm({
           } catch {
             headBlob = null;
           }
-          return await porcelainDiff(import_node_path8.default.join(this.root, rel), headBlob);
+          return await porcelainDiff(import_node_path9.default.join(this.root, rel), headBlob);
         } catch {
           return false;
         }
@@ -28155,9 +28155,9 @@ var init_vaultgit = __esm({
           timezoneOffset: (/* @__PURE__ */ new Date()).getTimezoneOffset()
         };
       }
-      async tryConfig(path32) {
+      async tryConfig(path34) {
         try {
-          const value = await git.getConfig({ fs: import_node_fs7.default, dir: this.root, path: path32 });
+          const value = await git.getConfig({ fs: import_node_fs7.default, dir: this.root, path: path34 });
           return typeof value === "string" ? value : "";
         } catch {
           return "";
@@ -28205,9 +28205,10 @@ var init_vaultgit = __esm({
           const date = when !== void 0 ? formatDate(when / 1e3) : await this.lastCommitDateAt(headOid, filePath);
           pages.push({
             pageRef: filePath,
-            content: result ?? "",
+            content: result?.content ?? "",
+            oid: result?.oid ?? "",
             date,
-            deleted: !result
+            deleted: result === null
           });
         }
         return { pages, found: true };
@@ -28223,6 +28224,7 @@ var init_vaultgit = __esm({
           pages.push({
             pageRef: filepath,
             content,
+            oid,
             date: dates.get(filepath) ?? "",
             deleted: false
           });
@@ -28270,14 +28272,15 @@ var init_vaultgit = __esm({
         } catch {
         }
         const out = /* @__PURE__ */ new Map();
-        for (const [path32, when] of latest) out.set(path32, formatDate(when / 1e3));
+        for (const [path34, when] of latest) out.set(path34, formatDate(when / 1e3));
         return out;
       }
-      /** Read `filePath` from head's tree, or null when it's deleted there. */
+      /** Read `filePath` from head's tree: its bytes and blob oid, or null when
+       * it's deleted there. */
       async tryReadFromHead(headOid, filePath) {
         try {
           const oid = await resolveFilePath(this.root, headOid, filePath);
-          return await readBlobAsString(this.root, oid);
+          return { content: await readBlobAsString(this.root, oid), oid };
         } catch {
           return null;
         }
@@ -28325,7 +28328,7 @@ var init_vaultgit = __esm({
             headBlob = null;
           }
         }
-        return porcelainDiff(import_node_path8.default.join(this.root, rel), headBlob);
+        return porcelainDiff(import_node_path9.default.join(this.root, rel), headBlob);
       }
     };
     EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -28349,8 +28352,8 @@ var CommanderError = class extends Error {
    * @param {string} code an id string representing the error
    * @param {string} message human-readable description of the error
    */
-  constructor(exitCode, code2, message) {
-    super(message);
+  constructor(exitCode, code2, message2) {
+    super(message2);
     Error.captureStackTrace(this, this.constructor);
     this.name = this.constructor.name;
     this.code = code2;
@@ -28363,8 +28366,8 @@ var InvalidArgumentError = class extends CommanderError {
    * Constructs the InvalidArgumentError class
    * @param {string} [message] explanation of why argument is invalid
    */
-  constructor(message) {
-    super(1, "commander.invalidArgument", message);
+  constructor(message2) {
+    super(1, "commander.invalidArgument", message2);
     Error.captureStackTrace(this, this.constructor);
     this.name = this.constructor.name;
   }
@@ -29910,9 +29913,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @return never
    * @private
    */
-  _exit(exitCode, code2, message) {
+  _exit(exitCode, code2, message2) {
     if (this._exitCallback) {
-      this._exitCallback(new CommanderError(exitCode, code2, message));
+      this._exitCallback(new CommanderError(exitCode, code2, message2));
     }
     import_node_process.default.exit(exitCode);
   }
@@ -29972,8 +29975,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
       return target.parseArg(value, previous);
     } catch (err) {
       if (err.code === "commander.invalidArgument") {
-        const message = `${invalidArgumentMessage} ${err.message}`;
-        this.error(message, { exitCode: err.exitCode, code: err.code });
+        const message2 = `${invalidArgumentMessage} ${err.message}`;
+        this.error(message2, { exitCode: err.exitCode, code: err.code });
       }
       throw err;
     }
@@ -31051,9 +31054,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [errorOptions.code] - an id string representing the error
    * @param {number} [errorOptions.exitCode] - used with process.exit
    */
-  error(message, errorOptions) {
+  error(message2, errorOptions) {
     this._outputConfiguration.outputError(
-      `${message}
+      `${message2}
 `,
       this._outputConfiguration.writeErr
     );
@@ -31067,7 +31070,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
     const config2 = errorOptions || {};
     const exitCode = config2.exitCode || 1;
     const code2 = config2.code || "commander.error";
-    this._exit(exitCode, code2, message);
+    this._exit(exitCode, code2, message2);
   }
   /**
    * Apply any option related environment variables, if option does
@@ -31123,8 +31126,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @private
    */
   missingArgument(name) {
-    const message = `error: missing required argument '${name}'`;
-    this.error(message, { code: "commander.missingArgument" });
+    const message2 = `error: missing required argument '${name}'`;
+    this.error(message2, { code: "commander.missingArgument" });
   }
   /**
    * `Option` is missing an argument.
@@ -31133,8 +31136,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @private
    */
   optionMissingArgument(option) {
-    const message = `error: option '${option.flags}' argument missing`;
-    this.error(message, { code: "commander.optionMissingArgument" });
+    const message2 = `error: option '${option.flags}' argument missing`;
+    this.error(message2, { code: "commander.optionMissingArgument" });
   }
   /**
    * `Option` does not have a value, and is a mandatory option.
@@ -31143,8 +31146,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @private
    */
   missingMandatoryOptionValue(option) {
-    const message = `error: required option '${option.flags}' not specified`;
-    this.error(message, { code: "commander.missingMandatoryOptionValue" });
+    const message2 = `error: required option '${option.flags}' not specified`;
+    this.error(message2, { code: "commander.missingMandatoryOptionValue" });
   }
   /**
    * `Option` conflicts with another option.
@@ -31177,8 +31180,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
       }
       return `option '${bestOption.flags}'`;
     };
-    const message = `error: ${getErrorMessage(option)} cannot be used with ${getErrorMessage(conflictingOption)}`;
-    this.error(message, { code: "commander.conflictingOption" });
+    const message2 = `error: ${getErrorMessage(option)} cannot be used with ${getErrorMessage(conflictingOption)}`;
+    this.error(message2, { code: "commander.conflictingOption" });
   }
   /**
    * Unknown option `flag`.
@@ -31199,8 +31202,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
       } while (command && !command._enablePositionalOptions);
       suggestion = suggestSimilar(flag, candidateFlags);
     }
-    const message = `error: unknown option '${flag}'${suggestion}`;
-    this.error(message, { code: "commander.unknownOption" });
+    const message2 = `error: unknown option '${flag}'${suggestion}`;
+    this.error(message2, { code: "commander.unknownOption" });
   }
   /**
    * Excess arguments, more than expected.
@@ -31215,8 +31218,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
     const received = receivedArgs.length;
     const forSubcommand = this.parent ? ` for '${this.name()}'` : "";
     const details = receivedArgs.join(", ");
-    const message = `error: too many arguments${forSubcommand}. Expected ${expected} argument${s} but got ${received}: ${details}.`;
-    this.error(message, { code: "commander.excessArguments" });
+    const message2 = `error: too many arguments${forSubcommand}. Expected ${expected} argument${s} but got ${received}: ${details}.`;
+    this.error(message2, { code: "commander.excessArguments" });
   }
   /**
    * Unknown command.
@@ -31234,8 +31237,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
       });
       suggestion = suggestSimilar(unknownName, candidateNames);
     }
-    const message = `error: unknown command '${unknownName}'${suggestion}`;
-    this.error(message, { code: "commander.unknownCommand" });
+    const message2 = `error: unknown command '${unknownName}'${suggestion}`;
+    this.error(message2, { code: "commander.unknownCommand" });
   }
   /**
    * Get or set the program version.
@@ -31452,9 +31455,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [path]
    * @return {(string|null|Command)}
    */
-  executableDir(path32) {
-    if (path32 === void 0) return this._executableDir;
-    this._executableDir = path32;
+  executableDir(path34) {
+    if (path34 === void 0) return this._executableDir;
+    this._executableDir = path34;
     return this;
   }
   /**
@@ -31710,7 +31713,7 @@ function useColor() {
 var program = new Command();
 
 // src/cli.ts
-var import_node_path31 = __toESM(require("node:path"), 1);
+var import_node_path33 = __toESM(require("node:path"), 1);
 var import_node_url = require("node:url");
 var import_node_util5 = __toESM(require("node:util"), 1);
 
@@ -31721,12 +31724,12 @@ function emitRows(rows) {
 function emitDocument(value) {
   console.log(JSON.stringify(value));
 }
-function fail(message) {
-  throw new Error(message);
+function fail(message2) {
+  throw new Error(message2);
 }
 function failureMessage(err) {
-  const message = err instanceof Error ? err.message : String(err);
-  return message.endsWith("\n") ? message : message + "\n";
+  const message2 = err instanceof Error ? err.message : String(err);
+  return message2.endsWith("\n") ? message2 : message2 + "\n";
 }
 
 // src/pagecommand.ts
@@ -37273,7 +37276,7 @@ function rewriteFrontmatter(text2, edit) {
 
 // src/vault.ts
 var import_node_fs5 = __toESM(require("node:fs"), 1);
-var import_node_path6 = __toESM(require("node:path"), 1);
+var import_node_path7 = __toESM(require("node:path"), 1);
 
 // src/fsutil.ts
 var import_node_fs2 = __toESM(require("node:fs"), 1);
@@ -37574,8 +37577,260 @@ function loadRecords(pages, kindByFolder2, opts = {}) {
   return records;
 }
 
+// src/fingerprint.ts
+var import_node_crypto = require("node:crypto");
+function normalizeNewlines(text2) {
+  return text2.replace(/\r\n?/g, "\n");
+}
+function fingerprintInput(record, body) {
+  const edges = record.edges.map((edge) => [edge.key, [...new Set(edge.targets)].sort()]).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  return JSON.stringify({
+    title: record.title,
+    summary: record.summary,
+    edges,
+    body: normalizeNewlines(body)
+  });
+}
+function semanticFingerprint(record, body) {
+  const digest = (0, import_node_crypto.createHash)("sha256").update(fingerprintInput(record, body), "utf8").digest("hex");
+  return `sha256:${digest}`;
+}
+
 // src/vault.ts
 init_pagepredicate();
+
+// src/consolidationexclusions.ts
+var import_node_path6 = __toESM(require("node:path"), 1);
+var import_yaml4 = __toESM(require_dist(), 1);
+var RegistryFilename = "CONSOLIDATION_EXCLUSIONS.yaml";
+function registryRef(folder) {
+  return `wiki/${folder}/${RegistryFilename}`;
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function stringField(value, key) {
+  const raw = value[key];
+  return typeof raw === "string" && raw !== "" ? raw : null;
+}
+function parseRegistry(text2) {
+  let data;
+  try {
+    data = (0, import_yaml4.parse)(text2);
+  } catch (err) {
+    return { exclusions: [], error: `not parseable as YAML: ${message(err)}` };
+  }
+  if (data === null || data === void 0)
+    return { exclusions: [], error: null };
+  if (!isRecord(data)) {
+    return { exclusions: [], error: "the document is not a mapping" };
+  }
+  const rawExclusions = data["exclusions"];
+  if (rawExclusions === void 0 || rawExclusions === null) {
+    return { exclusions: [], error: null };
+  }
+  if (!Array.isArray(rawExclusions)) {
+    return { exclusions: [], error: "`exclusions` is not a list" };
+  }
+  const exclusions = [];
+  for (let i = 0; i < rawExclusions.length; i++) {
+    const where = `exclusions[${i}]`;
+    const entry = rawExclusions[i];
+    if (!isRecord(entry)) {
+      return { exclusions: [], error: `${where} is not a mapping` };
+    }
+    const reason = stringField(entry, "reason");
+    if (reason === null) {
+      return {
+        exclusions: [],
+        error: `${where}.reason must be a non-empty string`
+      };
+    }
+    const rawMembers = entry["members"];
+    if (!Array.isArray(rawMembers) || rawMembers.length === 0) {
+      return {
+        exclusions: [],
+        error: `${where}.members must be a non-empty list`
+      };
+    }
+    const members = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (let j = 0; j < rawMembers.length; j++) {
+      const memberWhere = `${where}.members[${j}]`;
+      const raw = rawMembers[j];
+      if (!isRecord(raw)) {
+        return { exclusions: [], error: `${memberWhere} is not a mapping` };
+      }
+      const pageRef2 = stringField(raw, "page_ref");
+      const blobOid = stringField(raw, "blob_oid");
+      const fingerprint = stringField(raw, "fingerprint");
+      if (pageRef2 === null) {
+        return {
+          exclusions: [],
+          error: `${memberWhere}.page_ref must be a non-empty string`
+        };
+      }
+      if (blobOid === null) {
+        return {
+          exclusions: [],
+          error: `${memberWhere}.blob_oid must be a non-empty string`
+        };
+      }
+      if (fingerprint === null) {
+        return {
+          exclusions: [],
+          error: `${memberWhere}.fingerprint must be a non-empty string`
+        };
+      }
+      if (seen.has(pageRef2)) {
+        return {
+          exclusions: [],
+          error: `${memberWhere}.page_ref ${pageRef2} appears twice`
+        };
+      }
+      seen.add(pageRef2);
+      members.push({ pageRef: pageRef2, blobOid, fingerprint });
+    }
+    exclusions.push({ members: sortMembers(members), reason });
+  }
+  return { exclusions, error: null };
+}
+function message(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+function scalar2(value) {
+  return /^[A-Za-z0-9._/@+:-]+$/.test(value) ? value : JSON.stringify(value);
+}
+function sortMembers(members) {
+  return [...members].sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+}
+function refSetKey(refs) {
+  return [...refs].sort().join("\0");
+}
+function memberSetKey(members) {
+  return refSetKey(members.map((m) => m.pageRef));
+}
+function canonicalExclusions(exclusions) {
+  return [...exclusions].map((e) => ({ members: sortMembers(e.members), reason: e.reason })).sort(
+    (a, b) => memberSetKey(a.members).localeCompare(memberSetKey(b.members)) || a.reason.localeCompare(b.reason)
+  );
+}
+function renderRegistry(exclusions) {
+  const canonical = canonicalExclusions(exclusions);
+  if (canonical.length === 0) return "exclusions: []\n";
+  const lines = ["exclusions:"];
+  for (const exclusion of canonical) {
+    exclusion.members.forEach((member, index) => {
+      const head = index === 0 ? "  - members:" : "";
+      if (head !== "") lines.push(head);
+      lines.push(`      - page_ref: ${scalar2(member.pageRef)}`);
+      lines.push(`        blob_oid: ${scalar2(member.blobOid)}`);
+      lines.push(`        fingerprint: ${scalar2(member.fingerprint)}`);
+    });
+    lines.push(`    reason: ${JSON.stringify(exclusion.reason)}`);
+  }
+  return lines.join("\n") + "\n";
+}
+function resolveExclusion(exclusion, facts) {
+  const verdicts = exclusion.members.map((member) => {
+    const fact = facts.get(member.pageRef) ?? null;
+    if (fact === null) {
+      return { member, fact, valid: false, needsOidRefresh: false };
+    }
+    if (fact.blobOid !== "" && fact.blobOid === member.blobOid) {
+      return { member, fact, valid: true, needsOidRefresh: false };
+    }
+    if (fact.fingerprint !== "" && fact.fingerprint === member.fingerprint) {
+      return { member, fact, valid: true, needsOidRefresh: true };
+    }
+    return { member, fact, valid: false, needsOidRefresh: false };
+  });
+  return {
+    exclusion,
+    verdicts,
+    validMembers: verdicts.filter((v) => v.valid).map((v) => v.member),
+    staleMembers: verdicts.filter((v) => !v.valid && v.fact !== null).map((v) => v.member),
+    missingMembers: verdicts.filter((v) => !v.valid && v.fact === null).map((v) => v.member)
+  };
+}
+function suppressedBy(clusterRefs, resolved) {
+  const key = memberSetKey(clusterRefs.map((pageRef2) => ({ pageRef: pageRef2 })));
+  for (const record of resolved) {
+    if (record.validMembers.length < 2) continue;
+    if (memberSetKey(record.validMembers) === key) return record;
+  }
+  return null;
+}
+function isSafeDuplicate(a, b) {
+  return memberSetKey(a.members) === memberSetKey(b.members) && a.reason === b.reason;
+}
+function dedupeExclusions(exclusions) {
+  const out = [];
+  for (const exclusion of canonicalExclusions(exclusions)) {
+    if (out.some((kept) => isSafeDuplicate(kept, exclusion))) continue;
+    out.push(exclusion);
+  }
+  return out;
+}
+function refreshExclusions(exclusions, facts, opts = { prune: false }) {
+  const out = [];
+  for (const exclusion of exclusions) {
+    const resolved = resolveExclusion(exclusion, facts);
+    const members = [];
+    for (const verdict of resolved.verdicts) {
+      if (verdict.valid) {
+        members.push({
+          ...verdict.member,
+          blobOid: verdict.fact?.blobOid || verdict.member.blobOid
+        });
+        continue;
+      }
+      if (!opts.prune) members.push(verdict.member);
+    }
+    if (opts.prune && resolved.validMembers.length < 2) continue;
+    out.push({ members, reason: exclusion.reason });
+  }
+  return dedupeExclusions(out);
+}
+function upsertExclusion(exclusions, added) {
+  const key = memberSetKey(added.members);
+  return canonicalExclusions([
+    ...exclusions.filter((e) => memberSetKey(e.members) !== key),
+    added
+  ]);
+}
+function moveInRegistry(text2, oldRef, newRef, sameFolder, freshFingerprint) {
+  const { exclusions, error } = parseRegistry(text2);
+  if (error !== null) return null;
+  const refresh = (member) => {
+    const fingerprint = freshFingerprint?.(member.pageRef);
+    return fingerprint == null || fingerprint === member.fingerprint ? member : { ...member, fingerprint };
+  };
+  let changed = false;
+  const out = [];
+  for (const exclusion of exclusions) {
+    const members = [];
+    for (const member of exclusion.members) {
+      if (member.pageRef !== oldRef) {
+        members.push(refresh(member));
+        continue;
+      }
+      changed = true;
+      if (sameFolder) members.push(refresh({ ...member, pageRef: newRef }));
+    }
+    if (members.length < 2) continue;
+    out.push({ members, reason: exclusion.reason });
+  }
+  if (!changed) return null;
+  const before = JSON.stringify(canonicalExclusions(exclusions));
+  if (JSON.stringify(canonicalExclusions(out)) === before) return null;
+  return renderRegistry(out);
+}
+function folderOf(pageRef2) {
+  return import_node_path6.default.posix.basename(import_node_path6.default.posix.dirname(pageRef2));
+}
+
+// src/vault.ts
 var Markers = ["wiki", ".wiki-root"];
 var RootEnvVar = "WIKI_ROOT";
 function processLookupEnv(key) {
@@ -37585,7 +37840,7 @@ function processLookupEnv(key) {
 function hasMarker(dir) {
   for (const marker of Markers) {
     try {
-      import_node_fs5.default.statSync(import_node_path6.default.join(dir, marker));
+      import_node_fs5.default.statSync(import_node_path7.default.join(dir, marker));
       return true;
     } catch {
     }
@@ -37600,14 +37855,14 @@ function resolveRoot(start = "", lookupEnv = processLookupEnv) {
   const startPath = resolve(start === "" ? process.cwd() : start);
   for (let dir = startPath; ; ) {
     if (hasMarker(dir)) return dir;
-    const parent = import_node_path6.default.dirname(dir);
+    const parent = import_node_path7.default.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   return startPath;
 }
 function resolve(p) {
-  const abs = import_node_path6.default.resolve(p);
+  const abs = import_node_path7.default.resolve(p);
   try {
     return import_node_fs5.default.realpathSync(abs);
   } catch {
@@ -37645,7 +37900,7 @@ var Vault = class {
   wikiSubdirectories() {
     let entries;
     try {
-      entries = import_node_fs5.default.readdirSync(import_node_path6.default.join(this.root, "wiki"), {
+      entries = import_node_fs5.default.readdirSync(import_node_path7.default.join(this.root, "wiki"), {
         withFileTypes: true
       });
     } catch (err) {
@@ -37656,7 +37911,7 @@ var Vault = class {
   }
   /** The absolute filesystem path for a vault-relative page ref. */
   path(pageRef2) {
-    return import_node_path6.default.join(this.root, ...pageRef2.split("/"));
+    return import_node_path7.default.join(this.root, ...pageRef2.split("/"));
   }
   /** Read the page at pageRef (vault-relative) into a [Page]. */
   load(pageRef2) {
@@ -37684,7 +37939,7 @@ var Vault = class {
    * needed. */
   write(pageRef2, page) {
     const abs = this.path(pageRef2);
-    mkdirSafe(import_node_path6.default.dirname(abs), 493);
+    mkdirSafe(import_node_path7.default.dirname(abs), 493);
     import_node_fs5.default.writeFileSync(abs, page.text, { mode: 420 });
   }
   /** Return `{kind: folder}` for every `wiki/` subdirectory that is not already
@@ -37704,7 +37959,7 @@ var Vault = class {
   kindOf(folder) {
     return {
       kind: kindForFolder(this.root, folder),
-      consolidatable: readKindMeta(import_node_path6.default.join(this.root, "wiki", folder))?.consolidatable ?? false
+      consolidatable: readKindMeta(import_node_path7.default.join(this.root, "wiki", folder))?.consolidatable ?? false
     };
   }
   /** Whether the kind-folder `folder` is consolidatable (ADR-0027), reading its
@@ -37724,6 +37979,32 @@ var Vault = class {
       if (isConsolidatableKind(kind, consolidatable)) kinds.add(kind);
     }
     return [...kinds].sort();
+  }
+  /** The kind-folders a Consolidation may draw from, sorted — [consolidatableKinds]'
+   * folder spelling, for placing and finding a registry. */
+  consolidatableFolders() {
+    const folders = [];
+    for (const folder of this.wikiSubdirectories()) {
+      const { kind, consolidatable } = this.kindOf(folder);
+      if (isConsolidatableKind(kind, consolidatable)) folders.push(folder);
+    }
+    return folders;
+  }
+  /** Every consolidatable kind-folder's Consolidation-exclusion registry, as
+   * `{ref, text}`, sorted by ref; a folder without one is absent. Malformed text
+   * is returned verbatim — decoding is
+   * [consolidationexclusions.parseRegistry]'s job. */
+  loadRegistries() {
+    const out = [];
+    for (const folder of this.consolidatableFolders()) {
+      const ref = registryRef(folder);
+      try {
+        out.push({ ref, text: import_node_fs5.default.readFileSync(this.path(ref), "utf8") });
+      } catch (err) {
+        if (!isENOENT2(err)) throw err;
+      }
+    }
+    return out.sort((a, b) => a.ref.localeCompare(b.ref));
   }
   /** Every `wiki/**` page as a {pageRef: text} map. Never walks `raw/`. */
   loadWikiPages() {
@@ -37779,11 +38060,54 @@ var Vault = class {
     if (!(oldRef in files)) {
       throw new Error(`${oldRef} not found under ${this.root}`);
     }
-    const changed = this.writeChanged(planMove(files, oldRef, newRef), files);
+    const planned = planMove(files, oldRef, newRef);
+    const changed = this.writeChanged(planned, files);
     if (this.path(oldRef) !== this.path(newRef)) {
       import_node_fs5.default.unlinkSync(this.path(oldRef));
     }
-    return changed;
+    changed.push(...this.followMoveInRegistries(oldRef, newRef, planned));
+    return changed.sort();
+  }
+  /** Rewrite the source kind-folder's exclusion registry for a move: within a
+   * kind the moved page's reference follows it, across kinds it leaves the
+   * record (a cluster never mixes kinds). `planned` is the post-move text, so a
+   * member whose inbound link the move re-spelled has its cached fingerprint
+   * refreshed rather than quietly dropping out of the exclusion. */
+  followMoveInRegistries(oldRef, newRef, planned) {
+    const folder = folderOf(oldRef);
+    if (!this.isConsolidatable(folder)) return [];
+    const ref = registryRef(folder);
+    let text2;
+    try {
+      text2 = import_node_fs5.default.readFileSync(this.path(ref), "utf8");
+    } catch (err) {
+      if (isENOENT2(err)) return [];
+      throw err;
+    }
+    const next = moveInRegistry(
+      text2,
+      oldRef,
+      newRef,
+      folderOf(oldRef) === folderOf(newRef),
+      (pageRef2) => this.fingerprintOf(pageRef2, planned[pageRef2])
+    );
+    if (next === null || next === text2) return [];
+    mkdirSafe(import_node_path7.default.dirname(this.path(ref)), 493);
+    import_node_fs5.default.writeFileSync(this.path(ref), next, { mode: 420 });
+    return [ref];
+  }
+  /** One page's semantic fingerprint, or null when its text isn't a readable
+   * page — the ref is needed for the page's own edge resolution. */
+  fingerprintOf(pageRef2, text2) {
+    if (text2 === void 0) return null;
+    try {
+      return semanticFingerprint(
+        newPageRecord(pageRef2, text2),
+        splitFrontmatter(text2).body
+      );
+    } catch {
+      return null;
+    }
   }
   /** Absorb losers into the survivor (ADR-0021), repointing inbound links.
    *
@@ -37815,13 +38139,13 @@ var Vault = class {
 function vaultForFile(file) {
   let abs;
   try {
-    abs = import_node_fs5.default.realpathSync(import_node_path6.default.resolve(file));
+    abs = import_node_fs5.default.realpathSync(import_node_path7.default.resolve(file));
   } catch {
-    abs = import_node_path6.default.resolve(file);
+    abs = import_node_path7.default.resolve(file);
   }
-  const root = resolveRoot(import_node_path6.default.dirname(abs), () => [void 0, false]);
-  const rel = import_node_path6.default.relative(root, abs).split(import_node_path6.default.sep).join("/");
-  const dir = import_node_path6.default.posix.dirname(rel);
+  const root = resolveRoot(import_node_path7.default.dirname(abs), () => [void 0, false]);
+  const rel = import_node_path7.default.relative(root, abs).split(import_node_path7.default.sep).join("/");
+  const dir = import_node_path7.default.posix.dirname(rel);
   return { vault: new Vault(root), pageDir: dir === "." ? "" : dir };
 }
 
@@ -37850,7 +38174,7 @@ function resolve2(seeds, records) {
 }
 
 // src/pageedge.ts
-var import_node_path7 = __toESM(require("node:path"), 1);
+var import_node_path8 = __toESM(require("node:path"), 1);
 var listEdgeKeys = EdgeKeys.filter(
   (key) => !isSingleLinkEdgeKey(key)
 );
@@ -37866,21 +38190,21 @@ function isWholeLink(value) {
 }
 function isVaultRef(ref) {
   if (!isVaultRelativeDest(ref)) return false;
-  const normalized = import_node_path7.default.posix.normalize(ref);
+  const normalized = import_node_path8.default.posix.normalize(ref);
   return normalized !== ".." && !normalized.startsWith("../");
 }
 function edgeRefusal(key, value) {
   return `${key}: ${JSON.stringify(value)} is neither a markdown link nor a resolvable vault-relative page ref`;
 }
 function edgeLabel(key, ref, title) {
-  return isSingleLinkEdgeKey(key) || title === "" ? import_node_path7.default.posix.basename(ref) : title;
+  return isSingleLinkEdgeKey(key) || title === "" ? import_node_path8.default.posix.basename(ref) : title;
 }
 function composeEdgeLink(key, ref, pageDir, title) {
   return composeLink(edgeLabel(key, ref, title), ref, pageDir);
 }
 function edgeLink(key, value, pageDir, lookup) {
   if (isWholeLink(value)) return value;
-  const ref = import_node_path7.default.posix.normalize(value);
+  const ref = import_node_path8.default.posix.normalize(value);
   if (!isVaultRef(value)) throw new Error(edgeRefusal(key, value));
   const found = lookup(ref);
   if (!found.exists) throw new Error(edgeRefusal(key, value));
@@ -38045,10 +38369,10 @@ function registerPageCommands(program2) {
 // src/searchindex.ts
 var import_node_sqlite3_wasm = __toESM(require_node_sqlite3_wasm(), 1);
 var import_node_fs8 = __toESM(require("node:fs"), 1);
-var import_node_path9 = __toESM(require("node:path"), 1);
+var import_node_path10 = __toESM(require("node:path"), 1);
 init_pagepredicate();
 var { Database } = import_node_sqlite3_wasm.default;
-var SCHEMA_VERSION = "5";
+var SCHEMA_VERSION = "6";
 var KIND_DECLARATIONS_KEY = "kind_declarations";
 var GROUP_SEPARATOR = String.fromCharCode(31);
 var GROUP_SEPARATOR_SQL = "char(31)";
@@ -38068,7 +38392,9 @@ CREATE TABLE IF NOT EXISTS page (
     git_date      TEXT,
     volatility    TEXT,
     supersedes    TEXT,
-    superseded_by TEXT
+    superseded_by TEXT,
+    blob_oid      TEXT,
+    fingerprint   TEXT
 );
 CREATE TABLE IF NOT EXISTS page_tag (
     page_ref TEXT,
@@ -38110,9 +38436,9 @@ var Index = class _Index {
   }
   /** Open with a substituted Git surface — the test seam. */
   static async openWithGit(root, git2) {
-    const indexDir = import_node_path9.default.join(root, ".wiki-knowledge");
+    const indexDir = import_node_path10.default.join(root, ".wiki-knowledge");
     mkdirSafe(indexDir);
-    const dbPath = import_node_path9.default.join(indexDir, "index.db");
+    const dbPath = import_node_path10.default.join(indexDir, "index.db");
     const db = new Database(dbPath);
     const index = new _Index(root, dbPath, db, git2, kindByFolder(root));
     index.createSchema();
@@ -38308,8 +38634,8 @@ var Index = class _Index {
     }
     this.db.run(
       `INSERT INTO page(page_ref, title, summary, kind, source_date,
-          git_date, volatility, supersedes, superseded_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+          git_date, volatility, supersedes, superseded_by, blob_oid, fingerprint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       [
         page.pageRef,
         rec.title,
@@ -38318,7 +38644,9 @@ var Index = class _Index {
         rec.sourceDate,
         page.date || null,
         rec.volatility,
-        JSON.stringify(supersedes2)
+        JSON.stringify(supersedes2),
+        page.oid || null,
+        semanticFingerprint(rec, body)
       ]
     );
     for (const tag of rec.tags) {
@@ -38424,6 +38752,27 @@ var Index = class _Index {
       kind: r.kind ?? "",
       tags: r.tags ? r.tags.split(GROUP_SEPARATOR).sort() : []
     }));
+  }
+  /** The HEAD-blob facts for the named pages, keyed by page ref. A page the
+   * index does not hold (deleted, malformed, or never committed) is simply
+   * absent — the caller reads that as "cannot be read at HEAD". */
+  async pageFacts(pageRefs) {
+    await this.sync();
+    const facts = /* @__PURE__ */ new Map();
+    if (pageRefs.length === 0) return facts;
+    const rows = this.db.all(
+      `SELECT page_ref, blob_oid, fingerprint FROM page
+       WHERE page_ref IN (${placeholders(pageRefs.length)})`,
+      pageRefs
+    );
+    for (const row of rows) {
+      facts.set(row.page_ref, {
+        pageRef: row.page_ref,
+        blobOid: row.blob_oid ?? "",
+        fingerprint: row.fingerprint ?? ""
+      });
+    }
+    return facts;
   }
   /** Pairs of in-scope pages sharing at least one tag, most-shared first — an
    * exact-match tag count over `page_tag` (ADR-0021). An empty include-list
@@ -38750,16 +39099,16 @@ function registerSearchCommand(program2) {
 
 // src/ingestcommand.ts
 var import_node_fs17 = __toESM(require("node:fs"), 1);
-var import_node_path19 = __toESM(require("node:path"), 1);
+var import_node_path20 = __toESM(require("node:path"), 1);
 
 // src/toolcallstats.ts
 var import_node_fs10 = __toESM(require("node:fs"), 1);
-var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_path12 = __toESM(require("node:path"), 1);
 
 // src/sessionstate.ts
 var import_node_fs9 = __toESM(require("node:fs"), 1);
 var import_node_os2 = __toESM(require("node:os"), 1);
-var import_node_path10 = __toESM(require("node:path"), 1);
+var import_node_path11 = __toESM(require("node:path"), 1);
 function processLookupEnv2(key) {
   const value = process.env[key];
   return [value, value !== void 0];
@@ -38767,7 +39116,7 @@ function processLookupEnv2(key) {
 var ClaudeCode = {
   marker: ".claude",
   projectDirEnv: "CLAUDE_PROJECT_DIR",
-  stateDir: import_node_path10.default.join(".claude", "wiki-knowledge", "sessions")
+  stateDir: import_node_path11.default.join(".claude", "wiki-knowledge", "sessions")
 };
 function findProjectRoot(cwd, layout, lookupEnv) {
   if (layout.projectDirEnv !== "") {
@@ -38790,7 +39139,7 @@ function sessionsDir(cwd, lookupEnv = processLookupEnv2) {
   return projectSessionsDir(cwd, ClaudeCode, lookupEnv);
 }
 function sessionsUnder(base, layout) {
-  return import_node_path10.default.join(base, layout.stateDir);
+  return import_node_path11.default.join(base, layout.stateDir);
 }
 function startDir(cwd) {
   return cwd === "" ? process.cwd() : cwd;
@@ -38800,10 +39149,10 @@ function markerAncestor(cwd, marker, lookupEnv) {
   for (; ; ) {
     if (isHomeDir(dir, lookupEnv)) return void 0;
     try {
-      if (import_node_fs9.default.statSync(import_node_path10.default.join(dir, marker)).isDirectory()) return dir;
+      if (import_node_fs9.default.statSync(import_node_path11.default.join(dir, marker)).isDirectory()) return dir;
     } catch {
     }
-    const parent = import_node_path10.default.dirname(dir);
+    const parent = import_node_path11.default.dirname(dir);
     if (parent === dir) return void 0;
     dir = parent;
   }
@@ -38811,14 +39160,14 @@ function markerAncestor(cwd, marker, lookupEnv) {
 function isHomeDir(dir, lookupEnv) {
   const [home, ok] = lookupEnv("HOME");
   const homeDir = ok && home ? home : import_node_os2.default.homedir();
-  return homeDir !== "" && import_node_path10.default.resolve(dir) === import_node_path10.default.resolve(homeDir);
+  return homeDir !== "" && import_node_path11.default.resolve(dir) === import_node_path11.default.resolve(homeDir);
 }
 function statePath(sessionID, stateDir) {
-  return import_node_path10.default.join(stateDir, `${sessionID}.json`);
+  return import_node_path11.default.join(stateDir, `${sessionID}.json`);
 }
 function writeTranscriptPath(sessionID, transcriptPath, stateDir) {
   const file = statePath(sessionID, stateDir);
-  mkdirSafe(import_node_path10.default.dirname(file));
+  mkdirSafe(import_node_path11.default.dirname(file));
   import_node_fs9.default.writeFileSync(file, JSON.stringify({ transcript_path: transcriptPath }), {
     mode: 420
   });
@@ -38842,7 +39191,7 @@ function readTranscriptPath(sessionID, stateDir) {
 // src/toolcallstats.ts
 function logPath(sessionID, stateDir) {
   const dir = stateDir === "" ? sessionsDir("", processLookupEnv2) : stateDir;
-  return import_node_path11.default.join(dir, `${sessionID}-tool-calls.jsonl`);
+  return import_node_path12.default.join(dir, `${sessionID}-tool-calls.jsonl`);
 }
 function readLog(sessionID, stateDir) {
   const file = logPath(sessionID, stateDir);
@@ -38908,12 +39257,12 @@ init_vaultgit();
 
 // src/ingestscan.ts
 var import_node_fs12 = __toESM(require("node:fs"), 1);
-var import_node_path13 = __toESM(require("node:path"), 1);
+var import_node_path14 = __toESM(require("node:path"), 1);
 init_vaultgit();
 
 // src/ingestignore.ts
 var import_node_fs11 = __toESM(require("node:fs"), 1);
-var import_node_path12 = __toESM(require("node:path"), 1);
+var import_node_path13 = __toESM(require("node:path"), 1);
 var Filename = ".ingestignore";
 function parse(text2) {
   const patterns = [];
@@ -38954,7 +39303,7 @@ function compile(patterns) {
   };
 }
 function append(folder, pattern, comment) {
-  const filePath = import_node_path12.default.join(folder, Filename);
+  const filePath = import_node_path13.default.join(folder, Filename);
   let existing = null;
   try {
     existing = import_node_fs11.default.readFileSync(filePath, "utf8");
@@ -38983,8 +39332,8 @@ var ReasonNeverIngested = "never-ingested";
 var ReasonChangedSinceIngestion = "changed-since-ingestion";
 var skipNames = /* @__PURE__ */ new Set(["INGESTION.md", ".ingestignore"]);
 function walkRaw(root, folder) {
-  let rawRoot = import_node_path13.default.join(root, "raw");
-  if (folder !== "") rawRoot = import_node_path13.default.join(rawRoot, ...folder.split("/"));
+  let rawRoot = import_node_path14.default.join(root, "raw");
+  if (folder !== "") rawRoot = import_node_path14.default.join(rawRoot, ...folder.split("/"));
   let info;
   try {
     info = import_node_fs12.default.statSync(rawRoot);
@@ -38997,11 +39346,11 @@ function walkRaw(root, folder) {
   const walk2 = (dir) => {
     const entries = import_node_fs12.default.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     for (const entry of entries) {
-      const abs = import_node_path13.default.join(dir, entry.name);
+      const abs = import_node_path14.default.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk2(abs);
       } else if (!skipNames.has(entry.name)) {
-        rels.push(toSlash2(import_node_path13.default.relative(root, abs)));
+        rels.push(toSlash2(import_node_path14.default.relative(root, abs)));
       }
     }
   };
@@ -39009,7 +39358,7 @@ function walkRaw(root, folder) {
   return rels;
 }
 function loadIngestignore(folder) {
-  const filePath = import_node_path13.default.join(folder, Filename);
+  const filePath = import_node_path14.default.join(folder, Filename);
   let text2;
   try {
     text2 = import_node_fs12.default.readFileSync(filePath, "utf8");
@@ -39045,7 +39394,7 @@ async function scan(root, folder, git2) {
   const result = { eligible: [], ignored: [] };
   const matcherCache = /* @__PURE__ */ new Map();
   for (const rel of rels) {
-    const dir = import_node_path13.default.dirname(import_node_path13.default.join(root, ...rel.split("/")));
+    const dir = import_node_path14.default.dirname(import_node_path14.default.join(root, ...rel.split("/")));
     let matcher = matcherCache.get(dir);
     if (matcher === void 0) {
       let patterns;
@@ -39057,7 +39406,7 @@ async function scan(root, folder, git2) {
       matcher = compile(patterns);
       matcherCache.set(dir, matcher);
     }
-    if (matcher.matches(import_node_path13.default.basename(rel))) {
+    if (matcher.matches(import_node_path14.default.basename(rel))) {
       result.ignored.push(rel);
       continue;
     }
@@ -39093,7 +39442,7 @@ async function scan(root, folder, git2) {
   return result;
 }
 function toSlash2(p) {
-  return p.split(import_node_path13.default.sep).join("/");
+  return p.split(import_node_path14.default.sep).join("/");
 }
 function isENOENT4(err) {
   return err.code === "ENOENT";
@@ -39101,21 +39450,21 @@ function isENOENT4(err) {
 
 // src/commit.ts
 var import_node_fs13 = __toESM(require("node:fs"), 1);
-var import_node_path15 = __toESM(require("node:path"), 1);
+var import_node_path16 = __toESM(require("node:path"), 1);
 
 // src/chainofevidence.ts
-var import_node_path14 = __toESM(require("node:path"), 1);
+var import_node_path15 = __toESM(require("node:path"), 1);
 var sourceDir = `wiki/${KindFolders["source"]}`;
 function check(staged, raw) {
-  raw = import_node_path14.default.posix.normalize(raw);
+  raw = import_node_path15.default.posix.normalize(raw);
   const refs = sortedRefs(staged);
   let stubRef = "";
   for (const pageRef2 of refs) {
-    if (import_node_path14.default.posix.dirname(pageRef2) !== sourceDir) continue;
+    if (import_node_path15.default.posix.dirname(pageRef2) !== sourceDir) continue;
     const link2 = staged[pageRef2].getString("raw_source");
     if (link2 === "") continue;
     const { dest, ok } = linkDest(link2);
-    if (ok && resolveLinkDest(dest, import_node_path14.default.posix.dirname(pageRef2)) === raw) {
+    if (ok && resolveLinkDest(dest, import_node_path15.default.posix.dirname(pageRef2)) === raw) {
       stubRef = pageRef2;
       break;
     }
@@ -39129,7 +39478,7 @@ function check(staged, raw) {
   for (const pageRef2 of refs) {
     if (pageRef2 === stubRef) continue;
     const links = staged[pageRef2].getStringList("source");
-    const pageDir = import_node_path14.default.posix.dirname(pageRef2);
+    const pageDir = import_node_path15.default.posix.dirname(pageRef2);
     let found = false;
     for (const link2 of links) {
       const { dest, ok } = linkDest(link2);
@@ -39150,8 +39499,8 @@ function sortedRefs(staged) {
 
 // src/commit.ts
 var ErrGate = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ErrGate";
   }
 };
@@ -39188,7 +39537,7 @@ async function checkChainOfEvidence(root, m) {
   if (!m.raw_source) return;
   const staged = {};
   for (const pageRef2 of [...m.created ?? [], ...m.updated ?? []]) {
-    const abs = import_node_path15.default.join(root, ...pageRef2.split("/"));
+    const abs = import_node_path16.default.join(root, ...pageRef2.split("/"));
     let text2;
     try {
       text2 = import_node_fs13.default.readFileSync(abs, "utf8");
@@ -39214,8 +39563,131 @@ async function commit2(root, m, git2) {
 }
 
 // src/ingest.ts
-var import_node_path16 = __toESM(require("node:path"), 1);
+var import_node_path17 = __toESM(require("node:path"), 1);
 init_pagepredicate();
+
+// src/assess.ts
+init_vaultgit();
+async function headPages(root) {
+  const snapshot = await new VaultGit(root).committedPages("");
+  const pages = /* @__PURE__ */ new Map();
+  for (const change of snapshot.pages) {
+    if (change.deleted) continue;
+    let title = "";
+    let fingerprint = null;
+    try {
+      const record = newPageRecord(change.pageRef, change.content);
+      title = record.title;
+      fingerprint = semanticFingerprint(
+        record,
+        splitFrontmatter(change.content).body
+      );
+    } catch {
+    }
+    pages.set(change.pageRef, {
+      pageRef: change.pageRef,
+      blobOid: change.oid,
+      content: change.content,
+      title,
+      fingerprint
+    });
+  }
+  return { head: snapshot.head, pages };
+}
+function headPageFacts(pages) {
+  const facts = /* @__PURE__ */ new Map();
+  for (const [ref, page] of pages) {
+    if (page.fingerprint === null) continue;
+    facts.set(ref, {
+      pageRef: ref,
+      blobOid: page.blobOid,
+      fingerprint: page.fingerprint
+    });
+  }
+  return facts;
+}
+var ErrAssess = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "ErrAssess";
+  }
+};
+async function assessCluster(root, refs) {
+  const { head, pages } = await headPages(root);
+  const members = refs.map((ref) => {
+    const page = pages.get(ref);
+    if (page === void 0) {
+      throw new ErrAssess(
+        `${ref} is not a committed page at HEAD \u2014 the cluster cannot be assessed from one snapshot`
+      );
+    }
+    if (page.fingerprint === null) {
+      throw new ErrAssess(
+        `${ref} could not be read at HEAD as a page \u2014 the cluster cannot be assessed`
+      );
+    }
+    return {
+      page_ref: ref,
+      blob_oid: page.blobOid,
+      fingerprint: page.fingerprint,
+      title: page.title,
+      bytes: Buffer.byteLength(page.content, "utf8"),
+      text: page.content
+    };
+  });
+  return { head, members };
+}
+function isRecord2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function decodeAssessment(raw) {
+  if (raw === void 0 || raw === null) return null;
+  if (!isRecord2(raw)) {
+    throw new Error('invalid plan JSON: "assessed" must be an object');
+  }
+  const head = typeof raw["head"] === "string" ? raw["head"] : "";
+  const members = Array.isArray(raw["members"]) ? raw["members"].map((entry) => {
+    const member = isRecord2(entry) ? entry : {};
+    return {
+      page_ref: typeof member["page_ref"] === "string" ? member["page_ref"] : "",
+      blob_oid: typeof member["blob_oid"] === "string" ? member["blob_oid"] : ""
+    };
+  }) : [];
+  return { head, members };
+}
+async function assessmentErrors(assessed, consolidates, root) {
+  const snapshot = await headPages(root);
+  if (assessed.head !== snapshot.head) {
+    return [
+      `the vault's HEAD moved since the cluster was assessed (assessed ${assessed.head || "(none)"}, now ${snapshot.head || "(none)"}); re-run against a fresh snapshot`
+    ];
+  }
+  const pinned = new Map(
+    assessed.members.map((member) => [member.page_ref, member.blob_oid])
+  );
+  const problems = [];
+  for (const ref of /* @__PURE__ */ new Set([...consolidates, ...pinned.keys()])) {
+    const want = pinned.get(ref);
+    const now = snapshot.pages.get(ref)?.blobOid;
+    if (want === void 0) {
+      problems.push(`${ref} is named by the plan but was not assessed`);
+      continue;
+    }
+    if (now === void 0) {
+      problems.push(`${ref} is no longer a committed page at HEAD`);
+      continue;
+    }
+    if (now !== want) {
+      problems.push(`${ref} changed since it was assessed`);
+    }
+  }
+  if (problems.length > 0) {
+    problems.push("re-run against a fresh snapshot");
+  }
+  return problems;
+}
+
+// src/ingest.ts
 var MaxPathLength = 255;
 var OpCreate = "create";
 var OpUpdate = "update";
@@ -39231,8 +39703,8 @@ function isPlanAction(action) {
   return PlanActions.includes(action);
 }
 var ErrPlan = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ErrPlan";
   }
 };
@@ -39300,7 +39772,8 @@ function decodePlan(jsonText) {
     source_date: typeof data["source_date"] === "string" ? data["source_date"] : "",
     raw: typeof data["raw"] === "string" ? data["raw"] : "",
     pages,
-    consolidates
+    consolidates,
+    assessed: decodeAssessment(data["assessed"])
   };
 }
 var Resolved = class {
@@ -39457,6 +39930,50 @@ var Resolved = class {
         );
       }
     }
+    if (this.plan.assessed !== null) {
+      const assessed = this.plan.assessed;
+      if (this.plan.action !== ActionConsolidate) {
+        problems.push(
+          `plan.assessed is only valid when action is '${ActionConsolidate}'`
+        );
+      }
+      if (assessed.head === "") {
+        problems.push("plan.assessed.head is required");
+      }
+      if (assessed.members.length === 0) {
+        problems.push(
+          "plan.assessed.members must name at least one assessed page"
+        );
+      }
+      const named = /* @__PURE__ */ new Set();
+      for (let i = 0; i < assessed.members.length; i++) {
+        const member = assessed.members[i];
+        if (member.page_ref === "") {
+          problems.push(`plan.assessed.members[${i}].page_ref is required`);
+          continue;
+        }
+        if (named.has(member.page_ref)) {
+          problems.push(
+            `plan.assessed.members names ${member.page_ref} more than once`
+          );
+          continue;
+        }
+        named.add(member.page_ref);
+        if (member.blob_oid === "") {
+          problems.push(
+            `plan.assessed.members[${i}].blob_oid is required for ${member.page_ref}`
+          );
+        }
+      }
+      for (let i = 0; i < this.plan.consolidates.length; i++) {
+        const ref = this.plan.consolidates[i];
+        if (ref !== "" && !named.has(ref)) {
+          problems.push(
+            `plan.consolidates[${i}] ${ref} is not named by plan.assessed`
+          );
+        }
+      }
+    }
     const seenConsolidated = /* @__PURE__ */ new Set();
     for (let i = 0; i < this.plan.consolidates.length; i++) {
       const ref = this.plan.consolidates[i];
@@ -39576,7 +40093,7 @@ var Resolved = class {
     const target = (ref) => consolidated.has(ref) ? c.survivorRef : ref;
     const survivorBody = canonicalizeLinkTargets(
       survivor.body(),
-      import_node_path16.default.posix.dirname(c.survivorRef),
+      import_node_path17.default.posix.dirname(c.survivorRef),
       target
     );
     const problems = [];
@@ -39584,7 +40101,7 @@ var Resolved = class {
       if (!absorbed.found) continue;
       const want = canonicalizeLinkTargets(
         absorbed.body,
-        import_node_path16.default.posix.dirname(absorbed.pageRef),
+        import_node_path17.default.posix.dirname(absorbed.pageRef),
         target
       ).trim();
       if (want === "") continue;
@@ -39627,7 +40144,7 @@ var Resolved = class {
       if (targets.ok) {
         for (const target of targets.value ?? []) {
           superseded.push({
-            old: import_node_path16.default.posix.normalize(target),
+            old: import_node_path17.default.posix.normalize(target),
             new: resolved.pageRef
           });
         }
@@ -39748,7 +40265,7 @@ function resolve3(plan, root) {
     let page = applyFrontmatter(
       base,
       planPage,
-      import_node_path16.default.posix.dirname(pageRef_),
+      import_node_path17.default.posix.dirname(pageRef_),
       plan,
       titles,
       v
@@ -39776,7 +40293,7 @@ function resolveConsolidation(plan, resolvedPages, v) {
   }
   const survivorRef = resolvedPages[0].pageRef;
   const absorbed = plan.consolidates.map((ref) => {
-    const pageRef2 = import_node_path16.default.posix.normalize(ref);
+    const pageRef2 = import_node_path17.default.posix.normalize(ref);
     let body = "";
     let found = false;
     if (v !== null && pageRef2 !== "" && v.exists(pageRef2)) {
@@ -39797,7 +40314,7 @@ function pageRef(page, extraKindFolders) {
   }
 }
 function resolveTitle(targetRef, titles, v) {
-  targetRef = import_node_path16.default.posix.normalize(targetRef);
+  targetRef = import_node_path17.default.posix.normalize(targetRef);
   const title = titles.get(targetRef);
   if (title !== void 0) return title;
   if (v !== null && v.exists(targetRef)) {
@@ -39854,11 +40371,11 @@ function pageLinkTargets(page, plan) {
   const targets = [];
   const rawSource = page.frontmatter.get("raw_source");
   if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
-    targets.push({ key: "raw_source", ref: import_node_path16.default.posix.normalize(plan.raw) });
+    targets.push({ key: "raw_source", ref: import_node_path17.default.posix.normalize(plan.raw) });
   }
   for (const [key, refs] of page.edges.all()) {
     for (const ref of refs) {
-      targets.push({ key, ref: import_node_path16.default.posix.normalize(ref) });
+      targets.push({ key, ref: import_node_path17.default.posix.normalize(ref) });
     }
   }
   return targets;
@@ -39992,7 +40509,7 @@ function tagCounts(vocabulary, tags) {
 
 // src/watch.ts
 var import_node_fs16 = __toESM(require("node:fs"), 1);
-var import_node_path18 = __toESM(require("node:path"), 1);
+var import_node_path19 = __toESM(require("node:path"), 1);
 
 // node_modules/chokidar/index.js
 var import_node_events2 = require("node:events");
@@ -40002,7 +40519,7 @@ var sp2 = __toESM(require("node:path"), 1);
 
 // node_modules/readdirp/index.js
 var import_promises = require("node:fs/promises");
-var import_node_path17 = require("node:path");
+var import_node_path18 = require("node:path");
 var import_node_stream = require("node:stream");
 var EntryTypes = {
   FILE_TYPE: "files",
@@ -40093,7 +40610,7 @@ var ReaddirpStream = class extends import_node_stream.Readable {
     this._directoryFilter = normalizeFilter(opts.directoryFilter);
     const statMethod = opts.lstat ? import_promises.lstat : import_promises.stat;
     if (wantBigintFsStats) {
-      this._stat = (path32) => statMethod(path32, { bigint: true });
+      this._stat = (path34) => statMethod(path34, { bigint: true });
     } else {
       this._stat = statMethod;
     }
@@ -40101,8 +40618,8 @@ var ReaddirpStream = class extends import_node_stream.Readable {
     this._wantsDir = DIR_TYPES.has(type);
     this._wantsFile = FILE_TYPES.has(type);
     this._wantsEverything = type === EntryTypes.EVERYTHING_TYPE;
-    this._root = (0, import_node_path17.resolve)(root);
-    this._relStart = this._root.endsWith(import_node_path17.sep) ? this._root.length : this._root.length + 1;
+    this._root = (0, import_node_path18.resolve)(root);
+    this._relStart = this._root.endsWith(import_node_path18.sep) ? this._root.length : this._root.length + 1;
     this._isDirent = !opts.alwaysStat;
     this._statsProp = this._isDirent ? "dirent" : "stats";
     this._rdOptions = { encoding: "utf8", withFileTypes: this._isDirent };
@@ -40121,8 +40638,8 @@ var ReaddirpStream = class extends import_node_stream.Readable {
         const par = this.parent;
         const fil = par && par.files;
         if (fil && fil.length > 0) {
-          const { path: path32, depth } = par;
-          const slice = fil.splice(0, batch).map((dirent) => this._formatEntry(dirent, path32));
+          const { path: path34, depth } = par;
+          const slice = fil.splice(0, batch).map((dirent) => this._formatEntry(dirent, path34));
           const awaited = this._isDirent ? slice : await Promise.all(slice);
           for (const entry of awaited) {
             if (!entry)
@@ -40181,19 +40698,19 @@ var ReaddirpStream = class extends import_node_stream.Readable {
   //   directoryFilter rejects, doesn't follow symlinked dirs, and fails
   //   wholesale (all entries lost) if anything in the subtree is unreadable,
   //   instead of emitting a 'warn' and continuing.
-  async _exploreDir(path32, depth) {
+  async _exploreDir(path34, depth) {
     let files;
     try {
-      files = await (0, import_promises.readdir)(path32, this._rdOptions);
+      files = await (0, import_promises.readdir)(path34, this._rdOptions);
     } catch (error) {
       this._onError(error);
     }
-    return { files, depth, path: path32 };
+    return { files, depth, path: path34 };
   }
   // Synchronous in dirent mode; returns a promise only when stats are needed.
-  _formatEntry(dirent, path32) {
+  _formatEntry(dirent, path34) {
     const basename3 = this._isDirent ? dirent.name : dirent;
-    const fullPath = (0, import_node_path17.join)(path32, basename3);
+    const fullPath = (0, import_node_path18.join)(path34, basename3);
     const entry = { path: fullPath.slice(this._relStart), fullPath, basename: basename3 };
     if (this._isDirent) {
       entry.dirent = dirent;
@@ -40239,7 +40756,7 @@ var ReaddirpStream = class extends import_node_stream.Readable {
       }
       if (entryRealPathStats.isDirectory()) {
         const len = entryRealPath.length;
-        if (full.startsWith(entryRealPath) && full[len] === import_node_path17.sep) {
+        if (full.startsWith(entryRealPath) && full[len] === import_node_path18.sep) {
           const recursiveError = new Error(`Circular symlink detected: "${full}" points to "${entryRealPath}"`);
           recursiveError.code = RECURSIVE_ERROR_CODE;
           this._onError(recursiveError);
@@ -40604,16 +41121,16 @@ var delFromSet = (main2, prop, item) => {
 };
 var isEmptySet = (val) => val instanceof Set ? val.size === 0 : !val;
 var FsWatchInstances = /* @__PURE__ */ new Map();
-function createFsWatchInstance(path32, options, listener, errHandler, emitRaw) {
+function createFsWatchInstance(path34, options, listener, errHandler, emitRaw) {
   const handleEvent = (rawEvent, evPath) => {
-    listener(path32);
-    emitRaw(rawEvent, evPath, { watchedPath: path32 });
-    if (evPath && path32 !== evPath) {
-      fsWatchBroadcast(sp.resolve(path32, evPath), KEY_LISTENERS, sp.join(path32, evPath));
+    listener(path34);
+    emitRaw(rawEvent, evPath, { watchedPath: path34 });
+    if (evPath && path34 !== evPath) {
+      fsWatchBroadcast(sp.resolve(path34, evPath), KEY_LISTENERS, sp.join(path34, evPath));
     }
   };
   try {
-    return (0, import_node_fs14.watch)(path32, {
+    return (0, import_node_fs14.watch)(path34, {
       persistent: options.persistent
     }, handleEvent);
   } catch (error) {
@@ -40629,12 +41146,12 @@ var fsWatchBroadcast = (fullPath, listenerType, val1, val2, val3) => {
     listener(val1, val2, val3);
   });
 };
-var setFsWatchListener = (path32, fullPath, options, handlers) => {
+var setFsWatchListener = (path34, fullPath, options, handlers) => {
   const { listener, errHandler, rawEmitter } = handlers;
   let cont = FsWatchInstances.get(fullPath);
   let watcher;
   if (!options.persistent) {
-    watcher = createFsWatchInstance(path32, options, listener, errHandler, rawEmitter);
+    watcher = createFsWatchInstance(path34, options, listener, errHandler, rawEmitter);
     if (!watcher)
       return;
     return watcher.close.bind(watcher);
@@ -40645,7 +41162,7 @@ var setFsWatchListener = (path32, fullPath, options, handlers) => {
     addAndConvert(cont, KEY_RAW, rawEmitter);
   } else {
     watcher = createFsWatchInstance(
-      path32,
+      path34,
       options,
       fsWatchBroadcast.bind(null, fullPath, KEY_LISTENERS),
       errHandler,
@@ -40660,7 +41177,7 @@ var setFsWatchListener = (path32, fullPath, options, handlers) => {
         cont.watcherUnusable = true;
       if (isWindows && error.code === "EPERM") {
         try {
-          const fd = await (0, import_promises2.open)(path32, "r");
+          const fd = await (0, import_promises2.open)(path34, "r");
           await fd.close();
           broadcastErr(error);
         } catch (err) {
@@ -40691,7 +41208,7 @@ var setFsWatchListener = (path32, fullPath, options, handlers) => {
   };
 };
 var FsWatchFileInstances = /* @__PURE__ */ new Map();
-var setFsWatchFileListener = (path32, fullPath, options, handlers) => {
+var setFsWatchFileListener = (path34, fullPath, options, handlers) => {
   const { listener, rawEmitter } = handlers;
   let cont = FsWatchFileInstances.get(fullPath);
   const copts = cont && cont.options;
@@ -40713,7 +41230,7 @@ var setFsWatchFileListener = (path32, fullPath, options, handlers) => {
         });
         const currmtime = curr.mtimeMs;
         if (curr.size !== prev.size || currmtime > prev.mtimeMs || currmtime === 0) {
-          foreach(cont.listeners, (listener2) => listener2(path32, curr));
+          foreach(cont.listeners, (listener2) => listener2(path34, curr));
         }
       })
     };
@@ -40743,13 +41260,13 @@ var NodeFsHandler = class {
    * @param listener on fs change
    * @returns closer for the watcher instance
    */
-  _watchWithNodeFs(path32, listener) {
+  _watchWithNodeFs(path34, listener) {
     const opts = this.fsw.options;
-    const directory = sp.dirname(path32);
-    const basename3 = sp.basename(path32);
+    const directory = sp.dirname(path34);
+    const basename3 = sp.basename(path34);
     const parent = this.fsw._getWatchedDir(directory);
     parent.add(basename3);
-    const absolutePath = sp.resolve(path32);
+    const absolutePath = sp.resolve(path34);
     const options = {
       persistent: opts.persistent
     };
@@ -40759,12 +41276,12 @@ var NodeFsHandler = class {
     if (opts.usePolling) {
       const enableBin = opts.interval !== opts.binaryInterval;
       options.interval = enableBin && isBinaryPath(basename3) ? opts.binaryInterval : opts.interval;
-      closer = setFsWatchFileListener(path32, absolutePath, options, {
+      closer = setFsWatchFileListener(path34, absolutePath, options, {
         listener,
         rawEmitter: this.fsw._emitRaw
       });
     } else {
-      closer = setFsWatchListener(path32, absolutePath, options, {
+      closer = setFsWatchListener(path34, absolutePath, options, {
         listener,
         errHandler: this._boundHandleError,
         rawEmitter: this.fsw._emitRaw
@@ -40786,7 +41303,7 @@ var NodeFsHandler = class {
     let prevStats = stats;
     if (parent.has(basename3))
       return;
-    const listener = async (path32, newStats) => {
+    const listener = async (path34, newStats) => {
       if (!this.fsw._throttle(THROTTLE_MODE_WATCH, file, 5))
         return;
       if (!newStats || newStats.mtimeMs === 0) {
@@ -40800,11 +41317,11 @@ var NodeFsHandler = class {
             this.fsw._emit(EV.CHANGE, file, newStats2);
           }
           if ((isMacos || isLinux || isFreeBSD) && prevStats.ino !== newStats2.ino) {
-            this.fsw._closeFile(path32);
+            this.fsw._closeFile(path34);
             prevStats = newStats2;
             const closer2 = this._watchWithNodeFs(file, listener);
             if (closer2)
-              this.fsw._addPathCloser(path32, closer2);
+              this.fsw._addPathCloser(path34, closer2);
           } else {
             prevStats = newStats2;
           }
@@ -40836,7 +41353,7 @@ var NodeFsHandler = class {
    * @param item basename of this item
    * @returns true if no more processing is needed for this entry.
    */
-  async _handleSymlink(entry, directory, path32, item) {
+  async _handleSymlink(entry, directory, path34, item) {
     if (this.fsw.closed) {
       return;
     }
@@ -40846,7 +41363,7 @@ var NodeFsHandler = class {
       this.fsw._incrReadyCount();
       let linkPath;
       try {
-        linkPath = await (0, import_promises2.realpath)(path32);
+        linkPath = await (0, import_promises2.realpath)(path34);
       } catch (e) {
         this.fsw._emitReady();
         return true;
@@ -40856,12 +41373,12 @@ var NodeFsHandler = class {
       if (dir.has(item)) {
         if (this.fsw._symlinkPaths.get(full) !== linkPath) {
           this.fsw._symlinkPaths.set(full, linkPath);
-          this.fsw._emit(EV.CHANGE, path32, entry.stats);
+          this.fsw._emit(EV.CHANGE, path34, entry.stats);
         }
       } else {
         dir.add(item);
         this.fsw._symlinkPaths.set(full, linkPath);
-        this.fsw._emit(EV.ADD, path32, entry.stats);
+        this.fsw._emit(EV.ADD, path34, entry.stats);
       }
       this.fsw._emitReady();
       return true;
@@ -40891,9 +41408,9 @@ var NodeFsHandler = class {
         return;
       }
       const item = entry.path;
-      let path32 = sp.join(directory, item);
+      let path34 = sp.join(directory, item);
       current.add(item);
-      if (entry.stats.isSymbolicLink() && await this._handleSymlink(entry, directory, path32, item)) {
+      if (entry.stats.isSymbolicLink() && await this._handleSymlink(entry, directory, path34, item)) {
         return;
       }
       if (this.fsw.closed) {
@@ -40902,8 +41419,8 @@ var NodeFsHandler = class {
       }
       if (item === target || !target && !previous.has(item)) {
         this.fsw._incrReadyCount();
-        path32 = sp.join(dir, sp.relative(dir, path32));
-        this._addToNodeFs(path32, initialAdd, wh, depth + 1);
+        path34 = sp.join(dir, sp.relative(dir, path34));
+        this._addToNodeFs(path34, initialAdd, wh, depth + 1);
       }
     }).on(EV.ERROR, this._boundHandleError);
     return new Promise((resolve6, reject) => {
@@ -40972,13 +41489,13 @@ var NodeFsHandler = class {
    * @param depth Child path actually targeted for watch
    * @param target Child path actually targeted for watch
    */
-  async _addToNodeFs(path32, initialAdd, priorWh, depth, target) {
+  async _addToNodeFs(path34, initialAdd, priorWh, depth, target) {
     const ready = this.fsw._emitReady;
-    if (this.fsw._isIgnored(path32) || this.fsw.closed) {
+    if (this.fsw._isIgnored(path34) || this.fsw.closed) {
       ready();
       return false;
     }
-    const wh = this.fsw._getWatchHelpers(path32);
+    const wh = this.fsw._getWatchHelpers(path34);
     if (priorWh) {
       wh.filterPath = (entry) => priorWh.filterPath(entry);
       wh.filterDir = (entry) => priorWh.filterDir(entry);
@@ -40994,8 +41511,8 @@ var NodeFsHandler = class {
       const follow = this.fsw.options.followSymlinks;
       let closer;
       if (stats.isDirectory()) {
-        const absPath = sp.resolve(path32);
-        const targetPath = follow ? await (0, import_promises2.realpath)(path32) : path32;
+        const absPath = sp.resolve(path34);
+        const targetPath = follow ? await (0, import_promises2.realpath)(path34) : path34;
         if (this.fsw.closed)
           return;
         closer = await this._handleDir(wh.watchPath, stats, initialAdd, depth, target, wh, targetPath);
@@ -41005,29 +41522,29 @@ var NodeFsHandler = class {
           this.fsw._symlinkPaths.set(absPath, targetPath);
         }
       } else if (stats.isSymbolicLink()) {
-        const targetPath = follow ? await (0, import_promises2.realpath)(path32) : path32;
+        const targetPath = follow ? await (0, import_promises2.realpath)(path34) : path34;
         if (this.fsw.closed)
           return;
         const parent = sp.dirname(wh.watchPath);
         this.fsw._getWatchedDir(parent).add(wh.watchPath);
         this.fsw._emit(EV.ADD, wh.watchPath, stats);
-        closer = await this._handleDir(parent, stats, initialAdd, depth, path32, wh, targetPath);
+        closer = await this._handleDir(parent, stats, initialAdd, depth, path34, wh, targetPath);
         if (this.fsw.closed)
           return;
         if (targetPath !== void 0) {
-          this.fsw._symlinkPaths.set(sp.resolve(path32), targetPath);
+          this.fsw._symlinkPaths.set(sp.resolve(path34), targetPath);
         }
       } else {
         closer = this._handleFile(wh.watchPath, stats, initialAdd);
       }
       ready();
       if (closer)
-        this.fsw._addPathCloser(path32, closer);
+        this.fsw._addPathCloser(path34, closer);
       return false;
     } catch (error) {
       if (this.fsw._handleError(error)) {
         ready();
-        return path32;
+        return path34;
       }
     }
   }
@@ -41070,24 +41587,24 @@ function createPattern(matcher) {
   }
   return () => false;
 }
-function normalizePath(path32) {
-  if (typeof path32 !== "string")
+function normalizePath(path34) {
+  if (typeof path34 !== "string")
     throw new Error("string expected");
-  path32 = sp2.normalize(path32);
-  path32 = path32.replace(/\\/g, "/");
+  path34 = sp2.normalize(path34);
+  path34 = path34.replace(/\\/g, "/");
   let prepend = false;
-  if (path32.startsWith("//"))
+  if (path34.startsWith("//"))
     prepend = true;
-  path32 = path32.replace(DOUBLE_SLASH_RE, "/");
+  path34 = path34.replace(DOUBLE_SLASH_RE, "/");
   if (prepend)
-    path32 = "/" + path32;
-  return path32;
+    path34 = "/" + path34;
+  return path34;
 }
 function matchPatterns(patterns, testString, stats) {
-  const path32 = normalizePath(testString);
+  const path34 = normalizePath(testString);
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index];
-    if (pattern(path32, stats)) {
+    if (pattern(path34, stats)) {
       return true;
     }
   }
@@ -41125,19 +41642,19 @@ var toUnix = (string) => {
   }
   return str;
 };
-var normalizePathToUnix = (path32) => toUnix(sp2.normalize(toUnix(path32)));
-var normalizeIgnored = (cwd = "") => (path32) => {
-  if (typeof path32 === "string") {
-    return normalizePathToUnix(sp2.isAbsolute(path32) ? path32 : sp2.join(cwd, path32));
+var normalizePathToUnix = (path34) => toUnix(sp2.normalize(toUnix(path34)));
+var normalizeIgnored = (cwd = "") => (path34) => {
+  if (typeof path34 === "string") {
+    return normalizePathToUnix(sp2.isAbsolute(path34) ? path34 : sp2.join(cwd, path34));
   } else {
-    return path32;
+    return path34;
   }
 };
-var getAbsolutePath = (path32, cwd) => {
-  if (sp2.isAbsolute(path32)) {
-    return path32;
+var getAbsolutePath = (path34, cwd) => {
+  if (sp2.isAbsolute(path34)) {
+    return path34;
   }
-  return sp2.join(cwd, path32);
+  return sp2.join(cwd, path34);
 };
 var EMPTY_SET = Object.freeze(/* @__PURE__ */ new Set());
 var DirEntry = class {
@@ -41202,10 +41719,10 @@ var WatchHelper = class {
   dirParts;
   followSymlinks;
   statMethod;
-  constructor(path32, follow, fsw) {
+  constructor(path34, follow, fsw) {
     this.fsw = fsw;
-    const watchPath = path32;
-    this.path = path32 = path32.replace(REPLACER_RE, "");
+    const watchPath = path34;
+    this.path = path34 = path34.replace(REPLACER_RE, "");
     this.watchPath = watchPath;
     this.fullWatchPath = sp2.resolve(watchPath);
     this.dirParts = [];
@@ -41345,20 +41862,20 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
     this._closePromise = void 0;
     let paths = unifyPaths(paths_);
     if (cwd) {
-      paths = paths.map((path32) => {
-        const absPath = getAbsolutePath(path32, cwd);
+      paths = paths.map((path34) => {
+        const absPath = getAbsolutePath(path34, cwd);
         return absPath;
       });
     }
-    paths.forEach((path32) => {
-      this._removeIgnoredPath(path32);
+    paths.forEach((path34) => {
+      this._removeIgnoredPath(path34);
     });
     this._userIgnored = void 0;
     if (!this._readyCount)
       this._readyCount = 0;
     this._readyCount += paths.length;
-    Promise.all(paths.map(async (path32) => {
-      const res = await this._nodeFsHandler._addToNodeFs(path32, !_internal, void 0, 0, _origAdd);
+    Promise.all(paths.map(async (path34) => {
+      const res = await this._nodeFsHandler._addToNodeFs(path34, !_internal, void 0, 0, _origAdd);
       if (res)
         this._emitReady();
       return res;
@@ -41380,17 +41897,17 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
       return this;
     const paths = unifyPaths(paths_);
     const { cwd } = this.options;
-    paths.forEach((path32) => {
-      if (!sp2.isAbsolute(path32) && !this._closers.has(path32)) {
+    paths.forEach((path34) => {
+      if (!sp2.isAbsolute(path34) && !this._closers.has(path34)) {
         if (cwd)
-          path32 = sp2.join(cwd, path32);
-        path32 = sp2.resolve(path32);
+          path34 = sp2.join(cwd, path34);
+        path34 = sp2.resolve(path34);
       }
-      this._closePath(path32);
-      this._addIgnoredPath(path32);
-      if (this._watched.has(path32)) {
+      this._closePath(path34);
+      this._addIgnoredPath(path34);
+      if (this._watched.has(path34)) {
         this._addIgnoredPath({
-          path: path32,
+          path: path34,
           recursive: true
         });
       }
@@ -41454,38 +41971,38 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param stats arguments to be passed with event
    * @returns the error if defined, otherwise the value of the FSWatcher instance's `closed` flag
    */
-  async _emit(event, path32, stats) {
+  async _emit(event, path34, stats) {
     if (this.closed)
       return;
     const opts = this.options;
     if (isWindows)
-      path32 = sp2.normalize(path32);
+      path34 = sp2.normalize(path34);
     if (opts.cwd)
-      path32 = sp2.relative(opts.cwd, path32);
-    const args = [path32];
+      path34 = sp2.relative(opts.cwd, path34);
+    const args = [path34];
     if (stats != null)
       args.push(stats);
     const awf = opts.awaitWriteFinish;
     let pw;
-    if (awf && (pw = this._pendingWrites.get(path32))) {
+    if (awf && (pw = this._pendingWrites.get(path34))) {
       pw.lastChange = /* @__PURE__ */ new Date();
       return this;
     }
     if (opts.atomic) {
       if (event === EVENTS.UNLINK) {
-        this._pendingUnlinks.set(path32, [event, ...args]);
+        this._pendingUnlinks.set(path34, [event, ...args]);
         setTimeout(() => {
-          this._pendingUnlinks.forEach((entry, path33) => {
+          this._pendingUnlinks.forEach((entry, path35) => {
             this.emit(...entry);
             this.emit(EVENTS.ALL, ...entry);
-            this._pendingUnlinks.delete(path33);
+            this._pendingUnlinks.delete(path35);
           });
         }, typeof opts.atomic === "number" ? opts.atomic : 100);
         return this;
       }
-      if (event === EVENTS.ADD && this._pendingUnlinks.has(path32)) {
+      if (event === EVENTS.ADD && this._pendingUnlinks.has(path34)) {
         event = EVENTS.CHANGE;
-        this._pendingUnlinks.delete(path32);
+        this._pendingUnlinks.delete(path34);
       }
     }
     if (awf && (event === EVENTS.ADD || event === EVENTS.CHANGE) && this._readyEmitted) {
@@ -41503,16 +42020,16 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
           this.emitWithAll(event, args);
         }
       };
-      this._awaitWriteFinish(path32, awf.stabilityThreshold, event, awfEmit);
+      this._awaitWriteFinish(path34, awf.stabilityThreshold, event, awfEmit);
       return this;
     }
     if (event === EVENTS.CHANGE) {
-      const isThrottled = !this._throttle(EVENTS.CHANGE, path32, 50);
+      const isThrottled = !this._throttle(EVENTS.CHANGE, path34, 50);
       if (isThrottled)
         return this;
     }
     if (opts.alwaysStat && stats === void 0 && (event === EVENTS.ADD || event === EVENTS.ADD_DIR || event === EVENTS.CHANGE)) {
-      const fullPath = opts.cwd ? sp2.join(opts.cwd, path32) : path32;
+      const fullPath = opts.cwd ? sp2.join(opts.cwd, path34) : path34;
       let stats2;
       try {
         stats2 = await (0, import_promises3.stat)(fullPath);
@@ -41543,23 +42060,23 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param timeout duration of time to suppress duplicate actions
    * @returns tracking object or false if action should be suppressed
    */
-  _throttle(actionType, path32, timeout) {
+  _throttle(actionType, path34, timeout) {
     if (!this._throttled.has(actionType)) {
       this._throttled.set(actionType, /* @__PURE__ */ new Map());
     }
     const action = this._throttled.get(actionType);
     if (!action)
       throw new Error("invalid throttle");
-    const actionPath = action.get(path32);
+    const actionPath = action.get(path34);
     if (actionPath) {
       actionPath.count++;
       return false;
     }
     let timeoutObject;
     const clear = () => {
-      const item = action.get(path32);
+      const item = action.get(path34);
       const count = item ? item.count : 0;
-      action.delete(path32);
+      action.delete(path34);
       clearTimeout(timeoutObject);
       if (item)
         clearTimeout(item.timeoutObject);
@@ -41567,7 +42084,7 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
     };
     timeoutObject = setTimeout(clear, timeout);
     const thr = { timeoutObject, clear, count: 0 };
-    action.set(path32, thr);
+    action.set(path34, thr);
     return thr;
   }
   _incrReadyCount() {
@@ -41581,44 +42098,44 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param event
    * @param awfEmit Callback to be called when ready for event to be emitted.
    */
-  _awaitWriteFinish(path32, threshold, event, awfEmit) {
+  _awaitWriteFinish(path34, threshold, event, awfEmit) {
     const awf = this.options.awaitWriteFinish;
     if (typeof awf !== "object")
       return;
     const pollInterval = awf.pollInterval;
     let timeoutHandler;
-    let fullPath = path32;
-    if (this.options.cwd && !sp2.isAbsolute(path32)) {
-      fullPath = sp2.join(this.options.cwd, path32);
+    let fullPath = path34;
+    if (this.options.cwd && !sp2.isAbsolute(path34)) {
+      fullPath = sp2.join(this.options.cwd, path34);
     }
     const now = /* @__PURE__ */ new Date();
     const writes = this._pendingWrites;
     function awaitWriteFinishFn(prevStat) {
       (0, import_node_fs15.stat)(fullPath, (err, curStat) => {
-        if (err || !writes.has(path32)) {
+        if (err || !writes.has(path34)) {
           if (err && err.code !== "ENOENT")
             awfEmit(err);
           return;
         }
         const now2 = Number(/* @__PURE__ */ new Date());
         if (prevStat && curStat.size !== prevStat.size) {
-          writes.get(path32).lastChange = now2;
+          writes.get(path34).lastChange = now2;
         }
-        const pw = writes.get(path32);
+        const pw = writes.get(path34);
         const df = now2 - pw.lastChange;
         if (df >= threshold) {
-          writes.delete(path32);
+          writes.delete(path34);
           awfEmit(void 0, curStat);
         } else {
           timeoutHandler = setTimeout(awaitWriteFinishFn, pollInterval, curStat);
         }
       });
     }
-    if (!writes.has(path32)) {
-      writes.set(path32, {
+    if (!writes.has(path34)) {
+      writes.set(path34, {
         lastChange: now,
         cancelWait: () => {
-          writes.delete(path32);
+          writes.delete(path34);
           clearTimeout(timeoutHandler);
           return event;
         }
@@ -41629,8 +42146,8 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
   /**
    * Determines whether user has asked to ignore this path.
    */
-  _isIgnored(path32, stats) {
-    if (this.options.atomic && DOT_RE.test(path32))
+  _isIgnored(path34, stats) {
+    if (this.options.atomic && DOT_RE.test(path34))
       return true;
     if (!this._userIgnored) {
       const { cwd } = this.options;
@@ -41640,17 +42157,17 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
       const list2 = [...ignoredPaths.map(normalizeIgnored(cwd)), ...ignored];
       this._userIgnored = anymatch(list2, void 0);
     }
-    return this._userIgnored(path32, stats);
+    return this._userIgnored(path34, stats);
   }
-  _isntIgnored(path32, stat4) {
-    return !this._isIgnored(path32, stat4);
+  _isntIgnored(path34, stat4) {
+    return !this._isIgnored(path34, stat4);
   }
   /**
    * Provides a set of common helpers and properties relating to symlink handling.
    * @param path file or directory pattern being watched
    */
-  _getWatchHelpers(path32) {
-    return new WatchHelper(path32, this.options.followSymlinks, this);
+  _getWatchHelpers(path34) {
+    return new WatchHelper(path34, this.options.followSymlinks, this);
   }
   // Directory helpers
   // -----------------
@@ -41682,63 +42199,63 @@ var FSWatcher = class extends import_node_events2.EventEmitter {
    * @param item      base path of item/directory
    */
   _remove(directory, item, isDirectory) {
-    const path32 = sp2.join(directory, item);
-    const fullPath = sp2.resolve(path32);
-    isDirectory = isDirectory != null ? isDirectory : this._watched.has(path32) || this._watched.has(fullPath);
-    if (!this._throttle("remove", path32, 100))
+    const path34 = sp2.join(directory, item);
+    const fullPath = sp2.resolve(path34);
+    isDirectory = isDirectory != null ? isDirectory : this._watched.has(path34) || this._watched.has(fullPath);
+    if (!this._throttle("remove", path34, 100))
       return;
     if (!isDirectory && this._watched.size === 1) {
       this.add(directory, item, true);
     }
-    const wp = this._getWatchedDir(path32);
+    const wp = this._getWatchedDir(path34);
     const nestedDirectoryChildren = wp.getChildren();
-    nestedDirectoryChildren.forEach((nested) => this._remove(path32, nested));
+    nestedDirectoryChildren.forEach((nested) => this._remove(path34, nested));
     const parent = this._getWatchedDir(directory);
     const wasTracked = parent.has(item);
     parent.remove(item);
     if (this._symlinkPaths.has(fullPath)) {
       this._symlinkPaths.delete(fullPath);
     }
-    let relPath2 = path32;
+    let relPath2 = path34;
     if (this.options.cwd)
-      relPath2 = sp2.relative(this.options.cwd, path32);
+      relPath2 = sp2.relative(this.options.cwd, path34);
     if (this.options.awaitWriteFinish && this._pendingWrites.has(relPath2)) {
       const event = this._pendingWrites.get(relPath2).cancelWait();
       if (event === EVENTS.ADD)
         return;
     }
-    this._watched.delete(path32);
+    this._watched.delete(path34);
     this._watched.delete(fullPath);
     const eventName = isDirectory ? EVENTS.UNLINK_DIR : EVENTS.UNLINK;
-    if (wasTracked && !this._isIgnored(path32))
-      this._emit(eventName, path32);
-    this._closePath(path32);
+    if (wasTracked && !this._isIgnored(path34))
+      this._emit(eventName, path34);
+    this._closePath(path34);
   }
   /**
    * Closes all watchers for a path
    */
-  _closePath(path32) {
-    this._closeFile(path32);
-    const dir = sp2.dirname(path32);
-    this._getWatchedDir(dir).remove(sp2.basename(path32));
+  _closePath(path34) {
+    this._closeFile(path34);
+    const dir = sp2.dirname(path34);
+    this._getWatchedDir(dir).remove(sp2.basename(path34));
   }
   /**
    * Closes only file-specific watchers
    */
-  _closeFile(path32) {
-    const closers = this._closers.get(path32);
+  _closeFile(path34) {
+    const closers = this._closers.get(path34);
     if (!closers)
       return;
     closers.forEach((closer) => closer());
-    this._closers.delete(path32);
+    this._closers.delete(path34);
   }
-  _addPathCloser(path32, closer) {
+  _addPathCloser(path34, closer) {
     if (!closer)
       return;
-    let list2 = this._closers.get(path32);
+    let list2 = this._closers.get(path34);
     if (!list2) {
       list2 = [];
-      this._closers.set(path32, list2);
+      this._closers.set(path34, list2);
     }
     list2.push(closer);
   }
@@ -41811,7 +42328,7 @@ function defaultClock() {
   return () => (Date.now() - start) / 1e3;
 }
 function writeLock(lockPath, pid, startedAt) {
-  mkdirSafe(import_node_path18.default.dirname(lockPath), 493);
+  mkdirSafe(import_node_path19.default.dirname(lockPath), 493);
   if (!pid) pid = process.pid;
   const started = startedAt ? startedAt : /* @__PURE__ */ new Date();
   import_node_fs16.default.writeFileSync(lockPath, lockPayload(pid, started), { mode: 420 });
@@ -41921,7 +42438,7 @@ function readQueue(queuePath) {
   return out;
 }
 function withQueueLock(queuePath, fn) {
-  mkdirSafe(import_node_path18.default.dirname(queuePath), 493);
+  mkdirSafe(import_node_path19.default.dirname(queuePath), 493);
   const writelockPath = queuePath + ".writelock";
   withExclusiveLock(
     writelockPath,
@@ -41955,11 +42472,11 @@ function checkAndEnqueue(eligibleRels, settledRel, queuePath) {
   return true;
 }
 function forRoot(root) {
-  const wk = import_node_path18.default.join(root, ".wiki-knowledge");
+  const wk = import_node_path19.default.join(root, ".wiki-knowledge");
   return {
     root,
-    lock: import_node_path18.default.join(wk, "watch.lock"),
-    queue: import_node_path18.default.join(wk, "watch-queue.jsonl")
+    lock: import_node_path19.default.join(wk, "watch.lock"),
+    queue: import_node_path19.default.join(wk, "watch-queue.jsonl")
   };
 }
 function relForEvent(root, abs) {
@@ -41970,14 +42487,14 @@ function relForEvent(root, abs) {
     return null;
   }
   if (info.isDirectory()) return null;
-  const rel = import_node_path18.default.relative(root, abs);
-  if (rel === ".." || rel.startsWith(".." + import_node_path18.default.sep)) return null;
+  const rel = import_node_path19.default.relative(root, abs);
+  if (rel === ".." || rel.startsWith(".." + import_node_path19.default.sep)) return null;
   return toSlash3(rel);
 }
 var LockRetryMillis = 5;
 function withExclusiveLock(lockPath, critical, stalePolicy, seams = {}) {
   const { clock, pidAlive, sleep: wait } = lockDefaults(seams);
-  mkdirSafe(import_node_path18.default.dirname(lockPath), 493);
+  mkdirSafe(import_node_path19.default.dirname(lockPath), 493);
   let fd;
   for (; ; ) {
     try {
@@ -42038,13 +42555,13 @@ function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 function toSlash3(p) {
-  return p.split(import_node_path18.default.sep).join("/");
+  return p.split(import_node_path19.default.sep).join("/");
 }
 var StopSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
 function runWatch(paths, options = {}) {
   const debounceSeconds = options.debounceSeconds ?? DefaultDebounceSeconds;
   const pollIntervalSeconds = options.pollIntervalSeconds ?? DefaultPollIntervalSeconds;
-  const rawRoot = import_node_path18.default.join(paths.root, "raw");
+  const rawRoot = import_node_path19.default.join(paths.root, "raw");
   mkdirSafe(rawRoot, 493);
   const watcher = (options.makeWatcher ?? defaultWatcher)(rawRoot);
   const debouncer = new Debouncer(
@@ -42152,6 +42669,14 @@ async function runPlan(planPath, root, dryRun) {
   const plan = decodePlan(text2);
   const resolved = resolve3(plan, root);
   resolved.validate();
+  if (plan.assessed !== null) {
+    const stale = await assessmentErrors(
+      plan.assessed,
+      plan.consolidates,
+      root
+    );
+    if (stale.length > 0) fail(`stale assessment: ${stale.join("; ")}`);
+  }
   if (dryRun) {
     console.log(resolved.describe());
     return;
@@ -42193,18 +42718,18 @@ async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
   emitDocument(payload);
 }
 function ignoreRawFile(root, rawRel, comment) {
-  const rel = import_node_path19.default.posix.normalize(rawRel);
+  const rel = import_node_path20.default.posix.normalize(rawRel);
   if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
     fail(
       `--ignore takes a vault-relative path under raw/, got ${JSON.stringify(rawRel)}`
     );
   }
-  const folder = import_node_path19.default.join(
+  const folder = import_node_path20.default.join(
     root,
     "raw",
-    import_node_path19.default.posix.dirname(rel.slice("raw/".length))
+    import_node_path20.default.posix.dirname(rel.slice("raw/".length))
   );
-  append(folder, import_node_path19.default.posix.basename(rel), comment);
+  append(folder, import_node_path20.default.posix.basename(rel), comment);
 }
 function registerIngestCommands(program2) {
   program2.command("ingest-scan [folder]").description("Scan raw/ for files that need ingestion").option(
@@ -42406,11 +42931,11 @@ function registerIngestCommands(program2) {
 }
 
 // src/vaultcommand.ts
-var import_node_path21 = __toESM(require("node:path"), 1);
+var import_node_path22 = __toESM(require("node:path"), 1);
 
 // src/initwiki.ts
 var import_node_fs18 = __toESM(require("node:fs"), 1);
-var import_node_path20 = __toESM(require("node:path"), 1);
+var import_node_path21 = __toESM(require("node:path"), 1);
 init_vaultgit();
 var ModeQueryFromAnywhere = "query-from-anywhere";
 var ModeDedicated = "dedicated";
@@ -42451,31 +42976,31 @@ async function init2(vaultRoot, mode, pluginRoot) {
     );
   }
   mkdirSafe(vaultRoot, 493);
-  const converting = import_node_fs18.default.existsSync(import_node_path20.default.join(vaultRoot, "wiki"));
+  const converting = import_node_fs18.default.existsSync(import_node_path21.default.join(vaultRoot, "wiki"));
   for (const folder of Object.values(KindFolders)) {
-    const kindDir = import_node_path20.default.join(vaultRoot, "wiki", folder);
+    const kindDir = import_node_path21.default.join(vaultRoot, "wiki", folder);
     if (import_node_fs18.default.existsSync(kindDir)) continue;
     mkdirSafe(kindDir, 493);
-    touch(import_node_path20.default.join(kindDir, ".gitkeep"));
+    touch(import_node_path21.default.join(kindDir, ".gitkeep"));
   }
-  const rawDir = import_node_path20.default.join(vaultRoot, "raw");
+  const rawDir = import_node_path21.default.join(vaultRoot, "raw");
   if (!converting && !import_node_fs18.default.existsSync(rawDir)) {
     mkdirSafe(rawDir, 493);
-    touch(import_node_path20.default.join(rawDir, ".gitkeep"));
+    touch(import_node_path21.default.join(rawDir, ".gitkeep"));
   }
-  import_node_fs18.default.writeFileSync(import_node_path20.default.join(vaultRoot, ".gitignore"), gitignore, {
+  import_node_fs18.default.writeFileSync(import_node_path21.default.join(vaultRoot, ".gitignore"), gitignore, {
     mode: 420
   });
   const addPaths = [];
   for (const rel of ["wiki", "raw", ".gitignore"]) {
-    const abs = import_node_path20.default.join(vaultRoot, ...rel.split("/"));
+    const abs = import_node_path21.default.join(vaultRoot, ...rel.split("/"));
     if (import_node_fs18.default.existsSync(abs)) addPaths.push(rel);
   }
   if (mode === ModeQueryFromAnywhere) {
-    const claudeDir = import_node_path20.default.join(vaultRoot, ".claude");
+    const claudeDir = import_node_path21.default.join(vaultRoot, ".claude");
     mkdirSafe(claudeDir, 493);
     import_node_fs18.default.writeFileSync(
-      import_node_path20.default.join(claudeDir, "settings.json"),
+      import_node_path21.default.join(claudeDir, "settings.json"),
       settingsJSON(pluginRoot),
       {
         mode: 420
@@ -42489,7 +43014,7 @@ async function init2(vaultRoot, mode, pluginRoot) {
   }
   await repo.add(addPaths);
   await repo.commit("Initialize wiki vault");
-  return import_node_path20.default.resolve(vaultRoot);
+  return import_node_path21.default.resolve(vaultRoot);
 }
 function touch(file) {
   import_node_fs18.default.closeSync(import_node_fs18.default.openSync(file, "a", 420));
@@ -42559,7 +43084,7 @@ function registerVaultCommand(program2) {
       });
     }
     for (const [kind, folder] of Object.entries(custom)) {
-      const meta = readKindMeta(import_node_path21.default.join(root, "wiki", folder));
+      const meta = readKindMeta(import_node_path22.default.join(root, "wiki", folder));
       result.push({
         kind,
         folder,
@@ -42575,22 +43100,22 @@ function registerVaultCommand(program2) {
 }
 
 // src/check.ts
-var import_node_path23 = __toESM(require("node:path"), 1);
+var import_node_path24 = __toESM(require("node:path"), 1);
 var import_node_util4 = require("node:util");
-var import_yaml4 = __toESM(require_dist(), 1);
+var import_yaml5 = __toESM(require_dist(), 1);
 
 // src/vaultread.ts
 var import_node_fs19 = __toESM(require("node:fs"), 1);
-var import_node_path22 = __toESM(require("node:path"), 1);
+var import_node_path23 = __toESM(require("node:path"), 1);
 function walkAllMd(root) {
-  const wikiDir = import_node_path22.default.join(root, "wiki");
+  const wikiDir = import_node_path23.default.join(root, "wiki");
   const refs = [];
   const walk2 = (dir) => {
     for (const entry of import_node_fs19.default.readdirSync(dir, { withFileTypes: true })) {
-      const abs = import_node_path22.default.join(dir, entry.name);
+      const abs = import_node_path23.default.join(dir, entry.name);
       if (entry.isDirectory()) walk2(abs);
       else if (entry.name.endsWith(".md")) {
-        const rel = import_node_path22.default.relative(root, abs).split(import_node_path22.default.sep).join("/");
+        const rel = import_node_path23.default.relative(root, abs).split(import_node_path23.default.sep).join("/");
         refs.push(rel);
       }
     }
@@ -42612,6 +43137,7 @@ var VaultRead = class {
   allRefsCache;
   recordsCache;
   kindsCache;
+  registryCache;
   /** Every `wiki/**` page as a {pageRef: text} map. */
   texts() {
     return this.textsCache ??= this.vault.loadWikiPages();
@@ -42640,13 +43166,18 @@ var VaultRead = class {
   consolidatableKinds() {
     return this.kindsCache ??= this.vault.consolidatableKinds();
   }
+  /** Every consolidatable kind-folder's Consolidation-exclusion registry, as
+   * written on disk (ADR-0028). */
+  registryFiles() {
+    return this.registryCache ??= this.vault.loadRegistries();
+  }
 };
 
 // src/check.ts
 init_vaultgit();
 init_pagepredicate();
 var SOURCES_DIR = `wiki/${KindFolders["source"]}`;
-var RAW_HREF_PREFIX = import_node_path23.default.posix.relative(SOURCES_DIR, "raw");
+var RAW_HREF_PREFIX = import_node_path24.default.posix.relative(SOURCES_DIR, "raw");
 function regexEscape(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -42805,19 +43336,19 @@ async function orphans(read) {
 function doubleQuotedSpans(frontmatter) {
   let doc;
   try {
-    doc = (0, import_yaml4.parseDocument)(frontmatter);
+    doc = (0, import_yaml5.parseDocument)(frontmatter);
   } catch {
     return [];
   }
   if (doc.errors.length > 0) return [];
   const spans = [];
   const walk2 = (node) => {
-    if ((0, import_yaml4.isScalar)(node)) {
+    if ((0, import_yaml5.isScalar)(node)) {
       if (node.type === "QUOTE_DOUBLE" && node.range)
         spans.push([node.range[0], node.range[2]]);
-    } else if ((0, import_yaml4.isSeq)(node)) {
+    } else if ((0, import_yaml5.isSeq)(node)) {
       for (const item of node.items) walk2(item);
-    } else if ((0, import_yaml4.isMap)(node)) {
+    } else if ((0, import_yaml5.isMap)(node)) {
       for (const pair of node.items) walk2(pair.value);
     }
   };
@@ -42974,6 +43505,29 @@ function inboundCounts(text2) {
   }
   return counts;
 }
+function pairKey(a, b) {
+  return refSetKey([a, b]);
+}
+function conflictingPairs(records) {
+  const pairs = /* @__PURE__ */ new Set();
+  for (const [ref, record] of Object.entries(records)) {
+    for (const edge of record.edges) {
+      if (edge.key !== "contradicts" && edge.key !== "supersedes") continue;
+      for (const target of edge.targets) {
+        if (target !== ref) pairs.add(pairKey(ref, target));
+      }
+    }
+  }
+  return pairs;
+}
+function clusterConflicts(refs, conflicts) {
+  for (let i = 0; i < refs.length; i++) {
+    for (let j = i + 1; j < refs.length; j++) {
+      if (conflicts.has(pairKey(refs[i], refs[j]))) return true;
+    }
+  }
+  return false;
+}
 function fragmentationDetail(cluster) {
   const basis = [];
   if (cluster.basis.tags.length > 0)
@@ -42982,6 +43536,24 @@ function fragmentationDetail(cluster) {
     basis.push(`shared title terms: ${cluster.basis.titleTokens.join(", ")}`);
   const why = basis.length > 0 ? basis.join("; ") : "similar titles";
   return `${cluster.members.length} closely-related pages (${why}) \u2014 consider consolidating into ${cluster.suggestedSurvivor}`;
+}
+async function readRegistries(read, index) {
+  const registries = [];
+  const refs = [];
+  for (const file of read.registryFiles()) {
+    const { exclusions, error } = parseRegistry(file.text);
+    for (const exclusion of exclusions) {
+      for (const member of exclusion.members) refs.push(member.pageRef);
+    }
+    registries.push({ ref: file.ref, exclusions, error, resolved: [] });
+  }
+  const facts = await index.pageFacts(refs);
+  for (const registry of registries) {
+    registry.resolved = registry.exclusions.map(
+      (exclusion) => resolveExclusion(exclusion, facts)
+    );
+  }
+  return { registries, facts };
 }
 async function conceptFragmentation(read, opts = {}) {
   const minSimilarity = opts.minSimilarity ?? DefaultMinSimilarity;
@@ -42998,11 +43570,13 @@ async function conceptFragmentation(read, opts = {}) {
       });
       kindOf.set(page.pageRef, page.kind);
     }
+    const { registries } = await readRegistries(read, index);
+    const resolved = registries.flatMap((state) => state.resolved);
     const candidates = /* @__PURE__ */ new Set();
     const addPair = (a, b) => {
       if (a === b || !signals.has(a) || !signals.has(b)) return;
       if (kindOf.get(a) !== kindOf.get(b)) return;
-      candidates.add(a < b ? `${a}\0${b}` : `${b}\0${a}`);
+      candidates.add(pairKey(a, b));
     };
     for (const pair of await index.sharedTagPairs(scope)) {
       addPair(pair.a, pair.b);
@@ -43030,13 +43604,13 @@ async function conceptFragmentation(read, opts = {}) {
     if (scored.length === 0) return [];
     const parent = /* @__PURE__ */ new Map();
     const find = (x) => {
-      const path32 = [];
+      const path34 = [];
       let cur = x;
       while (parent.get(cur) !== cur) {
-        path32.push(cur);
+        path34.push(cur);
         cur = parent.get(cur);
       }
-      for (const node of path32) parent.set(node, cur);
+      for (const node of path34) parent.set(node, cur);
       return cur;
     };
     const union = (a, b) => {
@@ -43083,9 +43657,17 @@ async function conceptFragmentation(read, opts = {}) {
       if (!change.deleted) text2.set(change.pageRef, change.content);
     }
     const inbound = inboundCounts(text2);
+    let conflicts = null;
+    const conflictEdges = () => conflicts ??= conflictingPairs(
+      loadRecords(Object.fromEntries(text2), void 0, {
+        skipMalformedEdges: true
+      })
+    );
     const findings = [];
     for (const [root, refs] of clusters) {
       if (refs.length < 2) continue;
+      if (suppressedBy(refs, resolved) !== null) continue;
+      if (clusterConflicts(refs, conflictEdges())) continue;
       const members = refs.sort().map((ref) => ({
         pageRef: ref,
         bytes: Buffer.byteLength(text2.get(ref) ?? "", "utf8"),
@@ -43115,6 +43697,59 @@ async function conceptFragmentation(read, opts = {}) {
     index.close();
   }
 }
+async function consolidationExclusions(read) {
+  const index = await Index.open(read.root);
+  try {
+    const { registries } = await readRegistries(read, index);
+    const findings = [];
+    for (const registry of registries) {
+      if (registry.error !== null) {
+        findings.push({
+          pageRef: registry.ref,
+          detail: `registry integrity: ${registry.error}; candidate reporting ignores this file until the YAML is repaired by hand`
+        });
+        continue;
+      }
+      const byMemberSet = /* @__PURE__ */ new Map();
+      for (const record of registry.resolved) {
+        const key = memberSetKey(record.exclusion.members);
+        const list2 = byMemberSet.get(key);
+        if (list2) list2.push(record);
+        else byMemberSet.set(key, [record]);
+      }
+      for (const duplicates of byMemberSet.values()) {
+        if (duplicates.length < 2) continue;
+        const members = duplicates[0].exclusion.members.map((m) => m.pageRef).join(", ");
+        const reasons = new Set(duplicates.map((d) => d.exclusion.reason));
+        findings.push({
+          pageRef: registry.ref,
+          detail: reasons.size === 1 ? `${duplicates.length} identical records for ${members}; fix consolidation-exclusions collapses them` : `${duplicates.length} records name ${members} with different reasons; resolve by hand`
+        });
+      }
+      for (const record of registry.resolved) {
+        const dropped = [...record.staleMembers, ...record.missingMembers].map(
+          (m) => m.pageRef
+        );
+        const members = record.exclusion.members.map((m) => m.pageRef).join(", ");
+        if (dropped.length > 0) {
+          const gone = record.validMembers.length < 2 ? " and deletes the record" : "";
+          findings.push({
+            pageRef: registry.ref,
+            detail: `member(s) ${dropped.join(", ")} no longer match HEAD; fix consolidation-exclusions --prune drops them${gone}`
+          });
+        } else if (record.validMembers.length < 2) {
+          findings.push({
+            pageRef: registry.ref,
+            detail: `only ${record.validMembers.length} of ${record.exclusion.members.length} members (${members}) match HEAD; fix consolidation-exclusions --prune deletes the record`
+          });
+        }
+      }
+    }
+    return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+  } finally {
+    index.close();
+  }
+}
 function leadingFrontmatterBlocks(text2) {
   const blocks = [];
   let offset = 0;
@@ -43136,21 +43771,21 @@ function blockMapping(yaml) {
   if (yaml.trim() === "") return {};
   let doc;
   try {
-    doc = (0, import_yaml4.parseDocument)(yaml);
+    doc = (0, import_yaml5.parseDocument)(yaml);
   } catch {
     return null;
   }
   if (doc.errors.length > 0 || doc.contents === null) return null;
-  if (!(0, import_yaml4.isMap)(doc.contents)) return null;
+  if (!(0, import_yaml5.isMap)(doc.contents)) return null;
   return doc.contents.toJSON();
 }
-function isRecord(value) {
+function isRecord3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function yamlSubset(a, b) {
   if (Array.isArray(a))
     return Array.isArray(b) && a.every((x) => b.some((y) => (0, import_node_util4.isDeepStrictEqual)(x, y)));
-  if (isRecord(a) && isRecord(b))
+  if (isRecord3(a) && isRecord3(b))
     return Object.entries(a).every(([k, v]) => k in b && yamlSubset(v, b[k]));
   return a === b;
 }
@@ -43199,7 +43834,8 @@ var CHECKS = {
   orphans,
   "split-links": splitLinks,
   "duplicate-frontmatter": duplicateFrontmatter,
-  "concept-fragmentation": conceptFragmentation
+  "concept-fragmentation": conceptFragmentation,
+  "consolidation-exclusions": consolidationExclusions
 };
 async function runAllChecks(root, opts = {}) {
   const read = new VaultRead(root);
@@ -43283,7 +43919,22 @@ function fixedIngestionSourceIntegrity(text2) {
     })
   );
 }
-function fixedMissingCrossReferences(pages) {
+var HeadingLineRe = /^#{1,6}[ \t]/;
+function onHeadingLine(body, idx) {
+  const lineStart = body.lastIndexOf("\n", idx) + 1;
+  return HeadingLineRe.test(body.slice(lineStart, lineStart + 7));
+}
+function firstMention(body, title, linkSpans, includeHeadings) {
+  for (let at = body.indexOf(title); at >= 0; at = body.indexOf(title, at + 1)) {
+    if (linkSpans.some(([s, e]) => at >= s && at + title.length <= e)) continue;
+    const ch = at > 0 ? body[at - 1] : "";
+    if (ch === "[" || ch === "`") continue;
+    if (!includeHeadings && onHeadingLine(body, at)) continue;
+    return at;
+  }
+  return -1;
+}
+function fixedMissingCrossReferences(pages, { includeHeadings = false } = {}) {
   const titleToRef = /* @__PURE__ */ new Map();
   const ambiguous = /* @__PURE__ */ new Set();
   for (const [ref, { title }] of Object.entries(pages)) {
@@ -43313,12 +43964,8 @@ function fixedMissingCrossReferences(pages) {
     for (const [title, targetRef] of titleToRef) {
       if (targetRef === ref) continue;
       if (linkedRefs.has(targetRef)) continue;
-      const idx = newBody.indexOf(title);
+      const idx = firstMention(newBody, title, linkSpans, includeHeadings);
       if (idx < 0) continue;
-      if (linkSpans.some(([s, e]) => idx >= s && idx + title.length <= e))
-        continue;
-      const ch = idx > 0 ? newBody[idx - 1] : "";
-      if (ch === "[" || ch === "`") continue;
       const insertion = composeLink(title, targetRef, pageDir);
       const diff = insertion.length - title.length;
       newBody = newBody.slice(0, idx) + insertion + newBody.slice(idx + title.length);
@@ -43378,7 +44025,7 @@ async function fixIngestionSourceIntegrity(root) {
     (ref) => ref.startsWith(SOURCES_DIR + "/")
   );
 }
-async function fixMissingCrossReferences(root) {
+async function fixMissingCrossReferences(root, opts = {}) {
   const vault = new Vault(root);
   const pages = {};
   for (const [ref, { record, text: text2 }] of Object.entries(
@@ -43386,7 +44033,7 @@ async function fixMissingCrossReferences(root) {
   )) {
     pages[ref] = { title: record.title, text: text2 };
   }
-  return writePlan(vault, fixedMissingCrossReferences(pages));
+  return writePlan(vault, fixedMissingCrossReferences(pages, opts));
 }
 async function fixSplitLinks(root) {
   return fixEveryPage(root, fixedSplitLinks);
@@ -43394,12 +44041,38 @@ async function fixSplitLinks(root) {
 async function fixDuplicateFrontmatter(root) {
   return fixEveryPage(root, fixedDuplicateFrontmatter);
 }
+async function fixConsolidationExclusions(root, opts = {}) {
+  const read = new VaultRead(root);
+  if (read.registryFiles().length === 0) return [];
+  const vault = new Vault(root);
+  const index = await Index.open(root);
+  const changed = [];
+  try {
+    const { registries, facts } = await readRegistries(read, index);
+    for (const registry of registries) {
+      if (registry.error !== null) continue;
+      const next = refreshExclusions(registry.exclusions, facts, {
+        prune: opts.prune ?? false
+      });
+      if (JSON.stringify(next) === JSON.stringify(registry.exclusions))
+        continue;
+      vault.write(registry.ref, new Page(renderRegistry(next)));
+      changed.push(registry.ref);
+    }
+  } finally {
+    index.close();
+  }
+  return changed.sort();
+}
+var PruneFix = "consolidation-exclusions";
+var IncludeHeadingsFix = "missing-cross-references";
 var FIXES = {
   "frontmatter-link-format": fixFrontmatterLinkFormat,
   "ingestion-source-integrity": fixIngestionSourceIntegrity,
   "missing-cross-references": fixMissingCrossReferences,
   "split-links": fixSplitLinks,
-  "duplicate-frontmatter": fixDuplicateFrontmatter
+  "duplicate-frontmatter": fixDuplicateFrontmatter,
+  [PruneFix]: fixConsolidationExclusions
 };
 
 // src/checkcommand.ts
@@ -43450,24 +44123,157 @@ function registerCheckFixCommands(program2) {
     }
   );
   const fixNames = Object.keys(FIXES).join(", ");
-  program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").action(async (name) => {
+  program2.command("fix").description(`Apply an auto-fix by name; names: ${fixNames}`).argument("<name>", "fix name").option(
+    "--include-headings",
+    "missing-cross-references: also link a mention on a heading line"
+  ).option(
+    "--prune",
+    "consolidation-exclusions: also drop members that no longer match HEAD (confirm first)"
+  ).action(async (name, opts) => {
     const fn = FIXES[name];
     if (!fn) {
       fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
     }
+    if (opts.includeHeadings && name !== IncludeHeadingsFix) {
+      fail(
+        `enchiridion fix: --include-headings applies only to fix "${IncludeHeadingsFix}", not "${name}"`
+      );
+    }
+    if (opts.prune && name !== PruneFix) {
+      fail(
+        `enchiridion fix: --prune applies only to fix "${PruneFix}", not "${name}"`
+      );
+    }
     const root = resolveRoot();
-    const changed = await fn(root);
+    const changed = await fn(root, opts);
     for (const ref of changed) console.log(ref);
   });
 }
 
+// src/assesscommand.ts
+function registerAssessCommand(program2) {
+  program2.command("assess").argument("<page_ref...>", "the candidate cluster's member pages").description(
+    "Read every member in full from one committed HEAD snapshot: {head, members: [{page_ref, blob_oid, fingerprint, title, bytes, text}]}"
+  ).action(async (refs) => {
+    const root = resolveRoot();
+    try {
+      emitDocument(await assessCluster(root, refs));
+    } catch (err) {
+      if (err instanceof ErrAssess) fail(err.message);
+      throw err;
+    }
+  });
+}
+
+// src/exclusioncommand.ts
+var import_node_path25 = __toESM(require("node:path"), 1);
+var import_node_fs20 = __toESM(require("node:fs"), 1);
+init_vaultgit();
+function isENOENT5(err) {
+  return err.code === "ENOENT";
+}
+function captureMember(ref, page) {
+  if (page === void 0) {
+    fail(
+      `${ref} is not a committed page at HEAD, so the cluster cannot be assessed`
+    );
+  }
+  if (page.fingerprint === null) {
+    fail(`${ref} could not be read at HEAD as a page`);
+  }
+  return { pageRef: ref, blobOid: page.blobOid, fingerprint: page.fingerprint };
+}
+function exclusionMessage(members, reason) {
+  const refs = members.map((m) => m.pageRef).join("\n");
+  return `exclusion: Consolidation exclusion for ${members.length} pages
+
+${refs}
+
+${reason}
+`;
+}
+async function addExclusion(root, refs, reason, git2 = new VaultGit(root)) {
+  const vault = new Vault(root);
+  const members = [...new Set(refs.map((ref2) => import_node_path25.default.posix.normalize(ref2)))];
+  if (members.length < 2) {
+    fail("an exclusion names at least two member pages");
+  }
+  const folder = folderOf(members[0]);
+  for (const ref2 of members) {
+    if (folderOf(ref2) !== folder) {
+      fail(
+        `an exclusion's members share one kind-folder; ${ref2} is not in wiki/${folder}/`
+      );
+    }
+  }
+  if (!vault.isConsolidatable(folder)) {
+    fail(
+      `wiki/${folder}/ is not a consolidatable kind-folder, so it holds no Consolidation exclusions (ADR-0027)`
+    );
+  }
+  const before = await git2.committedPages("");
+  if (before.head === "") {
+    fail(`no commits at ${root}; an exclusion is recorded against HEAD`);
+  }
+  const snapshot = await headPages(root);
+  const captured = members.map((ref2) => captureMember(ref2, snapshot.pages.get(ref2))).sort((a, b) => a.pageRef.localeCompare(b.pageRef));
+  const ref = registryRef(folder);
+  let existing = [];
+  let text2 = null;
+  try {
+    text2 = import_node_fs20.default.readFileSync(vault.path(ref), "utf8");
+  } catch (err) {
+    if (!isENOENT5(err)) throw err;
+  }
+  if (text2 !== null) {
+    const parsed = parseRegistry(text2);
+    if (parsed.error !== null) {
+      fail(
+        `${ref} is malformed (${parsed.error}); repair it by hand before recording an exclusion`
+      );
+    }
+    existing = refreshExclusions(
+      parsed.exclusions,
+      headPageFacts(snapshot.pages)
+    );
+  }
+  const rendered = renderRegistry(
+    upsertExclusion(existing, { members: captured, reason })
+  );
+  if (rendered === text2) {
+    console.log(ref);
+    return;
+  }
+  if (before.head !== (await git2.committedPages("")).head) {
+    fail(
+      "HEAD moved while the snapshot was captured; re-run against a fresh snapshot"
+    );
+  }
+  vault.write(ref, new Page(rendered));
+  await git2.stageAndCommit([ref], exclusionMessage(captured, reason));
+  console.log(ref);
+}
+function registerExclusionCommand(program2) {
+  const exclusion = program2.command("exclusion").description(
+    "Record a declined Consolidation cluster so lint stops proposing it (an exact member-set match)"
+  );
+  exclusion.command("add").argument(
+    "<page_ref...>",
+    "the declined cluster's members, all in one consolidatable kind-folder"
+  ).requiredOption("--reason <text>", "why the cluster should not consolidate").description(
+    "Capture the members' HEAD revisions and commit them to the kind-folder's CONSOLIDATION_EXCLUSIONS.yaml"
+  ).action(async (refs, opts) => {
+    await addExclusion(resolveRoot(), refs, opts.reason);
+  });
+}
+
 // src/exportcommand.ts
-var import_node_fs24 = __toESM(require("node:fs"), 1);
-var import_node_path30 = __toESM(require("node:path"), 1);
+var import_node_fs25 = __toESM(require("node:fs"), 1);
+var import_node_path32 = __toESM(require("node:path"), 1);
 
 // src/transcriptcapture.ts
-var import_node_fs20 = __toESM(require("node:fs"), 1);
-var import_node_path24 = __toESM(require("node:path"), 1);
+var import_node_fs21 = __toESM(require("node:fs"), 1);
+var import_node_path26 = __toESM(require("node:path"), 1);
 var import_node_child_process2 = require("node:child_process");
 var import_node_os4 = __toESM(require("node:os"), 1);
 var SLUG_MAX_LENGTH = 60;
@@ -43588,7 +44394,7 @@ function findTranscriptPath(cwd, lookupEnv = processLookupEnv2) {
   const stateDir = sessionsDir(cwd, lookupEnv);
   let stateStat;
   try {
-    stateStat = import_node_fs20.default.statSync(stateDir);
+    stateStat = import_node_fs21.default.statSync(stateDir);
   } catch {
     throw stateDirNotLocated(cwd);
   }
@@ -43603,7 +44409,7 @@ function findTranscriptPath(cwd, lookupEnv = processLookupEnv2) {
   }
   let trStat;
   try {
-    trStat = import_node_fs20.default.statSync(transcriptPath);
+    trStat = import_node_fs21.default.statSync(transcriptPath);
   } catch {
     throw new CaptureError(
       "Recorded transcript file does not exist: " + transcriptPath
@@ -43622,26 +44428,26 @@ function stateDirNotLocated(cwd) {
   );
 }
 function writeCapture(wikiRoot, filename, markdown, shortID, listDir) {
-  const conversationsDir = import_node_path24.default.join(wikiRoot, "raw", "conversations");
+  const conversationsDir = import_node_path26.default.join(wikiRoot, "raw", "conversations");
   mkdirSafe(conversationsDir);
-  const list2 = listDir ?? ((dir) => import_node_fs20.default.readdirSync(dir));
+  const list2 = listDir ?? ((dir) => import_node_fs21.default.readdirSync(dir));
   let matches = [];
   try {
     matches = list2(conversationsDir).filter((f) => f.endsWith(`-${shortID}.md`)).sort();
   } catch (err) {
-    if (!isENOENT5(err)) {
+    if (!isENOENT6(err)) {
       throw new CaptureError(
         `Could not list ${conversationsDir} to find an existing capture of this session: ${errMsg(err)}. (Refusing to guess which file a re-save should rewrite, because a failed listing read as "no prior capture" writes a second raw file instead, orphaning the first.)`,
         { cause: err }
       );
     }
   }
-  let outPath = import_node_path24.default.join(conversationsDir, filename);
+  let outPath = import_node_path26.default.join(conversationsDir, filename);
   if (matches.length > 0) {
-    outPath = import_node_path24.default.join(conversationsDir, matches[0]);
+    outPath = import_node_path26.default.join(conversationsDir, matches[0]);
   }
-  import_node_fs20.default.writeFileSync(outPath, markdown, { mode: 420 });
-  return import_node_path24.default.relative(wikiRoot, outPath).split(import_node_path24.default.sep).join("/");
+  import_node_fs21.default.writeFileSync(outPath, markdown, { mode: 420 });
+  return import_node_path26.default.relative(wikiRoot, outPath).split(import_node_path26.default.sep).join("/");
 }
 async function captureSession(wikiRoot, slug, cwd, lookupEnv = processLookupEnv2, now, exportSeam) {
   const [claudeCodeID] = lookupEnv("CLAUDE_CODE_SESSION_ID");
@@ -43667,12 +44473,12 @@ function captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now) {
   const timestamp = now.getTime() === 0 ? /* @__PURE__ */ new Date() : now;
   let text2;
   try {
-    text2 = import_node_fs20.default.readFileSync(transcriptPath, "utf8");
+    text2 = import_node_fs21.default.readFileSync(transcriptPath, "utf8");
   } catch (err) {
     throw new CaptureError(`Could not read transcript: ${errMsg(err)}`);
   }
-  const base = import_node_path24.default.basename(transcriptPath);
-  const ext = import_node_path24.default.extname(transcriptPath);
+  const base = import_node_path26.default.basename(transcriptPath);
+  const ext = import_node_path26.default.extname(transcriptPath);
   const sessionID = ext !== "" ? base.slice(0, -ext.length) : base;
   const turns = parseClaudeTranscript(text2.split("\n"));
   let filename;
@@ -43697,13 +44503,13 @@ function captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now) {
 function errMsg(err) {
   return err instanceof Error ? err.message : String(err);
 }
-function isENOENT5(err) {
+function isENOENT6(err) {
   return err.code === "ENOENT";
 }
 var OpenCode = {
   marker: ".opencode",
   projectDirEnv: "",
-  stateDir: import_node_path24.default.join(".opencode", "wiki-knowledge", "sessions")
+  stateDir: import_node_path26.default.join(".opencode", "wiki-knowledge", "sessions")
 };
 function findOpenCodeSessionsDir(cwd, lookupEnv = processLookupEnv2) {
   return findProjectSessionsDir(cwd, OpenCode, lookupEnv);
@@ -43711,7 +44517,7 @@ function findOpenCodeSessionsDir(cwd, lookupEnv = processLookupEnv2) {
 function openCodeSessionIsTracked(sessionID, stateDir) {
   let data;
   try {
-    data = import_node_fs20.default.readFileSync(import_node_path24.default.join(stateDir, `${sessionID}.json`), "utf8");
+    data = import_node_fs21.default.readFileSync(import_node_path26.default.join(stateDir, `${sessionID}.json`), "utf8");
   } catch {
     return false;
   }
@@ -43739,7 +44545,7 @@ function isOpenCodeSessionTracked(cwd, lookupEnv = processLookupEnv2) {
   const stateDir = findOpenCodeSessionsDir(cwd, lookupEnv);
   if (stateDir === void 0) return false;
   try {
-    if (!import_node_fs20.default.statSync(stateDir).isDirectory()) return false;
+    if (!import_node_fs21.default.statSync(stateDir).isDirectory()) return false;
   } catch {
     return false;
   }
@@ -43753,17 +44559,17 @@ async function exportTranscript(sessionID, command) {
     throw new CaptureError(`${bin} CLI is required but was not found on PATH`);
   }
   bin = resolved;
-  const tmp = import_node_path24.default.join(
+  const tmp = import_node_path26.default.join(
     import_node_os4.default.tmpdir(),
     `opencode-export-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
   );
   let stderr = "";
   try {
     await runExport(bin, sessionID, tmp, (chunk) => stderr += chunk);
-    return import_node_fs20.default.readFileSync(tmp);
+    return import_node_fs21.default.readFileSync(tmp);
   } finally {
     try {
-      import_node_fs20.default.rmSync(tmp, { force: true });
+      import_node_fs21.default.rmSync(tmp, { force: true });
     } catch {
     }
   }
@@ -43772,7 +44578,7 @@ function runExport(bin, sessionID, tmpPath, onStderr) {
   return new Promise((resolve6, reject) => {
     let fd;
     try {
-      fd = import_node_fs20.default.openSync(tmpPath, "w");
+      fd = import_node_fs21.default.openSync(tmpPath, "w");
     } catch (err) {
       reject(
         new CaptureError(
@@ -43791,12 +44597,12 @@ function runExport(bin, sessionID, tmpPath, onStderr) {
       onStderr(text2);
     });
     child.on("error", (err) => {
-      import_node_fs20.default.closeSync(fd);
+      import_node_fs21.default.closeSync(fd);
       reject(err);
     });
     child.on("close", (code2, signal) => {
       try {
-        import_node_fs20.default.closeSync(fd);
+        import_node_fs21.default.closeSync(fd);
       } catch {
       }
       if (code2 !== 0) {
@@ -43812,20 +44618,20 @@ function runExport(bin, sessionID, tmpPath, onStderr) {
   });
 }
 function findExecutable(name) {
-  if (import_node_path24.default.isAbsolute(name)) {
+  if (import_node_path26.default.isAbsolute(name)) {
     return isExecutableFile(name) ? name : null;
   }
   const pathEnv = process.env.PATH ?? "";
-  for (const dir of pathEnv.split(import_node_path24.default.delimiter)) {
+  for (const dir of pathEnv.split(import_node_path26.default.delimiter)) {
     if (dir === "") continue;
-    const candidate = import_node_path24.default.join(dir, name);
+    const candidate = import_node_path26.default.join(dir, name);
     if (isExecutableFile(candidate)) return candidate;
   }
   return null;
 }
 function isExecutableFile(file) {
   try {
-    const stat4 = import_node_fs20.default.statSync(file);
+    const stat4 = import_node_fs21.default.statSync(file);
     if (!stat4.isFile()) return false;
     if (process.platform === "win32") return true;
     return (stat4.mode & 73) !== 0;
@@ -43849,11 +44655,11 @@ function normalizeExport(exportDoc) {
   const turns = [];
   for (const raw of messages) {
     if (typeof raw !== "object" || raw === null) continue;
-    const message = raw;
-    const info = message["info"];
+    const message2 = raw;
+    const info = message2["info"];
     const role = typeof info === "object" && info !== null ? info["role"] : void 0;
     if (role !== "user" && role !== "assistant") continue;
-    const parts = message["parts"];
+    const parts = message2["parts"];
     const partList = Array.isArray(parts) ? parts : [];
     const texts = [];
     for (const rawPart of partList) {
@@ -43896,8 +44702,8 @@ async function captureOpenCodeSession(wikiRoot, slug, lookupEnv, now, exportSeam
 }
 
 // src/hooks.ts
-var import_node_fs21 = __toESM(require("node:fs"), 1);
-var import_node_path25 = __toESM(require("node:path"), 1);
+var import_node_fs22 = __toESM(require("node:fs"), 1);
+var import_node_path27 = __toESM(require("node:path"), 1);
 function sessionStart(payload, lookupEnv = processLookupEnv2) {
   const p = payload ?? {};
   if (!p.session_id || !p.transcript_path) return;
@@ -43921,17 +44727,17 @@ function postToolUse(payload, lookupEnv = processLookupEnv2) {
     duration_ms: p.duration_ms ?? null
   });
   const logFile = logPath(p.session_id, stateDir);
-  mkdirSafe(import_node_path25.default.dirname(logFile), 493);
-  import_node_fs21.default.appendFileSync(logFile, line + "\n", { mode: 420 });
+  mkdirSafe(import_node_path27.default.dirname(logFile), 493);
+  import_node_fs22.default.appendFileSync(logFile, line + "\n", { mode: 420 });
 }
 
 // src/exportwriter.ts
-var import_node_fs23 = __toESM(require("node:fs"), 1);
-var import_node_path29 = __toESM(require("node:path"), 1);
+var import_node_fs24 = __toESM(require("node:fs"), 1);
+var import_node_path31 = __toESM(require("node:path"), 1);
 init_vaultgit();
 
 // src/exportmeta.ts
-var import_node_path26 = __toESM(require("node:path"), 1);
+var import_node_path28 = __toESM(require("node:path"), 1);
 var FRONT_PAGE_PATH = "index.html";
 var TAGS_INDEX_SLUG = "index";
 function tagPagePath(slug) {
@@ -43980,7 +44786,7 @@ function buildTagSlugMap(tags) {
   return slugMap;
 }
 function outboundRefs(pageRef2, body) {
-  const pageDir = import_node_path26.default.posix.dirname(pageRef2);
+  const pageDir = import_node_path28.default.posix.dirname(pageRef2);
   const baseDir = pageDir === "." ? "" : pageDir;
   const refs = /* @__PURE__ */ new Set();
   for (const link2 of iterLinks(body)) {
@@ -44072,8 +44878,8 @@ function kindLabel(folder) {
 }
 
 // src/exportrender.ts
-var import_node_path27 = __toESM(require("node:path"), 1);
-var import_yaml5 = __toESM(require_dist(), 1);
+var import_node_path29 = __toESM(require("node:path"), 1);
+var import_yaml6 = __toESM(require_dist(), 1);
 
 // src/exportstyle.ts
 var SAKURA_CSS = `/* Sakura.css v1.5.1
@@ -44427,10 +45233,10 @@ function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function pageHtmlDir(pageRef2) {
-  return import_node_path27.default.posix.dirname(mdToHtml(pageRef2));
+  return import_node_path29.default.posix.dirname(mdToHtml(pageRef2));
 }
 function relHtmlPath(fromPageRef, toPageRef, anchor = "") {
-  const rel = import_node_path27.default.posix.relative(
+  const rel = import_node_path29.default.posix.relative(
     pageHtmlDir(fromPageRef),
     mdToHtml(toPageRef)
   );
@@ -44475,7 +45281,7 @@ function navHref(htmlPath, targetPath, mode) {
   return `${rootPrefix(htmlPath)}${targetPath}`;
 }
 function vaultPageDir(pageRef2) {
-  const d = import_node_path27.default.posix.dirname(pageRef2);
+  const d = import_node_path29.default.posix.dirname(pageRef2);
   return d === "." ? "" : d;
 }
 function applyEdits2(src, edits) {
@@ -44589,7 +45395,7 @@ function renderPageLink(targetRef, pageRef2, allPages, context) {
 function renderFrontmatterTable(pageRef2, record, text2, allPages, tagSlugMap, context) {
   const { frontmatter, hasFrontmatter } = splitFrontmatter(text2);
   if (!hasFrontmatter) return "";
-  const fm = frontmatter.trim() ? (0, import_yaml5.parse)(frontmatter) : null;
+  const fm = frontmatter.trim() ? (0, import_yaml6.parse)(frontmatter) : null;
   if (typeof fm !== "object" || fm === null) return "";
   const fmMap = fm;
   const rows = [];
@@ -44719,7 +45525,7 @@ function buildRawPageParts(pageRef2, text2, meta, wikiTitle, mode) {
   const { body, hasFrontmatter, frontmatter } = splitFrontmatter(text2);
   let fmSection = "";
   if (hasFrontmatter && frontmatter.trim()) {
-    const fm = (0, import_yaml5.parse)(frontmatter);
+    const fm = (0, import_yaml6.parse)(frontmatter);
     if (typeof fm === "object" && fm !== null) {
       const rows = Object.entries(fm).map(
         ([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v ?? ""))}</td></tr>`
@@ -44996,22 +45802,22 @@ function renderSingleFile(pages, meta, opts = {}) {
     ...renderPageParts(pages, meta, opts, "single-file"),
     ...renderAggregateParts(pages, meta, opts, "single-file")
   ];
-  for (const { path: path32, parts: pageParts } of parts) {
-    sections.push(buildSection(path32, pageParts));
+  for (const { path: path34, parts: pageParts } of parts) {
+    sections.push(buildSection(path34, pageParts));
   }
   return buildSingleFileDocument(exportTitle(opts), sections);
 }
 
 // src/exportconfig.ts
-var import_node_fs22 = __toESM(require("node:fs"), 1);
-var import_node_path28 = __toESM(require("node:path"), 1);
+var import_node_fs23 = __toESM(require("node:fs"), 1);
+var import_node_path30 = __toESM(require("node:path"), 1);
 function exportConfigPath(root) {
-  return import_node_path28.default.join(root, ".wiki-knowledge", "config.json");
+  return import_node_path30.default.join(root, ".wiki-knowledge", "config.json");
 }
 function readExportConfig(root) {
   let raw;
   try {
-    raw = import_node_fs22.default.readFileSync(exportConfigPath(root), "utf8");
+    raw = import_node_fs23.default.readFileSync(exportConfigPath(root), "utf8");
   } catch {
     return {};
   }
@@ -45034,8 +45840,8 @@ function readExportConfig(root) {
   return config2;
 }
 function writeExportConfig(root, config2) {
-  import_node_fs22.default.mkdirSync(import_node_path28.default.dirname(exportConfigPath(root)), { recursive: true });
-  import_node_fs22.default.writeFileSync(
+  import_node_fs23.default.mkdirSync(import_node_path30.default.dirname(exportConfigPath(root)), { recursive: true });
+  import_node_fs23.default.writeFileSync(
     exportConfigPath(root),
     JSON.stringify(config2, null, 2) + "\n",
     "utf8"
@@ -45054,7 +45860,7 @@ function resolveExportTitle(root, flagTitle) {
   if (isSupplied(flagTitle)) return flagTitle.trim();
   const fromConfig = readExportConfig(root).title;
   if (isSupplied(fromConfig)) return fromConfig.trim();
-  return import_node_path28.default.basename(import_node_path28.default.resolve(root));
+  return import_node_path30.default.basename(import_node_path30.default.resolve(root));
 }
 function normalizeStartPageRef(ref) {
   let normalized = ref.trim();
@@ -45083,46 +45889,46 @@ function saveExportStartPage(root, ref) {
 
 // src/exportwriter.ts
 var ExportDirtyError = class extends Error {
-  constructor(message, dirtyFiles) {
-    super(message);
+  constructor(message2, dirtyFiles) {
+    super(message2);
     this.dirtyFiles = dirtyFiles;
     this.name = "ExportDirtyError";
   }
 };
 var ExportTargetNotEmptyError = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ExportTargetNotEmptyError";
   }
 };
 var ExportTargetIsDirectoryError = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ExportTargetIsDirectoryError";
   }
 };
 var ExportStartPageError = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ExportStartPageError";
   }
 };
 function enumerateRawRefs(root) {
-  const rawDir = import_node_path29.default.join(root, "raw");
+  const rawDir = import_node_path31.default.join(root, "raw");
   const refs = [];
   function walk2(dir) {
     let entries;
     try {
-      entries = import_node_fs23.default.readdirSync(dir, { withFileTypes: true });
+      entries = import_node_fs24.default.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const abs = import_node_path29.default.join(dir, entry.name);
+      const abs = import_node_path31.default.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk2(abs);
       } else {
-        const rel = import_node_path29.default.relative(root, abs).split(import_node_path29.default.sep).join("/");
+        const rel = import_node_path31.default.relative(root, abs).split(import_node_path31.default.sep).join("/");
         refs.push(rel);
       }
     }
@@ -45136,8 +45942,8 @@ function vaultPageRefs(root) {
   return refs;
 }
 function startPageErrorMessage(root, ref, fromFlag, includeRaw) {
-  const source = fromFlag ? `--start-page "${ref}"` : `the saved start page "${ref}" (${import_node_path29.default.join(".wiki-knowledge", "config.json")})`;
-  if (!includeRaw && ref.startsWith("raw/") && import_node_fs23.default.existsSync(import_node_path29.default.join(root, ...ref.split("/")))) {
+  const source = fromFlag ? `--start-page "${ref}"` : `the saved start page "${ref}" (${import_node_path31.default.join(".wiki-knowledge", "config.json")})`;
+  if (!includeRaw && ref.startsWith("raw/") && import_node_fs24.default.existsSync(import_node_path31.default.join(root, ...ref.split("/")))) {
     return `${source} is a raw/ page, which this run does not include. Pass --raw to include raw/ pages, or nominate a wiki/ page.`;
   }
   if (fromFlag) {
@@ -45146,9 +45952,9 @@ function startPageErrorMessage(root, ref, fromFlag, includeRaw) {
   return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is under raw/.`;
 }
 function writeFileIn(tempDir, relPath2, content) {
-  const abs = import_node_path29.default.join(tempDir, ...relPath2.split("/"));
-  import_node_fs23.default.mkdirSync(import_node_path29.default.dirname(abs), { recursive: true });
-  import_node_fs23.default.writeFileSync(abs, content, "utf8");
+  const abs = import_node_path31.default.join(tempDir, ...relPath2.split("/"));
+  import_node_fs24.default.mkdirSync(import_node_path31.default.dirname(abs), { recursive: true });
+  import_node_fs24.default.writeFileSync(abs, content, "utf8");
 }
 function writeTempSite(tempDir, pages) {
   for (const { path: relPath2, content } of pages) {
@@ -45156,21 +45962,21 @@ function writeTempSite(tempDir, pages) {
   }
 }
 function writeSingleFile(outFile, html) {
-  const tempFile = import_node_path29.default.join(
-    import_node_path29.default.dirname(outFile),
-    `.export-tmp-${import_node_path29.default.basename(outFile)}-${process.pid}`
+  const tempFile = import_node_path31.default.join(
+    import_node_path31.default.dirname(outFile),
+    `.export-tmp-${import_node_path31.default.basename(outFile)}-${process.pid}`
   );
   try {
-    import_node_fs23.default.writeFileSync(tempFile, html, "utf8");
-    import_node_fs23.default.renameSync(tempFile, outFile);
+    import_node_fs24.default.writeFileSync(tempFile, html, "utf8");
+    import_node_fs24.default.renameSync(tempFile, outFile);
   } catch (err) {
     try {
-      import_node_fs23.default.rmSync(tempFile, { force: true });
+      import_node_fs24.default.rmSync(tempFile, { force: true });
     } catch {
     }
     throw err;
   }
-  const warning = singleFileSizeWarning(import_node_fs23.default.statSync(outFile).size, outFile);
+  const warning = singleFileSizeWarning(import_node_fs24.default.statSync(outFile).size, outFile);
   if (warning) console.error(warning);
 }
 async function runExport2(root, opts) {
@@ -45197,15 +46003,15 @@ async function runExport2(root, opts) {
     }
   }
   if (singleFile) {
-    if (import_node_fs23.default.existsSync(outDir) && import_node_fs23.default.statSync(outDir).isDirectory()) {
+    if (import_node_fs24.default.existsSync(outDir) && import_node_fs24.default.statSync(outDir).isDirectory()) {
       throw new ExportTargetIsDirectoryError(
         `Output "${outDir}" is a directory, and --single-file writes one file. Pass --out <file>, or drop --single-file to write a directory tree.`
       );
     }
-  } else if (!force && import_node_fs23.default.existsSync(outDir)) {
+  } else if (!force && import_node_fs24.default.existsSync(outDir)) {
     let hasContents = false;
     try {
-      const entries = import_node_fs23.default.readdirSync(outDir);
+      const entries = import_node_fs24.default.readdirSync(outDir);
       hasContents = entries.length > 0;
     } catch {
     }
@@ -45225,8 +46031,8 @@ async function runExport2(root, opts) {
     const rawRefs = enumerateRawRefs(root);
     for (const ref of rawRefs) {
       try {
-        const text2 = import_node_fs23.default.readFileSync(
-          import_node_path29.default.join(root, ...ref.split("/")),
+        const text2 = import_node_fs24.default.readFileSync(
+          import_node_path31.default.join(root, ...ref.split("/")),
           "utf8"
         );
         pagesMap.set(ref, { text: text2 });
@@ -45255,13 +46061,13 @@ async function runExport2(root, opts) {
     yield* renderPages(pagesMap, meta, exportOpts);
     yield* renderAggregatePages(pagesMap, meta, exportOpts);
   }
-  const outParent = import_node_path29.default.dirname(outDir);
-  import_node_fs23.default.mkdirSync(outParent, { recursive: true });
+  const outParent = import_node_path31.default.dirname(outDir);
+  import_node_fs24.default.mkdirSync(outParent, { recursive: true });
   if (singleFile) {
     writeSingleFile(outDir, renderSingleFile(pagesMap, meta, exportOpts));
     return;
   }
-  const tempDir = import_node_fs23.default.mkdtempSync(import_node_path29.default.join(outParent, ".export-tmp-"));
+  const tempDir = import_node_fs24.default.mkdtempSync(import_node_path31.default.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());
     writeFileIn(
@@ -45269,13 +46075,13 @@ async function runExport2(root, opts) {
       `${STYLESHEET_DIR}/${STYLESHEET_FILE}`,
       EXPORT_STYLESHEET
     );
-    if (import_node_fs23.default.existsSync(outDir)) {
-      import_node_fs23.default.rmSync(outDir, { recursive: true, force: true });
+    if (import_node_fs24.default.existsSync(outDir)) {
+      import_node_fs24.default.rmSync(outDir, { recursive: true, force: true });
     }
-    import_node_fs23.default.renameSync(tempDir, outDir);
+    import_node_fs24.default.renameSync(tempDir, outDir);
   } catch (err) {
     try {
-      import_node_fs23.default.rmSync(tempDir, { recursive: true, force: true });
+      import_node_fs24.default.rmSync(tempDir, { recursive: true, force: true });
     } catch {
     }
     throw err;
@@ -45335,7 +46141,7 @@ function registerHookCommands(program2) {
   for (const action of ["session-start", "post-tool-use"]) {
     hook.command(action).description("Handle the " + action + " hook event").action(() => {
       try {
-        const payload = JSON.parse(import_node_fs24.default.readFileSync(0, "utf8"));
+        const payload = JSON.parse(import_node_fs25.default.readFileSync(0, "utf8"));
         if (action === "session-start") sessionStart(payload);
         else postToolUse(payload);
       } catch {
@@ -45408,7 +46214,7 @@ function registerExportCommands(program2) {
           });
         }
       }
-      const outPath = opts.out ? import_node_path30.default.resolve(opts.out) : import_node_path30.default.join(root, opts.singleFile ? SINGLE_FILE_DEFAULT_NAME : "web");
+      const outPath = opts.out ? import_node_path32.default.resolve(opts.out) : import_node_path32.default.join(root, opts.singleFile ? SINGLE_FILE_DEFAULT_NAME : "web");
       try {
         await runExport2(root, {
           out: outPath,
@@ -45447,6 +46253,8 @@ function buildProgram() {
   registerSessionCommands(program2);
   registerVaultCommand(program2);
   registerCheckFixCommands(program2);
+  registerAssessCommand(program2);
+  registerExclusionCommand(program2);
   registerPageCommands(program2);
   registerIngestCommands(program2);
   registerHookCommands(program2);
@@ -45457,7 +46265,7 @@ function isMainModule() {
   if (typeof require !== "undefined" && require.main === module) return true;
   const arg = process.argv[1];
   if (arg === void 0) return false;
-  return import_meta.url === (0, import_node_url.pathToFileURL)(import_node_path31.default.resolve(arg)).href;
+  return import_meta.url === (0, import_node_url.pathToFileURL)(import_node_path33.default.resolve(arg)).href;
 }
 async function run(argv) {
   const stdout = [];
