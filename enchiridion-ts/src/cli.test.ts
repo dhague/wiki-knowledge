@@ -21,6 +21,7 @@ import {
   WatchStartedMarker,
 } from "./contract.js";
 import { PlanActions } from "./ingest.js";
+import { MaxSlugLength, slugify } from "./place.js";
 import { splitFrontmatter } from "./wikipage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -152,6 +153,85 @@ test("place: prints the vault-relative path from kind and title", () => {
   ]);
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "wiki/concepts/connection-pooling.md");
+});
+
+test("place: the ref it prints is the ref ingest writes for the same kind and title", async () => {
+  // A `create` carries no page_ref, so an edge naming one predicts a path. Only
+  // place.path may apply the slug cap, and a prediction it disagrees with fails
+  // ingest's target-resolves check — the failure #646 reported.
+  const title =
+    "Re: Status updates on ArgoCDaaS DNS + cert-manager migration (zero-downtime upgrade)";
+  assert.ok(
+    slugify(title, 0).length > MaxSlugLength,
+    "the title must exceed the slug cap, or this proves nothing",
+  );
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-place-"));
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  const signature = {
+    name: "test",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.init({ fs, dir: root });
+  fs.mkdirSync(path.join(root, "raw"), { recursive: true });
+  fs.writeFileSync(path.join(root, "raw", "doc.md"), "raw\n");
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "seed",
+    author: signature,
+    committer: signature,
+  });
+
+  const placed = runEnv(["place", "source", title], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(placed.status, 0, placed.stderr);
+  const stubRef = placed.stdout.trim();
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "DNS migration",
+      source_date: "2026-03-01",
+      raw: "raw/doc.md",
+      pages: [
+        {
+          op: "create",
+          kind: "source",
+          title,
+          body: "stub\n",
+          frontmatter: {
+            summary: "the artifact",
+            raw_source: true,
+            volatility: "stable",
+          },
+        },
+        {
+          op: "create",
+          kind: "concept",
+          title: "Zero-downtime migration",
+          body: "Facts.\n",
+          frontmatter: { summary: "no downtime", volatility: "stable" },
+          edges: { source: [stubRef] },
+        },
+      ],
+    }),
+  );
+  const ingested = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.equal(ingested.status, 0, ingested.stderr);
+  assert.ok(
+    fs.existsSync(path.join(root, ...stubRef.split("/"))),
+    `ingest wrote no page at the ref place printed: ${stubRef}`,
+  );
 });
 
 test("place: errors non-zero on an unknown kind", () => {

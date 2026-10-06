@@ -75,7 +75,7 @@ Given one document at `<path>`.
            "volatility": "stable | evolving | volatile"
          },
          "edges": {
-           "source": ["wiki/sources/<stub-slug>.md"],  // mandatory back-edge to the stub above
+           "source": ["wiki/sources/<stub-slug>.md"],  // mandatory back-edge to the stub above; `place source "<title>"` supplies the slug
            "related": ["<page reference>"],
            "supersedes": ["<page reference>"]           // when step 3 found a contradiction
          }
@@ -103,7 +103,7 @@ Given one document at `<path>`.
    **Consolidation variant — `action: "consolidate"`** ([Consolidation](reference/consolidation.md)): one page, the **survivor** (`op: "update"`, or `op: "create"` for a fresh one) whose `body` carries each absorbed body as a section, a top-level `"consolidates"` list of the absorbed page references, and no `raw`. It also **pins the snapshot it was authored from** — `"assessed": {"head": "<sha>", "members": [{"page_ref": "<absorbed ref>", "blob_oid": "<its HEAD object id>"}]}`, one entry per absorbed ref, verbatim from the assessment read (`enchiridion assess`); `ingest` refuses the plan once `HEAD` or any pinned member has moved. Judgment around the survivor: [`reference/consolidation.md`](reference/consolidation.md) — read before authoring one.
 
    Judgment calls when filling in (folder's `INGESTION.md` may override any):
-   - **Kind** (create pages only): `"$RUNTIME" "$ENCHIRIDION" vault kinds` gives the placement vocabulary; apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm), first match wins. A custom kind-folder is a peer target — never emit a kind `vault kinds` doesn't return. Leave the filename to `enchiridion ingest`, which derives the kebab-slug from `kind` + `title` — never hand-slugify. A chosen custom kind with `definition: null` is noted for step 7's `kind-md-proposal` block; placement into the bare folder completes regardless.
+   - **Kind** (create pages only): `"$RUNTIME" "$ENCHIRIDION" vault kinds` gives the placement vocabulary; apply [Placement algorithm](../wiki-conventions/SKILL.md#placement-algorithm), first match wins. A custom kind-folder is a peer target — never emit a kind `vault kinds` doesn't return. `ingest` derives the filename from `kind` + `title`; a page whose ref an edge must name — the `source/` stub above all — takes that ref from `"$RUNTIME" "$ENCHIRIDION" place <kind> "<title>"`, never a hand-derived slug: the slug is truncated at a word boundary, and a ref that misses fails validation. A chosen custom kind with `definition: null` is noted for step 7's `kind-md-proposal` block; placement into the bare folder completes regardless.
    - **The `source/` stub is not optional** (see [The chain of evidence](reference/authoring.md#the-chain-of-evidence)) — thin fine, absent not. Prior pass already filed the stub: target it with `op: "update"`, not a second create.
    - **Typed edges** ([vocabulary](../wiki-conventions/SKILL.md#typed-edges)) — judge for **every new or updated page** against every page surfaced in step 3. Assign the most specific type true (`related` only as fallback); `contradicts`/`supersedes` decided by step 3, belong on the *new* page only.
      - Non-judgment edge: **every page except the stub carries a `source` edge to it** — each chunk of a multi-chunk split, `op: "update"` same as `create`. Edges merge on update so restating is safe; omit only if the page already carries it from an earlier pass.

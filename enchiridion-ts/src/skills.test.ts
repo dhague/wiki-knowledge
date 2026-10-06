@@ -615,6 +615,22 @@ test("the agent-facing plan shape names every accepted action", () => {
   );
 });
 
+test("the plan-authoring step resolves a referenced create's ref with place", () => {
+  // A `create` carries no page_ref, so an edge naming one predicts a path only
+  // [place.path] may compute — it truncates the slug at a word boundary.
+  const text = proseFor(INGEST_SKILL);
+  const start = text.indexOf("4. **Finish the plan.**");
+  const end = text.indexOf("5. **Run it.**");
+  assert.ok(
+    start >= 0 && end > start,
+    `${INGEST_SKILL} must carry its plan-authoring step before its run step`,
+  );
+  assert.ok(
+    text.slice(start, end).includes("place <kind>"),
+    `${INGEST_SKILL} step 4 must resolve a referenced create's ref with the place subcommand`,
+  );
+});
+
 /** The `{a, b, c}` spelling [KindFields] and [KindDefinitionFields] declare. */
 function braceList(fields: readonly string[]): string {
   return `{${fields.join(", ")}}`;
