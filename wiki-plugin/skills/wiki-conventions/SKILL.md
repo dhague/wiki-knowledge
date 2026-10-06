@@ -40,7 +40,16 @@ Vault is a **git repository**. Layout is opinionated and **plugin-fixed** — sa
 
 ### The `raw/` layer
 
-`raw/` holds **content-immutable** originals. Ingestion **never edits a raw file's contents**. Links into `raw/` are percent-encoded (see [Links](#links)) so any filename is linkable. See [Naming](#naming) for filename and prefix rules.
+`raw/` holds **content-immutable** originals. Ingestion **never edits a raw file's contents**, and a raw artifact is never corrected silently. Links into `raw/` are percent-encoded (see [Links](#links)) so any filename is linkable. See [Naming](#naming) for filename and prefix rules.
+
+**An artifact's error that has reached a page is fixed on the page, not in the artifact.** The page fix is ordinary application of rules that already exist — state the corrected claim, obtained by [verifying against the source](../wiki-ingest/reference/authoring.md#verify-against-the-source); note the live disagreement in the existing `> [!warning] Contradiction` callout; set `contradicts`/`supersedes` per [Typed edges](#typed-edges). No new authority, no new format: the artifact stays as the historical record of what the research produced, and the page keeps to [facts, not correction narrative](../wiki-ingest/reference/authoring.md#pages-state-facts).
+
+Editing the artifact itself is the exception: a deliberate, **separately committed** act needing the **vault owner**'s authorisation — the human who owns the vault — for that exception alone. There is no standing delegation and no class an agent may apply unattended: an agent without the authorisation **stops and escalates**, and a corrected page is not licence to correct the artifact. The correction is **in place** — the artifact keeps its path, nothing is copied elsewhere, and git's history is the record of the original bytes — and commits under a `correct:` prefix recording what changed, why, which class it was, and that the artifact no longer reflects what the research produced:
+
+- **Erroneous** — a claim that is demonstrably false, including a figure the artifact's own components refute under the arithmetic rule.
+- **Non-conforming** — content violating the contract's own content rules, whether or not it is factually true.
+
+Neither class is a permission; both route through the authorisation above. An artifact declined on ingestion grounds — spam, duplicate, junk — takes the [existing decline path](../wiki-ingest/reference/authoring.md#the-chain-of-evidence), not either class.
 
 ### Naming
 

@@ -20,6 +20,8 @@ Going past the headline rule:
 - **The artifact decides a disagreement.** Two pages at odds → check each against its own artifact; the loser does not win by being read last. Record the loser as a `contradicts` edge, plus `supersedes` on the page that replaces it ([directions](../../wiki-conventions/SKILL.md#typed-edges)).
 - **Recompute derived figures.** Percentages, sums, totals and surplus/deficit are checked arithmetically against components already on the page or in the artifact — components sum to the stated total, income minus expenditure reconciles with the stated surplus/deficit. Arithmetic settles the claim that reading alone cannot.
 
+Where an artifact refutes itself under these rules, the page takes the corrected claim by the rules above, and correcting the artifact itself is [a separate, vault-owner-authorised act](../../wiki-conventions/SKILL.md#the-raw-layer).
+
 ## Pages state facts
 
 **A page records what is true — not what was previously believed, and not how the page came to be written.** Correction narration ("this corrects", "the brief's premise", "previously said") and vault-process meta ("this page records a `contradicts` edge", "the page ingested on <date>", "earlier passes recorded") do not belong in a page. Both read as diligence while adding nothing a reader needs, and both turn a reference work into a changelog.
