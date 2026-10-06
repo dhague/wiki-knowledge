@@ -4,8 +4,8 @@
  * - Rows ([emitRows]) — JSON Lines, one compact object per line. `search`,
  *   `superseded-by`, `ingest-scan`, `check`, `discover`'s single-page mode.
  * - One document ([emitDocument]) — one compact JSON value for the whole run.
- *   `search --status`/`--reindex`, `read-page`, `discover --plan`, `vault
- *   kinds`, `export --candidates`. The value may itself be an array: the
+ *   `search --status`/`--reindex`, `read-page`, `read-pages`, `discover --plan`,
+ *   `vault kinds`, `export --candidates`. The value may itself be an array: the
  *   dialect is how many documents, not the outer JSON type.
  *
  * `page set --json` is the exception: it parses its value argument as JSON,

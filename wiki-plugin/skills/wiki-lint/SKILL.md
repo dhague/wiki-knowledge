@@ -82,6 +82,14 @@ Run after the mechanical pass. Get the full page list first, then limit to pages
 find <vault-root>/wiki -name "*.md" | sort
 ```
 
+That list enumerates the pages to visit; the bodies those checks judge come from `read-pages` — one committed `HEAD` snapshot, in bounded batches, cached for the run:
+
+```bash
+"$RUNTIME" "$ENCHIRIDION" read-pages <page_ref> [<page_ref> ...]
+```
+
+Pass `--reset` on the run's **first** body read: it drops the ledger and starts the budget, and thereafter a body the run already read comes back `cached: true` instead of being read again. A check that needs specific bodies names them; a sweep reads its batches until the run's budget is spent. `read-pages --help` is the flag list, and [`wiki-conventions` → Scripts](../wiki-conventions/reference/scripts.md) the catalogue entry.
+
 **Stale claims:** for pages whose last commit is > 90 days old, look for a source on the same topic, by title/tag overlap, ingested since.
 
 ```bash
@@ -90,7 +98,7 @@ find <vault-root>/wiki -name "*.md" | sort
 
 Compare `git_date`; where a related page is substantially newer and covers the same ground, flag the claims as possibly superseded.
 
-**Implicit concepts:** terms appearing across ≥ 3 pages that have no page of their own — candidates for extraction, which needs a new ingestion plan.
+**Implicit concepts:** a term recurring across ≥ 3 eligible pages that have no page of their own — a candidate for extraction, which needs a new ingestion plan. Read the eligible bodies before proposing one: [`reference/implicit-concepts.md`](reference/implicit-concepts.md) — the eligible set, the bounded sweep, the budget, and the evidence a proposal carries.
 
 **Missing cross-references:** a page naming another page's title in its body without linking to it.
 
@@ -131,10 +139,11 @@ Add every confirm-first finding to the report's **confirm-first proposals** sect
 - The check name and finding description.
 - The vault-relative path(s) of the affected page(s) — every member, for a cluster.
 - The exact command(s) to run on yes.
+- For an implicit concept, the evidence block its proposal carries — [`reference/implicit-concepts.md`](reference/implicit-concepts.md).
 
 Proposal shapes — present the entry, wait for a yes/no, apply the stated command on yes:
 
-[`reference/proposals.md`](reference/proposals.md) — the exact wording and command for each confirm-first shape; [`reference/consolidation.md`](reference/consolidation.md) — the Consolidation assessment, its three dispositions, and the exclusion offer; read both before writing a proposal.
+[`reference/proposals.md`](reference/proposals.md) — the exact wording and command for each confirm-first shape; [`reference/consolidation.md`](reference/consolidation.md) — the Consolidation assessment, its three dispositions, and the exclusion offer; [`reference/implicit-concepts.md`](reference/implicit-concepts.md) — the implicit-concept evidence; read them before writing a proposal.
 
 Never author the merged body here: the merge is a judgment call that belongs to the ingest flow. Never batch two clusters into one handoff.
 
@@ -150,11 +159,14 @@ After auto-fixes and confirms, emit the final report:
 
 **Confirm-first proposals (<N>):**
 - <check-name>: <finding> (<page>)
+  Evidence: '<term>' ← <ref>, <ref>, <ref>
   Command: `<exact command>`
 
 **Findings (<N>):**
 <priority> — <check-name>: <brief description> (<page>)
 ```
+
+The `Evidence:` line is the implicit-concept evidence block, printed under its proposal ([`reference/implicit-concepts.md`](reference/implicit-concepts.md)). When a sweep left eligible pages unread — a non-zero `remaining`, or `budget.exhausted` — say how many, rather than implying the run covered the vault.
 
 Priority ordering in the report:
 1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter, a malformed Consolidation-exclusion registry.

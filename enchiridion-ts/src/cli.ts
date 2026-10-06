@@ -21,6 +21,7 @@ import {
 } from "./vaultcommand.js";
 import { registerCheckFixCommands } from "./checkcommand.js";
 import { registerAssessCommand } from "./assesscommand.js";
+import { registerReadPagesCommand } from "./lintbodiescommand.js";
 import { registerExclusionCommand } from "./exclusioncommand.js";
 import {
   registerSessionCommands,
@@ -47,6 +48,8 @@ export function buildProgram(): Command {
   registerCheckFixCommands(program);
 
   registerAssessCommand(program);
+
+  registerReadPagesCommand(program);
 
   registerExclusionCommand(program);
 

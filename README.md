@@ -145,6 +145,19 @@ a candidate and is reported as a HIGH finding. Any `contradicts:` or
 `supersedes:` edge between two candidate pages excludes them from a proposal
 automatically, with no registry record.
 
+### Implicit concepts
+
+A term that recurs across three or more pages without a page of its own is
+proposed as a candidate for extraction. Recurrence is judged from page **bodies**,
+never from titles, summaries, tags or search snippets: `enchiridion read-pages`
+reads them from one committed snapshot in bounded batches (12 pages or 48 KiB at
+a time), and every body a lint run reads is remembered for that run, so a page
+another body-reading check already read is not read twice. A run's sweep reads at
+most 60 new bodies by default. A proposal names the term and at least three
+supporting pages with the revision each was read at, so anyone can re-run the
+read and check it; when a large vault leaves pages unread, the report says so
+rather than implying full coverage.
+
 Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
 path argument, else the current directory.
 

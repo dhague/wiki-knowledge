@@ -59,6 +59,10 @@ _Avoid_: Merge (that is `enchiridion page merge`, a frontmatter list union — a
 A declined concept-fragmentation cluster remembered in a committed `CONSOLIDATION_EXCLUSIONS.yaml` in the cluster's kind-folder, so lint stops proposing that exact member set. Identified by its unordered member set, and validated against `HEAD` two ways: a matching blob object ID is the fast path, a matching semantic fingerprint the fallback, so an edit outside the fingerprint keeps the exclusion and refreshes the cached ID while a meaningful one drops that member — the unchanged members stay excluded while at least two remain. A move within a kind follows the reference; a move to another kind leaves the record ([ADR-0028](docs/adr/0028-consolidation-exclusions-use-kind-registries.md)). Distinct from a typed edge — an exclusion records a decision *not* to join two pages, where an edge records that they are related — and from a `supersedes` record, which is a claim about which page wins.
 _Avoid_: Blacklist, suppression list (they name a mechanism, not the decision the user made); exclusion *rule* (the member set is the record, not a pattern).
 
+**Lint run**:
+One `wiki-lint` procedure invocation, which owns one body-read ledger and one read budget. `enchiridion read-pages --reset` opens it; the page bodies a judgment check reads are served from that ledger, marked `cached` when the run already read them, and the run may newly read at most `--budget` bodies before its sweep stops. A ledger is keyed to the `HEAD` it was opened at, so a commit moves `HEAD` and the next read starts a fresh run without the flag; the ledger itself is disposable cache, not vault history ([ADR-0029](docs/adr/0029-lint-judgment-reads-bodies-through-a-run-ledger.md)).
+_Avoid_: Lint session (a host session spans many runs, and is not what the ledger or the budget is scoped to), cache (the ledger is one input to the run, not the run).
+
 **Volatility**:
 A page's authored judgment of how likely its content is to go stale: `stable`, `evolving`, or `volatile`. Drives whether retrieval discounts a page's age.
 
