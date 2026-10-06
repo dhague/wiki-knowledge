@@ -72,8 +72,7 @@ done
 
 # 5. Regenerate the distribution tree — repo-root skills/ is a verbatim copy of
 #    the canonical tree, and is what `npx skills add` installs.
-rm -rf skills
-cp -R wiki-plugin/skills skills
+scripts/sync-skills.sh
 
 # 6. Commit and push to the current branch.
 git add "$plugin_json" CLAUDE.md wiki-plugin/scripts/cli.cjs wiki-plugin/scripts/node-sqlite3-wasm.wasm

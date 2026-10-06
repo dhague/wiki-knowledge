@@ -198,11 +198,4 @@ jobs:
       # the other is exactly the drift that would ship stale skill text to
       # consumers while the canonical text looked right in the repo.
       - name: Fail if the generated tree differs from the canonical one
-        run: |
-          if ! diff -r wiki-plugin/skills skills; then
-            echo ""
-            echo "STALE: repo-root skills/ differs from wiki-plugin/skills/."
-            echo "Regenerate it with: rm -rf skills && cp -R wiki-plugin/skills skills"
-            echo "(or run scripts/release.sh <new-version> for a release)."
-            exit 1
-          fi
+        run: scripts/sync-skills.sh --check

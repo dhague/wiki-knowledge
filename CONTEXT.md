@@ -80,7 +80,7 @@ The Claude Code install of this project — the eight skills plus the three mode
 _Avoid_: skill package (that is the host-neutral install), extension, app.
 
 **Skill package**:
-The same eight skills published as one host-neutral install (`npx skills add dhague/wiki-knowledge --all`), each self-contained with its own bundled script layer. Authored once under `wiki-plugin/skills/` and copied to repo-root `skills/` at release; installed by any host that reads the Agent Skills standard's skill directory, including OpenCode and DeepSeek Harness. Carries no model tier, no hook and no subagent — everything a host cannot express portably belongs to the **plugin**.
+The same eight skills published as one host-neutral install (`npx skills add dhague/wiki-knowledge --all`), each self-contained with its own bundled script layer. Authored once under `wiki-plugin/skills/` and mirrored to repo-root `skills/` in the same change; installed by any host that reads the Agent Skills standard's skill directory, including OpenCode and DeepSeek Harness. Carries no model tier, no hook and no subagent — everything a host cannot express portably belongs to the **plugin**.
 _Avoid_: plugin (the two installs do not carry the same thing), bundle (that named the deleted per-host DSH artifact), skills repo.
 
 **Session root**:
