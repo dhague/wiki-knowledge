@@ -765,8 +765,13 @@ test("execute writes pages and commits", async () => {
   resolved.validate();
 
   const git = new Fake();
-  const sha = await resolved.execute(git);
+  const { sha, written } = await resolved.execute(git);
   assert.equal(sha.length, 40);
+  // Plan order, so a caller maps its own plan entries to the refs the tool chose.
+  assert.deepEqual(written, [
+    { op: "create", pageRef: "wiki/sources/doc.md" },
+    { op: "create", pageRef: "wiki/concepts/prepared-statements.md" },
+  ]);
 
   const v = new Vault(root);
   for (const ref of [
@@ -793,6 +798,28 @@ test("execute writes pages and commits", async () => {
     git.added.join(",").includes("raw/doc.md"),
     `raw artifact not staged: ${git.added}`,
   );
+});
+
+test("execute reports an update beside the creates, in plan order", async () => {
+  const root = newVault({
+    "raw/doc.md": "raw\n",
+    "wiki/concepts/old.md": "---\ntitle: Old\n---\nold\n",
+  });
+  const resolved = resolveOK(
+    decodePlanOK(`{"title":"T","source_date":"2026-03-01","raw":"raw/doc.md","pages":[
+      {"op":"create","title":"Doc","kind":"source","body":"stub\\n",
+       "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
+      {"op":"update","page_ref":"wiki/concepts/old.md","frontmatter":{"volatility":"stable"},
+       "edges":{"source":["wiki/sources/doc.md"]}}]}`),
+    root,
+  );
+  resolved.validate();
+
+  const { written } = await resolved.execute(new Fake());
+  assert.deepEqual(written, [
+    { op: "create", pageRef: "wiki/sources/doc.md" },
+    { op: "update", pageRef: "wiki/concepts/old.md" },
+  ]);
 });
 
 test("execute is idempotent", async () => {
@@ -1140,8 +1167,14 @@ test("execute consolidates: survivor sections, deleted losers, repointed links, 
   resolved.validate();
 
   const fake = new Fake();
-  const sha = await resolved.execute(fake);
+  const { sha, written } = await resolved.execute(fake);
   assert.equal(sha.length, 40);
+  // The absorbed pages are deleted, not written, so a follow-up plan sees only
+  // the survivor and the pages whose inbound links moved.
+  assert.deepEqual(written, [
+    { op: "update", pageRef: "wiki/concepts/caching.md" },
+    { op: "update", pageRef: "wiki/concepts/client.md" },
+  ]);
 
   const v = new Vault(root);
   const survivor = v.load("wiki/concepts/caching.md").text;
@@ -1279,7 +1312,7 @@ test("integration: a multi-page plan commits pages to a real git vault", async (
   const resolved = resolve(decodePlanOK(multiPagePlan), root);
   resolved.validate();
   const repo = new VaultGit(root);
-  const sha = await resolved.execute(repo);
+  const { sha } = await resolved.execute(repo);
 
   const log = await git.log({ fs, dir: root, depth: 1 });
   assert.equal(log[0].oid, sha);
@@ -1332,7 +1365,7 @@ test("integration: a synthesize action commits under its own verb", async () => 
     root,
   );
   resolved.validate();
-  const sha = await resolved.execute(new VaultGit(root));
+  const { sha } = await resolved.execute(new VaultGit(root));
 
   const log = await git.log({ fs, dir: root, depth: 1 });
   assert.equal(log[0].oid, sha);
@@ -1371,7 +1404,7 @@ test("integration: a Consolidation deletes its losers in one real commit", async
     root,
   );
   resolved.validate();
-  const sha = await resolved.execute(new VaultGit(root));
+  const { sha } = await resolved.execute(new VaultGit(root));
 
   const log = await git.log({ fs, dir: root, depth: 1 });
   assert.equal(log[0].oid, sha);

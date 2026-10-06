@@ -21,6 +21,7 @@ import {
   WatchStartedMarker,
 } from "./contract.js";
 import { PlanActions } from "./ingest.js";
+import { MaxSlugLength, slugify } from "./place.js";
 import { splitFrontmatter } from "./wikipage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -121,12 +122,15 @@ test("ingest --help declares its stdout order", () => {
   assert.equal(status, 0);
   // Commander wraps help prose, so compare with runs of whitespace collapsed.
   const help = stdout.replace(/\s+/g, " ");
-  const first = help.indexOf(IngestStdout[0]);
-  const second = help.indexOf(IngestStdout[1]);
-  assert.ok(
-    first >= 0 && second > first,
-    `ingest --help must declare "${IngestStdout[0]}" then "${IngestStdout[1]}"`,
-  );
+  let at = -1;
+  for (const line of IngestStdout) {
+    const next = help.indexOf(line, at + 1);
+    assert.ok(
+      next > at,
+      `ingest --help must declare ${IngestStdout.map((l) => `"${l}"`).join(" then ")}`,
+    );
+    at = next;
+  }
 });
 
 test("watch --help declares the startup lines its caller gates on", () => {
@@ -149,6 +153,85 @@ test("place: prints the vault-relative path from kind and title", () => {
   ]);
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "wiki/concepts/connection-pooling.md");
+});
+
+test("place: the ref it prints is the ref ingest writes for the same kind and title", async () => {
+  // A `create` carries no page_ref, so an edge naming one predicts a path. Only
+  // place.path may apply the slug cap, and a prediction it disagrees with fails
+  // ingest's target-resolves check — the failure #646 reported.
+  const title =
+    "Re: Status updates on ArgoCDaaS DNS + cert-manager migration (zero-downtime upgrade)";
+  assert.ok(
+    slugify(title, 0).length > MaxSlugLength,
+    "the title must exceed the slug cap, or this proves nothing",
+  );
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-place-"));
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  const signature = {
+    name: "test",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.init({ fs, dir: root });
+  fs.mkdirSync(path.join(root, "raw"), { recursive: true });
+  fs.writeFileSync(path.join(root, "raw", "doc.md"), "raw\n");
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "seed",
+    author: signature,
+    committer: signature,
+  });
+
+  const placed = runEnv(["place", "source", title], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(placed.status, 0, placed.stderr);
+  const stubRef = placed.stdout.trim();
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "DNS migration",
+      source_date: "2026-03-01",
+      raw: "raw/doc.md",
+      pages: [
+        {
+          op: "create",
+          kind: "source",
+          title,
+          body: "stub\n",
+          frontmatter: {
+            summary: "the artifact",
+            raw_source: true,
+            volatility: "stable",
+          },
+        },
+        {
+          op: "create",
+          kind: "concept",
+          title: "Zero-downtime migration",
+          body: "Facts.\n",
+          frontmatter: { summary: "no downtime", volatility: "stable" },
+          edges: { source: [stubRef] },
+        },
+      ],
+    }),
+  );
+  const ingested = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.equal(ingested.status, 0, ingested.stderr);
+  assert.ok(
+    fs.existsSync(path.join(root, ...stubRef.split("/"))),
+    `ingest wrote no page at the ref place printed: ${stubRef}`,
+  );
 });
 
 test("place: errors non-zero on an unknown kind", () => {
@@ -1042,7 +1125,7 @@ test("unknown command: commander itself errors non-zero", () => {
   assert.notEqual(status, 0);
 });
 
-test("ingest: executes a plan against a real git vault, printing the SHA then the cost summary", async () => {
+test("ingest: executes a plan against a real git vault, printing the SHA, the written refs then the cost summary", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
   );
@@ -1123,10 +1206,16 @@ test("ingest: executes a plan against a real git vault, printing the SHA then th
     },
   });
   assert.equal(status, 0, stderr);
-  // The commit SHA is always the first line of stdout; the cost summary follows.
+  // The commit SHA is always the first line of stdout; the written page refs
+  // follow in plan order, then the cost summary.
   const lines = stdout.split("\n");
   assert.match(lines[0], /^[0-9a-f]{40}$/);
-  assert.match(lines[1], /^Total tool calls: 1$/);
+  assert.deepEqual(lines.slice(1, 4), [
+    "create wiki/sources/doc.md",
+    "create wiki/concepts/prepared-statements.md",
+    "update wiki/concepts/a.md",
+  ]);
+  assert.match(lines[4], /^Total tool calls: 1$/);
   assert.ok(fs.existsSync(path.join(root, "wiki", "sources", "doc.md")));
   assert.ok(
     fs.existsSync(
@@ -1270,7 +1359,11 @@ test("ingest: a consolidate plan absorbs, deletes and commits once", async () =>
     env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.equal(status, 0, stderr);
-  assert.match(stdout.split("\n")[0], /^[0-9a-f]{40}$/);
+  const consolidateLines = stdout.split("\n");
+  assert.match(consolidateLines[0], /^[0-9a-f]{40}$/);
+  assert.deepEqual(consolidateLines.slice(1, 2), [
+    "update wiki/concepts/caching.md",
+  ]);
   assert.ok(
     !fs.existsSync(path.join(root, "wiki", "concepts", "caching-ttl.md")),
     "the absorbed page should be deleted",

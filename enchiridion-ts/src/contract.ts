@@ -5,8 +5,13 @@
  */
 
 /** `ingest`'s stdout, in the order it is written: the commit SHA first, then
- * the tool-call cost summary — the latter only when a hook log exists. */
-export const IngestStdout = ["commit SHA", "tool-call cost summary"] as const;
+ * the refs of the pages it wrote, then the tool-call cost summary — the last
+ * only when a hook log exists. */
+export const IngestStdout = [
+  "commit SHA",
+  "written page refs",
+  "tool-call cost summary",
+] as const;
 
 /** The fields of one `vault kinds` entry, in emitted order. */
 export const KindFields = [

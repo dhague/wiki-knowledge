@@ -615,6 +615,22 @@ test("the agent-facing plan shape names every accepted action", () => {
   );
 });
 
+test("the plan-authoring step resolves a referenced create's ref with place", () => {
+  // A `create` carries no page_ref, so an edge naming one predicts a path only
+  // [place.path] may compute — it truncates the slug at a word boundary.
+  const text = proseFor(INGEST_SKILL);
+  const start = text.indexOf("4. **Finish the plan.**");
+  const end = text.indexOf("5. **Run it.**");
+  assert.ok(
+    start >= 0 && end > start,
+    `${INGEST_SKILL} must carry its plan-authoring step before its run step`,
+  );
+  assert.ok(
+    text.slice(start, end).includes("place <kind>"),
+    `${INGEST_SKILL} step 4 must resolve a referenced create's ref with the place subcommand`,
+  );
+});
+
 /** The `{a, b, c}` spelling [KindFields] and [KindDefinitionFields] declare. */
 function braceList(fields: readonly string[]): string {
   return `{${fields.join(", ")}}`;
@@ -635,16 +651,19 @@ test("the prose that names vault kinds fields names exactly the declared set", (
 });
 
 test("the ingest command's declared stdout order is stated by its callers", () => {
-  // Every caller names the SHA first and the summary after, in that order, so
-  // reordering [IngestStdout] fails here rather than silently mis-citing it.
+  // Every caller names the lines in [IngestStdout]'s order, so a reorder fails
+  // here rather than silently mis-citing it.
   for (const label of [INGEST_SKILL, SCRIPTS_REF]) {
     const text = proseFor(label);
-    const first = text.indexOf(IngestStdout[0]);
-    const second = text.indexOf(IngestStdout[1]);
-    assert.ok(
-      first >= 0 && second > first,
-      `${label}: must state "${IngestStdout[0]}" then "${IngestStdout[1]}"`,
-    );
+    let at = -1;
+    for (const line of IngestStdout) {
+      const next = text.indexOf(line, at + 1);
+      assert.ok(
+        next > at,
+        `${label}: must state ${IngestStdout.map((l) => `"${l}"`).join(" then ")}`,
+      );
+      at = next;
+    }
   }
 });
 
