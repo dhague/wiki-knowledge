@@ -283,6 +283,132 @@ test("wiki-lint reads every cluster member before it recommends, and writes noth
   }
 });
 
+// ---------------------------------------------------------------------------
+// Implicit concepts: the bodies a proposal was judged from (ADR-0029)
+// ---------------------------------------------------------------------------
+
+/** The one fenced `json` block in [text] that is an implicit-concept evidence
+ * block — the only one carrying a `term`. */
+function evidenceBlock(text: string): Record<string, unknown> {
+  for (const match of text.matchAll(/```json\n([\s\S]*?)\n\s*```/g)) {
+    const parsed = JSON.parse(match[1]) as Record<string, unknown>;
+    if ("term" in parsed) return parsed;
+  }
+  assert.fail('must carry a ```json evidence block with a "term" key');
+}
+
+test("wiki-lint reads page bodies through read-pages before judging them", () => {
+  const text = readFileSync(
+    path.join(skillsDir, "wiki-lint", "SKILL.md"),
+    "utf8",
+  );
+  const start = text.indexOf("### 4. Run judgment checks");
+  const end = text.indexOf("\n### ", start + 1);
+  assert.ok(start >= 0 && end > start, "step 4 must be its own section");
+  const step = text.slice(start, end);
+  assert.match(
+    step,
+    /"\$RUNTIME"\s+"\$ENCHIRIDION"\s+read-pages/,
+    "step 4 must read page bodies with `read-pages`",
+  );
+  for (const needle of [
+    "--reset",
+    "cached: true",
+    "reference/implicit-concepts.md",
+  ]) {
+    assert.ok(
+      step.includes(needle),
+      `wiki-lint/SKILL.md step 4 must state "${needle}"`,
+    );
+  }
+  // The report carries the evidence, and the coverage the sweep actually had.
+  const report = text.slice(text.indexOf("### 7. Report"));
+  assert.ok(
+    report.includes("Evidence:"),
+    "the report template must carry the evidence line",
+  );
+  assert.ok(
+    /unread/.test(report),
+    "the report must state what a partial sweep left unread",
+  );
+  assert.ok(
+    proseFor(SCRIPTS_REF).includes("`enchiridion read-pages`"),
+    `${SCRIPTS_REF} must catalogue read-pages`,
+  );
+  assert.ok(
+    proseFor("wiki-plugin/agents/wiki-linter.md").includes("read-pages"),
+    "wiki-linter.md must brief the agent on the body reader",
+  );
+});
+
+test("the implicit-concepts contract states the eligible set, sweep and budget", () => {
+  const ref = proseFor(LINT_IMPLICIT);
+  for (const needle of [
+    "--exclude",
+    "--after",
+    "--limit",
+    "--max-bytes",
+    "--budget",
+    "--reset",
+    "HEAD",
+    "KIND.md",
+    "_index.md",
+    "at least three",
+  ]) {
+    assert.ok(ref.includes(needle), `${LINT_IMPLICIT} must state "${needle}"`);
+  }
+  // Recurrence is a fact about bodies; metadata may only nominate a term.
+  const notEvidence = ref.slice(ref.indexOf("## What is not evidence"));
+  assert.ok(
+    notEvidence.length > 0,
+    "the contract must fence what is not evidence",
+  );
+  assert.match(
+    notEvidence,
+    /may \*nominate\* a term/,
+    "the contract must keep nomination and support distinct",
+  );
+  for (const source of ["title", "summary", "tag", "snippet"]) {
+    assert.ok(
+      notEvidence.includes(source),
+      `${LINT_IMPLICIT} must name a ${source} among what is not evidence`,
+    );
+  }
+});
+
+test("an implicit-concept proposal cites at least three bodies the run read", () => {
+  const block = evidenceBlock(proseFor(LINT_IMPLICIT));
+  assert.deepEqual(
+    Object.keys(block).sort(),
+    ["head", "rationale", "supporting", "term"],
+    `${LINT_IMPLICIT}: the evidence block must carry exactly its declared fields`,
+  );
+  const supporting = block["supporting"] as Array<Record<string, unknown>>;
+  assert.ok(
+    Array.isArray(supporting) && supporting.length >= 3,
+    `${LINT_IMPLICIT}: the evidence must name at least three supporting pages`,
+  );
+  for (const page of supporting) {
+    assert.deepEqual(
+      Object.keys(page).sort(),
+      ["blob_oid", "page_ref"],
+      `${LINT_IMPLICIT}: each supporting page is a ref and the revision read`,
+    );
+  }
+  // The wording names the term and its pages, never an unread count.
+  const proposals = proseFor(LINT_PROPOSALS);
+  const shape = proposals.slice(proposals.indexOf("**Implicit concept**"));
+  assert.ok(
+    shape.length > 0,
+    `${LINT_PROPOSALS} must state the proposal shape`,
+  );
+  assert.match(shape, /recurs in/, "the proposal must name the recurring term");
+  assert.ok(
+    shape.includes("implicit-concepts.md"),
+    `${LINT_PROPOSALS} must point at the evidence block`,
+  );
+});
+
 test("wiki-lint's catalogue keys every CHECKS check by slug", () => {
   const text = readFileSync(
     path.join(skillsDir, "wiki-lint", "SKILL.md"),
@@ -342,6 +468,9 @@ const INGEST_SKILL = "wiki-plugin/skills/wiki-ingest/SKILL.md";
 const AUTHORING_REF = "wiki-plugin/skills/wiki-ingest/reference/authoring.md";
 const LINT_SKILL = "wiki-plugin/skills/wiki-lint/SKILL.md";
 const LINT_CHECKS = "wiki-plugin/skills/wiki-lint/reference/checks.md";
+const LINT_IMPLICIT =
+  "wiki-plugin/skills/wiki-lint/reference/implicit-concepts.md";
+const LINT_PROPOSALS = "wiki-plugin/skills/wiki-lint/reference/proposals.md";
 const ASK_SKILL = "wiki-plugin/skills/wiki-ask/SKILL.md";
 const SAVING_SYNTHESIS = "wiki-plugin/skills/wiki-ask/saving-synthesis.md";
 

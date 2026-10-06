@@ -763,6 +763,57 @@ test("page set: a page's own vault wins over cwd", () => {
   assert.match(fs.readFileSync(file, "utf8"), /"\[Foo\]\(foo\.md\)"/);
 });
 
+test("read-pages: prints eligible bodies from HEAD as one JSON document", async () => {
+  const root = makeVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nAlpha body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nBeta body.\n",
+    "wiki/notes.md": "---\ntitle: Misplaced\n---\nnot a page\n",
+  });
+  const signature = {
+    name: "t",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.init({ fs, dir: root });
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "seed",
+    author: signature,
+    committer: signature,
+  });
+
+  const { status, stdout, stderr } = runEnv(["read-pages", "--limit", "10"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const doc = JSON.parse(stdout);
+  assert.deepEqual(
+    doc.pages.map((p: { page_ref: string }) => p.page_ref),
+    ["wiki/concepts/a.md", "wiki/concepts/b.md"],
+  );
+  assert.equal(doc.pages[0].body, "Alpha body.\n");
+  assert.equal(doc.eligible, 2);
+  assert.equal(doc.next_after, null);
+});
+
+test("read-pages: a ref that is not a committed page errors, naming it", async () => {
+  const root = makeVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nAlpha body.\n",
+  });
+  await git.init({ fs, dir: root });
+
+  const { status, stderr } = runEnv(["read-pages", "wiki/concepts/a.md"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /wiki\/concepts\/a\.md is not a committed page at HEAD/);
+});
+
 test(
   "page merge: composes through a symlinked vault path",
   { skip: process.platform === "win32" },

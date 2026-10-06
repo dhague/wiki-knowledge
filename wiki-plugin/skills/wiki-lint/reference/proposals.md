@@ -43,9 +43,12 @@ directly under a valid kind-folder. Move it to `wiki/<correct-kind>/`?
 
 Command on yes: `"$RUNTIME" "$ENCHIRIDION" vault move <old-ref> <new-ref>`
 
-**Implicit concept** — "Term '<term>' appears in N pages without its own concept
-page. Create one?" Command on yes: invoke the `wiki-ingest` procedure with the
-term and the context pages as input.
+**Implicit concept** — "Term '<term>' recurs in
+`<ref-1>`, `<ref-2>`, `<ref-3>`[, …] without a concept page of its own. Create
+one?" Name the term and every supporting page ref from the evidence block
+([`implicit-concepts.md`](implicit-concepts.md)) — never a page whose body this
+run did not read. Command on yes: invoke the `wiki-ingest` procedure with the
+term and the supporting pages as input.
 
 **Edge retyping** — "In `<page>`, `related:` → `<target>` looks like
 `<specific-type>` because `<reason>`. Retype?"
