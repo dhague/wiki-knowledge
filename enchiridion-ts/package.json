@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "npx tsx --test src/*.test.ts",
+    "test:file": "npx tsx --test",
     "test:bun": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
