@@ -635,16 +635,19 @@ test("the prose that names vault kinds fields names exactly the declared set", (
 });
 
 test("the ingest command's declared stdout order is stated by its callers", () => {
-  // Every caller names the SHA first and the summary after, in that order, so
-  // reordering [IngestStdout] fails here rather than silently mis-citing it.
+  // Every caller names the lines in [IngestStdout]'s order, so a reorder fails
+  // here rather than silently mis-citing it.
   for (const label of [INGEST_SKILL, SCRIPTS_REF]) {
     const text = proseFor(label);
-    const first = text.indexOf(IngestStdout[0]);
-    const second = text.indexOf(IngestStdout[1]);
-    assert.ok(
-      first >= 0 && second > first,
-      `${label}: must state "${IngestStdout[0]}" then "${IngestStdout[1]}"`,
-    );
+    let at = -1;
+    for (const line of IngestStdout) {
+      const next = text.indexOf(line, at + 1);
+      assert.ok(
+        next > at,
+        `${label}: must state ${IngestStdout.map((l) => `"${l}"`).join(" then ")}`,
+      );
+      at = next;
+    }
   }
 });
 

@@ -1,6 +1,6 @@
 /**
- * ingest — the IngestPlan schema and its single-call executor. Plan in, commit
- * SHA out.
+ * ingest — the IngestPlan schema and its single-call executor. Plan in, the
+ * commit SHA and the refs it wrote out.
  *
  * A [Plan] is the decided outcome of an ingestion: which pages to create or
  * update, with what frontmatter and typed edges. Chunking and overlap
@@ -257,6 +257,19 @@ export interface AbsorbedPage {
 export interface ResolvedConsolidation {
   survivorRef: string;
   absorbed: AbsorbedPage[];
+}
+
+/** One page [Resolved.execute] wrote, with the op it wrote it under. */
+export interface WrittenPage {
+  op: string;
+  pageRef: string;
+}
+
+/** What [Resolved.execute] did. `written` is in plan order — for a
+ * Consolidation, its survivor then the pages whose inbound links it repointed. */
+export interface Execution {
+  sha: string;
+  written: WrittenPage[];
 }
 
 /** A plan with every derived fact computed exactly once. Constructible directly
@@ -657,9 +670,9 @@ export class Resolved {
     return problems;
   }
 
-  /** Write every resolved page and commit, returning the SHA. Assumes
-   * [Resolved.validate] passed; no rollback on failure. */
-  async execute(git: Git): Promise<string> {
+  /** Write every resolved page and commit. Assumes [Resolved.validate] passed;
+   * no rollback on failure. */
+  async execute(git: Git): Promise<Execution> {
     if (this.root === "") {
       throw new ErrPlan(
         "invalid plan: cannot execute a plan resolved without a vault root",
@@ -671,9 +684,8 @@ export class Resolved {
       return this.executeConsolidation(v, git);
     }
 
-    const created: string[] = [];
-    const updated: string[] = [];
     const superseded: Supersession[] = [];
+    const written: WrittenPage[] = [];
 
     for (const resolved of this.pages) {
       if (resolved.pageRef === "" || resolved.page === null) {
@@ -682,11 +694,8 @@ export class Resolved {
         );
       }
       v.write(resolved.pageRef, resolved.page);
-      if (resolved.plan.op !== OpCreate) {
-        updated.push(resolved.pageRef);
-        continue;
-      }
-      created.push(resolved.pageRef);
+      written.push({ op: resolved.plan.op, pageRef: resolved.pageRef });
+      if (resolved.plan.op !== OpCreate) continue;
       const targets = resolved.plan.edges.get("supersedes");
       if (targets.ok) {
         for (const target of targets.value ?? []) {
@@ -698,7 +707,15 @@ export class Resolved {
       }
     }
 
-    return commit(
+    // The manifest's own grouping, projected from the one record of what was written.
+    const created = written
+      .filter((page) => page.op === OpCreate)
+      .map((page) => page.pageRef);
+    const updated = written
+      .filter((page) => page.op !== OpCreate)
+      .map((page) => page.pageRef);
+
+    const sha = await commit(
       this.root,
       {
         title: this.plan.title,
@@ -711,6 +728,7 @@ export class Resolved {
       },
       git,
     );
+    return { sha, written };
   }
 
   /**
@@ -718,7 +736,7 @@ export class Resolved {
    * link, delete the absorbed pages, commit once (ADR-0021). The losslessness
    * check runs again here so a hand-built [Resolved] cannot route around
    * [validate]. */
-  private async executeConsolidation(v: Vault, git: Git): Promise<string> {
+  private async executeConsolidation(v: Vault, git: Git): Promise<Execution> {
     const c = this.consolidation;
     const survivor = this.pages.length === 1 ? this.pages[0] : null;
     if (
@@ -745,17 +763,22 @@ export class Resolved {
     // has always laid the absorbed content down first.
     const changed = v.consolidate(c.survivorRef, survivor.page, losers);
 
-    const created: string[] = [];
-    const updated: string[] = [];
-    for (const ref of changed) {
-      // The rest are pages whose inbound links were rewritten;
-      // [Vault.consolidate] drops the consolidated pages before it writes.
-      if (ref !== c.survivorRef) updated.push(ref);
-    }
-    if (survivor.plan.op === OpCreate) created.push(c.survivorRef);
-    else updated.unshift(c.survivorRef);
+    // The rest are pages whose inbound links were rewritten; the absorbed pages
+    // are deleted, never written.
+    const written: WrittenPage[] = [
+      { op: survivor.plan.op, pageRef: c.survivorRef },
+      ...changed
+        .filter((ref) => ref !== c.survivorRef)
+        .map((pageRef) => ({ op: OpUpdate, pageRef })),
+    ];
+    const created = written
+      .filter((page) => page.op === OpCreate)
+      .map((page) => page.pageRef);
+    const updated = written
+      .filter((page) => page.op !== OpCreate)
+      .map((page) => page.pageRef);
 
-    return commit(
+    const sha = await commit(
       this.root,
       {
         title: this.plan.title,
@@ -768,6 +791,7 @@ export class Resolved {
       },
       git,
     );
+    return { sha, written };
   }
 
   /** A human-readable summary of what [Resolved.execute] would write. */

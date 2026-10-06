@@ -82,7 +82,8 @@ function renderScanTable(result: {
 }
 
 /** Execute an IngestPlan from a plan file ('-' reads stdin): print the commit
- * SHA first, then the tool-call summary, and delete the plan file. */
+ * SHA, then one `<op> <pageRef>` line per page it wrote, then the tool-call
+ * summary, and delete the plan file. */
 async function runPlan(
   planPath: string,
   root: string,
@@ -107,8 +108,9 @@ async function runPlan(
     return;
   }
 
-  const sha = await resolved.execute(new VaultGit(root));
+  const { sha, written } = await resolved.execute(new VaultGit(root));
   console.log(sha);
+  for (const page of written) console.log(`${page.op} ${page.pageRef}`);
   printToolCallSummary();
   if (planPath !== "-") {
     fs.unlinkSync(planPath);
@@ -301,7 +303,7 @@ export function registerIngestCommands(program: Command): void {
   program
     .command("ingest")
     .description(
-      `Execute an IngestPlan against the resolved vault; a writing --plan run prints the ${IngestStdout[0]} on line 1, then the ${IngestStdout[1]} when a hook log exists`,
+      `Execute an IngestPlan against the resolved vault; a writing --plan run prints the ${IngestStdout[0]} on line 1, then the ${IngestStdout[1]}, then the ${IngestStdout[2]} when a hook log exists`,
     )
     .option(
       "--plan <file>",
