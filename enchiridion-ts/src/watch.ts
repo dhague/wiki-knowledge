@@ -225,7 +225,12 @@ export function readQueue(queuePath: string): string[] {
     data = fs.readFileSync(queuePath, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
+    throw new Error(
+      `could not read the watch queue at ${queuePath}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      { cause: err },
+    );
   }
   const out: string[] = [];
   for (const line of data.split("\n")) {

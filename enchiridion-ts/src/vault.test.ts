@@ -257,10 +257,15 @@ test("movePage fixes links and removes original", () => {
   );
 });
 
-test("movePage missing source errors", () => {
+test("movePage missing source errors, naming the convention", () => {
   const v = writeVault({ "wiki/concepts/a.md": "a\n" });
-  assert.throws(() =>
-    v.movePage("wiki/concepts/missing.md", "wiki/entities/missing.md"),
+  assert.throws(
+    () => v.movePage("wiki/concepts/missing.md", "wiki/entities/missing.md"),
+    (err: Error) =>
+      err.message.includes("wiki/concepts/missing.md not found under") &&
+      err.message.includes(
+        "refs are vault-relative (wiki/<kind-folder>/<file>.md); list pages with `enchiridion search <term>`",
+      ),
   );
 });
 

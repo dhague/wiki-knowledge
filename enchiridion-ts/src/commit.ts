@@ -132,7 +132,7 @@ export async function commit(
 ): Promise<string> {
   if (!(await git.isWorkTree())) {
     throw new Error(
-      `${root} is not a git work tree; the vault's history is not optional`,
+      `${root} is not a git work tree; the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $WIKI_ROOT at the vault`,
     );
   }
   await checkChainOfEvidence(root, m);

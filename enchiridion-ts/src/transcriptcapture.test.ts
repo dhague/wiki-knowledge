@@ -795,9 +795,11 @@ test("captureSession throws when no session-id variable is set", async () => {
     () => captureSession(tmp(), "", "", env({}), NOW),
     (err: unknown) =>
       err instanceof CaptureError &&
-      /Neither \$CLAUDE_CODE_SESSION_ID nor \$OPENCODE_SESSION_ID/.test(
-        err.message,
-      ),
+      err.message ===
+        "Neither $CLAUDE_CODE_SESSION_ID nor $OPENCODE_SESSION_ID is set in " +
+          "this environment, so there is no way to tell which session to save. " +
+          "Run this from Claude Code, or set $CLAUDE_CODE_SESSION_ID to the " +
+          "session to save.",
   );
 });
 

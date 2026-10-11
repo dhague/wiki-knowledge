@@ -1177,6 +1177,20 @@ test("unknown command: commander itself errors non-zero", () => {
   assert.notEqual(status, 0);
 });
 
+test("root: a stray leading option is named instead of answering with the usage block", () => {
+  const { status, stdout, stderr } = run(["--json", "search", "x"]);
+  assert.notEqual(status, 0);
+  assert.equal(stdout, "");
+  assert.match(stderr, /^unknown option '--json'/);
+  assert.match(stderr, /after the subcommand/);
+});
+
+test("root: --version is reported as an unknown option", () => {
+  const { status, stderr } = run(["--version"]);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /^unknown option '--version'/);
+});
+
 test("ingest: executes a plan against a real git vault, printing the SHA, the written refs then the cost summary", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
@@ -1748,7 +1762,10 @@ test("commit: a manifest failing chain-of-evidence is rejected non-zero", async 
     env: { WIKI_ROOT: root },
   });
   assert.notEqual(status, 0);
-  assert.match(stderr, /needs a sources\/ page/);
+  assert.match(
+    stderr,
+    /needs a wiki\/sources\/ page whose raw_source points at it/,
+  );
 });
 
 test("place: prints the vault-relative path for a valid kind and title", () => {
@@ -1815,7 +1832,55 @@ test("read-page: a missing ref errors non-zero", () => {
     env: { WIKI_ROOT: root },
   });
   assert.notEqual(status, 0);
-  assert.match(stderr, /page not found/);
+  assert.match(stderr, /page not found: wiki\/concepts\/missing\.md in /);
+  assert.match(stderr, /vault-relative/);
+});
+
+test("page: a missing file and a directory are named, not leaked as errno", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-pg-"));
+  const missing = path.join(root, "nope.md");
+
+  const absent = run(["page", "get", missing, "title"]);
+  assert.notEqual(absent.status, 0);
+  assert.equal(absent.stderr.trim(), `no such file: ${missing}`);
+
+  const directory = run(["page", "get", root, "title"]);
+  assert.notEqual(directory.status, 0);
+  assert.equal(
+    directory.stderr.trim(),
+    `${root} is a directory, not a markdown file`,
+  );
+});
+
+test("page commands name the file when its frontmatter will not parse", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-pg-"));
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "bad.md"),
+    "---\ntitle: [unclosed\n---\n\nbody\n",
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+
+  const get = runEnv(["page", "get", "wiki/concepts/bad.md", "title"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(get.status, 0);
+  assert.ok(
+    get.stderr.startsWith("wiki/concepts/bad.md: invalid frontmatter YAML: "),
+    get.stderr,
+  );
+  assert.match(get.stderr, /repair the block between the --- fences/);
+
+  const readJson = runEnv(["read-page", "wiki/concepts/bad.md", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(readJson.status, 0);
+  assert.match(
+    readJson.stderr,
+    /^wiki\/concepts\/bad\.md: invalid frontmatter YAML: /,
+  );
 });
 
 test("read-page: wrong argument count errors non-zero", () => {

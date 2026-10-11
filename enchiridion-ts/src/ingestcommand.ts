@@ -42,10 +42,20 @@ import {
 import { emitDocument, emitRows, fail } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 
-/** Read a plan or manifest from a path, or stdin when the path is "-". */
-function readInput(pathOrDash: string): string {
+/** Read a plan or manifest from a path, or stdin when the path is "-". `flag`
+ * names the option that asked for it in a read refusal. */
+function readInput(pathOrDash: string, flag: string): string {
   if (pathOrDash === "-") return fs.readFileSync(0, "utf8");
-  return fs.readFileSync(pathOrDash, "utf8");
+  try {
+    return fs.readFileSync(pathOrDash, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EISDIR") {
+      fail(`${flag} ${pathOrDash} is a directory, not a file`);
+    }
+    fail(
+      `${flag} ${pathOrDash} could not be read — pass the path of an existing JSON file, or '-' for stdin`,
+    );
+  }
 }
 
 /** "" and "raw/" both mean all of raw/; a "raw/" prefix is stripped, so
@@ -89,8 +99,8 @@ async function runPlan(
   root: string,
   dryRun: boolean,
 ): Promise<void> {
-  const text = readInput(planPath);
-  const plan: Plan = decodePlan(text);
+  const text = readInput(planPath, "--plan");
+  const plan: Plan = decodePlan(text, planPath === "-" ? "(stdin)" : planPath);
   const resolved = resolve(plan, root);
   resolved.validate();
   // A plan that pinned the snapshot it was assessed at must still find it: the
@@ -156,8 +166,8 @@ async function runDiscoverPlan(
   tagsContain: string,
   tagCount: string,
 ): Promise<void> {
-  const text = readInput(planPath);
-  const plan: Plan = decodePlan(text);
+  const text = readInput(planPath, "--plan");
+  const plan: Plan = decodePlan(text, planPath === "-" ? "(stdin)" : planPath);
   const results = await discoverCandidates(index, plan.pages, opts);
 
   const pages = results.map((r) => ({
@@ -284,7 +294,9 @@ export function registerIngestCommands(program: Command): void {
 
         const { acquired, stalePID } = acquireLock(paths.lock);
         if (!acquired) {
-          fail(`${WatchLockedMarker}${paths.lock})`);
+          fail(
+            `${WatchLockedMarker}${paths.lock}) — stop that watcher, or delete the lock file if its pid is gone`,
+          );
         }
         if (stalePID !== null) {
           console.log(
@@ -333,10 +345,14 @@ export function registerIngestCommands(program: Command): void {
         const planPath = opts.plan ?? "";
         const ignoreRels = opts.ignore ?? [];
         if (opts.dryRun && planPath === "") {
-          fail("--dry-run only applies to --plan; --ignore always writes");
+          fail(
+            "--dry-run only applies to --plan; --ignore always writes. Run `enchiridion ingest --plan <file> --dry-run`",
+          );
         }
         if ((planPath === "") === (ignoreRels.length === 0)) {
-          fail("exactly one of --plan or --ignore is required");
+          fail(
+            "exactly one of --plan or --ignore is required. Run `enchiridion ingest --plan <file>` to execute a plan, or `enchiridion ingest --ignore <raw-file>` to withdraw one",
+          );
         }
         const root = resolveRoot();
         if (ignoreRels.length > 0) {
@@ -364,8 +380,15 @@ export function registerIngestCommands(program: Command): void {
         fail("required option '--manifest <file>' not specified");
       }
       const root = resolveRoot();
-      const text = readInput(opts.manifest);
-      const manifest = JSON.parse(text) as Manifest;
+      const text = readInput(opts.manifest, "--manifest");
+      let manifest: Manifest;
+      try {
+        manifest = JSON.parse(text) as Manifest;
+      } catch (err) {
+        fail(
+          `manifest JSON in ${opts.manifest} is not valid JSON: ${(err as Error).message}`,
+        );
+      }
       const sha = await commitManifest(root, manifest, new VaultGit(root));
       console.log(sha);
     });

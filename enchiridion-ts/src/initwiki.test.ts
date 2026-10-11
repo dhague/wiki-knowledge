@@ -103,7 +103,10 @@ test("init dedicated writes no settings", async () => {
 test("init refuses to run twice", async () => {
   const root = tmpVault();
   await init(root, ModeDedicated, "");
-  await assert.rejects(init(root, ModeDedicated, ""));
+  await assert.rejects(
+    init(root, ModeDedicated, ""),
+    /already looks like a vault .* — ingest into it, or scaffold a different path/,
+  );
 });
 
 test("init refuses a vault carrying a wiki-root sentinel and git", async () => {

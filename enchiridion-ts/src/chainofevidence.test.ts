@@ -26,7 +26,10 @@ test("missing stub is reported", () => {
   };
   const errs = check(staged, rawRef);
   assert.equal(errs.length, 1);
-  assert.match(errs[0], /needs a sources\/ page/);
+  assert.equal(
+    errs[0],
+    'raw/doc.md needs a wiki/sources/ page whose raw_source points at it — add that stub to the plan (op:"create", kind:"source"), even a thin one',
+  );
 });
 
 test("a sources/ page pointing elsewhere does not count as the stub", () => {
@@ -37,7 +40,7 @@ test("a sources/ page pointing elsewhere does not count as the stub", () => {
   };
   const errs = check(staged, rawRef);
   assert.equal(errs.length, 1);
-  assert.match(errs[0], /needs a sources\/ page/);
+  assert.match(errs[0], /needs a wiki\/sources\/ page/);
 });
 
 test("a page without a source edge is reported", () => {

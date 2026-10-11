@@ -158,7 +158,29 @@ test("commit throws when there is nothing to commit (strict)", async () => {
   const root = tmpRepo();
   const repo = new VaultGit(root);
   await repo.init();
-  await assert.rejects(() => repo.commit("empty"));
+  await assert.rejects(
+    () => repo.commit("empty"),
+    (err: Error) =>
+      err.message ===
+      `git commit: nothing to commit in ${root} — no path differs from HEAD`,
+  );
+});
+
+test("commit names the vault when the commit itself fails", async () => {
+  const root = tmpRepo();
+  const repo = new VaultGit(root);
+  await repo.init();
+  writeFile(root, "wiki/concepts/a.md", "one\n");
+  await repo.add(["wiki/concepts/a.md"]);
+  // A git dir the commit cannot write objects into: the failure must still say
+  // which vault.
+  fs.rmSync(path.join(root, ".git", "objects"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".git", "objects"), "not a directory\n");
+
+  await assert.rejects(
+    () => repo.commit("first"),
+    (err: Error) => err.message.startsWith(`git commit in ${root}: `),
+  );
 });
 
 test("commit falls back to OS-user@hostname without error", async () => {

@@ -122,13 +122,12 @@ test("commit stages and returns a SHA", async () => {
 test("commit requires a work tree", async () => {
   const git = new Fake();
   git.notAWorkTree = true;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-commit-"));
   await assert.rejects(
-    commit(
-      fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-commit-")),
-      { title: "T" },
-      git,
-    ),
-    /is not a git work tree/,
+    commit(root, { title: "T" }, git),
+    (err: unknown) =>
+      (err as Error).message ===
+      `${root} is not a git work tree; the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $WIKI_ROOT at the vault`,
   );
   assert.equal(git.messages.length, 0);
 });

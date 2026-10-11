@@ -168,7 +168,9 @@ export class VaultGit implements Git {
       // statusMatrix mis-reports staged deletions (an index removal reports
       // STAGE == HEAD), so compare the HEAD tree to the index at blob level.
       if (!(await this.hasStagedChanges())) {
-        throw new VaultGitError("git commit: nothing to commit");
+        throw new VaultGitError(
+          `git commit: nothing to commit in ${this.root} — no path differs from HEAD`,
+        );
       }
       return await git.commit({
         fs,
@@ -179,7 +181,7 @@ export class VaultGit implements Git {
       });
     } catch (err) {
       if (err instanceof VaultGitError) throw err;
-      throw new VaultGitError(`git commit: ${messageOf(err)}`);
+      throw new VaultGitError(`git commit in ${this.root}: ${messageOf(err)}`);
     }
   }
 

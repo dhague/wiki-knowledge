@@ -64,6 +64,28 @@ export function buildProgram(): Command {
   return program;
 }
 
+/** The root command owns no option but help, and allows unknown options so a
+ * host-injected flag cannot break invocation. Commander then answers a stray
+ * leading option by printing the whole usage with exit 1, naming nothing, so
+ * the stray token is refused here instead. */
+function rootOptionRefusal(argv: string[]): string | null {
+  const first = argv[0];
+  if (
+    first === undefined ||
+    first === "-" ||
+    first === "--" ||
+    first === "-h" ||
+    first === "--help" ||
+    !first.startsWith("-")
+  ) {
+    return null;
+  }
+  return (
+    `unknown option '${first}' — options come after the subcommand; ` +
+    "run `enchiridion --help` for the command list, or `enchiridion <command> --help`"
+  );
+}
+
 /** Detect a direct CLI invocation across both execution shapes: the esbuild
  * CJS bundle (require.main === module) and the tsx/ESM source path
  * (import.meta.url vs argv[1]). */
@@ -127,6 +149,12 @@ export async function run(argv: string[]): Promise<RunResult> {
       return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 0 };
     }
 
+    const stray = rootOptionRefusal(argv);
+    if (stray !== null) {
+      stderr.push(stray + "\n");
+      return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 1 };
+    }
+
     try {
       await program.parseAsync([process.execPath, "enchiridion", ...argv]);
     } catch (err) {
@@ -158,8 +186,15 @@ export async function run(argv: string[]): Promise<RunResult> {
 }
 
 function main(): void {
+  const argv = process.argv.slice(2);
+  const stray = rootOptionRefusal(argv);
+  if (stray !== null) {
+    process.stderr.write(stray + "\n");
+    process.exitCode = 1;
+    return;
+  }
   const program = buildProgram();
-  if (process.argv.slice(2).length === 0) {
+  if (argv.length === 0) {
     // Commander would treat bare invocation as a missing subcommand (help to
     // stderr, exit 1); match the established usage-to-stdout, exit-0 behaviour
     // instead.

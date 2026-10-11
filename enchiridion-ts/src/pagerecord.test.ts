@@ -129,6 +129,20 @@ test("newPageRecord rejects an edge that is not a markdown link", () => {
   );
 });
 
+test("newPageRecord names the page when its frontmatter is not valid YAML", () => {
+  assert.throws(
+    () =>
+      newPageRecord(
+        "wiki/concepts/broken.md",
+        "---\ntitle: [unclosed\n---\nbody\n",
+      ),
+    (err: Error) =>
+      err.message.startsWith(
+        '"wiki/concepts/broken.md": frontmatter is not valid YAML — ',
+      ) && err.message.endsWith("; repair that page's block"),
+  );
+});
+
 test("loadRecords inverts supersedes", () => {
   const pages: Record<string, string> = {
     "wiki/concepts/new.md":

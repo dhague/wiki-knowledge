@@ -22,6 +22,14 @@ test("parse rejects richer patterns", () => {
   }
 });
 
+test("parse names the policy file in the refusal", () => {
+  assert.throws(
+    () => parse("sub/dir.md", "/vault/raw/emails/.ingestignore"),
+    (err: unknown) =>
+      (err as Error).message.endsWith(" in /vault/raw/emails/.ingestignore"),
+  );
+});
+
 test("append creates the file", () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ii-"));
   append(folder, "doc.md", "ingested before back-pointers were mandatory");
@@ -50,8 +58,23 @@ test("append refuses a missing folder", () => {
     fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ii-")),
     "emials",
   );
-  assert.throws(() => append(folder, "doc.eml", ""));
+  assert.throws(
+    () => append(folder, "doc.eml", ""),
+    (err: unknown) =>
+      (err as Error).message ===
+      `no folder ${folder} — --ignore takes a vault-relative path to a raw/ file that exists`,
+  );
   assert.equal(fs.existsSync(folder), false);
+});
+
+test("append re-parsing a broken policy file names it", () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ii-"));
+  fs.writeFileSync(path.join(folder, Filename), "sub/dir.md\n");
+  assert.throws(
+    () => append(folder, "doc.md", ""),
+    (err: unknown) =>
+      (err as Error).message.endsWith(` in ${path.join(folder, Filename)}`),
+  );
 });
 
 function readIgnore(folder: string): string {

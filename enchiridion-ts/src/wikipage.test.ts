@@ -633,9 +633,12 @@ describe("rewriteFrontmatter", () => {
     assert.equal(out, "---\n# c\ntitle: A\nsummary: t\n---\nbody\n");
   });
 
-  it("throws on frontmatter the parser refuses", () => {
-    assert.throws(() =>
-      rewriteFrontmatter("---\ntitle: [unclosed\n---\nbody\n", () => {}),
+  it("throws on frontmatter the parser refuses, naming the repair", () => {
+    assert.throws(
+      () => rewriteFrontmatter("---\ntitle: [unclosed\n---\nbody\n", () => {}),
+      (err: Error) =>
+        err.message.startsWith("invalid frontmatter YAML: ") &&
+        err.message.endsWith("— repair the block between the --- fences"),
     );
   });
 });
@@ -666,9 +669,21 @@ describe("Page.get", () => {
     assert.equal(new Page("---\ntitle: A\n---\n").get("summary").ok, false);
   });
 
-  it("errors on invalid YAML", () => {
-    assert.throws(() =>
-      new Page("---\ntitle: [unclosed\n---\nbody\n").get("title"),
+  it("errors on invalid YAML, naming the repair", () => {
+    assert.throws(
+      () => new Page("---\ntitle: [unclosed\n---\nbody\n").get("title"),
+      (err: Error) =>
+        err.message.startsWith("invalid frontmatter YAML: ") &&
+        err.message.endsWith("— repair the block between the --- fences"),
+    );
+  });
+
+  it("errors on a block that is not a mapping", () => {
+    assert.throws(
+      () => new Page("---\n- a\n- b\n---\nbody\n").get("title"),
+      (err: Error) =>
+        err.message ===
+        "frontmatter is not a YAML mapping — the block between the --- fences must be YAML key: value pairs",
     );
   });
 });

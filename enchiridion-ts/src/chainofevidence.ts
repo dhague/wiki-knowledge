@@ -38,8 +38,7 @@ export function check(staged: Record<string, Page>, raw: string): string[] {
 
   if (stubRef === "") {
     return [
-      `${raw} needs a ${KindFolders["source"]}/ page whose raw_source points at it ` +
-        `— every ingested raw file gets a stand-in, even a thin stub`,
+      `${raw} needs a wiki/${KindFolders["source"]}/ page whose raw_source points at it — add that stub to the plan (op:"create", kind:"source"), even a thin one`,
     ];
   }
 
