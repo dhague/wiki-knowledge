@@ -11,9 +11,11 @@ import {
   type SkippedPage,
 } from "./searchindex.js";
 import { Volatilities } from "./pagerecord.js";
-import { resolveRoot } from "./vault.js";
+import { Kinds } from "./place.js";
+import { Vault, resolveRoot } from "./vault.js";
 import { emitDocument, emitRows, fail } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
+import { CANONICAL_DATE_FORMAT, canonicalSourceDate } from "./sourcedate.js";
 
 /** Render "" as "-". */
 function orDash(s: string): string {
@@ -141,6 +143,49 @@ function renderReindex(
   );
 }
 
+/** A digits-only positive integer the index can bind; Number() alone accepts
+ * `1e21` and `0x10`, which the index rejects with a leaked datatype mismatch. */
+function positiveInteger(flag: string): (value: string) => number {
+  return (value: string) => {
+    const n = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(n) || n < 1) {
+      fail(`${flag} must be a positive integer, got "${value}"`);
+    }
+    return n;
+  };
+}
+
+/** A date the index's YYYY-MM-DD columns can hold exactly, or a refusal naming
+ * the flag and the value — a timestamp or a loose spelling compares wrongly. */
+function calendarDate(flag: string): (value: string) => string {
+  return (value: string) => {
+    let canonical: string | null | undefined = null;
+    try {
+      canonical = canonicalSourceDate(value);
+    } catch {
+      // Refused below, under this flag's name rather than source_date's.
+    }
+    if (canonical !== value) {
+      fail(
+        `${flag} must be a calendar date (${CANONICAL_DATE_FORMAT}), got "${value}"`,
+      );
+    }
+    return value;
+  };
+}
+
+/** A comma-separated volatility list, refusing any value outside the
+ * vocabulary — the index would otherwise match nothing, silently. */
+function volatilityList(value: string): string[] {
+  const values = splitCommaList(value);
+  for (const v of values) {
+    if (!(Volatilities as readonly string[]).includes(v)) {
+      fail(`--volatility must be one of ${Volatilities.join("|")}, got "${v}"`);
+    }
+  }
+  return values;
+}
+
 export function registerSearchCommand(program: Command): void {
   // search [text] — query the lexical index, or manage it with --reindex /
   // --status. --json emits one Hit per line, else the compact table.
@@ -161,18 +206,28 @@ export function registerSearchCommand(program: Command): void {
     )
     .option(
       "--kind <kinds>",
-      "filter by kind — a canonical kind or a folder's declared kind; comma-separated for multiple",
+      "filter by kind — a canonical kind or a discovered custom kind-folder; comma-separated for multiple",
       splitCommaList,
       [] as string[],
     )
-    .option("--since <date>", "ISO date; inclusive lower bound on date_field")
-    .option("--until <date>", "ISO date; inclusive upper bound on date_field")
+    .option(
+      "--since <date>",
+      `calendar date (${CANONICAL_DATE_FORMAT}); inclusive lower bound on date_field`,
+      calendarDate("--since"),
+    )
+    .option(
+      "--until <date>",
+      `calendar date (${CANONICAL_DATE_FORMAT}); inclusive upper bound on date_field`,
+      calendarDate("--until"),
+    )
     .option(
       "--date-field <field>",
       "which date the --since/--until bounds apply to (source_date|git_date)",
       (value: string) => {
         if (value !== "source_date" && value !== "git_date") {
-          fail(`must be 'source_date' or 'git_date', got "${value}"`);
+          fail(
+            `--date-field must be 'source_date' or 'git_date', got "${value}"`,
+          );
         }
         return value;
       },
@@ -181,10 +236,15 @@ export function registerSearchCommand(program: Command): void {
     .option(
       "--volatility <vols>",
       `filter by volatility (${Volatilities.join("|")}); comma-separated for multiple`,
-      splitCommaList,
+      volatilityList,
       [] as string[],
     )
-    .option("--limit <n>", "max hits", (v: string) => Number(v), 20)
+    .option(
+      "--limit <n>",
+      "max hits (a positive integer)",
+      positiveInteger("--limit"),
+      20,
+    )
     .option(
       "--include-superseded",
       "include pages that have been superseded (default: filter them out)",
@@ -221,6 +281,22 @@ export function registerSearchCommand(program: Command): void {
         },
       ) => {
         const root = resolveRoot();
+        if (opts.kind.length > 0) {
+          // The accepted set is canonical kinds plus the vault's discovered
+          // custom kinds, which only the vault can supply — so it validates
+          // here, and only when a kind filter was actually asked for.
+          const knownKinds = [
+            ...Kinds,
+            ...Object.keys(new Vault(root).discoveredKinds()),
+          ];
+          for (const kind of opts.kind) {
+            if (!knownKinds.includes(kind)) {
+              fail(
+                `--kind must be one of ${knownKinds.join(", ")}, got "${kind}"`,
+              );
+            }
+          }
+        }
         const index = await Index.open(root);
         try {
           if (opts.status) {

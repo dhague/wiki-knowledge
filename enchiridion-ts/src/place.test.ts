@@ -82,6 +82,18 @@ test("path rejects an unknown kind", () => {
   assert.throws(() => path("nonsense", "X"), /unknown kind "nonsense"/);
 });
 
+test("path rejects a title whose slug is empty", () => {
+  // 日本語のページ has letters, but none the ASCII-only slug keeps.
+  for (const title of ["", "   ", "!!!", "---", "日本語のページ"]) {
+    assert.throws(
+      () => path("concept", title),
+      (err: Error) =>
+        err.message ===
+        `title ${JSON.stringify(title)} slugifies to nothing — a page filename is built from a-z and 0-9, so the title needs at least one of those`,
+    );
+  }
+});
+
 test("path's unknown-kind error names the custom kinds it was handed", () => {
   assert.throws(
     () => path("nonsense", "X", { person: "people", research: "research" }),

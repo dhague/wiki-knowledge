@@ -337,6 +337,16 @@ test("place: a legacy singular folder does not repeat a canonical kind in the er
   );
 });
 
+test("place: refuses a title whose slug is empty", () => {
+  // 日本語のページ has letters, but none the ASCII-only slug keeps.
+  for (const title of ["", "!!!", "日本語のページ"]) {
+    const { status, stderr } = run(["place", "concept", title]);
+    assert.equal(status, 1, stderr);
+    assert.ok(stderr.includes(`title ${JSON.stringify(title)}`), stderr);
+    assert.match(stderr, /a page filename is built from a-z and 0-9/);
+  }
+});
+
 test("vault (bare): prints the resolved root", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   fs.mkdirSync(path.join(root, "wiki"));
@@ -402,6 +412,25 @@ test("vault move: missing source errors non-zero", () => {
     { cwd: root, env: { WIKI_ROOT: root } },
   );
   assert.notEqual(status, 0);
+});
+
+/** Assert `vault` refuses `args`, naming `word` and the real subcommands. */
+function assertVaultRefusal(args: string[], word: string): void {
+  const { status, stdout, stderr } = run(args);
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes(`"${word}"`), stderr);
+  for (const real of ["root", "move", "kinds"]) {
+    assert.ok(stderr.includes(real), stderr);
+  }
+}
+
+test("vault: refuses a typo'd subcommand, naming the word and the real ones", () => {
+  assertVaultRefusal(["vault", "mve", "a", "b"], "mve");
+});
+
+test("vault: refuses an unknown word, naming it and the real ones", () => {
+  assertVaultRefusal(["vault", "nonsense"], "nonsense");
 });
 
 test("vault root: falls back to cwd with no marker or WIKI_ROOT", () => {
@@ -1636,6 +1665,58 @@ test("ingest: --dry-run prints the describe, writes nothing", async () => {
   assert.ok(!fs.existsSync(path.join(root, "wiki", "concepts", "a.md")));
 });
 
+test("ingest: --dry-run refuses a create title that cannot name a file", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  await git.init({ fs, dir: root });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "initial",
+    author: { name: "test", email: "t@e.com", timestamp: 1, timezoneOffset: 0 },
+    committer: {
+      name: "test",
+      email: "t@e.com",
+      timestamp: 1,
+      timezoneOffset: 0,
+    },
+  });
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "T",
+      pages: [
+        {
+          op: "create",
+          title: "!!!",
+          kind: "concept",
+          body: "b\n",
+          frontmatter: { volatility: "stable" },
+        },
+      ],
+    }),
+  );
+
+  const { status, stdout, stderr } = runEnv(
+    ["ingest", "--plan", planPath, "--dry-run"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(
+    status,
+    1,
+    "a plan the executor would refuse must not dry-run green",
+  );
+  assert.match(
+    stderr,
+    /pages\[0\]\.title "!!!" slugifies to nothing — a page filename is built from a-z and 0-9/,
+  );
+  assert.equal(stdout.trim(), "", "a refused plan describes nothing");
+});
+
 test("ingest: --plan and --ignore are mutually exclusive, one required", () => {
   const { status, stderr } = run(["ingest"]);
   assert.notEqual(status, 0);
@@ -1961,6 +2042,20 @@ test("superseded-by: a current page prints (current)", () => {
 test("superseded-by: no args errors non-zero", () => {
   const { status } = run(["superseded-by"]);
   assert.notEqual(status, 0);
+});
+
+test("superseded-by: refuses a ref that names no page, naming it", () => {
+  const root = makeVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nsummary: s\ntags: []\nsource_date: 2026-01-01\nvolatility: stable\n---\n\n",
+  });
+  const { status, stdout, stderr } = runEnv(
+    ["superseded-by", "wiki/concepts/a.md", "wiki/concepts/missing.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes("wiki/concepts/missing.md"), stderr);
 });
 
 test("ingest-scan: lists eligible raw files", () => {
@@ -2888,6 +2983,100 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
 // search — JSON Lines for hits, one document for the index's own state
 // ---------------------------------------------------------------------------
 
+test("search --limit: refuses a value that is not a positive integer, naming it", async () => {
+  // 1e21, 0x10 and " 5" all satisfy Number(), and 1e21 then fails the index's
+  // integer binding rather than this flag.
+  for (const value of ["abc", "0", "-1", "2.5", "1e21", "0x10", " 5"]) {
+    const { status, stdout, stderr } = run(["search", "x", "--limit", value]);
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, "");
+    assert.ok(stderr.includes(`"${value}"`), stderr);
+  }
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    ["search", "connection", "--limit", "5", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+});
+
+test("search --date-field: names its own flag in the refusal", () => {
+  const { status, stderr } = run(["search", "x", "--date-field", "bogus"]);
+  assert.equal(status, 1, stderr);
+  assert.ok(stderr.includes("--date-field"), stderr);
+  assert.ok(stderr.includes('"bogus"'), stderr);
+});
+
+test("search --volatility: refuses an unknown value, naming it and the vocabulary", () => {
+  for (const value of ["bogus", "stable,bogus"]) {
+    const { status, stdout, stderr } = run([
+      "search",
+      "x",
+      "--volatility",
+      value,
+    ]);
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, "");
+    assert.ok(stderr.includes('"bogus"'), stderr);
+    for (const known of ["stable", "evolving", "volatile"]) {
+      assert.ok(stderr.includes(known), stderr);
+    }
+  }
+});
+
+test("search --kind: refuses an unknown kind, naming it and the accepted set", () => {
+  const root = makeVault({
+    "wiki/concepts/.keep": "",
+    "wiki/research/KIND.md": "---\nkind: research\n---\n",
+  });
+  for (const value of ["bogus", "concept,bogus"]) {
+    const { status, stdout, stderr } = runEnv(
+      ["search", "x", "--kind", value],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, "");
+    assert.ok(stderr.includes('"bogus"'), stderr);
+    for (const known of [
+      "concept",
+      "entity",
+      "source",
+      "synthesis",
+      "research",
+    ]) {
+      assert.ok(stderr.includes(known), stderr);
+    }
+  }
+});
+
+test("search --since/--until: refuses a value that is not a calendar date, naming it", async () => {
+  for (const flag of ["--since", "--until"]) {
+    // The index columns hold canonical YYYY-MM-DD, so a timestamp or a loose
+    // spelling would compare as text and silently drop rows.
+    for (const value of [
+      "bogus",
+      "2024-13-45",
+      "2024-1-1",
+      "2026-01-01T00:00:00Z",
+    ]) {
+      const { status, stdout, stderr } = run(["search", "x", flag, value]);
+      assert.equal(status, 1, stderr);
+      assert.equal(stdout, "");
+      assert.ok(stderr.includes(flag), stderr);
+      assert.ok(stderr.includes(`"${value}"`), stderr);
+    }
+  }
+  // A real date still reaches the index — no hits is silence, not a refusal.
+  const root = await buildCommittedVault();
+  for (const flag of ["--since", "--until"]) {
+    const { status, stderr } = runEnv(
+      ["search", "connection", flag, "2026-07-20", "--json"],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(status, 0, stderr);
+  }
+});
+
 test("search --json: one hit object per line", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
@@ -3196,6 +3385,35 @@ test("vault kinds --help names every field the command emits", () => {
 // ---------------------------------------------------------------------------
 // export: --candidates, and the wiki title
 // ---------------------------------------------------------------------------
+
+test("export: refuses a stray positional argument, naming it", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["export", "nonsense", "--candidates"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes('"nonsense"'), stderr);
+});
+
+test("export --starters: a ref after the variadic option is not a stray operand", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    [
+      "export",
+      "--starters",
+      "wiki/concepts/connection-pooling.md=Read this first",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
+  assert.ok(
+    idx.includes("Read this first"),
+    "the supplied starter reached the front page",
+  );
+});
 
 test("export --candidates: the ranked list is one compact JSON document", async () => {
   const root = await buildCommittedVault();
