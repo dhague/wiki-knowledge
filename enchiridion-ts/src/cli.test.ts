@@ -1877,7 +1877,7 @@ test("commit: a manifest failing chain-of-evidence is rejected non-zero", async 
   assert.notEqual(status, 0);
   assert.match(
     stderr,
-    /needs a wiki\/sources\/ stub among this plan's own pages whose raw_source points at it/,
+    /needs a wiki\/sources\/ stub among the pages this plan writes whose raw_source points at it/,
   );
 });
 
@@ -2381,6 +2381,29 @@ test("check: neither a name nor --all errors non-zero", () => {
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /--all/);
+});
+
+test("check self-referential-edge: a self-edge on disk is reported", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-selfedge-"));
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "foo.md"),
+    '---\ntitle: Foo\nsummary: s\nsource_date: 2026-01-01\nvolatility: stable\nrelated:\n  - "[Foo](../concepts/./foo.md)"\n---\nbody\n',
+  );
+
+  const { status, stdout, stderr } = runEnv(
+    ["check", "self-referential-edge"],
+    {
+      cwd: root,
+      env: { WIKI_ROOT: root },
+    },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    stdout.trim(),
+    "wiki/concepts/foo.md: related points at wiki/concepts/foo.md itself",
+  );
 });
 
 test("check --all: the text form prefixes each finding with its check", async () => {

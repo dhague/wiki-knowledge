@@ -28,29 +28,32 @@ test("missing stub is reported, with the whole contract", () => {
   assert.equal(errs.length, 1);
   assert.equal(
     errs[0],
-    'raw/doc.md needs a wiki/sources/ stub among this plan\'s own pages whose raw_source points at it (op:"create", kind:"source", even a thin one), and every other page in the plan — updates included — needs a source edge to that stub',
+    'raw/doc.md needs a wiki/sources/ stub among the pages this plan writes whose raw_source points at it — add one (op:"create", kind:"source", even a thin one); every other page in the plan — updates included — needs a source edge to that stub',
   );
 });
 
-test("the missing-stub message names an on-disk stand-in when the vault has one", () => {
+test("an on-disk stand-in is named, with the remedy that reaches it", () => {
   const staged: Record<string, Page> = {
     "wiki/concepts/a.md": page("title: A\n"),
   };
   const errs = check(staged, rawRef, () => "wiki/sources/on-disk.md");
   assert.equal(errs.length, 1);
-  assert.match(
+  // `create` would be refused as an existing target, so the remedy must be the
+  // one that puts the stub this plan already has to work.
+  assert.equal(
     errs[0],
-    /wiki\/sources\/on-disk\.md on disk already stands in for it, but the stub must be one of this plan's pages/,
+    'raw/doc.md needs a wiki/sources/ stub among the pages this plan writes whose raw_source points at it — wiki/sources/on-disk.md on disk already stands in for it, so bring it into the plan (op:"update"); every other page in the plan — updates included — needs a source edge to that stub',
   );
 });
 
-test("the missing-stub message claims no stand-in when the vault has none", () => {
+test("the missing-stub message offers create when the vault has no stand-in", () => {
   const staged: Record<string, Page> = {
     "wiki/concepts/a.md": page("title: A\n"),
   };
   const errs = check(staged, rawRef, () => "");
   assert.equal(errs.length, 1);
-  assert.ok(!errs[0].includes("on disk already stands in"), errs[0]);
+  assert.match(errs[0], /\(op:"create", kind:"source", even a thin one\)/);
+  assert.ok(!errs[0].includes("already stands in"), errs[0]);
 });
 
 test("the stand-in is not looked up when the plan carries its own stub", () => {
@@ -67,21 +70,16 @@ test("the stand-in is not looked up when the plan carries its own stub", () => {
 });
 
 test("the stub's position in the plan changes nothing", () => {
-  const stub = page('raw_source: "[doc.md](../../raw/doc.md)"\n');
   const first: Record<string, Page> = {
-    "wiki/sources/doc.md": stub,
+    "wiki/sources/doc.md": page('raw_source: "[doc.md](../../raw/doc.md)"\n'),
     "wiki/concepts/a.md": page('source:\n  - "[doc.md](../sources/doc.md)"\n'),
   };
   const last: Record<string, Page> = {
     "wiki/concepts/a.md": page('source:\n  - "[doc.md](../sources/doc.md)"\n'),
-    "wiki/sources/doc.md": stub,
+    "wiki/sources/doc.md": page('raw_source: "[doc.md](../../raw/doc.md)"\n'),
   };
   assert.deepEqual(check(first, rawRef), []);
   assert.deepEqual(check(last, rawRef), []);
-  assert.equal(
-    last["wiki/sources/doc.md"].text,
-    first["wiki/sources/doc.md"].text,
-  );
 });
 
 test("every page missing the source edge is reported in one pass", () => {

@@ -102,13 +102,12 @@ Field notes:
 
 ### On the way back out
 
-**A write re-emits the page's whole frontmatter block** — `ingest`, `page set` and `page merge` alike. Byte-identical round-tripping is deliberately not the contract ([ADR-0012](docs/adr/0012-frontmatter-round-trip-relaxed.md)), so a page an edit touches only in one key can come back with another key respelled, and that is not a change to its meaning:
+**A write re-emits the page's whole frontmatter block** — `ingest`, `page set` and `page merge` alike — so a page touched only in one key can come back with another respelled. Byte-identical round-tripping is deliberately not the contract ([ADR-0012](https://github.com/dhague/wiki-knowledge/blob/main/docs/adr/0012-frontmatter-round-trip-relaxed.md)); keys, their order and their values all survive, and the rest is presentation:
 
-- **Keys and their order survive, values survive.** Key *order* is preserved, so a re-emitted block reads in the same order it was authored.
-- **Scalar quote style may shift** — `source_date: '2026-03-01'` returns as `source_date: "2026-03-01"`. Both are round-trips of one value.
-- **A scalar an older writer folded returns on one line.** The emitter never folds ([ADR-0024](docs/adr/0024-emitted-lines-are-not-folded.md)), so a long `summary` split across two lines by a writer predating that decision comes back whole. Discard the diff hunk: it is presentation.
+- **Scalar quote style may shift** — `source_date: '2026-03-01'` returns as `source_date: "2026-03-01"`.
+- **A scalar an older writer folded returns on one line.** The emitter never folds ([ADR-0024](https://github.com/dhague/wiki-knowledge/blob/main/docs/adr/0024-emitted-lines-are-not-folded.md)), so a long `summary` split across two lines comes back whole.
 
-The rule to carry: **never treat a re-emitted block as the page's own content changing.** If a write is expected to touch one edge and the diff shows a refolded `summary`, the summary was already that value — the bytes moved, the meaning did not.
+Never read a re-emitted block as the page's own content changing: if a write touches one edge and the diff shows a refolded `summary`, the bytes moved and the meaning did not.
 
 ## Tags
 

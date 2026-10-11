@@ -857,9 +857,42 @@ test("shape validation rejects a self-referential edge", () => {
     root,
   );
   assert.ok(
-    got.includes("pages[0].source points at wiki/concepts/a.md itself"),
+    got.includes("pages[0].edges.source points at wiki/concepts/a.md itself"),
     got,
   );
+});
+
+// A page_ref is a path, so a spelling that normalises to the same file is the
+// same page — else `wiki/concepts/./a.md` escapes the gate and commits one.
+test("a non-canonical page_ref does not escape the self-edge refusal", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/./a.md","body":"b",
+     "edges":{"related":["wiki/concepts/a.md"]}}]}`,
+    root,
+  );
+  assert.ok(
+    got.includes("pages[0].edges.related points at wiki/concepts/a.md itself"),
+    got,
+  );
+});
+
+test("a non-canonical page_ref still resolves to its canonical page", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nb\n",
+  });
+  const resolved = resolveOK(
+    decodePlanOK(`{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/./a.md","body":"new\\n"}]}`),
+    root,
+  );
+  assert.equal(resolved.pages[0].pageRef, "wiki/concepts/a.md");
+  const git = new Fake();
+  await resolved.execute(git);
+  assert.ok(git.messages[0].includes("updated: wiki/concepts/a.md"));
 });
 
 test("shape validation rejects a self-referential raw_source link", () => {
@@ -874,9 +907,27 @@ test("shape validation rejects a self-referential raw_source link", () => {
     root,
   );
   assert.ok(
-    got.includes("pages[0].raw_source points at wiki/sources/a.md itself"),
+    got.includes(
+      "pages[0].edges.raw_source points at wiki/sources/a.md itself",
+    ),
     got,
   );
+});
+
+// The sentinel's target is plan.raw, a raw/ artifact — never the page, so an
+// update of the stub itself is not a self-edge however the page_ref is spelled.
+test("a raw_source sentinel on the stub itself is not a self-edge", () => {
+  const root = newVault({
+    "raw/doc.md": "raw\n",
+    "wiki/sources/stub.md": "---\ntitle: Stub\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","raw":"raw/doc.md","pages":[
+    {"op":"update","page_ref":"wiki/sources/stub.md","body":"b",
+     "frontmatter":{"volatility":"stable","raw_source":true}}]}`,
+    root,
+  );
+  assert.equal(got, "");
 });
 
 test("shape validation reports every self-edge, not the first", () => {
@@ -892,9 +943,9 @@ test("shape validation reports every self-edge, not the first", () => {
      "edges":{"refines":["wiki/concepts/b.md"]}}]}`,
     root,
   );
-  assert.ok(got.includes("pages[0].related points at"), got);
-  assert.ok(got.includes("pages[0].source points at"), got);
-  assert.ok(got.includes("pages[1].refines points at"), got);
+  assert.ok(got.includes("pages[0].edges.related points at"), got);
+  assert.ok(got.includes("pages[0].edges.source points at"), got);
+  assert.ok(got.includes("pages[1].edges.refines points at"), got);
 });
 
 test("shape validation accepts an edge to a different page", () => {
@@ -1077,7 +1128,7 @@ test("semantic validation runs chain of evidence", () => {
     root,
   );
   assert.ok(
-    got.includes("needs a wiki/sources/ stub among this plan's own pages"),
+    got.includes("needs a wiki/sources/ stub among the pages this plan writes"),
     got,
   );
 });
@@ -2158,6 +2209,38 @@ test("integration: a multi-page plan commits pages to a real git vault", async (
   );
   assert.ok(message.includes("updated: wiki/concepts/old.md"), message);
   assert.ok(message.includes("source-date: 2026-03-01"), message);
+});
+
+// The regression the plan's page order must not break: the stub the plan lists
+// first and the one it lists last commit byte-identical files.
+test("integration: the stub's position in the plan does not change its bytes", async () => {
+  const stubPage =
+    '{"op":"create","title":"Doc","kind":"source","body":"stub body\\n",' +
+    '"frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}}';
+  const conceptPage =
+    '{"op":"create","title":"Prepared Statements","kind":"concept","body":"page body\\n",' +
+    '"frontmatter":{"summary":"s","volatility":"stable"},' +
+    '"edges":{"source":["wiki/sources/doc.md"]}}';
+
+  const run = async (pages: string[]): Promise<string> => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "enchiridion-ingest-order-"),
+    );
+    await initRepo(root);
+    fs.mkdirSync(path.join(root, "raw"), { recursive: true });
+    fs.writeFileSync(path.join(root, "raw", "doc.md"), "raw\n");
+
+    const plan = `{"title":"Deploy notes","raw":"raw/doc.md","pages":[${pages.join(",")}]}`;
+    const resolved = resolve(decodePlanOK(plan), root);
+    resolved.validate();
+    await resolved.execute(new VaultGit(root));
+    return new Vault(root).load("wiki/sources/doc.md").text;
+  };
+
+  const first = await run([stubPage, conceptPage]);
+  const last = await run([conceptPage, stubPage]);
+  assert.equal(first, last);
+  assert.ok(first.includes('raw_source: "[doc.md](../../raw/doc.md)"'), first);
 });
 
 test("integration: a synthesize action commits under its own verb", async () => {

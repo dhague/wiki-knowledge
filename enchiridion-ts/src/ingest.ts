@@ -80,6 +80,7 @@
  * after fixing the cause is safe.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import {
   Page,
@@ -125,7 +126,7 @@ export const OpUpdate = "update";
 
 /** The whole page schema a plan's `frontmatter` map may name: the page's own
  * keys, then every [EdgeKeys] edge in conventions-spec order. */
-export const FrontmatterKeys: string[] = [
+const FrontmatterKeys: string[] = [
   "title",
   "summary",
   "tags",
@@ -520,7 +521,7 @@ export class Resolved {
         for (const target of pageLinkTargets(page, this.plan)) {
           if (target.ref === pageRef_) {
             problems.push(
-              `${prefix}.${target.key} points at ${pageRef_} itself — an edge needs a target other than the page carrying it`,
+              `${prefix}.${target.at} points at ${pageRef_} itself — an edge needs a target other than the page carrying it`,
             );
           }
         }
@@ -1069,7 +1070,7 @@ export function resolve(plan: Plan, root: string): Resolved {
     Object.assign(extraKindFolders, v.discoveredKinds());
   }
 
-  const refs = plan.pages.map((page) => pageRef(page, extraKindFolders));
+  const refs = plan.pages.map((page) => pageRef(page, extraKindFolders, v));
 
   // First page wins, so a link's title matches the earliest plan page claiming
   // it. An empty title is no title, not a decision: recording one would shadow
@@ -1195,12 +1196,34 @@ function describeEdge(key: string): string {
 }
 
 /** The vault-relative path a plan page will occupy, or "" when it cannot be
- * computed (each cause is already its own shape error). */
+ * computed (each cause is already its own shape error). An update's ref is a
+ * caller-supplied path, so it is canonicalised against the vault — `./`,
+ * `../` and the on-disk spelling of the name — rather than trusted verbatim:
+ * everything downstream (the manifest, the chain gate, the self-edge check)
+ * says "the page at this ref", and two spellings of one file would disagree. */
 function pageRef(
   page: PagePlan,
   extraKindFolders: Record<string, string>,
+  v: Vault | null,
 ): string {
-  if (page.op !== OpCreate) return page.page_ref;
+  if (page.op !== OpCreate) {
+    const ref = path.posix.normalize(page.page_ref);
+    if (v === null || ref === "" || !v.exists(ref)) return ref;
+    try {
+      const real = fs.realpathSync(v.path(ref));
+      const root = fs.realpathSync(v.root);
+      if (real.startsWith(root + path.sep)) {
+        return real
+          .slice(root.length + 1)
+          .split(path.sep)
+          .join("/");
+      }
+    } catch {
+      // unreadable or a dangling symlink: the normalized spelling is the ref,
+      // and existence validation reports it as it finds it
+    }
+    return ref;
+  }
   if (page.title === "") return "";
   try {
     return placePath(page.kind, page.title, extraKindFolders);
@@ -1311,8 +1334,12 @@ function applyBody(page: Page, newBody: string | null): Page {
   return new Page(page.text.slice(0, bodyOffset) + normalizeBodyLinks(newBody));
 }
 
-/** One (edge key, normalized target ref) awaiting existence validation. */
+/** One link a plan asks for, with the plan field it sits under so a refusal can
+ * name the path an author would edit. */
 interface LinkTarget {
+  /** The plan field, `pages[i].`-relative — `edges.related`,
+   * `frontmatter.raw_source`. */
+  at: string;
   key: string;
   ref: string;
 }
@@ -1323,13 +1350,21 @@ function pageLinkTargets(page: PagePlan, plan: Plan): LinkTarget[] {
   const targets: LinkTarget[] = [];
   const rawSource = page.frontmatter.get("raw_source");
   if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
-    targets.push({ key: "raw_source", ref: path.posix.normalize(plan.raw) });
+    targets.push({
+      at: "frontmatter.raw_source",
+      key: "raw_source",
+      ref: path.posix.normalize(plan.raw),
+    });
   }
   for (const [key, refs] of page.edges.all()) {
     if (!Array.isArray(refs)) continue;
     for (const ref of refs) {
       if (typeof ref !== "string") continue;
-      targets.push({ key, ref: path.posix.normalize(ref) });
+      targets.push({
+        at: `edges.${key}`,
+        key,
+        ref: path.posix.normalize(ref),
+      });
     }
   }
   return targets;

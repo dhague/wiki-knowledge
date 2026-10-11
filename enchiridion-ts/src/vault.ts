@@ -276,9 +276,10 @@ export class Vault {
   }
 
   /** The vault's own `wiki/sources/` stand-in for a raw artifact — the first by
-   * ref when several point at it — or "". Only the sources folder is decoded,
-   * and a page whose frontmatter will not parse is skipped rather than raised:
-   * callers word a refusal from this, and `check` reports the broken page. */
+   * ref when several point at it — or "". Only the sources folder is decoded, and
+   * a page whose frontmatter will not parse is skipped rather than raised: this
+   * only words a refusal, so one broken page must not abort the run that is
+   * reporting it. */
   rawSourceStub(raw: string): string {
     const wanted = path.posix.normalize(raw);
     const dir = `wiki/${KindFolders["source"]}/`;

@@ -4,9 +4,9 @@
  * whose `raw_source` points back at it, and every other page from it must carry
  * a `source` edge to that stub.
  *
- * The stand-in must be one of the plan's own pages — `commit` re-runs this gate
- * over the manifest's pages alone, so a stub already in the vault is worth
- * naming but never satisfies the rule.
+ * The stub must be one of the pages the plan writes: `commit` re-runs this gate
+ * over the manifest's own pages, so a stub already in the vault is named in the
+ * refusal but never satisfies the rule.
  *
  * `ingest` runs it before any write; `commit` re-runs it as the hard gate.
  */
@@ -53,12 +53,11 @@ export function check(
   if (stubRef === "") {
     const onDisk = existingStub === undefined ? "" : existingStub(raw);
     return [
-      `${raw} needs a wiki/${KindFolders["source"]}/ stub among this plan's own pages whose raw_source points at it ` +
-        `(op:"create", kind:"source", even a thin one)` +
+      `${raw} needs a wiki/${KindFolders["source"]}/ stub among the pages this plan writes whose raw_source points at it` +
         (onDisk === ""
-          ? ""
-          : ` — ${onDisk} on disk already stands in for it, but the stub must be one of this plan's pages`) +
-        `, and every other page in the plan — updates included — needs a source edge to that stub`,
+          ? ` — add one (op:"create", kind:"source", even a thin one)`
+          : ` — ${onDisk} on disk already stands in for it, so bring it into the plan (op:"update")`) +
+        `; every other page in the plan — updates included — needs a source edge to that stub`,
     ];
   }
 

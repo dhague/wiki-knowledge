@@ -65,12 +65,11 @@ self-edge as `[Foo](foo.md)`.
 
 A self-edge carries no information — it says the page relates to itself — and it
 inflates the graph `wiki-ask` follows: the one hop the edge promises lands back
-where it started. `enchiridion ingest` refuses to write one in the first place,
-so a finding here means the page predates that refusal or was hand-edited.
+where it started. `ingest` refuses to write one, so a finding means a hand edit.
 
-Report only, and the repair depends on what the author meant: an edge to the
-page itself is either a typo for a real target, which only the author knows, or a
-line to delete because the target has no page of its own.
+Report only: the repair depends on what the author meant, and an edge to the page
+itself is either a typo for a real target or a line to delete because the target
+has no page of its own.
 
 ## `stale-synthesis`
 

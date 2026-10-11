@@ -371,8 +371,8 @@ test("rawSourceStub prefers the first ref when several stand in", () => {
   assert.equal(v.rawSourceStub("raw/a.md"), "wiki/sources/a.md");
 });
 
-// Callers word a refusal from this; the broken page is `check`'s finding, not
-// a reason to abort the ingest.
+// This only words a refusal, so one broken page must not abort the run that is
+// reporting it.
 test("rawSourceStub skips a page whose frontmatter will not parse", () => {
   const v = writeVault({
     "wiki/sources/broken.md": "---\nraw_source: [unclosed\n---\n\n",
