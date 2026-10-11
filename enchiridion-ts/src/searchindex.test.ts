@@ -1319,6 +1319,20 @@ describe("status", () => {
     return { root, git };
   };
 
+  /** Commit a page whose frontmatter is not valid YAML. */
+  const commitUnparsablePage = async (
+    root: string,
+    git: VaultGit,
+  ): Promise<void> => {
+    writeFile(
+      root,
+      "wiki/concepts/broken.md",
+      "---\ntitle: [unclosed\n---\n\nbody\n",
+    );
+    await git.add(["wiki"]);
+    await git.commit("add an unparsable page");
+  };
+
   it("reports 0 uncommitted pages on a clean tree", async () => {
     const { root, git } = await committedVault([
       "wiki/concepts/a.md",
@@ -1348,13 +1362,7 @@ describe("status", () => {
     // reindex that a caller sees; the skip must still be named.
     const { root, git } = await committedVault(["wiki/concepts/a.md"]);
     try {
-      writeFile(
-        root,
-        "wiki/concepts/broken.md",
-        "---\ntitle: [unclosed\n---\n\nbody\n",
-      );
-      await git.add(["wiki"]);
-      await git.commit("add an unparsable page");
+      await commitUnparsablePage(root, git);
 
       const index = await Index.openWithGit(root, git);
       try {
@@ -1378,13 +1386,7 @@ describe("status", () => {
     // stays uncommitted while the unparsable one moves to unindexed.
     const { root, git } = await committedVault(["wiki/concepts/a.md"]);
     try {
-      writeFile(
-        root,
-        "wiki/concepts/broken.md",
-        "---\ntitle: [unclosed\n---\n\nbody\n",
-      );
-      await git.add(["wiki"]);
-      await git.commit("add an unparsable page");
+      await commitUnparsablePage(root, git);
       writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
 
       const index = await Index.openWithGit(root, git);
@@ -1411,13 +1413,7 @@ describe("status", () => {
   it("names an unparsable committed page as unindexed, not uncommitted", async () => {
     const { root, git } = await committedVault(["wiki/concepts/a.md"]);
     try {
-      writeFile(
-        root,
-        "wiki/concepts/broken.md",
-        "---\ntitle: [unclosed\n---\n\nbody\n",
-      );
-      await git.add(["wiki"]);
-      await git.commit("add an unparsable page");
+      await commitUnparsablePage(root, git);
 
       const index = await Index.openWithGit(root, git);
       try {
