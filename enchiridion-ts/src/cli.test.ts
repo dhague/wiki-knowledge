@@ -1965,6 +1965,81 @@ test("page: a missing file and a directory are named, not leaked as errno", () =
   );
 });
 
+test("page: a missing relative path reports the absolute path it resolved to", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-cwd-"));
+  const { status, stderr } = runEnv(
+    ["page", "get", "wiki/concepts/alpha.md", "title"],
+    { cwd, env: { WIKI_ROOT: "" } },
+  );
+  assert.notEqual(status, 0);
+  const resolved = path.join(
+    fs.realpathSync(cwd),
+    "wiki",
+    "concepts",
+    "alpha.md",
+  );
+  assert.ok(stderr.includes(`resolved to ${resolved}`), stderr);
+  assert.match(stderr, /filesystem path/);
+  assert.match(stderr, /vault-relative/);
+  assert.match(stderr, /absolute path/);
+});
+
+test("page: a vault-relative ref naming a real page is named as a ref", () => {
+  const root = makeVault({
+    "wiki/concepts/alpha.md": "---\ntitle: Alpha\n---\nbody\n",
+  });
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
+  const { status, stderr } = runEnv(
+    ["page", "get", "wiki/concepts/alpha.md", "title"],
+    { cwd: elsewhere, env: { WIKI_ROOT: fs.realpathSync(root) } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /is a vault-relative page ref/);
+  assert.ok(
+    stderr.includes(pagePath(fs.realpathSync(root), "wiki/concepts/alpha.md")),
+    stderr,
+  );
+});
+
+test("page get|set|merge: a vault-relative ref fails without writing", () => {
+  const root = makeVault({
+    "wiki/concepts/alpha.md": "---\ntitle: Alpha\n---\nbody\n",
+  });
+  const file = pagePath(root, "wiki/concepts/alpha.md");
+  const before = fs.readFileSync(file, "utf8");
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
+  const env = { WIKI_ROOT: fs.realpathSync(root) };
+  const invocations: string[][] = [
+    ["page", "get", "wiki/concepts/alpha.md", "title"],
+    ["page", "set", "wiki/concepts/alpha.md", "volatility", "stable"],
+    ["page", "merge", "wiki/concepts/alpha.md", "tags", '["alpha"]'],
+  ];
+  for (const args of invocations) {
+    const { status, stderr } = runEnv(args, { cwd: elsewhere, env });
+    assert.notEqual(status, 0, args.join(" "));
+    assert.match(stderr, /is a vault-relative page ref/, args.join(" "));
+    assert.equal(fs.readFileSync(file, "utf8"), before, args.join(" "));
+  }
+});
+
+test("page: a vault-relative path that is not a page is not called a ref", () => {
+  const root = makeVault({ "raw/notes/x.txt": "raw body\n" });
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
+  const { status, stderr } = runEnv(
+    ["page", "get", "raw/notes/x.txt", "title"],
+    { cwd: elsewhere, env: { WIKI_ROOT: fs.realpathSync(root) } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /not a vault-relative page ref/);
+});
+
+test("page --help spells <file> as a filesystem path, not a page ref", () => {
+  const { status, stdout } = run(["page", "get", "--help"]);
+  assert.equal(status, 0);
+  assert.match(stdout, /filesystem path/i);
+  assert.match(stdout, /not a vault-relative/i);
+});
+
 test("page commands name the file when its frontmatter will not parse", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-pg-"));
   fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });

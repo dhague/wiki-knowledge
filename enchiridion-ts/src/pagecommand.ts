@@ -6,8 +6,10 @@
 
 import type { Command } from "commander";
 import fs from "node:fs";
+import path from "node:path";
 import { Page, isStringListKey } from "./wikipage.js";
 import { Vault, resolveRoot, vaultForFile } from "./vault.js";
+import { isPageRef } from "./pagepredicate.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";
 import { canonicalSourceDate } from "./sourcedate.js";
 import {
@@ -29,13 +31,40 @@ function onPage<T>(file: string, fn: () => T): T {
   }
 }
 
+/** The absolute path a `<file>` argument names when it is a vault-relative ref
+ * to a real page, else null — the spelling `page`'s edge *values* take. */
+function vaultRefPath(file: string): string | null {
+  if (path.isAbsolute(file)) return null;
+  if (path.posix.normalize(file) !== file) return null;
+  if (!isPageRef(file)) return null;
+  const vault = new Vault(resolveRoot());
+  return vault.exists(file) ? vault.path(file) : null;
+}
+
+/** Name a file `page` could not read as the path it resolved to — the argument
+ * is cwd-relative, never `$WIKI_ROOT`-relative, which is the trap a
+ * vault-relative ref walks into. */
+function noSuchFile(file: string): never {
+  const abs = path.resolve(file);
+  if (file === abs) fail(`no such file: ${file}`);
+  const refPath = vaultRefPath(file);
+  if (refPath !== null) {
+    fail(
+      `no such file: ${file} (resolved to ${abs}) — page takes a filesystem path, but ${file} is a vault-relative page ref; pass ${refPath}`,
+    );
+  }
+  fail(
+    `no such file: ${file} (resolved to ${abs}) — page takes a filesystem path, not a vault-relative page ref; pass an absolute path or run from the vault root`,
+  );
+}
+
 function loadPage(file: string): Page {
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") fail(`no such file: ${file}`);
+    if (code === "ENOENT") noSuchFile(file);
     if (code === "EISDIR") fail(`${file} is a directory, not a markdown file`);
     throw err;
   }
@@ -130,6 +159,10 @@ function noSuchPage(ref: string, root: string): never {
   );
 }
 
+/** `page get|set|merge`'s `<file>` help — the surface read before the refusal. */
+const FileArgument =
+  "markdown file — a filesystem path (absolute, or relative to the working directory), not a vault-relative page ref";
+
 export function registerPageCommands(program: Command): void {
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no
   // vault root for a plain value, but an edge key's value may be a
@@ -142,7 +175,7 @@ export function registerPageCommands(program: Command): void {
 
   page
     .command("get")
-    .argument("<file>", "markdown file")
+    .argument("<file>", FileArgument)
     .argument("<key>", "frontmatter key")
     .description("Print a frontmatter value")
     .action((file: string, key: string) => {
@@ -156,7 +189,7 @@ export function registerPageCommands(program: Command): void {
 
   page
     .command("set")
-    .argument("<file>", "markdown file")
+    .argument("<file>", FileArgument)
     .argument("<key>", "frontmatter key")
     .argument(
       "<value>",
@@ -191,7 +224,7 @@ export function registerPageCommands(program: Command): void {
 
   page
     .command("merge")
-    .argument("<file>", "markdown file")
+    .argument("<file>", FileArgument)
     .argument("<key>", "frontmatter key")
     .argument(
       "<json-list>",
