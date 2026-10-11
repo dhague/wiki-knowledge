@@ -93,7 +93,7 @@ function renderStatus(
   console.log(`git_head:          ${orDash(st.gitHead)}`);
   if (st.unindexedPages.length > 0) {
     console.log(
-      `unindexed_pages: ${st.unindexedPages.length} page(s) the index cannot read — fix the frontmatter, then search --reindex.`,
+      `unindexed_pages: ${st.unindexedPages.length} page(s) the index cannot hold:`,
     );
     for (const page of st.unindexedPages) {
       console.log(`  ${page.pageRef}: ${page.reason}`);
@@ -198,7 +198,7 @@ export function registerSearchCommand(program: Command): void {
     .option("--full", "with --reindex: wipe the index and rebuild from scratch")
     .option(
       "--status",
-      "print index status and exit; unindexed_pages lists {page_ref, reason} for pages the index cannot read",
+      "print index status and exit; unindexed_pages lists {page_ref, reason} for pages the index cannot hold",
     )
     .action(
       async (

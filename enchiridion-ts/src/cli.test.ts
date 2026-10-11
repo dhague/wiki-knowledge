@@ -2960,19 +2960,18 @@ test("search --status --json: unparsable page is unindexed, not uncommitted", as
   assert.equal(payload.uncommitted_pages, 0);
 });
 
-test("search --status: names the unindexed page, its reason and the remedy", async () => {
+test("search --status: names the unindexed page and its reason", async () => {
   const root = await buildVaultWithUnparsablePage();
   const { status, stdout, stderr } = runEnv(["search", "--status"], {
     cwd: root,
     env: { WIKI_ROOT: root },
   });
   assert.equal(status, 0, stderr);
-  assert.match(stdout, /unindexed_pages: 1 page/);
+  assert.match(stdout, /unindexed_pages: 1 page\(s\) the index cannot hold:/);
   assert.match(
     stdout,
     /wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
   );
-  assert.match(stdout, /fix the frontmatter, then search --reindex/);
   assert.match(stdout, /uncommitted_pages: 0/);
 });
 

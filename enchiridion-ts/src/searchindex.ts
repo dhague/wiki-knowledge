@@ -382,9 +382,9 @@ export class Index {
     let inserted = 0;
     const skipped: SkippedPage[] = [];
     for (const page of snap.pages) {
-      const reason = this.upsertPage(page);
-      if (reason === null) inserted++;
-      else skipped.push({ pageRef: page.pageRef, reason });
+      const skippedPage = this.upsertPage(page);
+      if (skippedPage === null) inserted++;
+      else skipped.push(skippedPage);
     }
     this.recomputeSupersededBy();
     const pages = this.countPages();
@@ -403,9 +403,9 @@ export class Index {
         continue;
       }
       const existed = this.pageIndexed(page.pageRef);
-      const reason = this.upsertPage(page);
-      if (reason !== null) {
-        skipped.push({ pageRef: page.pageRef, reason });
+      const skippedPage = this.upsertPage(page);
+      if (skippedPage !== null) {
+        skipped.push(skippedPage);
         // Malformed page skipped; if it was indexed, count the drop as a removal.
         if (existed) removed++;
         continue;
@@ -453,10 +453,10 @@ export class Index {
   // Per-page upsert / remove
   // -------------------------------------------------------------------------
 
-  /** Index one page, or return the parser's reason for skipping it, having
-   * removed any stale row. Malformed pages are skipped, never a crash, so one
-   * buried in git history cannot take down a reindex. */
-  private upsertPage(page: PageChange): string | null {
+  /** Index one page, or return the skip naming why, having removed any stale
+   * row. Malformed pages are skipped, never a crash, so one buried in git
+   * history cannot take down a reindex. */
+  private upsertPage(page: PageChange): SkippedPage | null {
     const parsed = parsePageRecord(
       page.pageRef,
       page.content,
@@ -464,7 +464,7 @@ export class Index {
     );
     if (!parsed.ok) {
       this.removePage(page.pageRef);
-      return parsed.reason;
+      return { pageRef: page.pageRef, reason: parsed.reason };
     }
     const rec = parsed.record;
     const body = splitFrontmatter(page.content).body;
@@ -592,15 +592,14 @@ export class Index {
     let uncommitted = 0;
     for (const ref of enumeratePageRefs(this.root)) {
       if (indexed.has(ref)) continue;
-      const reason = this.onDiskFailure(ref);
-      if (reason === null) uncommitted++;
-      else unindexed.push({ pageRef: ref, reason });
+      const skippedPage = this.onDiskFailure(ref);
+      if (skippedPage === null) uncommitted++;
+      else unindexed.push(skippedPage);
     }
     return { unindexed, uncommitted };
   }
 
-  /** The parser's reason for refusing the working-tree copy of ref, or null. */
-  private onDiskFailure(pageRef: string): string | null {
+  private onDiskFailure(pageRef: string): SkippedPage | null {
     let content: string;
     try {
       content = fs.readFileSync(
@@ -609,10 +608,13 @@ export class Index {
       );
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      return code ? `cannot be read (${code})` : "cannot be read";
+      return {
+        pageRef,
+        reason: code ? `cannot be read (${code})` : "cannot be read",
+      };
     }
     const parsed = parsePageRecord(pageRef, content, this.kindByFolder);
-    return parsed.ok ? null : parsed.reason;
+    return parsed.ok ? null : { pageRef, reason: parsed.reason };
   }
 
   async tagCounts(): Promise<TagCount[]> {

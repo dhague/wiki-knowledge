@@ -1319,7 +1319,6 @@ describe("status", () => {
     return { root, git };
   };
 
-  /** Commit a page whose frontmatter is not valid YAML. */
   const commitUnparsablePage = async (
     root: string,
     git: VaultGit,
