@@ -13,8 +13,11 @@
  * A plan names link targets by vault-relative page reference only: `edges` and
  * `supersedes` hold paths like `wiki/concepts/foo.md`, never composed
  * `[Title](../dest.md)` strings. Composing the link (title lookup, `../`
- * relativisation, percent-encoding, YAML quoting) is this module's job. The
- * `raw_source` boolean sentinel works the same way:
+ * relativisation, percent-encoding, YAML quoting) is this module's job. The two
+ * frontmatter maps are each other's fence: a typed edge belongs under `edges`
+ * and is refused on a `frontmatter` map, while a `frontmatter` map takes only
+ * the page's own keys plus the `raw_source` sentinel below. The `raw_source`
+ * boolean sentinel works the same way as an edge:
  * `frontmatter: {"raw_source": true}` marks the page as the stub for [Plan.raw]
  * and the link is composed from it. [Plan.raw] itself is never renamed or moved
  * — the file keeps its name forever, and the link destination is
@@ -53,10 +56,10 @@
  * pages, so the checked plan and the written plan cannot diverge. Resolve is
  * pure apart from vault reads. Validation runs entirely before any write —
  * shape (required fields, valid op, a `frontmatter` key within
- * [FrontmatterKeys], no edge pointing at its own page) then semantic (an
- * update's pageRef exists, a create's target does not yet, every edge target
- * resolves to a page on disk or created by this same plan, and
- * [chainofevidence.check] holds). The chain check is a courtesy;
+ * [FrontmatterKeys] and no edge key on that map, no edge pointing at its own
+ * page) then semantic (an update's pageRef exists, a create's target does not
+ * yet, every edge target resolves to a page on disk or created by this same
+ * plan, and [chainofevidence.check] holds). The chain check is a courtesy;
  * [commit.commit] re-runs it as the hard gate.
  *
  * Two frontmatter fields are this module's to guarantee, not the agent's to
@@ -124,15 +127,15 @@ export const SummaryWordGuideline = 20;
 export const OpCreate = "create";
 export const OpUpdate = "update";
 
-/** The whole page schema a plan's `frontmatter` map may name: the page's own
- * keys, then every [EdgeKeys] edge in conventions-spec order. */
+/** What a plan's `frontmatter` map may name: the page's own keys plus the
+ * `raw_source` sentinel. An edge key is refused, pointing at `edges`. */
 const FrontmatterKeys: string[] = [
   "title",
   "summary",
   "tags",
   "source_date",
   "volatility",
-  ...EdgeKeys,
+  "raw_source",
 ];
 
 export const ActionIngest = "ingest";
@@ -436,18 +439,13 @@ export class Resolved {
         }
       }
 
-      // Null reads as absent, like an omitted key.
+      // `raw_source` here is the `true` sentinel; a ref under it is a typed
+      // edge and is refused below with the map that composes one.
       const rawSource = page.frontmatter.get("raw_source");
-      if (rawSource.ok && rawSource.value !== null) {
-        if (rawSource.value !== true) {
-          problems.push(
-            `${prefix}.frontmatter.raw_source must be true (derived from plan.raw), got ${String(rawSource.value)}`,
-          );
-        } else if (this.plan.raw === "") {
-          problems.push(
-            `${prefix}.frontmatter.raw_source is true but plan.raw is not set`,
-          );
-        }
+      if (rawSource.ok && rawSource.value === true && this.plan.raw === "") {
+        problems.push(
+          `${prefix}.frontmatter.raw_source is true but plan.raw is not set`,
+        );
       }
 
       // A date, with an optional clock that is truncated on write; anything
@@ -527,10 +525,20 @@ export class Resolved {
         }
       }
 
-      // The schema's accepted set, `raw_source` and the typed edges included;
-      // anything else is a typo the writer would otherwise carry to the page.
-      for (const [key] of page.frontmatter.all()) {
-        if (!FrontmatterKeys.includes(key)) {
+      // A `frontmatter` map writes its values verbatim, so an edge key here
+      // commits a bare ref no consumer follows. An unknown key is the same
+      // silent write-through, one typo away.
+      for (const [key, value] of page.frontmatter.all()) {
+        // Null reads as absent, like an omitted key.
+        if (value === null) continue;
+        if (
+          EdgeKeys.includes(key) &&
+          !(key === "raw_source" && value === true)
+        ) {
+          problems.push(
+            `${prefix}.frontmatter.${key} is an edge key — name it under ${prefix}.edges instead, where ingest composes the link`,
+          );
+        } else if (!FrontmatterKeys.includes(key)) {
           problems.push(
             `${prefix}.frontmatter.${key} is not a frontmatter key; one of ${FrontmatterKeys.join(", ")}`,
           );
