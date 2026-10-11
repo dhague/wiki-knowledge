@@ -21,6 +21,7 @@ import {
   WatchStartedMarker,
 } from "./contract.js";
 import { PlanActions } from "./ingest.js";
+import { assessCluster } from "./assess.js";
 import { MaxSlugLength, slugify } from "./place.js";
 import { splitFrontmatter } from "./wikipage.js";
 
@@ -1388,6 +1389,7 @@ test("ingest: a consolidate plan absorbs, deletes and commits once", async () =>
     committer: signature,
   });
 
+  const assessed = await assessCluster(root, ["wiki/concepts/caching-ttl.md"]);
   const planPath = path.join(root, "plan.json");
   fs.writeFileSync(
     planPath,
@@ -1395,6 +1397,13 @@ test("ingest: a consolidate plan absorbs, deletes and commits once", async () =>
       title: "Caching",
       action: "consolidate",
       consolidates: ["wiki/concepts/caching-ttl.md"],
+      assessed: {
+        head: assessed.head,
+        members: assessed.members.map((m) => ({
+          page_ref: m.page_ref,
+          blob_oid: m.blob_oid,
+        })),
+      },
       pages: [
         {
           op: "update",

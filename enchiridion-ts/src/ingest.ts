@@ -31,9 +31,12 @@
  * rather than marked `superseded`, and one commit. `plan.raw` stays unset — a
  * Consolidation is sourced from pages, not an artifact. Losslessness is
  * mechanical: validation, and the executor again immediately before the delete,
- * refuses a survivor body that no longer reads an absorbed page's content.
+ * refuses a survivor body that no longer reads an absorbed page's content as
+ * one unbroken run of top-level markdown blocks, and — for an `update`
+ * survivor — the survivor's own former body. What separates content from
+ * presentation is [bodycontent]'s, stated there once (ADR-0030).
  *
- * A `consolidate` plan may pin the snapshot the cluster was assessed at —
+ * A `consolidate` plan must pin the snapshot the cluster was assessed at —
  * `"assessed": {"head": "<sha>", "members": [{"page_ref", "blob_oid"}]}` — and
  * the `ingest` command refuses to run it once HEAD or any assessed member has
  * moved, because the merged body was authored against that snapshot. Every ref
@@ -81,6 +84,11 @@ import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
 import { Volatilities } from "./pagerecord.js";
 import { decodeAssessment, type PlanAssessment } from "./assess.js";
+import {
+  bodyBlocks,
+  firstUnmatchedBlock,
+  type BodyBlock,
+} from "./bodycontent.js";
 
 /** Windows' 255-char path limit, measured against root plus vault-relative path. */
 export const MaxPathLength = 255;
@@ -257,6 +265,8 @@ export interface AbsorbedPage {
 export interface ResolvedConsolidation {
   survivorRef: string;
   absorbed: AbsorbedPage[];
+  /** The survivor's on-disk body before this plan rewrote it; null for a create. */
+  survivorPriorBody: string | null;
 }
 
 /** One page [Resolved.execute] wrote, with the op it wrote it under. */
@@ -463,8 +473,13 @@ export class Resolved {
       }
     }
 
-    // A pinned assessment is the cluster's snapshot guard: it only makes sense
-    // on a Consolidation, and it must name every page the plan absorbs.
+    // A pinned assessment is the cluster's snapshot guard: it is required on a
+    // Consolidation, and it must name every page the plan absorbs.
+    if (this.plan.action === ActionConsolidate && this.plan.assessed === null) {
+      problems.push(
+        `plan.assessed is required when action is '${ActionConsolidate}': pin the snapshot the cluster was assessed at`,
+      );
+    }
     if (this.plan.assessed !== null) {
       const assessed = this.plan.assessed;
       if (this.plan.action !== ActionConsolidate) {
@@ -630,11 +645,13 @@ export class Resolved {
   }
 
   /**
-   * The losslessness gate (ADR-0021): each absorbed body must still be readable
-   * in the survivor's body, so the delete drops nothing. Compared through
-   * [canonicalizeLinkTargets] — by where links point, not how they are spelled —
-   * so a body re-based into another kind-folder compares equal and a link the
-   * merge broke does not. Frontmatter is deliberately outside the comparison.
+   * The losslessness gate (ADR-0021, ADR-0030): every absorbed body's content,
+   * and an `update` survivor's own former body, must still be readable — as one
+   * unbroken run of top-level blocks — in the survivor's authored body.
+   * Compared through [canonicalizeLinkTargets] — by where links point, not how
+   * they are spelled — so a body re-based into another kind-folder compares
+   * equal and a link the merge broke does not. Frontmatter is deliberately
+   * outside the comparison.
    */
   private losslessnessErrors(): string[] {
     const c = this.consolidation;
@@ -646,24 +663,28 @@ export class Resolved {
     const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
     const target = (ref: string): string =>
       consolidated.has(ref) ? c.survivorRef : ref;
-    const survivorBody = canonicalizeLinkTargets(
-      survivor.body(),
-      path.posix.dirname(c.survivorRef),
-      target,
-    );
+    const canonical = (body: string, from: string): string =>
+      canonicalizeLinkTargets(body, path.posix.dirname(from), target);
+    const have = bodyBlocks(canonical(survivor.body(), c.survivorRef));
 
     const problems: string[] = [];
+    if (c.survivorPriorBody !== null) {
+      const want = bodyBlocks(canonical(c.survivorPriorBody, c.survivorRef));
+      const at = firstUnmatchedBlock(want, have);
+      if (at >= 0) {
+        problems.push(
+          `plan.consolidates: the survivor's body does not contain its own former content, starting at ${describeBlock(want[at])} — a Consolidation is lossless (ADR-0021)`,
+        );
+      }
+    }
     for (const absorbed of c.absorbed) {
       if (!absorbed.found) continue; // its own "does not exist" error
-      const want = canonicalizeLinkTargets(
-        absorbed.body,
-        path.posix.dirname(absorbed.pageRef),
-        target,
-      ).trim();
-      if (want === "") continue; // a stub absorbs nothing
-      if (!survivorBody.includes(want)) {
+      const want = bodyBlocks(canonical(absorbed.body, absorbed.pageRef));
+      if (want.length === 0) continue; // a stub absorbs nothing
+      const at = firstUnmatchedBlock(want, have);
+      if (at >= 0) {
         problems.push(
-          `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content — a Consolidation is lossless (ADR-0021)`,
+          `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content, starting at ${describeBlock(want[at])} — a Consolidation is lossless (ADR-0021)`,
         );
       }
     }
@@ -889,9 +910,10 @@ export function resolve(plan: Plan, root: string): Resolved {
   );
 }
 
-/** Read the consolidation a plan declares: its survivor, and each absorbed
- * page's body as it stands on disk — captured once so validate and execute read
- * the same content, including on a second execute after the file is gone. */
+/** Read the consolidation a plan declares: its survivor and the survivor's
+ * former body, and each absorbed page's body as it stands on disk — captured
+ * once so validate and execute read the same content, including on a second
+ * execute after the file is gone. */
 function resolveConsolidation(
   plan: Plan,
   resolvedPages: ResolvedPage[],
@@ -901,6 +923,15 @@ function resolveConsolidation(
     return null;
   }
   const survivorRef = resolvedPages[0].pageRef;
+  let survivorPriorBody: string | null = null;
+  if (
+    resolvedPages[0].plan.op === OpUpdate &&
+    survivorRef !== "" &&
+    v !== null &&
+    v.exists(survivorRef)
+  ) {
+    survivorPriorBody = v.load(survivorRef).body();
+  }
   const absorbed: AbsorbedPage[] = plan.consolidates.map((ref) => {
     const pageRef = path.posix.normalize(ref);
     let body = "";
@@ -911,7 +942,7 @@ function resolveConsolidation(
     }
     return { pageRef, body, found };
   });
-  return { survivorRef, absorbed };
+  return { survivorRef, absorbed, survivorPriorBody };
 }
 
 /** The vault-relative path a plan page will occupy, or "" when it cannot be
@@ -1005,6 +1036,12 @@ function applyFrontmatter(
 function manifestSourceDate(s: string): string {
   const date = parseSourceDate(s);
   return date !== null ? date : s;
+}
+
+/** A block's opening source line, truncated, for naming it in a refusal. */
+function describeBlock(block: BodyBlock): string {
+  const line = block.opening.trim();
+  return JSON.stringify(line.length > 60 ? `${line.slice(0, 60)}…` : line);
 }
 
 /** Replaces the body, leaving the frontmatter block byte-exact and re-encoding

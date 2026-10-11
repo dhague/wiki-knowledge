@@ -18,6 +18,8 @@ import {
   type Plan,
 } from "./ingest.js";
 import { missingVolatilitySourceDate } from "./check.js";
+import { type PlanAssessment } from "./assess.js";
+import { Page } from "./wikipage.js";
 import { Vault } from "./vault.js";
 import { VaultRead } from "./vaultread.js";
 import { VaultGit } from "./vaultgit.js";
@@ -71,6 +73,18 @@ function validationErrors(src: string, root: string): string {
   }
 }
 
+/** A shape-valid `assessed` pin for one cluster. Only the `ingest` command path
+ * checks it against HEAD; these unit tests exercise validation. */
+function pinFor(...refs: string[]): PlanAssessment {
+  return {
+    head: "0".repeat(40),
+    members: [...new Set(refs)].map((page_ref) => ({
+      page_ref,
+      blob_oid: "0".repeat(40),
+    })),
+  };
+}
+
 // --- decoding ---------------------------------------------------------------
 
 test("decodePlan defaults the action to ingest", () => {
@@ -114,6 +128,7 @@ test("every declared plan action is recognised by validation", () => {
     ingest: `"pages":[${create("concept")}]`,
     synthesize: `"pages":[${create("synthesis")}]`,
     consolidate: `"consolidates":["wiki/concepts/a.md"],
+      "assessed":${JSON.stringify(pinFor("wiki/concepts/a.md"))},
       "pages":[{"op":"update","page_ref":"wiki/concepts/b.md","body":"b"}]`,
   };
   // Root "" keeps this to the shape rules, so each action is judged on its own
@@ -996,7 +1011,12 @@ const fragmentedVault: Record<string, string> = {
     "---\ntitle: Client\n---\nSee [TTL](caching-ttl.md) and [expiry](cache-expiry.md).\n",
 };
 
-const consolidatePlan = `{"title":"Caching","action":"consolidate","consolidates":["wiki/concepts/caching-ttl.md","wiki/concepts/cache-expiry.md"],"pages":[
+const consolidateRefs = [
+  "wiki/concepts/caching-ttl.md",
+  "wiki/concepts/cache-expiry.md",
+];
+
+const consolidatePlan = `{"title":"Caching","action":"consolidate","consolidates":${JSON.stringify(consolidateRefs)},"assessed":${JSON.stringify(pinFor(...consolidateRefs))},"pages":[
   {"op":"update","page_ref":"wiki/concepts/caching.md","frontmatter":{"volatility":"stable","tags":["caching"]},
    "body":"Caching is remembering a value.\\n\\n## TTL\\n\\nA cache entry expires after its TTL.\\n\\n## Eviction\\n\\nEntries also expire when evicted.\\n"}]}`;
 
@@ -1007,11 +1027,15 @@ function consolidateWith(overrides: {
   raw?: string;
   action?: string;
 }): string {
+  const consolidates = overrides.consolidates ?? [
+    "wiki/concepts/caching-ttl.md",
+  ];
   return JSON.stringify({
     title: "Caching",
     action: overrides.action ?? "consolidate",
     ...(overrides.raw === undefined ? {} : { raw: overrides.raw }),
-    consolidates: overrides.consolidates ?? ["wiki/concepts/caching-ttl.md"],
+    consolidates,
+    assessed: pinFor(...consolidates),
     pages: [
       JSON.parse(
         overrides.page ??
@@ -1055,6 +1079,7 @@ test("shape validation rejects a consolidate plan with more than one page", () =
     title: "Caching",
     action: "consolidate",
     consolidates: ["wiki/concepts/a.md"],
+    assessed: pinFor("wiki/concepts/a.md"),
     pages: [
       { op: "update", page_ref: "wiki/concepts/b.md", body: "b" },
       { op: "update", page_ref: "wiki/concepts/c.md", body: "c" },
@@ -1145,19 +1170,184 @@ test("losslessness reads a re-based link by where it points, not its spelling", 
       title: "N",
       action: "consolidate",
       consolidates: ["wiki/concepts/a.md"],
+      assessed: pinFor("wiki/concepts/a.md"),
       pages: [{ op: "update", page_ref: "wiki/notes/n.md", body }],
     });
 
   // Faithful: the link was re-based when the body landed in another folder.
   assert.equal(
-    validationErrors(based("See [C](../concepts/c.md).\n"), root),
+    validationErrors(based("N body.\n\nSee [C](../concepts/c.md).\n"), root),
     "",
   );
   // Copied verbatim, the link now points at a page that is not there — the
   // check catches what a byte comparison would have called a match.
   assert.match(
-    validationErrors(based("See [C](c.md).\n"), root),
+    validationErrors(based("N body.\n\nSee [C](c.md).\n"), root),
     /does not contain wiki\/concepts\/a\.md's content/,
+  );
+});
+
+/** A one-survivor consolidation of `absorbed` into `survivor`. */
+function consolidationOf(
+  absorbed: string,
+  body: string,
+  survivor = "wiki/concepts/b.md",
+): string {
+  return JSON.stringify({
+    title: "Merged",
+    action: "consolidate",
+    consolidates: [absorbed],
+    assessed: pinFor(absorbed),
+    pages: [{ op: "update", page_ref: survivor, body }],
+  });
+}
+
+test("a CRLF absorbed page validates against an LF plan body, and writes the plan's endings", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nAlpha one.\r\nAlpha two.\r\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nBravo.\r\n",
+  });
+  const body = "Bravo.\n\nAlpha one.\nAlpha two.\n";
+  const resolved = resolveOK(
+    decodePlanOK(consolidationOf("wiki/concepts/a.md", body)),
+    root,
+  );
+  resolved.validate();
+  await resolved.execute(new Fake());
+
+  // The gate normalised the disk CRLF away; the plan's own LF is what landed.
+  assert.equal(new Vault(root).load("wiki/concepts/b.md").body(), body);
+});
+
+test("an LF absorbed page validates against a CRLF plan body, and writes it verbatim", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nAlpha one.\nAlpha two.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nBravo.\n",
+  });
+  const body = "Bravo.\r\n\r\nAlpha one.\r\nAlpha two.\r\n";
+  const resolved = resolveOK(
+    decodePlanOK(consolidationOf("wiki/concepts/a.md", body)),
+    root,
+  );
+  resolved.validate();
+  await resolved.execute(new Fake());
+
+  assert.equal(new Vault(root).load("wiki/concepts/b.md").body(), body);
+});
+
+test("a lone-CR absorbed body reads as LF", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nAlpha one.\rAlpha two.\r",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nBravo.\n",
+  });
+  assert.equal(
+    validationErrors(
+      consolidationOf(
+        "wiki/concepts/a.md",
+        "Bravo.\n\nAlpha one.\nAlpha two.\n",
+      ),
+      root,
+    ),
+    "",
+  );
+});
+
+test("an update survivor may not drop its own former content", () => {
+  const errors = validationErrors(
+    consolidateWith({
+      page: `{"op":"update","page_ref":"wiki/concepts/caching.md","body":"## TTL\\n\\nA cache entry expires after its TTL.\\n"}`,
+    }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /its own former content/);
+});
+
+test("a reflowed, heading-demoted, bullet-respelled merge validates and commits", async () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\n---\nIntro one.\nIntro two.\n\n## Detail\n\nThe quick brown fox\njumps over the lazy dog.\n\n- alpha\n- bravo\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nSurvivor body.\n",
+  });
+  const body =
+    "Survivor body.\n\n### A\n\nIntro one. Intro two.\n\n#### Detail\n\nThe quick brown fox jumps over the lazy dog.\n\n* alpha\n* bravo\n";
+  const resolved = resolveOK(
+    decodePlanOK(consolidationOf("wiki/concepts/a.md", body)),
+    root,
+  );
+  resolved.validate();
+  await resolved.execute(new Fake());
+
+  assert.equal(new Vault(root).load("wiki/concepts/b.md").body(), body);
+  assert.equal(new Vault(root).exists("wiki/concepts/a.md"), false);
+});
+
+test("a losslessness refusal names the first block that failed to match", () => {
+  const errors = validationErrors(
+    consolidateWith({
+      page: `{"op":"update","page_ref":"wiki/concepts/caching.md","body":"Caching is remembering a value.\\n\\n## TTL\\n\\nA cache entry expires after its TTL now.\\n"}`,
+    }),
+    newVault(fragmentedVault),
+  );
+  assert.match(errors, /starting at "A cache entry expires after its TTL\."/);
+});
+
+test("losslessness refuses a repointed link destination", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nSee [C](c.md).\n",
+    "wiki/concepts/c.md": "---\ntitle: C\n---\nC body.\n",
+    "wiki/concepts/d.md": "---\ntitle: D\n---\nD body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nB body.\n",
+  });
+  // Same label, same spelling, different page: the gate reads where it points.
+  assert.match(
+    validationErrors(
+      consolidationOf("wiki/concepts/a.md", "B body.\n\nSee [C](d.md).\n"),
+      root,
+    ),
+    /does not contain wiki\/concepts\/a\.md's content/,
+  );
+});
+
+test("losslessness refuses a block satisfied only by a nested copy", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nDistinct claim.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nB body.\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationOf("wiki/concepts/a.md", "B body.\n\n> Distinct claim.\n"),
+      root,
+    ),
+    /does not contain wiki\/concepts\/a\.md's content/,
+  );
+});
+
+test("the executor's pre-delete re-check refuses a survivor mutated past validation", async () => {
+  const root = newVault(fragmentedVault);
+  const resolved = resolveOK(decodePlanOK(consolidatePlan), root);
+  resolved.validate();
+  // A caller that routes around validate: the comparison must still run before
+  // anything is deleted.
+  resolved.pages[0].page = new Page("---\ntitle: Caching\n---\nNothing.\n");
+  await assert.rejects(() => resolved.execute(new Fake()), /does not contain/);
+});
+
+test("shape validation requires the assessed pin on a consolidate plan", () => {
+  const src = JSON.stringify({
+    title: "Caching",
+    action: "consolidate",
+    consolidates: ["wiki/concepts/caching-ttl.md"],
+    pages: [
+      {
+        op: "update",
+        page_ref: "wiki/concepts/caching.md",
+        body: "Caching is remembering a value.\n\nA cache entry expires after its TTL.\n",
+      },
+    ],
+  });
+  assert.match(
+    validationErrors(src, newVault(fragmentedVault)),
+    /plan\.assessed is required/,
   );
 });
 
@@ -1222,7 +1412,7 @@ test("execute consolidation may author a fresh survivor", async () => {
     "wiki/concepts/b.md": "---\ntitle: B\n---\nBeta.\n",
   });
   const resolved = resolveOK(
-    decodePlanOK(`{"title":"AB","action":"consolidate","consolidates":["wiki/concepts/a.md","wiki/concepts/b.md"],"pages":[
+    decodePlanOK(`{"title":"AB","action":"consolidate","consolidates":["wiki/concepts/a.md","wiki/concepts/b.md"],"assessed":${JSON.stringify(pinFor("wiki/concepts/a.md", "wiki/concepts/b.md"))},"pages":[
       {"op":"create","title":"Alpha Beta","kind":"concept","body":"Alpha.\\n\\nBeta.\\n",
        "frontmatter":{"volatility":"stable"}}]}`),
     root,
@@ -1399,7 +1589,7 @@ test("integration: a Consolidation deletes its losers in one real commit", async
   await seed.commit("seed");
 
   const resolved = resolve(
-    decodePlanOK(`{"title":"Caching","action":"consolidate","consolidates":["wiki/concepts/caching-ttl.md"],"pages":[
+    decodePlanOK(`{"title":"Caching","action":"consolidate","consolidates":["wiki/concepts/caching-ttl.md"],"assessed":${JSON.stringify(pinFor("wiki/concepts/caching-ttl.md"))},"pages":[
       {"op":"update","page_ref":"wiki/concepts/caching.md","body":"Caching is remembering a value.\\n\\nA cache entry expires after its TTL.\\n"}]}`),
     root,
   );
