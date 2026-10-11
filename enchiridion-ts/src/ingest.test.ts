@@ -1322,6 +1322,267 @@ test("losslessness refuses a block satisfied only by a nested copy", () => {
   );
 });
 
+// --- Consolidation frontmatter (typed edges, raw_source, tags, volatility) ----
+
+/** A one-survivor consolidation whose survivor plan page is given verbatim. */
+function consolidationInto(
+  consolidates: string[],
+  survivor: string,
+  page: Record<string, unknown>,
+): string {
+  return JSON.stringify({
+    title: "Merged",
+    action: "consolidate",
+    consolidates,
+    assessed: pinFor(...consolidates),
+    pages: [{ op: "update", page_ref: survivor, ...page }],
+  });
+}
+
+test("a consolidate plan that drops an absorbed typed edge is refused", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      '---\ntitle: A\nvolatility: stable\nrelated:\n  - "[C](c.md)"\n---\nA body.\n',
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "wiki/concepts/c.md": "---\ntitle: C\nvolatility: stable\n---\nC body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", { body }),
+      root,
+    ),
+    /the survivor's frontmatter does not carry wiki\/concepts\/a\.md's related edge to wiki\/concepts\/c\.md/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        edges: { related: ["wiki/concepts/c.md"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("frontmatter containment matches an edge target under any key", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      '---\ntitle: A\nvolatility: stable\nrefines:\n  - "[C](c.md)"\n---\nA body.\n',
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "wiki/concepts/c.md": "---\ntitle: C\nvolatility: stable\n---\nC body.\n",
+  });
+  // Re-typed from `refines` to `related` on the merge: the target survives, so
+  // the judgment call is tolerated.
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body: "B body.\n\nA body.\n",
+        edges: { related: ["wiki/concepts/c.md"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("an absorbed edge to a page the consolidation deletes is exempt", () => {
+  const root = newVault({
+    "wiki/concepts/a1.md":
+      '---\ntitle: A1\nvolatility: stable\nrelated:\n  - "[A2](a2.md)"\n  - "[B](b.md)"\n---\nA1 body.\n',
+    "wiki/concepts/a2.md":
+      "---\ntitle: A2\nvolatility: stable\n---\nA2 body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  // a2 is itself absorbed and b is the survivor, so neither target can survive
+  // as an edge: both collapse into the survivor.
+  assert.equal(
+    validationErrors(
+      consolidationInto(
+        ["wiki/concepts/a1.md", "wiki/concepts/a2.md"],
+        "wiki/concepts/b.md",
+        { body: "B body.\n\nA1 body.\n\nA2 body.\n" },
+      ),
+      root,
+    ),
+    "",
+  );
+});
+
+test("a consolidate plan that drops an absorbed raw_source is refused", async () => {
+  const root = newVault({
+    "wiki/notes/a.md":
+      '---\ntitle: A\nvolatility: stable\nraw_source: "[doc.txt](../../raw/doc.txt)"\n---\nA body.\n',
+    "wiki/notes/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "raw/doc.txt": "raw\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", { body }),
+      root,
+    ),
+    /the survivor's frontmatter does not carry wiki\/notes\/a\.md's raw_source link to raw\/doc\.txt/,
+  );
+
+  const plan = consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", {
+    body,
+    edges: { raw_source: ["raw/doc.txt"] },
+  });
+  assert.equal(validationErrors(plan, root), "");
+  const resolved = resolveOK(decodePlanOK(plan), root);
+  resolved.validate();
+  await resolved.execute(new Fake());
+  // Carried as the single scalar link the schema reads, not a list.
+  assert.equal(
+    new Vault(root).load("wiki/notes/b.md").getString("raw_source"),
+    "[doc.txt](../../raw/doc.txt)",
+  );
+});
+
+test("a consolidate plan must union the cluster's tags", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nvolatility: stable\ntags:\n  - alpha\n  - beta\n---\nA body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        frontmatter: { volatility: "stable", tags: ["alpha"] },
+      }),
+      root,
+    ),
+    /the survivor's tags must union the cluster's; missing "beta"/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        frontmatter: { volatility: "stable", tags: ["alpha", "beta"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("a consolidate plan must carry the cluster's most volatile member", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\nvolatility: volatile\n---\nA body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", { body }),
+      root,
+    ),
+    /the survivor's volatility is "stable", but the cluster's most volatile member is "volatile"/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        frontmatter: { volatility: "volatile" },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("an absorbed page whose frontmatter cannot be read is refused, not read edge-less", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nvolatility: stable\nrelated:\n  - not-a-link\n---\nA body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body: "B body.\n\nA body.\n",
+      }),
+      root,
+    ),
+    /wiki\/concepts\/a\.md's frontmatter could not be read/,
+  );
+});
+
+test("an absorbed supersedes edge is covered like any other", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      '---\ntitle: A\nvolatility: stable\nsupersedes:\n  - "[C](c.md)"\n---\nA body.\n',
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "wiki/concepts/c.md": "---\ntitle: C\nvolatility: stable\n---\nC body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", { body }),
+      root,
+    ),
+    /the survivor's frontmatter does not carry wiki\/concepts\/a\.md's supersedes edge to wiki\/concepts\/c\.md/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        edges: { supersedes: ["wiki/concepts/c.md"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("a single-link edge key refuses more than one ref", () => {
+  const root = newVault({
+    "wiki/notes/a.md": "---\ntitle: A\nvolatility: stable\n---\nA body.\n",
+    "wiki/notes/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "raw/doc.txt": "raw\n",
+    "raw/other.txt": "raw\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", {
+        body: "B body.\n\nA body.\n",
+        edges: { raw_source: ["raw/doc.txt", "raw/other.txt"] },
+      }),
+      root,
+    ),
+    /edges\.raw_source holds a single link; pass one ref/,
+  );
+});
+
+test("a survivor whose prior frontmatter cannot be read is refused", () => {
+  const root = newVault({
+    "wiki/notes/a.md": "---\ntitle: A\nvolatility: stable\n---\nA body.\n",
+    // The prior block is unreadable, so its tags and volatility cannot enter the
+    // union; the plan re-authors raw_source, leaving the final block readable.
+    "wiki/notes/b.md":
+      "---\ntitle: B\nvolatility: stable\nraw_source: not-a-link\n---\nB body.\n",
+    "raw/doc.txt": "raw\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", {
+        body: "B body.\n\nA body.\n",
+        edges: { raw_source: ["raw/doc.txt"] },
+      }),
+      root,
+    ),
+    /the survivor's prior frontmatter could not be read/,
+  );
+});
+
 test("the executor's pre-delete re-check refuses a survivor mutated past validation", async () => {
   const root = newVault(fragmentedVault);
   const resolved = resolveOK(decodePlanOK(consolidatePlan), root);

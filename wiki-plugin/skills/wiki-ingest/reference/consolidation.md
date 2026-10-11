@@ -28,15 +28,18 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 3. **Pick the survivor.** Default to the assessment's recommendation (itself defaulting to the check's suggestion: most inbound links, largest body as tie-break). Override it when another member holds the cluster's subject more centrally, or when a fresh page reads better than bloating an existing one: a `create` survivor is a first-class choice, not a fallback.
 
-4. **Author the survivor body.** Keep the survivor's own content, then add each absorbed page's content as a section (`## <absorbed page's title>`), carrying every claim, citation and link across. **Re-base sibling links** copied out of another kind-folder — see [the losslessness gate](#the-losslessness-gate). Frontmatter (`summary`, `tags`, `volatility`, typed edges) is your judgment about the merged page; list keys union as on any update, and a survivor whose plan rewrites frontmatter must carry `volatility` (`stable | evolving | volatile`) — a fresh `create` survivor always does. Set the survivor's `volatility` to the most volatile member's: a merge is only as durable as its shakiest part.
+4. **Author the survivor body.** Keep the survivor's own content, then add each absorbed page's content as a section (`## <absorbed page's title>`), carrying every claim, citation and link across. **Re-base sibling links** copied out of another kind-folder — see [the losslessness gate](#the-losslessness-gate).
+
+   **Merge the frontmatter too, or the losslessness gate refuses the plan.** It is containment, not judgment: every edge target of every absorbed page — including `raw_source`, under any edge key, so re-typing is fine — must appear in the survivor's frontmatter; the survivor's `tags` must union the cluster's; and its `volatility` must be the most volatile member's, since a merge is only as durable as its shakiest part. An edge to a page the consolidation itself absorbs is the one exception: it collapses into the survivor. `summary` is yours to author afresh. A survivor whose plan rewrites frontmatter must carry `volatility` (`stable | evolving | volatile`) — a fresh `create` survivor always does.
 
 5. **Write the plan** to a scratch file, never inside the vault — step 4's Consolidation variant: `"action": "consolidate"`, a top-level `"consolidates"` naming the absorbed refs, and `pages` holding exactly one entry, the survivor, whose `body` is the full merged text.
    - Existing survivor: `op: "update"` with `page_ref`, and **no** `kind` (the executor rejects a kind on an update).
    - Fresh survivor: `op: "create"` with `title`, `kind` and `body`.
-   - No `raw`, no `raw_source`, no second page, no ref named twice, survivor never listed in `consolidates`.
+   - No `raw`, no `frontmatter.raw_source` sentinel (a Consolidation is sourced from pages, not an artifact). Carry an absorbed page's `raw_source` forward by naming its ref under `edges.raw_source` — the single-link key takes one ref.
+   - No second page, no ref named twice, survivor never listed in `consolidates`.
    - **Pin the snapshot you authored from**: a top-level `"assessed"` holding `{"head": "<assess head>", "members": [{"page_ref": "<absorbed ref>", "blob_oid": "<its assess oid>"}]}`, one entry per absorbed ref, copied verbatim from step 1. The executor refuses the plan when `HEAD` or any pinned member moved, so a stale merge never lands; re-run step 1 rather than editing the pin.
 
-6. **Run it and report.** `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` validates the whole plan before writing — each absorbed body readable in the survivor's body, every ref a real page, the survivor not absorbing itself, the pinned snapshot still current — then commits once and prints the SHA. Report the survivor, the deleted refs and the SHA. No page-content dump. On error nothing was committed: fix the plan and rerun rather than hand-repairing, which is safe because writes are idempotent and the survivor is written before anything is deleted.
+6. **Run it and report.** `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` validates the whole plan before writing — each absorbed body readable in the survivor's body, every absorbed edge target, tag and the cluster's volatility carried in its frontmatter, every ref a real page, the survivor not absorbing itself, the pinned snapshot still current — then commits once and prints the SHA. Report the survivor, the deleted refs and the SHA. No page-content dump. On error nothing was committed: fix the plan and rerun rather than hand-repairing, which is safe because writes are idempotent and the survivor is written before anything is deleted.
 
 ## The losslessness gate
 
@@ -49,16 +52,18 @@ The bullets are the authoring rule, not the boundary itself (ADR-0030); when in 
 
 Links are compared by where they resolve, not how they are spelled — a destination outside the vault is compared literally — so a body copied into another kind-folder matches once its destinations are re-based (step 4). Line endings are normalised before the comparison, so the author need not match the working tree's endings.
 
-**Bodies only.** Frontmatter is outside the comparison on both sides: an absorbed page's typed edges and `raw_source` are your judgment for the merged page, not part of the guarantee. An `update` survivor's own former body is covered too; a `create` survivor has no prior body, so only the absorbed pages are checked.
+**Frontmatter is compared too, by target containment** (ADR-0031): an absorbed edge target the survivor's frontmatter omits, a dropped tag, or a `volatility` that is not the cluster's most volatile refuses the plan exactly as a lost block does. Re-typing an edge is fine, an edge into the absorbed set or the survivor is exempt, and `summary` is free — step 4 has the authoring rule and the `edges.raw_source` path.
+
+**The survivor counts too.** An `update` survivor's own former body must survive as well, and its former `tags` and `volatility` join the cluster's in the union and the floor; only its former edge targets are left to the merge's judgment. A `create` survivor has no prior content, so only the absorbed pages are checked.
 
 **When it runs.** During `ingest` validation, before any write, and again in the executor before it writes the survivor or deletes the absorbed pages. There is no partial-commit state to inspect: the one `ingest` invocation is the whole feedback loop.
 
-**What failure looks like.** Exit code 1, nothing committed, and a single stderr line beginning `invalid plan: `, its problems joined by `; `. The gate's own problem names the absorbed ref — or says the survivor's own former content — and quotes the opening line of the first block that failed to match:
+**What failure looks like.** Exit code 1, nothing committed, and a single stderr line beginning `invalid plan: `, its problems joined by `; `. Each gate problem says what the survivor is missing — the absorbed ref and the first block that failed to match, the edge target, the dropped tags, or the `volatility` the cluster demands:
 
 ```
 invalid plan: plan.consolidates: the survivor's body does not contain wiki/concepts/caching-ttl.md's content, starting at "A cache entry expires after its TTL." — a Consolidation is lossless (ADR-0021)
 ```
 
-**What to do.** Carry that block into the survivor body and rerun the same plan — writes are idempotent, and the survivor lands before anything is deleted.
+**What to do.** Carry what the message names into the survivor — the block, the edge target, the tag, the volatility — and rerun the same plan. Rerunning is safe: writes are idempotent, and the survivor lands before anything is deleted.
 
 **The pin is required.** A `consolidate` plan without `assessed` is refused outright. The gate cannot see an absorbed page that *shrank* between the assessment read and the write — the shorter text is still contained — so the pin, not the comparison, is what stops a merge silently dropping what the absorbed page lost.
