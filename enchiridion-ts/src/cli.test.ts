@@ -1018,6 +1018,38 @@ test("init: refuses a directory that already looks like a vault", () => {
   assert.match(stderr, /already looks like a vault/);
 });
 
+test("init: a dir nested inside another repo gets its own repo (#671)", async () => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-init-"));
+  const { status: outerStatus } = spawnSync("git", ["-C", outer, "init"], {
+    encoding: "utf8",
+  });
+  assert.equal(outerStatus, 0);
+
+  // Relative from inside the enclosing repo — the case findRoot hands back
+  // unnormalised.
+  const { status, stdout, stderr } = runEnv(
+    ["init", "vault", "--mode", "dedicated"],
+    { cwd: outer },
+  );
+  assert.equal(status, 0, stderr);
+
+  const root = path.join(outer, "vault");
+  // The child's cwd is the physical path, so /var and /private/var must agree.
+  assert.equal(fs.realpathSync(stdout.trim()), fs.realpathSync(root));
+
+  const { status: logStatus, stdout: log } = spawnSync(
+    "git",
+    ["-C", root, "log", "--format=%s"],
+    { encoding: "utf8" },
+  );
+  assert.equal(logStatus, 0, `no commit in the nested vault:\n${log}`);
+  assert.match(log, /Initialize wiki vault/);
+  assert.equal(
+    path.resolve(await git.findRoot({ fs, filepath: root })),
+    path.resolve(root),
+  );
+});
+
 test("init: seeds a repo around an existing wiki/ tree without git (#323)", () => {
   const root = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-init-")),

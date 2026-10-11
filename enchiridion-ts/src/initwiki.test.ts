@@ -144,6 +144,63 @@ test("isVault requires a marker AND a git work tree (#323)", async () => {
   assert.equal(await isVault(root), true);
 });
 
+test("init in a dir nested inside another repo makes its own repo (#671)", async () => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-initwiki-"));
+  await new VaultGit(outer).init();
+  const root = path.join(outer, "vault");
+
+  const got = await init(root, ModeDedicated, "");
+
+  assert.equal(got, path.resolve(root));
+  // The enclosing repo must not be mistaken for this directory's own.
+  assert.equal(
+    path.resolve(await git.findRoot({ fs, filepath: root })),
+    path.resolve(root),
+  );
+  const files = await git.listFiles({ fs, dir: root, ref: "HEAD" });
+  assert.ok(files.includes(".gitignore"), files.join("\n"));
+});
+
+test("init at the root of an existing repo commits into that repo (#671)", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-initwiki-"));
+  const repo = new VaultGit(root);
+  await repo.init();
+  fs.writeFileSync(path.join(root, "README.md"), "existing project\n");
+  await repo.add(["README.md"]);
+  const before = await repo.commit("existing history");
+
+  await init(root, ModeDedicated, "");
+
+  // Same repo, not a second one: the pre-existing commit is still in history.
+  const commits = await git.log({ fs, dir: root, ref: "HEAD" });
+  assert.equal(commits[0].commit.message.trim(), "Initialize wiki vault");
+  assert.ok(
+    commits.some((c) => c.oid === before),
+    "init did not commit into the pre-existing repository",
+  );
+});
+
+test("init converts a wiki/ tree nested inside another repo (#671)", async () => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-initwiki-"));
+  await new VaultGit(outer).init();
+  const root = path.join(outer, "vault");
+  fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "a.md"),
+    "---\ntitle: A\n---\n\nBody.\n",
+  );
+
+  const got = await init(root, ModeDedicated, "");
+
+  assert.equal(got, path.resolve(root));
+  assert.equal(
+    path.resolve(await git.findRoot({ fs, filepath: root })),
+    path.resolve(root),
+  );
+  const files = await git.listFiles({ fs, dir: root, ref: "HEAD" });
+  assert.ok(files.includes("wiki/concepts/a.md"), files.join("\n"));
+});
+
 test("init converts an existing wiki/ tree without git (#323)", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-initwiki-"));
   fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });

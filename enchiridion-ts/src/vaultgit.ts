@@ -213,11 +213,12 @@ export class VaultGit implements Git {
 
   // -- Lenient: never throw, return the documented default -------------------
 
-  /** Whether root is a git work tree. Lenient: false when absent/unreadable. */
+  /** Whether root itself is a work-tree root — an ancestor's repository does
+   * not make a nested directory one. Lenient: false when absent or unreadable. */
   async isWorkTree(): Promise<boolean> {
     try {
-      await git.findRoot({ fs, filepath: this.root });
-      return true;
+      const found = await git.findRoot({ fs, filepath: this.root });
+      return path.resolve(found) === path.resolve(this.root);
     } catch {
       return false;
     }

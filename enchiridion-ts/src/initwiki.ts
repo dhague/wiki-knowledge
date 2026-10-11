@@ -4,8 +4,8 @@
  * git repo around an existing `wiki/` tree that has no git work tree.
  *
  * [init] refuses a directory that is already a vault ([isVault]: a marker and a
- * git work tree). Deployment mode (ADR-0004) is the caller's judgment, never
- * inferred here.
+ * git work tree of its own). Deployment mode (ADR-0004) is the caller's
+ * judgment, never inferred here.
  */
 
 import fs from "node:fs";
@@ -41,8 +41,9 @@ export const gitignore =
   "_index.md\n";
 
 /** Whether root already looks like a vault — the gate [init] refuses on. A root
- * qualifies only with a marker (`wiki/` or `.wiki-root`) and a git work tree; a
- * marker without git still resolves as a vault root for reads. */
+ * qualifies only with a marker (`wiki/` or `.wiki-root`) and a work tree of its
+ * own; an ancestor's repository does not count, and a marker without git still
+ * resolves as a vault root for reads. */
 export async function isVault(root: string): Promise<boolean> {
   if (!hasMarker(root)) return false;
   return await new VaultGit(root).isWorkTree();
@@ -84,7 +85,7 @@ export async function init(
 
   if (await isVault(vaultRoot)) {
     throw new Error(
-      `${vaultRoot} already looks like a vault (a wiki/ or .wiki-root marker in a git work tree) — ingest into it, or scaffold a different path`,
+      `${vaultRoot} already looks like a vault (a wiki/ or .wiki-root marker in a git work tree of its own) — ingest into it, or scaffold a different path`,
     );
   }
 
