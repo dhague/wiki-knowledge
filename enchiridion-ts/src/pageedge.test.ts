@@ -74,9 +74,8 @@ test("edgeLink: falls back to the basename when the target has no title", () => 
   );
 });
 
-test("edgeLink: refuses a value that is neither link nor resolvable ref", () => {
+test("edgeLink: refuses a value that is neither link nor ref, naming the remedy", () => {
   for (const bad of [
-    "not a ref",
     "https://example.com/x.md",
     "/etc/passwd",
     "../outside.md",
@@ -85,20 +84,29 @@ test("edgeLink: refuses a value that is neither link nor resolvable ref", () => 
     assert.throws(
       () => edgeLink("related", bad, "wiki/concepts", vault),
       (err: Error) =>
-        err.message.includes("related") && err.message.includes(bad),
-      `expected ${JSON.stringify(bad)} to be refused, naming key and value`,
+        err.message.includes("related") &&
+        err.message.includes(JSON.stringify(bad)) &&
+        err.message.includes(
+          "write a link like [Title](path/to/page.md), or a ref under wiki/",
+        ),
+      `expected ${JSON.stringify(bad)} to be refused, naming key, value and remedy`,
     );
   }
 });
 
-test("edgeLink: refuses a ref that does not resolve to a file", () => {
-  assert.throws(
-    () =>
-      edgeLink("related", "wiki/concepts/missing.md", "wiki/concepts", vault),
-    (err: Error) =>
-      err.message.includes("related") &&
-      err.message.includes("wiki/concepts/missing.md"),
-  );
+test("edgeLink: a ref-shaped value with no page is refused as a missing target", () => {
+  for (const missing of ["not a ref", "wiki/concepts/missing.md"]) {
+    assert.throws(
+      () => edgeLink("related", missing, "wiki/concepts", vault),
+      (err: Error) =>
+        err.message.includes("related") &&
+        err.message.includes(JSON.stringify(missing)) &&
+        err.message.includes("no page at") &&
+        err.message.includes("create the page first, or fix the ref") &&
+        !err.message.includes("neither a markdown link"),
+      `expected ${JSON.stringify(missing)} to be refused as a missing page`,
+    );
+  }
 });
 
 test("edge key predicates: raw_source is an edge key but not a list", () => {

@@ -329,7 +329,9 @@ export class Vault {
   movePage(oldRef: string, newRef: string): string[] {
     const files = this.loadWikiPages();
     if (!(oldRef in files)) {
-      throw new Error(`${oldRef} not found under ${this.root}`);
+      throw new Error(
+        `${oldRef} not found under ${this.root} — refs are vault-relative (wiki/<kind-folder>/<file>.md); list pages with \`enchiridion search <term>\``,
+      );
     }
 
     // planMove keys the moved page under newRef, so writing every changed page

@@ -273,6 +273,44 @@ test("decodePlan rejects malformed JSON", () => {
   assert.throws(() => decodePlan(`{"title":`), /invalid plan JSON/);
 });
 
+test("decodePlan names the plan file in a refusal", () => {
+  assert.throws(
+    () => decodePlan(`{"title":`, "plans/x.json"),
+    (err: unknown) =>
+      (err as Error).message.startsWith("invalid plan JSON in plans/x.json:"),
+  );
+});
+
+test("decodePlan refuses a document that is not a JSON object", () => {
+  for (const [json, shape] of [
+    ["null", "null"],
+    ["[]", "an array"],
+    ["5", "number"],
+  ]) {
+    assert.throws(
+      () => decodePlan(json, "plans/x.json"),
+      (err: unknown) =>
+        (err as Error).message ===
+        `invalid plan JSON in plans/x.json: the document must be a JSON object, got ${shape}`,
+    );
+  }
+});
+
+test("decodePlan refuses a page that is not a JSON object", () => {
+  for (const [json, shape] of [
+    ["null", "null"],
+    ["[]", "an array"],
+    ["5", "number"],
+  ]) {
+    assert.throws(
+      () => decodePlan(`{"title":"T","pages":[${json}]}`, "(stdin)"),
+      (err: unknown) =>
+        (err as Error).message ===
+        `invalid plan JSON in (stdin): pages[0] must be a JSON object, got ${shape}`,
+    );
+  }
+});
+
 test("orderedMap null decodes empty", () => {
   const plan = decodePlanOK(
     `{"title":"T","pages":[{"op":"create","title":"A","frontmatter":null}]}`,
@@ -418,7 +456,10 @@ test("shape validation reports every problem at once", () => {
 
 test("shape validation rejects an empty plan", () => {
   const got = validationErrors(`{"title":"T"}`, "");
-  assert.ok(got.includes("at least one page"), got);
+  assert.ok(
+    got.includes("plan.pages must be a JSON array with at least one page"),
+    got,
+  );
 });
 
 test("shape validation rejects a bad op", () => {
@@ -473,7 +514,26 @@ test("shape validation rejects an unknown kind", () => {
     {"op":"create","title":"A","kind":"nonsense","body":"b"}]}`,
     "",
   );
-  assert.ok(got.includes(`pages[0].kind "nonsense" is not a valid kind`), got);
+  assert.ok(
+    got.includes(
+      `pages[0].kind "nonsense" is not a valid kind; one of concept, entity, source, synthesis`,
+    ),
+    got,
+  );
+});
+
+test("shape validation lists a discovered custom kind in the refusal", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"nonsense","body":"b"}]}`,
+    newVault({ "wiki/decisions/.keep": "" }),
+  );
+  assert.ok(
+    got.includes(
+      `pages[0].kind "nonsense" is not a valid kind; one of concept, entity, source, synthesis, decision`,
+    ),
+    got,
+  );
 });
 
 test("shape validation rejects a non-true raw_source", () => {
@@ -636,6 +696,36 @@ test("shape validation rejects a volatility outside the schema domain", () => {
   );
 });
 
+// OrderedMap.decode passes values through unchecked, so a non-list would
+// otherwise be dereferenced while composing links.
+test("shape validation rejects a non-list edges value", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"related":5}}]}`,
+    newVault({}),
+  );
+  assert.ok(
+    got.includes(
+      "pages[0].edges.related must be a list of vault-relative page refs, got 5",
+    ),
+    got,
+  );
+});
+
+test("shape validation rejects a non-string edges entry", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"related":["wiki/concepts/a.md",5]}}]}`,
+    newVault({}),
+  );
+  assert.ok(
+    got.includes("pages[0].edges.related entries must be strings, got 5"),
+    got,
+  );
+});
+
 // --- semantic validation ----------------------------------------------------
 
 test("semantic validation rejects an existing create target", () => {
@@ -646,7 +736,9 @@ test("semantic validation rejects an existing create target", () => {
     root,
   );
   assert.ok(
-    got.includes("create target wiki/concepts/a.md already exists"),
+    got.includes(
+      'create target wiki/concepts/a.md already exists — use op:"update" to revise it, or give the page a different title',
+    ),
     got,
   );
 });
@@ -662,7 +754,9 @@ test("semantic validation rejects a directory at a create target", () => {
     root,
   );
   assert.ok(
-    got.includes("create target wiki/concepts/a.md already exists"),
+    got.includes(
+      'create target wiki/concepts/a.md already exists — use op:"update" to revise it, or give the page a different title',
+    ),
     got,
   );
 });
@@ -684,6 +778,24 @@ test("resolve refuses unmigrated kind folders", () => {
   );
 });
 
+// The plural is the canonical folder, not the singular plus "s": the old
+// concatenation printed wiki/entitys/.
+test("resolve names the canonical plural folder for a legacy kind", () => {
+  const root = newVault({
+    "wiki/entity/old.md": "---\ntitle: Old\n---\nold\n",
+  });
+  assert.throws(
+    () =>
+      resolve(
+        decodePlanOK(`{"title":"T","pages":[
+      {"op":"create","title":"A","kind":"concept","body":"b"}]}`),
+        root,
+      ),
+    (err: unknown) =>
+      (err as Error).message.includes("git mv wiki/entity/* wiki/entities/"),
+  );
+});
+
 test("resolve accepts a synthesis folder", () => {
   const root = newVault({ "wiki/synthesis/s.md": "---\ntitle: S\n---\ns\n" });
   resolve(
@@ -699,7 +811,12 @@ test("semantic validation rejects a missing update target", () => {
     {"op":"update","title":"A","page_ref":"wiki/concepts/gone.md"}]}`,
     newVault({}),
   );
-  assert.ok(got.includes("page_ref wiki/concepts/gone.md does not exist"), got);
+  assert.ok(
+    got.includes(
+      'page_ref wiki/concepts/gone.md does not exist — use op:"create" to add it, or fix the ref',
+    ),
+    got,
+  );
 });
 
 test("semantic validation rejects an unresolvable edge target", () => {
@@ -710,7 +827,9 @@ test("semantic validation rejects an unresolvable edge target", () => {
     newVault({}),
   );
   assert.ok(
-    got.includes('related target "wiki/concepts/nowhere.md" does not resolve'),
+    got.includes(
+      'related target "wiki/concepts/nowhere.md" does not resolve to a real page — create it in this plan, fix the ref, or drop the related entry',
+    ),
     got,
   );
 });
@@ -735,7 +854,13 @@ test("semantic validation enforces path length", () => {
     `{"title":"T","pages":[{"op":"create","title":"${longTitle}","kind":"concept","body":"b"}]}`,
     path.join(root, "d".repeat(150)),
   );
-  assert.ok(got.includes("exceeds 255 chars"), got);
+  assert.ok(
+    got.includes("exceeds 255 chars (") &&
+      got.includes(
+        "chars with vault root) — shorten the title, or put the vault nearer the filesystem root",
+      ),
+    got,
+  );
 });
 
 test("semantic validation runs chain of evidence", () => {
@@ -746,7 +871,7 @@ test("semantic validation runs chain of evidence", () => {
     root,
   );
   assert.ok(
-    got.includes("needs a sources/ page whose raw_source points at it"),
+    got.includes("needs a wiki/sources/ page whose raw_source points at it"),
     got,
   );
 });
@@ -1606,9 +1731,12 @@ test("shape validation requires the assessed pin on a consolidate plan", () => {
       },
     ],
   });
-  assert.match(
-    validationErrors(src, newVault(fragmentedVault)),
-    /plan\.assessed is required/,
+  const got = validationErrors(src, newVault(fragmentedVault));
+  assert.ok(
+    got.includes(
+      "plan.assessed is required when action is 'consolidate': pin the snapshot the cluster was assessed at with `enchiridion assess <page_ref...>`",
+    ),
+    got,
   );
 });
 

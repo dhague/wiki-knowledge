@@ -327,6 +327,16 @@ test("queue: read missing file is empty", () => {
   assert.deepEqual(readQueue(path.join(tmpRoot(), "watch-queue.jsonl")), []);
 });
 
+test("queue: an unreadable queue names the queue and the errno", () => {
+  const queuePath = path.join(tmpRoot(), "watch-queue.jsonl");
+  fs.mkdirSync(queuePath);
+  const err = thrownBy(() => readQueue(queuePath));
+  assert.match(
+    err.message,
+    /could not read the watch queue at .*watch-queue\.jsonl: EISDIR/,
+  );
+});
+
 // --- eligibility check on settle ----------------------------------------------
 
 test("check-and-enqueue: enqueues when eligible", () => {

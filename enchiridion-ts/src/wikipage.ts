@@ -794,11 +794,15 @@ function frontmatterNodeFrom(
   if (!hasFrontmatter || frontmatter.trim() === "") return new YAMLMap();
   const doc = parseDocument(frontmatter);
   if (doc.errors.length > 0) {
-    throw new Error(`invalid frontmatter YAML: ${doc.errors[0].message}`);
+    throw new Error(
+      `invalid frontmatter YAML: ${doc.errors[0].message} — repair the block between the --- fences`,
+    );
   }
   if (doc.contents === null) return new YAMLMap();
   if (!isMap(doc.contents))
-    throw new Error("frontmatter is not a YAML mapping");
+    throw new Error(
+      "frontmatter is not a YAML mapping — the block between the --- fences must be YAML key: value pairs",
+    );
   return doc.contents;
 }
 

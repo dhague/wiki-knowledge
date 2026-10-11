@@ -573,6 +573,26 @@ describe("search", () => {
     }
   });
 
+  it("names the query when FTS5 rejects it", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "A", "s", "alpha only", [], "", ""),
+    );
+    const index = await openIndex(fake);
+    try {
+      await assert.rejects(
+        () => index.search({ text: "AND", raw: true }),
+        (err: unknown) =>
+          err instanceof Error &&
+          /search: the query is not a valid FTS5 expression: fts5: syntax error near "AND" — simplify the query, or pass --raw with a valid FTS5 MATCH expression/.test(
+            err.message,
+          ),
+      );
+    } finally {
+      index.close();
+    }
+  });
+
   it("syncs committed history on every search", async () => {
     const fake = fakeAtHead(
       "head1",

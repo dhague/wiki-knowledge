@@ -133,7 +133,15 @@ function decodeRecord(
   }
   const kind = resolveKind(folder, kindByFolder?.[folder]);
 
-  const data = frontmatterMap(text);
+  let data: Record<string, unknown>;
+  try {
+    data = frontmatterMap(text);
+  } catch (err) {
+    throw new Error(
+      `"${pageRef}": frontmatter is not valid YAML — ${err instanceof Error ? err.message : String(err)}; repair that page's block`,
+      { cause: err },
+    );
+  }
   const { edges, malformed } = decodeEdges(data, pageDir);
 
   return {

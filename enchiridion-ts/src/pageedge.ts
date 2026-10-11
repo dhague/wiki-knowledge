@@ -51,10 +51,18 @@ function isVaultRef(ref: string): boolean {
   return normalized !== ".." && !normalized.startsWith("../");
 }
 
-/** The one refusal message, naming key and value. Returns a string, not an
+/** The refusal for a value that is not an edge value at all: naming key and
+ * value, and the two shapes the schema accepts. Returns a string, not an
  * Error, so the CLI can route it through `fail`; [edgeLink] throws it. */
 export function edgeRefusal(key: string, value: unknown): string {
-  return `${key}: ${JSON.stringify(value)} is neither a markdown link nor a resolvable vault-relative page ref`;
+  return `${key}: ${JSON.stringify(value)} is neither a markdown link nor a vault-relative page ref — write a link like [Title](path/to/page.md), or a ref under wiki/`;
+}
+
+/** The refusal for a value shaped like a ref whose target is absent: the two
+ * are different faults, so a resolvable-looking typo is not told to fix its
+ * spelling. Returns a string, per [edgeRefusal]. */
+export function edgeTargetMissing(key: string, value: unknown): string {
+  return `${key}: no page at ${JSON.stringify(value)} — refs are vault-relative (wiki/<kind-folder>/<file>.md); create the page first, or fix the ref`;
 }
 
 /** An edge link's label: the target's title, its basename when it has none,
@@ -89,6 +97,6 @@ export function edgeLink(
   const ref = path.posix.normalize(value);
   if (!isVaultRef(value)) throw new Error(edgeRefusal(key, value));
   const found = lookup(ref);
-  if (!found.exists) throw new Error(edgeRefusal(key, value));
+  if (!found.exists) throw new Error(edgeTargetMissing(key, value));
   return composeEdgeLink(key, ref, pageDir, found.title);
 }

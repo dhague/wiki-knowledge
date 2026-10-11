@@ -65,7 +65,7 @@ export async function addExclusion(
   const vault = new Vault(root);
   const members = [...new Set(refs.map((ref) => path.posix.normalize(ref)))];
   if (members.length < 2) {
-    fail("an exclusion names at least two member pages");
+    fail(`an exclusion names at least two member pages, got ${members.length}`);
   }
   const folder = folderOf(members[0]);
   for (const ref of members) {

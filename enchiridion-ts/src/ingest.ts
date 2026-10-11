@@ -80,7 +80,7 @@ import {
   splitFrontmatter,
 } from "./wikipage.js";
 import { composeEdgeLink } from "./pageedge.js";
-import { path as placePath, Kinds } from "./place.js";
+import { path as placePath, Kinds, KindFolders } from "./place.js";
 import { Vault } from "./vault.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
@@ -204,15 +204,27 @@ export interface Plan {
   assessed: PlanAssessment | null;
 }
 
-/** Read one plan from JSON; `action` defaults to `ingest`. */
-export function decodePlan(jsonText: string): Plan {
+/** The JSON type of a value, for a refusal that has to say what it got. */
+function jsonShape(v: unknown): string {
+  return v === null ? "null" : Array.isArray(v) ? "an array" : typeof v;
+}
+
+/** Read one plan from JSON; `action` defaults to `ingest`. `source` is the plan
+ * path, or `"(stdin)"`, named in a refusal. */
+export function decodePlan(jsonText: string, source = ""): Plan {
+  const where = source === "" ? "" : ` in ${source}`;
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(jsonText) as Record<string, unknown>;
   } catch (err) {
-    throw new Error(`invalid plan JSON: ${(err as Error).message}`, {
+    throw new Error(`invalid plan JSON${where}: ${(err as Error).message}`, {
       cause: err,
     });
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(
+      `invalid plan JSON${where}: the document must be a JSON object, got ${jsonShape(data)}`,
+    );
   }
   const action = typeof data["action"] === "string" ? data["action"] : "";
   const rawPages = Array.isArray(data["pages"]) ? data["pages"] : [];
@@ -221,7 +233,12 @@ export function decodePlan(jsonText: string): Plan {
         typeof ref === "string" ? ref : String(ref),
       )
     : [];
-  const pages: PagePlan[] = rawPages.map((p) => {
+  const pages: PagePlan[] = rawPages.map((p, i) => {
+    if (p === null || typeof p !== "object" || Array.isArray(p)) {
+      throw new Error(
+        `invalid plan JSON${where}: pages[${i}] must be a JSON object, got ${jsonShape(p)}`,
+      );
+    }
     const page = p as Record<string, unknown>;
     return {
       op: typeof page["op"] === "string" ? page["op"] : "",
@@ -344,7 +361,7 @@ export class Resolved {
       problems.push("plan.title is required");
     }
     if (this.plan.pages.length === 0) {
-      problems.push("plan.pages must contain at least one page");
+      problems.push("plan.pages must be a JSON array with at least one page");
     }
 
     for (let i = 0; i < this.pages.length; i++) {
@@ -372,7 +389,7 @@ export class Resolved {
           !(page.kind in this.extraKindFolders)
         ) {
           problems.push(
-            `${prefix}.kind ${JSON.stringify(page.kind)} is not a valid kind`,
+            `${prefix}.kind ${JSON.stringify(page.kind)} is not a valid kind; one of ${[...Kinds, ...Object.keys(this.extraKindFolders)].join(", ")}`,
           );
         }
         if (page.body === null) {
@@ -437,13 +454,28 @@ export class Resolved {
         }
       }
 
-      // `page set` refuses a multi-entry single-link key; the plan path must too,
-      // rather than silently writing the first ref.
-      for (const [key, refs] of page.edges.all()) {
+      // OrderedMap.decode leaves edge values unchecked, so validation is the
+      // only place a non-list can be refused; `page set` refuses a multi-entry
+      // single-link key, and the plan path must too rather than silently
+      // writing the first ref.
+      for (const [key, refs] of (page.edges as OrderedMap<unknown>).all()) {
+        if (!Array.isArray(refs)) {
+          problems.push(
+            `${prefix}.edges.${key} must be a list of vault-relative page refs, got ${JSON.stringify(refs)}`,
+          );
+          continue;
+        }
         if (isSingleLinkEdgeKey(key) && refs.length > 1) {
           problems.push(
             `${prefix}.edges.${key} holds a single link; pass one ref, got ${refs.length}`,
           );
+        }
+        for (const entry of refs) {
+          if (typeof entry !== "string") {
+            problems.push(
+              `${prefix}.edges.${key} entries must be strings, got ${JSON.stringify(entry)}`,
+            );
+          }
         }
       }
     }
@@ -507,7 +539,7 @@ export class Resolved {
     // Consolidation, and it must name every page the plan absorbs.
     if (this.plan.action === ActionConsolidate && this.plan.assessed === null) {
       problems.push(
-        `plan.assessed is required when action is '${ActionConsolidate}': pin the snapshot the cluster was assessed at`,
+        `plan.assessed is required when action is '${ActionConsolidate}': pin the snapshot the cluster was assessed at with \`enchiridion assess <page_ref...>\``,
       );
     }
     if (this.plan.assessed !== null) {
@@ -597,17 +629,19 @@ export class Resolved {
       if (page.op === OpCreate && rp.pageRef !== "") {
         if (rp.occupied) {
           problems.push(
-            `${prefix}: create target ${rp.pageRef} already exists`,
+            `${prefix}: create target ${rp.pageRef} already exists — use op:"update" to revise it, or give the page a different title`,
           );
         }
         const full = v.path(rp.pageRef);
         if (full.length > MaxPathLength) {
           problems.push(
-            `${prefix}: path ${rp.pageRef} exceeds ${MaxPathLength} chars (${full.length} chars with vault root)`,
+            `${prefix}: path ${rp.pageRef} exceeds ${MaxPathLength} chars (${full.length} chars with vault root) — shorten the title, or put the vault nearer the filesystem root`,
           );
         }
       } else if (page.op === OpUpdate && rp.pageRef !== "" && !rp.loaded) {
-        problems.push(`${prefix}.page_ref ${rp.pageRef} does not exist`);
+        problems.push(
+          `${prefix}.page_ref ${rp.pageRef} does not exist — use op:"create" to add it, or fix the ref`,
+        );
       }
 
       for (const target of pageLinkTargets(page, this.plan)) {
@@ -616,7 +650,7 @@ export class Resolved {
         // composing a link to something unopenable.
         if (!v.exists(target.ref)) {
           problems.push(
-            `${prefix}: ${target.key} target ${JSON.stringify(target.ref)} does not resolve to a real page`,
+            `${prefix}: ${target.key} target ${JSON.stringify(target.ref)} does not resolve to a real page — create it in this plan, fix the ref, or drop the ${target.key} entry`,
           );
         }
       }
@@ -963,7 +997,7 @@ export function resolve(plan: Plan, root: string): Resolved {
     const legacy = v.legacyKindFolders();
     if (legacy.length > 0) {
       const moves = legacy.map(
-        (kind) => `git mv wiki/${kind}/* wiki/${kind}s/`,
+        (kind) => `git mv wiki/${kind}/* wiki/${KindFolders[kind]}/`,
       );
       throw new Error(
         `${root} holds pre-ADR-0008 kind-folders (wiki/${legacy.join(", wiki/")}); ` +
@@ -1169,9 +1203,13 @@ function applyFrontmatter(
   }
 
   for (const [key, refs] of planPage.edges.all()) {
+    // A non-list value or a non-string entry is a shape error; validation
+    // reports it, so only well-typed refs are composed here.
+    if (!Array.isArray(refs)) continue;
+    const typed = refs.filter((ref) => typeof ref === "string");
     const single = isSingleLinkEdgeKey(key);
-    if (single && refs.length === 0) continue; // nothing to point at
-    const links = refs.map((ref) =>
+    if (single && typed.length === 0) continue; // nothing to point at
+    const links = typed.map((ref) =>
       composeEdgeLink(key, ref, pageDir, resolveTitle(ref, titles, v)),
     );
     // A single-link key (`raw_source`) is a scalar; validation already refused
@@ -1223,7 +1261,9 @@ function pageLinkTargets(page: PagePlan, plan: Plan): LinkTarget[] {
     targets.push({ key: "raw_source", ref: path.posix.normalize(plan.raw) });
   }
   for (const [key, refs] of page.edges.all()) {
+    if (!Array.isArray(refs)) continue;
     for (const ref of refs) {
+      if (typeof ref !== "string") continue;
       targets.push({ key, ref: path.posix.normalize(ref) });
     }
   }
