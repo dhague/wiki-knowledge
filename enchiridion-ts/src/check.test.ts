@@ -1,4 +1,4 @@
-/** Tests for the twelve mechanical vault health checks. staleSynthesis and
+/** Tests for the mechanical vault health checks. staleSynthesis and
  * conceptFragmentation need a real git commit: the index is a view of HEAD
  * (ADR-0015). */
 
@@ -15,6 +15,7 @@ import {
   staleSynthesis,
   missingVolatilitySourceDate,
   tagsShape,
+  selfReferentialEdge,
   unresolvedSupersession,
   contradictionCallouts,
   orphans,
@@ -958,15 +959,56 @@ test("duplicate-frontmatter: a page without frontmatter is clean", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// selfReferentialEdge
+// ---------------------------------------------------------------------------
+
+test("self-referential-edge: an edge back to its own page is reported", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      fmBlock('source:\n  - "[foo](foo.md)"\n') + "Body.\n",
+  });
+  const findings = await selfReferentialEdge(read(root));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/concepts/foo.md");
+  assert.equal(
+    findings[0].detail,
+    "source points at wiki/concepts/foo.md itself",
+  );
+});
+
+test("self-referential-edge: a self-ref through another spelling resolves", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      fmBlock('related:\n  - "[self](../concepts/./foo.md)"\n') + "Body.\n",
+  });
+  const findings = await selfReferentialEdge(read(root));
+  assert.equal(findings.length, 1);
+  assert.equal(
+    findings[0].detail,
+    "related points at wiki/concepts/foo.md itself",
+  );
+});
+
+test("self-referential-edge: an edge to another page is clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      fmBlock('related:\n  - "[bar](bar.md)"\n') + "Body.\n",
+    "wiki/concepts/bar.md": fmBlock() + "Body.\n",
+  });
+  assert.deepEqual(await selfReferentialEdge(read(root)), []);
+});
+
+// ---------------------------------------------------------------------------
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all thirteen check names", () => {
+test("CHECKS registry contains all fourteen check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
     "frontmatter-link-format",
     "tags-shape",
+    "self-referential-edge",
     "stale-synthesis",
     "missing-volatility-source-date",
     "unresolved-supersession",

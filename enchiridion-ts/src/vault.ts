@@ -11,8 +11,10 @@ import { mkdirSafe } from "./fsutil.js";
 import { kindByFolder, kindForFolder, readKindMeta } from "./kindmeta.js";
 import {
   Page,
+  linkDest,
   planConsolidate,
   planMove,
+  resolveLinkDest,
   splitFrontmatter,
 } from "./wikipage.js";
 import { loadRecords, newPageRecord } from "./pagerecord.js";
@@ -271,6 +273,35 @@ export class Vault {
     for (const ref of refs)
       pages[ref] = fs.readFileSync(this.path(ref), "utf8");
     return pages;
+  }
+
+  /** The vault's own `wiki/sources/` stand-in for a raw artifact — the first by
+   * ref when several point at it — or "". Only the sources folder is decoded, and
+   * a page whose frontmatter will not parse is skipped rather than raised: this
+   * only words a refusal, so one broken page must not abort the run that is
+   * reporting it. */
+  rawSourceStub(raw: string): string {
+    const wanted = path.posix.normalize(raw);
+    const dir = `wiki/${KindFolders["source"]}/`;
+    const refs = Object.keys(this.loadWikiPages())
+      .filter((ref) => ref.startsWith(dir))
+      .sort();
+    for (const ref of refs) {
+      let link: string;
+      try {
+        link = new Page(fs.readFileSync(this.path(ref), "utf8")).getString(
+          "raw_source",
+        );
+      } catch {
+        continue;
+      }
+      if (link === "") continue;
+      const { dest, ok } = linkDest(link);
+      if (ok && resolveLinkDest(dest, path.posix.dirname(ref)) === wanted) {
+        return ref;
+      }
+    }
+    return "";
   }
 
   /** Decode an already-read {pageRef: text} map, so a caller holding the text

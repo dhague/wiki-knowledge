@@ -50,6 +50,7 @@ One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row na
 - **Ingestion source integrity** (`ingestion-source-integrity`) — every `wiki/sources/*.md` carries `raw_source:`.
 - **Frontmatter link format** (`frontmatter-link-format`) — every frontmatter edge value is a quoted markdown link with an encoded destination. A value that is no markdown link at all must be re-set with `page set`, or `page merge` with a JSON list — a fix cannot invent a label.
 - **Tags shape** (`tags-shape`) — every page's `tags` is a YAML list of plain tags: non-empty strings with no whitespace, comma or quote. A scalar, or an entry holding a delimited list collapsed into one string, indexes as a single junk tag every tag filter misses while the file still shows a value.
+- **Self-referential edge** (`self-referential-edge`) — no frontmatter edge key points at the page carrying it. A self-edge says nothing and inflates the graph retrieval follows; `ingest` refuses to write one, so a finding means a hand edit or a page predating that refusal.
 - **Stale synthesis** (`stale-synthesis`) — synthesis pages whose last commit is > 30 days old.
 - **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field.
 - **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead.
@@ -194,6 +195,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `ingestion-source-integrity` | auto-fix (unambiguous) / report only |
 | `frontmatter-link-format` | auto-fix (quoting/encoding) / report only (non-link) |
 | `tags-shape` | report only |
+| `self-referential-edge` | report only |
 | `stale-synthesis` | report only |
 | `missing-volatility-source-date` | report only |
 | `unresolved-supersession` | report only |

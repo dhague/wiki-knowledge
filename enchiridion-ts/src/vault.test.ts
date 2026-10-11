@@ -341,6 +341,63 @@ test("pages decodes records", () => {
   assert.deepEqual(a.supersededBy, ["wiki/sources/s.md"]);
 });
 
+test("rawSourceStub finds the stub for an encoded artifact path", () => {
+  const v = writeVault({
+    "wiki/sources/s.md":
+      '---\ntitle: S\nraw_source: "[a doc (v2).md](../../raw/a%20doc%20%28v2%29.md)"\n---\nstub\n',
+    "wiki/sources/other.md":
+      '---\ntitle: Other\nraw_source: "[b.md](../../raw/b.md)"\n---\nstub\n',
+  });
+  assert.equal(v.rawSourceStub("raw/a doc (v2).md"), "wiki/sources/s.md");
+});
+
+// The label is the artifact's filename by contract, so a mismatched one must
+// not stop the match: only the destination decides.
+test("rawSourceStub matches on destination, not label", () => {
+  const v = writeVault({
+    "wiki/sources/s.md":
+      '---\ntitle: S\nraw_source: "[wrong-name.md](../../raw/real.md)"\n---\nstub\n',
+  });
+  assert.equal(v.rawSourceStub("raw/real.md"), "wiki/sources/s.md");
+});
+
+test("rawSourceStub prefers the first ref when several stand in", () => {
+  const v = writeVault({
+    "wiki/sources/b.md":
+      '---\nraw_source: "[a.md](../../raw/a.md)"\n---\nstub\n',
+    "wiki/sources/a.md":
+      '---\nraw_source: "[a.md](../../raw/a.md)"\n---\nstub\n',
+  });
+  assert.equal(v.rawSourceStub("raw/a.md"), "wiki/sources/a.md");
+});
+
+// This only words a refusal, so one broken page must not abort the run that is
+// reporting it.
+test("rawSourceStub skips a page whose frontmatter will not parse", () => {
+  const v = writeVault({
+    "wiki/sources/broken.md": "---\nraw_source: [unclosed\n---\n\n",
+    "wiki/sources/s.md":
+      '---\nraw_source: "[a.md](../../raw/a.md)"\n---\nstub\n',
+  });
+  assert.equal(v.rawSourceStub("raw/a.md"), "wiki/sources/s.md");
+});
+
+test("rawSourceStub reports no stand-in for a vault that has none", () => {
+  const v = writeVault({
+    "wiki/sources/s.md": '---\nraw_source: "[b.md](../../raw/b.md)"\n---\n\n',
+  });
+  assert.equal(v.rawSourceStub("raw/a.md"), "");
+});
+
+// A concept page carrying raw_source is still not a sources/ stub.
+test("rawSourceStub ignores pages outside the sources folder", () => {
+  const v = writeVault({
+    "wiki/concepts/c.md":
+      '---\nraw_source: "[a.md](../../raw/a.md)"\n---\nstub\n',
+  });
+  assert.equal(v.rawSourceStub("raw/a.md"), "");
+});
+
 test("readKindMeta returns kind, summary and consolidatable from a KIND.md", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-km-"));
   fs.writeFileSync(

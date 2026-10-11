@@ -100,6 +100,15 @@ Field notes:
 
 **Deliberately absent:** `updated_at`, `ingested_at` — git already knows them, and a hand-maintained timestamp an agent forgets to bump is worse than none; derive from `git log`. `source_date` is **valid time** (authored), git's commit date is **transaction time** (derived). **Never add a frontmatter field for anything git already knows.**
 
+### On the way back out
+
+**A write re-emits the page's whole frontmatter block** — `ingest`, `page set` and `page merge` alike — so a page touched only in one key can come back with another respelled. Byte-identical round-tripping is deliberately not the contract ([ADR-0012](https://github.com/dhague/wiki-knowledge/blob/main/docs/adr/0012-frontmatter-round-trip-relaxed.md)); keys, their order and their values all survive, and the rest is presentation:
+
+- **Scalar quote style may shift** — `source_date: '2026-03-01'` returns as `source_date: "2026-03-01"`.
+- **A scalar an older writer folded returns on one line.** The emitter never folds ([ADR-0024](https://github.com/dhague/wiki-knowledge/blob/main/docs/adr/0024-emitted-lines-are-not-folded.md)), so a long `summary` split across two lines comes back whole.
+
+Never read a re-emitted block as the page's own content changing: if a write touches one edge and the diff shows a refolded `summary`, the bytes moved and the meaning did not.
+
 ## Tags
 
 Tags are **emergent** — generated at ingestion, not conformed to a fixed list. **Reuse an existing tag** where one fits; **mint a new one** only where nothing does — `enchiridion discover --plan` returns the vault's tag vocabulary beside every candidate, and `--tags-containing`/`--tag-count`, derived from the draft's own candidate tags, beats the full dump ([catalogue](reference/scripts.md)). Consistency comes from reuse-first discipline, not a closed set.
