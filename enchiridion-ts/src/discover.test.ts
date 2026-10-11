@@ -197,6 +197,20 @@ test("check returns no candidates for an empty query", async () => {
   assert.equal(fake.lastQuery, null);
 });
 
+test("check passes exclude through to the query, defaulting to none", async () => {
+  const fake = new FakeSearcher();
+  await check(fake, "Connection Pooling", "", "", CheckOpts);
+  assert.equal(fake.lastQuery!.exclude, undefined);
+
+  await check(fake, "Connection Pooling", "", "", {
+    ...CheckOpts,
+    exclude: ["wiki/concepts/connection-pooling.md"],
+  });
+  assert.deepEqual(fake.lastQuery!.exclude, [
+    "wiki/concepts/connection-pooling.md",
+  ]);
+});
+
 test("check classifies each hit and carries the full payload", async () => {
   const fake = new FakeSearcher();
   fake.hits = [

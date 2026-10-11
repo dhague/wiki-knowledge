@@ -2638,6 +2638,44 @@ test("discover: single-page mode finds the overlapping page and emits one candid
   assert.equal(first.page_ref, "wiki/concepts/connection-pooling.md");
 });
 
+test("discover single-page mode: --exclude drops the named candidate", async () => {
+  const root = await buildCommittedVault();
+  const args = [
+    "discover",
+    "--title",
+    "Connection Pooling in Postgres",
+    "--related-threshold",
+    "0.000001",
+  ];
+  const baseline = runEnv(args, { cwd: root, env: { WIKI_ROOT: root } });
+  assert.equal(baseline.status, 0, baseline.stderr);
+  const top = JSON.parse(baseline.stdout.trim().split("\n")[0]).page_ref;
+
+  const { status, stdout, stderr } = runEnv(
+    [...args, "--exclude", top, "--exclude", "wiki/concepts/never-matches.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.ok(!stdout.includes(top), stdout);
+});
+
+test("discover: --exclude applies to single-page mode only, refused elsewhere", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--exclude",
+      "wiki/concepts/sourdough-starter.md",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes("--exclude"), stderr);
+});
+
 test("discover: --plan emits the pages and vocabulary payload", async () => {
   const root = await buildCommittedVault();
   const planPath = path.join(root, "draft.json");
@@ -3143,6 +3181,72 @@ test("search --json: no hits is silence, not []", async () => {
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout, "");
+});
+
+test("search --exclude: drops the named ref, keeping the rest's order and scores", async () => {
+  const root = await buildCommittedVault();
+  const parse = (stdout: string) =>
+    stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+  const baseline = runEnv(["search", "a", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(baseline.status, 0, baseline.stderr);
+  const all = parse(baseline.stdout);
+  assert.ok(all.length >= 2, `fixture must yield two hits, got ${all.length}`);
+  const dropped = all[0].page_ref;
+
+  const filtered = runEnv(["search", "a", "--exclude", dropped, "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(filtered.status, 0, filtered.stderr);
+  const kept = parse(filtered.stdout);
+  const expected = all.filter((r) => r.page_ref !== dropped);
+  assert.deepEqual(
+    kept.map((r) => r.page_ref),
+    expected.map((r) => r.page_ref),
+  );
+  assert.deepEqual(
+    kept.map((r) => r.score),
+    expected.map((r) => r.score),
+  );
+});
+
+test("search --exclude: repeatable, and --limit still counts returned rows", async () => {
+  const root = await buildCommittedVault();
+  const baseline = runEnv(["search", "a", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  const refs = baseline.stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l).page_ref);
+  assert.ok(refs.length >= 2);
+
+  // Every matching ref excluded leaves silence, not a partial table.
+  const all = runEnv(
+    ["search", "a", ...refs.flatMap((ref) => ["--exclude", ref]), "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(all.status, 0, all.stderr);
+  assert.equal(all.stdout, "");
+
+  // Excluding the top hit still fills the limit from the rows behind it.
+  const limited = runEnv(
+    ["search", "a", "--exclude", refs[0], "--limit", "1", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(limited.status, 0, limited.stderr);
+  const rows = limited.stdout.trim().split("\n").filter(Boolean);
+  assert.equal(rows.length, 1);
+  assert.notEqual(JSON.parse(rows[0]).page_ref, refs[0]);
 });
 
 test("search --reindex --json: one compact JSON document", async () => {

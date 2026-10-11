@@ -85,6 +85,9 @@ export interface Query {
   dateField?: string;
   volatility?: string[];
   includeSuperseded?: boolean;
+  /** Vault-relative refs to drop before LIMIT, so `limit` still counts the
+   * rows returned rather than the rows scanned. */
+  exclude?: string[];
   limit?: number;
 }
 
@@ -865,6 +868,10 @@ function buildMetadataWhere(q: Query): WhereResult {
   if ((q.kinds ?? []).length > 0) {
     clauses.push(`p.kind IN (${placeholders(q.kinds!.length)})`);
     params.push(...q.kinds!);
+  }
+  if ((q.exclude ?? []).length > 0) {
+    clauses.push(`p.page_ref NOT IN (${placeholders(q.exclude!.length)})`);
+    params.push(...q.exclude!);
   }
 
   const dateField = q.dateField || "source_date";
