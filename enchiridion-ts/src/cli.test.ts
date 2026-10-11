@@ -2566,10 +2566,8 @@ async function buildCommittedVault(): Promise<string> {
   return root;
 }
 
-/** The committed fixture vault plus one committed page whose frontmatter is
- * not valid YAML. */
-async function buildVaultWithUnparsablePage(): Promise<string> {
-  const root = await buildCommittedVault();
+/** Commit one page whose frontmatter is not valid YAML on top of `root`'s HEAD. */
+async function commitUnparsablePage(root: string): Promise<void> {
   fs.writeFileSync(
     path.join(root, "wiki", "concepts", "broken.md"),
     "---\ntitle: [unclosed\n---\n\nBody text.\n",
@@ -2588,6 +2586,13 @@ async function buildVaultWithUnparsablePage(): Promise<string> {
     author: identity,
     committer: identity,
   });
+}
+
+/** The committed fixture vault plus one committed page whose frontmatter is
+ * not valid YAML. */
+async function buildVaultWithUnparsablePage(): Promise<string> {
+  const root = await buildCommittedVault();
+  await commitUnparsablePage(root);
   return root;
 }
 
@@ -3194,6 +3199,51 @@ test("search --status: names the unindexed page and its reason", async () => {
     /wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
   );
   assert.match(stdout, /uncommitted_pages: 0/);
+});
+
+test("search: names a page the index cannot hold on stderr, stdout unchanged", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = runEnv(["search", "pooling", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(
+    stderr,
+    /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
+  );
+  // The JSON-Lines stdout contract: every line is one complete document.
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(rows[0].page_ref, "wiki/concepts/connection-pooling.md");
+});
+
+test("search: names a page a later commit made unindexable", async () => {
+  const root = await buildCommittedVault();
+
+  // Builds the index at this HEAD; a clean vault says nothing.
+  const first = runEnv(["search", "pooling"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(first.status, 0, first.stderr);
+  assert.doesNotMatch(first.stderr, /skipped/);
+
+  await commitUnparsablePage(root);
+
+  // The delta this search walks is what drops the page; nothing re-walks disk.
+  const second = runEnv(["search", "pooling"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(
+    second.stderr,
+    /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
+  );
+  assert.match(second.stdout, /wiki\/concepts\/connection-pooling\.md/);
 });
 
 test("vault kinds: canonical-only vault returns four entries", () => {

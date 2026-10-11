@@ -112,6 +112,14 @@ function renderStatus(
   }
 }
 
+/** Name each ref the index could not hold, on stderr, so no stdout contract —
+ * the JSON-Lines query rows included — is touched. */
+function renderSkipped(skipped: SkippedPage[]): void {
+  for (const page of skipped) {
+    console.error(`skipped ${page.pageRef}: ${page.reason}`);
+  }
+}
+
 function renderReindex(
   stats: {
     pages: number;
@@ -124,9 +132,7 @@ function renderReindex(
   full: boolean,
   asJSON: boolean,
 ): void {
-  for (const page of stats.skipped) {
-    console.error(`skipped ${page.pageRef}: ${page.reason}`);
-  }
+  renderSkipped(stats.skipped);
   if (asJSON) {
     emitDocument({
       pages: stats.pages,
@@ -324,7 +330,9 @@ export function registerSearchCommand(program: Command): void {
             includeSuperseded: opts.includeSuperseded ?? false,
             limit: opts.limit,
           };
-          renderHits(await index.search(query), opts.json ?? false);
+          const hits = await index.search(query);
+          renderSkipped(index.skippedPages());
+          renderHits(hits, opts.json ?? false);
         } finally {
           index.close();
         }

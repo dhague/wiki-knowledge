@@ -206,6 +206,10 @@ function reasonOf(err: unknown, pageRef: string): string {
 // ---------------------------------------------------------------------------
 
 export class Index {
+  /** Refs this index's passes could not hold, retained across them — a ref
+   * leaves only when a later pass indexes or removes it. */
+  private readonly skippedRefs = new Map<string, SkippedPage>();
+
   private constructor(
     private readonly root: string,
     private readonly dbPath: string,
@@ -379,6 +383,7 @@ export class Index {
     `);
     this.createSchema();
     this.setKindDeclarationsKey();
+    this.skippedRefs.clear();
     let inserted = 0;
     const skipped: SkippedPage[] = [];
     for (const page of snap.pages) {
@@ -399,6 +404,7 @@ export class Index {
     for (const page of snap.pages) {
       if (page.deleted) {
         this.removePage(page.pageRef);
+        this.skippedRefs.delete(page.pageRef);
         removed++;
         continue;
       }
@@ -464,7 +470,9 @@ export class Index {
     );
     if (!parsed.ok) {
       this.removePage(page.pageRef);
-      return { pageRef: page.pageRef, reason: parsed.reason };
+      const skippedPage = { pageRef: page.pageRef, reason: parsed.reason };
+      this.skippedRefs.set(page.pageRef, skippedPage);
+      return skippedPage;
     }
     const rec = parsed.record;
     const body = splitFrontmatter(page.content).body;
@@ -505,6 +513,7 @@ export class Index {
       "INSERT INTO page_fts(page_ref, title, summary, body) VALUES (?, ?, ?, ?)",
       [page.pageRef, rec.title, rec.summary, body],
     );
+    this.skippedRefs.delete(page.pageRef);
     return null;
   }
 
@@ -705,6 +714,14 @@ export class Index {
       b: r.b,
       sharedTags: r.tags.split(GROUP_SEPARATOR).sort(),
     }));
+  }
+
+  /** The refs this index's passes could not hold — empty on a clean vault, and
+   * still populated when the search's own pass walked nothing (ADR-0015). */
+  skippedPages(): SkippedPage[] {
+    return [...this.skippedRefs.values()].sort((a, b) =>
+      a.pageRef.localeCompare(b.pageRef),
+    );
   }
 
   async search(q: Query): Promise<Hit[]> {

@@ -107,6 +107,35 @@ async function seedCommittedVault(
   return { root, git };
 }
 
+/** A page body that `newPageRecord` accepts, so it indexes rather than skips. */
+function pageText(title: string): string {
+  return page(title, "s", `${title} body`, [], "source_date: 2026-01-01\n");
+}
+
+/** A committed vault holding one `pageText` page per ref, plus its git seam. */
+async function committedVault(
+  refs: string[],
+): Promise<{ root: string; git: VaultGit }> {
+  return seedCommittedVault(
+    Object.fromEntries(
+      refs.map((ref) => [ref, pageText(path.basename(ref, ".md"))]),
+    ),
+  );
+}
+
+async function commitUnparsablePage(
+  root: string,
+  git: VaultGit,
+): Promise<void> {
+  writeVaultFile(
+    root,
+    "wiki/concepts/broken.md",
+    "---\ntitle: [unclosed\n---\n\nbody\n",
+  );
+  await git.add(["wiki"]);
+  await git.commit("add an unparsable page");
+}
+
 /** Run each statement against the on-disk index db under root. */
 async function patchIndexDb(
   root: string,
@@ -1291,47 +1320,6 @@ describe("status", () => {
   // were committed. Each case builds a real vault, since the git walk decides
   // what HEAD holds and no fake reproduces that.
 
-  const writeFile = (root: string, ref: string, text: string): void => {
-    const p = path.join(root, ...ref.split("/"));
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, text);
-  };
-
-  /** A page body that `newPageRecord` accepts, so it indexes rather than skips. */
-  const pageText = (title: string): string =>
-    page(title, "s", `${title} body`, [], "source_date: 2026-01-01\n");
-
-  /**
-   * A fresh temp vault with `refs` committed at HEAD, plus the git seam so a
-   * test can commit a further change. The caller removes `root`.
-   */
-  const committedVault = async (
-    refs: string[],
-  ): Promise<{ root: string; git: VaultGit }> => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
-    for (const ref of refs) {
-      writeFile(root, ref, pageText(path.basename(ref, ".md")));
-    }
-    const git = new VaultGit(root);
-    await git.init();
-    await git.add(["wiki"]);
-    await git.commit("seed vault");
-    return { root, git };
-  };
-
-  const commitUnparsablePage = async (
-    root: string,
-    git: VaultGit,
-  ): Promise<void> => {
-    writeFile(
-      root,
-      "wiki/concepts/broken.md",
-      "---\ntitle: [unclosed\n---\n\nbody\n",
-    );
-    await git.add(["wiki"]);
-    await git.commit("add an unparsable page");
-  };
-
   it("reports 0 uncommitted pages on a clean tree", async () => {
     const { root, git } = await committedVault([
       "wiki/concepts/a.md",
@@ -1386,7 +1374,7 @@ describe("status", () => {
     const { root, git } = await committedVault(["wiki/concepts/a.md"]);
     try {
       await commitUnparsablePage(root, git);
-      writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
+      writeVaultFile(root, "wiki/concepts/draft.md", pageText("draft"));
 
       const index = await Index.openWithGit(root, git);
       try {
@@ -1446,7 +1434,7 @@ describe("status", () => {
       const index = await Index.openWithGit(root, git);
       try {
         await index.reindex(true);
-        writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
+        writeVaultFile(root, "wiki/concepts/draft.md", pageText("draft"));
         const status = await index.status();
         assert.equal(
           status.uncommittedPages,
@@ -1521,7 +1509,7 @@ describe("status", () => {
         );
 
         // An uncommitted addition on top.
-        writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
+        writeVaultFile(root, "wiki/concepts/draft.md", pageText("draft"));
 
         const status = await index.status();
         assert.equal(
@@ -1529,6 +1517,124 @@ describe("status", () => {
           1,
           "the draft survives a committed deletion that cancels it by count",
         );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Query-path skips
+// ---------------------------------------------------------------------------
+
+describe("skippedPages", () => {
+  it("names a ref the delta a search walked could not hold", async () => {
+    const { root, git } = await committedVault(["wiki/concepts/alpha.md"]);
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        await commitUnparsablePage(root, git);
+
+        const hits = await index.search({ text: "alpha" });
+        assert.deepEqual(refsOf(hits), ["wiki/concepts/alpha.md"]);
+        assert.deepEqual(
+          index.skippedPages().map((p) => p.pageRef),
+          ["wiki/concepts/broken.md"],
+        );
+        assert.match(
+          index.skippedPages()[0].reason,
+          /frontmatter is not valid YAML/,
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("retains a ref the bootstrap rebuild dropped", async () => {
+    const { root, git } = await committedVault(["wiki/concepts/alpha.md"]);
+    try {
+      await commitUnparsablePage(root, git);
+      // No index on disk, so `open` rebuilds and the skip happens before any
+      // search; the search's own pass then walks an empty delta.
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.search({ text: "alpha" });
+        assert.deepEqual(
+          index.skippedPages().map((p) => p.pageRef),
+          ["wiki/concepts/broken.md"],
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a clean vault silent", async () => {
+    const { root, git } = await committedVault([
+      "wiki/concepts/alpha.md",
+      "wiki/concepts/beta.md",
+    ]);
+    try {
+      const index = await Index.openWithGit(root, git);
+      try {
+        const hits = await index.search({ text: "body" });
+        assert.equal(hits.length, 2);
+        assert.deepEqual(index.skippedPages(), []);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stops naming a ref once a later pass indexes it", async () => {
+    const { root, git } = await committedVault(["wiki/concepts/alpha.md"]);
+    try {
+      await commitUnparsablePage(root, git);
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.search({ text: "alpha" });
+        assert.equal(index.skippedPages().length, 1, "precondition: skipped");
+
+        writeVaultFile(root, "wiki/concepts/broken.md", pageText("broken"));
+        await git.add(["wiki"]);
+        await git.commit("fix the frontmatter");
+
+        const hits = await index.search({ text: "broken" });
+        assert.deepEqual(refsOf(hits), ["wiki/concepts/broken.md"]);
+        assert.deepEqual(index.skippedPages(), []);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stops naming a ref whose page is deleted at HEAD", async () => {
+    const { root, git } = await committedVault(["wiki/concepts/alpha.md"]);
+    try {
+      await commitUnparsablePage(root, git);
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.search({ text: "alpha" });
+        assert.equal(index.skippedPages().length, 1, "precondition: skipped");
+
+        fs.rmSync(path.join(root, "wiki", "concepts", "broken.md"));
+        await git.add(["wiki"]);
+        await git.commit("delete the unparsable page");
+
+        await index.search({ text: "alpha" });
+        assert.deepEqual(index.skippedPages(), []);
       } finally {
         index.close();
       }
