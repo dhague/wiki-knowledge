@@ -344,10 +344,9 @@ export async function captureSession(
     return captureClaudeCodeSession(wikiRoot, slug, cwd, lookupEnv, now);
   }
   throw new CaptureError(
-    "Neither $CLAUDE_CODE_SESSION_ID nor " +
-      "$OPENCODE_SESSION_ID is set in this environment, so there is no way to " +
-      "tell which session to save. (Claude Code sets the first; OpenCode's " +
-      "session-tracker plugin injects the second.)",
+    "Neither $CLAUDE_CODE_SESSION_ID nor $OPENCODE_SESSION_ID is set in this " +
+      "environment, so there is no way to tell which session to save. Run this " +
+      "from Claude Code, or set $CLAUDE_CODE_SESSION_ID to the session to save.",
   );
 }
 

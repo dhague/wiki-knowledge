@@ -84,7 +84,7 @@ export function isSupplied(value: string | undefined): value is string {
  *  refused: "no title" is spelled by not having one. */
 export function saveExportTitle(root: string, title: string): void {
   if (!isSupplied(title)) {
-    throw new Error("a wiki title must not be empty");
+    throw new Error("--save-title needs a non-empty title");
   }
   writeExportConfig(root, { ...readExportConfig(root), title: title.trim() });
 }

@@ -19,8 +19,33 @@ import {
 } from "./pageedge.js";
 import { emitDocument, emitRows, fail } from "./output.js";
 
+/** Run an operation on one page, naming that page in any refusal — [Page]'s
+ * YAML refusals carry no path of their own. */
+function onPage<T>(file: string, fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    fail(`${file}: ${(err as Error).message}`);
+  }
+}
+
 function loadPage(file: string): Page {
-  return new Page(fs.readFileSync(file, "utf8"));
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") fail(`no such file: ${file}`);
+    if (code === "EISDIR") fail(`${file} is a directory, not a markdown file`);
+    throw err;
+  }
+  return onPage(file, () => {
+    const page = new Page(text);
+    // Every page subcommand reads the block anyway; decoding here is what puts
+    // the file's name on a YAML refusal.
+    page.frontmatter();
+    return page;
+  });
 }
 
 function writePageFile(file: string, page: Page): void {
@@ -142,7 +167,9 @@ export function registerPageCommands(program: Command): void {
           try {
             value = JSON.parse(raw);
           } catch {
-            fail(`parsing ${key} as JSON: invalid JSON`);
+            fail(
+              `parsing ${key} as JSON: invalid JSON — drop --json to set the value as a literal string`,
+            );
           }
         }
         if (key === "source_date") value = canonicalSourceDate(value);
@@ -201,13 +228,15 @@ export function registerPageCommands(program: Command): void {
       const root = resolveRoot();
       const vault = new Vault(root);
       if (!vault.exists(ref)) {
-        fail(`page not found: ${ref}`);
+        fail(
+          `page not found: ${ref} in ${root} — refs are vault-relative (wiki/<kind-folder>/<file>.md); list pages with \`enchiridion search <term>\``,
+        );
       }
-      const page = vault.load(ref);
+      const page = onPage(ref, () => vault.load(ref));
       if (opts.json) {
         emitDocument({
           page_ref: ref,
-          frontmatter: page.frontmatter(),
+          frontmatter: onPage(ref, () => page.frontmatter()),
           body: page.body(),
         });
         return;

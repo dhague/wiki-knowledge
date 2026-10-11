@@ -668,17 +668,29 @@ export class Index {
       ...params,
       limit,
     ] as import("node-sqlite3-wasm").JSValue[];
-    const rows = this.db.all(
-      `SELECT p.page_ref, bm25(page_fts, ${BM25_WEIGHTS}) AS raw_score,
-              p.title, p.summary, p.kind,
-              p.source_date, p.git_date, p.volatility, p.superseded_by,
-              snippet(page_fts, 3, '', '', '…', 12) AS snip
-       FROM page_fts
-       JOIN page p ON p.page_ref = page_fts.page_ref
-       WHERE page_fts MATCH ? AND ${where}
-       ORDER BY raw_score LIMIT ?`,
-      args,
-    ) as unknown as RawFtsRow[];
+    let rows: RawFtsRow[];
+    try {
+      rows = this.db.all(
+        `SELECT p.page_ref, bm25(page_fts, ${BM25_WEIGHTS}) AS raw_score,
+                p.title, p.summary, p.kind,
+                p.source_date, p.git_date, p.volatility, p.superseded_by,
+                snippet(page_fts, 3, '', '', '…', 12) AS snip
+         FROM page_fts
+         JOIN page p ON p.page_ref = page_fts.page_ref
+         WHERE page_fts MATCH ? AND ${where}
+         ORDER BY raw_score LIMIT ?`,
+        args,
+      ) as unknown as RawFtsRow[];
+    } catch (err) {
+      // FTS5 rejects a malformed MATCH at prepare time; --raw is the escape
+      // hatch, so an unguarded throw hands the agent a bare `fts5: syntax error`.
+      throw new Error(
+        `search: the query is not a valid FTS5 expression: ${
+          err instanceof Error ? err.message : String(err)
+        } — simplify the query, or pass --raw with a valid FTS5 MATCH expression`,
+        { cause: err },
+      );
+    }
 
     const hits: Hit[] = rows.map((r) => ({
       pageRef: r.page_ref,

@@ -16,7 +16,7 @@ export const Filename = ".ingestignore";
  * stripped, the rest a filename glob. `/`, `!` and `**` are rejected — a
  * per-folder file has no way to answer the precedence questions richer patterns
  * raise. */
-export function parse(text: string): string[] {
+export function parse(text: string, source = ""): string[] {
   const patterns: string[] = [];
   for (let line of text.split("\n")) {
     const hash = line.indexOf("#");
@@ -25,7 +25,7 @@ export function parse(text: string): string[] {
     if (line.trim() === "") continue;
     if (/[/!]/.test(line) || line.includes("**")) {
       throw new Error(
-        `${Filename} patterns must be bare filename globs (no '/', no '!', no '**'): "${line}"`,
+        `${Filename} patterns must be bare filename globs (no '/', no '!', no '**'): "${line}"${source === "" ? "" : ` in ${source}`}`,
       );
     }
     patterns.push(line);
@@ -75,7 +75,7 @@ export function append(folder: string, pattern: string, comment: string): void {
     if (!isENOENT(err)) throw err;
   }
   if (existing !== null) {
-    const patterns = parse(existing);
+    const patterns = parse(existing, filePath);
     if (patterns.includes(pattern)) return;
   }
 
@@ -83,7 +83,16 @@ export function append(folder: string, pattern: string, comment: string): void {
   if (comment !== "") line += "  # " + comment;
   // The folder is deliberately not created: a withdrawn raw file lives in it
   // already, so a missing folder means a mistyped path.
-  const fd = fs.openSync(filePath, "a", 0o644);
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, "a", 0o644);
+  } catch (err) {
+    if (!isENOENT(err)) throw err;
+    throw new Error(
+      `no folder ${folder} — --ignore takes a vault-relative path to a raw/ file that exists`,
+      { cause: err },
+    );
+  }
   try {
     fs.writeSync(fd, line + "\n");
   } finally {

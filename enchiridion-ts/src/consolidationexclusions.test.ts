@@ -16,6 +16,7 @@ import {
   suppressedBy,
   upsertExclusion,
 } from "./consolidationexclusions.js";
+import { addExclusion } from "./exclusioncommand.js";
 import type { Exclusion } from "./consolidationexclusions.js";
 import type { PageFact } from "./searchindex.js";
 
@@ -440,4 +441,15 @@ test("registry refs and folders compose the documented paths", () => {
     "wiki/concepts/CONSOLIDATION_EXCLUSIONS.yaml",
   );
   assert.equal(folderOf(A), "concepts");
+});
+
+// ---------------------------------------------------------------------------
+// exclusion add
+// ---------------------------------------------------------------------------
+
+test("an exclusion refuses a member list shorter than two and says how many it got", async () => {
+  await assert.rejects(
+    () => addExclusion("", [A], "reason"),
+    /an exclusion names at least two member pages, got 1/,
+  );
 });

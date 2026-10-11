@@ -1,7 +1,7 @@
 /**
  * discover — single-call discovery for ingestion: overlap candidates plus the
  * tag vocabulary, driven off a draft IngestPlan. `nominate` is the same search
- * for a page that already exists, behind the `--ref` mode (ADR-0031).
+ * for a page that already exists, behind the `--ref` mode (ADR-0033).
  *
  * The query is OR of the candidate's own words (`raw=true`): an AND query over
  * a whole title+summary+body silently misses real duplicates, because the
@@ -186,7 +186,7 @@ export const RefScanDefault = 200;
  * the nomination, and the agent reading bodies decides.
  *
  * `--limit 0` takes the whole scan. The named page is the caller's filter,
- * never a `Query` field (ADR-0031). */
+ * never a `Query` field (ADR-0033). */
 export async function nominate(
   searcher: Searcher,
   ref: string,

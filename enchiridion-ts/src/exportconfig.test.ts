@@ -120,7 +120,10 @@ test("saveExportTitle: repairs a malformed file rather than failing", () => {
 
 test("saveExportTitle: a blank title is refused", () => {
   const root = tmpDir();
-  assert.throws(() => saveExportTitle(root, "   "), /title/i);
+  assert.throws(
+    () => saveExportTitle(root, "   "),
+    /^Error: --save-title needs a non-empty title$/,
+  );
   assert.ok(
     !fs.existsSync(exportConfigPath(root)),
     "nothing should be written",

@@ -273,6 +273,44 @@ test("decodePlan rejects malformed JSON", () => {
   assert.throws(() => decodePlan(`{"title":`), /invalid plan JSON/);
 });
 
+test("decodePlan names the plan file in a refusal", () => {
+  assert.throws(
+    () => decodePlan(`{"title":`, "plans/x.json"),
+    (err: unknown) =>
+      (err as Error).message.startsWith("invalid plan JSON in plans/x.json:"),
+  );
+});
+
+test("decodePlan refuses a document that is not a JSON object", () => {
+  for (const [json, shape] of [
+    ["null", "null"],
+    ["[]", "an array"],
+    ["5", "number"],
+  ]) {
+    assert.throws(
+      () => decodePlan(json, "plans/x.json"),
+      (err: unknown) =>
+        (err as Error).message ===
+        `invalid plan JSON in plans/x.json: the document must be a JSON object, got ${shape}`,
+    );
+  }
+});
+
+test("decodePlan refuses a page that is not a JSON object", () => {
+  for (const [json, shape] of [
+    ["null", "null"],
+    ["[]", "an array"],
+    ["5", "number"],
+  ]) {
+    assert.throws(
+      () => decodePlan(`{"title":"T","pages":[${json}]}`, "(stdin)"),
+      (err: unknown) =>
+        (err as Error).message ===
+        `invalid plan JSON in (stdin): pages[0] must be a JSON object, got ${shape}`,
+    );
+  }
+});
+
 test("orderedMap null decodes empty", () => {
   const plan = decodePlanOK(
     `{"title":"T","pages":[{"op":"create","title":"A","frontmatter":null}]}`,
@@ -418,7 +456,10 @@ test("shape validation reports every problem at once", () => {
 
 test("shape validation rejects an empty plan", () => {
   const got = validationErrors(`{"title":"T"}`, "");
-  assert.ok(got.includes("at least one page"), got);
+  assert.ok(
+    got.includes("plan.pages must be a JSON array with at least one page"),
+    got,
+  );
 });
 
 test("shape validation rejects a bad op", () => {
@@ -473,7 +514,26 @@ test("shape validation rejects an unknown kind", () => {
     {"op":"create","title":"A","kind":"nonsense","body":"b"}]}`,
     "",
   );
-  assert.ok(got.includes(`pages[0].kind "nonsense" is not a valid kind`), got);
+  assert.ok(
+    got.includes(
+      `pages[0].kind "nonsense" is not a valid kind; one of concept, entity, source, synthesis`,
+    ),
+    got,
+  );
+});
+
+test("shape validation lists a discovered custom kind in the refusal", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"nonsense","body":"b"}]}`,
+    newVault({ "wiki/decisions/.keep": "" }),
+  );
+  assert.ok(
+    got.includes(
+      `pages[0].kind "nonsense" is not a valid kind; one of concept, entity, source, synthesis, decision`,
+    ),
+    got,
+  );
 });
 
 test("shape validation rejects a non-true raw_source", () => {
@@ -636,6 +696,36 @@ test("shape validation rejects a volatility outside the schema domain", () => {
   );
 });
 
+// OrderedMap.decode passes values through unchecked, so a non-list would
+// otherwise be dereferenced while composing links.
+test("shape validation rejects a non-list edges value", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"related":5}}]}`,
+    newVault({}),
+  );
+  assert.ok(
+    got.includes(
+      "pages[0].edges.related must be a list of vault-relative page refs, got 5",
+    ),
+    got,
+  );
+});
+
+test("shape validation rejects a non-string edges entry", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"related":["wiki/concepts/a.md",5]}}]}`,
+    newVault({}),
+  );
+  assert.ok(
+    got.includes("pages[0].edges.related entries must be strings, got 5"),
+    got,
+  );
+});
+
 // --- semantic validation ----------------------------------------------------
 
 test("semantic validation rejects an existing create target", () => {
@@ -646,7 +736,9 @@ test("semantic validation rejects an existing create target", () => {
     root,
   );
   assert.ok(
-    got.includes("create target wiki/concepts/a.md already exists"),
+    got.includes(
+      'create target wiki/concepts/a.md already exists — use op:"update" to revise it, or give the page a different title',
+    ),
     got,
   );
 });
@@ -662,7 +754,9 @@ test("semantic validation rejects a directory at a create target", () => {
     root,
   );
   assert.ok(
-    got.includes("create target wiki/concepts/a.md already exists"),
+    got.includes(
+      'create target wiki/concepts/a.md already exists — use op:"update" to revise it, or give the page a different title',
+    ),
     got,
   );
 });
@@ -684,6 +778,24 @@ test("resolve refuses unmigrated kind folders", () => {
   );
 });
 
+// The plural is the canonical folder, not the singular plus "s": the old
+// concatenation printed wiki/entitys/.
+test("resolve names the canonical plural folder for a legacy kind", () => {
+  const root = newVault({
+    "wiki/entity/old.md": "---\ntitle: Old\n---\nold\n",
+  });
+  assert.throws(
+    () =>
+      resolve(
+        decodePlanOK(`{"title":"T","pages":[
+      {"op":"create","title":"A","kind":"concept","body":"b"}]}`),
+        root,
+      ),
+    (err: unknown) =>
+      (err as Error).message.includes("git mv wiki/entity/* wiki/entities/"),
+  );
+});
+
 test("resolve accepts a synthesis folder", () => {
   const root = newVault({ "wiki/synthesis/s.md": "---\ntitle: S\n---\ns\n" });
   resolve(
@@ -699,7 +811,12 @@ test("semantic validation rejects a missing update target", () => {
     {"op":"update","title":"A","page_ref":"wiki/concepts/gone.md"}]}`,
     newVault({}),
   );
-  assert.ok(got.includes("page_ref wiki/concepts/gone.md does not exist"), got);
+  assert.ok(
+    got.includes(
+      'page_ref wiki/concepts/gone.md does not exist — use op:"create" to add it, or fix the ref',
+    ),
+    got,
+  );
 });
 
 test("semantic validation rejects an unresolvable edge target", () => {
@@ -710,7 +827,9 @@ test("semantic validation rejects an unresolvable edge target", () => {
     newVault({}),
   );
   assert.ok(
-    got.includes('related target "wiki/concepts/nowhere.md" does not resolve'),
+    got.includes(
+      'related target "wiki/concepts/nowhere.md" does not resolve to a real page — create it in this plan, fix the ref, or drop the related entry',
+    ),
     got,
   );
 });
@@ -735,7 +854,13 @@ test("semantic validation enforces path length", () => {
     `{"title":"T","pages":[{"op":"create","title":"${longTitle}","kind":"concept","body":"b"}]}`,
     path.join(root, "d".repeat(150)),
   );
-  assert.ok(got.includes("exceeds 255 chars"), got);
+  assert.ok(
+    got.includes("exceeds 255 chars (") &&
+      got.includes(
+        "chars with vault root) — shorten the title, or put the vault nearer the filesystem root",
+      ),
+    got,
+  );
 });
 
 test("semantic validation runs chain of evidence", () => {
@@ -746,7 +871,7 @@ test("semantic validation runs chain of evidence", () => {
     root,
   );
   assert.ok(
-    got.includes("needs a sources/ page whose raw_source points at it"),
+    got.includes("needs a wiki/sources/ page whose raw_source points at it"),
     got,
   );
 });
@@ -1322,6 +1447,267 @@ test("losslessness refuses a block satisfied only by a nested copy", () => {
   );
 });
 
+// --- Consolidation frontmatter (typed edges, raw_source, tags, volatility) ----
+
+/** A one-survivor consolidation whose survivor plan page is given verbatim. */
+function consolidationInto(
+  consolidates: string[],
+  survivor: string,
+  page: Record<string, unknown>,
+): string {
+  return JSON.stringify({
+    title: "Merged",
+    action: "consolidate",
+    consolidates,
+    assessed: pinFor(...consolidates),
+    pages: [{ op: "update", page_ref: survivor, ...page }],
+  });
+}
+
+test("a consolidate plan that drops an absorbed typed edge is refused", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      '---\ntitle: A\nvolatility: stable\nrelated:\n  - "[C](c.md)"\n---\nA body.\n',
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "wiki/concepts/c.md": "---\ntitle: C\nvolatility: stable\n---\nC body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", { body }),
+      root,
+    ),
+    /the survivor's frontmatter does not carry wiki\/concepts\/a\.md's related edge to wiki\/concepts\/c\.md/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        edges: { related: ["wiki/concepts/c.md"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("frontmatter containment matches an edge target under any key", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      '---\ntitle: A\nvolatility: stable\nrefines:\n  - "[C](c.md)"\n---\nA body.\n',
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "wiki/concepts/c.md": "---\ntitle: C\nvolatility: stable\n---\nC body.\n",
+  });
+  // Re-typed from `refines` to `related` on the merge: the target survives, so
+  // the judgment call is tolerated.
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body: "B body.\n\nA body.\n",
+        edges: { related: ["wiki/concepts/c.md"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("an absorbed edge to a page the consolidation deletes is exempt", () => {
+  const root = newVault({
+    "wiki/concepts/a1.md":
+      '---\ntitle: A1\nvolatility: stable\nrelated:\n  - "[A2](a2.md)"\n  - "[B](b.md)"\n---\nA1 body.\n',
+    "wiki/concepts/a2.md":
+      "---\ntitle: A2\nvolatility: stable\n---\nA2 body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  // a2 is itself absorbed and b is the survivor, so neither target can survive
+  // as an edge: both collapse into the survivor.
+  assert.equal(
+    validationErrors(
+      consolidationInto(
+        ["wiki/concepts/a1.md", "wiki/concepts/a2.md"],
+        "wiki/concepts/b.md",
+        { body: "B body.\n\nA1 body.\n\nA2 body.\n" },
+      ),
+      root,
+    ),
+    "",
+  );
+});
+
+test("a consolidate plan that drops an absorbed raw_source is refused", async () => {
+  const root = newVault({
+    "wiki/notes/a.md":
+      '---\ntitle: A\nvolatility: stable\nraw_source: "[doc.txt](../../raw/doc.txt)"\n---\nA body.\n',
+    "wiki/notes/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "raw/doc.txt": "raw\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", { body }),
+      root,
+    ),
+    /the survivor's frontmatter does not carry wiki\/notes\/a\.md's raw_source link to raw\/doc\.txt/,
+  );
+
+  const plan = consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", {
+    body,
+    edges: { raw_source: ["raw/doc.txt"] },
+  });
+  assert.equal(validationErrors(plan, root), "");
+  const resolved = resolveOK(decodePlanOK(plan), root);
+  resolved.validate();
+  await resolved.execute(new Fake());
+  // Carried as the single scalar link the schema reads, not a list.
+  assert.equal(
+    new Vault(root).load("wiki/notes/b.md").getString("raw_source"),
+    "[doc.txt](../../raw/doc.txt)",
+  );
+});
+
+test("a consolidate plan must union the cluster's tags", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nvolatility: stable\ntags:\n  - alpha\n  - beta\n---\nA body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        frontmatter: { volatility: "stable", tags: ["alpha"] },
+      }),
+      root,
+    ),
+    /the survivor's tags must union the cluster's; missing "beta"/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        frontmatter: { volatility: "stable", tags: ["alpha", "beta"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("a consolidate plan must carry the cluster's most volatile member", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\nvolatility: volatile\n---\nA body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", { body }),
+      root,
+    ),
+    /the survivor's volatility is "stable", but the cluster's most volatile member is "volatile"/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        frontmatter: { volatility: "volatile" },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("an absorbed page whose frontmatter cannot be read is refused, not read edge-less", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nvolatility: stable\nrelated:\n  - not-a-link\n---\nA body.\n",
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body: "B body.\n\nA body.\n",
+      }),
+      root,
+    ),
+    /wiki\/concepts\/a\.md's frontmatter could not be read/,
+  );
+});
+
+test("an absorbed supersedes edge is covered like any other", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      '---\ntitle: A\nvolatility: stable\nsupersedes:\n  - "[C](c.md)"\n---\nA body.\n',
+    "wiki/concepts/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "wiki/concepts/c.md": "---\ntitle: C\nvolatility: stable\n---\nC body.\n",
+  });
+  const body = "B body.\n\nA body.\n";
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", { body }),
+      root,
+    ),
+    /the survivor's frontmatter does not carry wiki\/concepts\/a\.md's supersedes edge to wiki\/concepts\/c\.md/,
+  );
+  assert.equal(
+    validationErrors(
+      consolidationInto(["wiki/concepts/a.md"], "wiki/concepts/b.md", {
+        body,
+        edges: { supersedes: ["wiki/concepts/c.md"] },
+      }),
+      root,
+    ),
+    "",
+  );
+});
+
+test("a single-link edge key refuses more than one ref", () => {
+  const root = newVault({
+    "wiki/notes/a.md": "---\ntitle: A\nvolatility: stable\n---\nA body.\n",
+    "wiki/notes/b.md": "---\ntitle: B\nvolatility: stable\n---\nB body.\n",
+    "raw/doc.txt": "raw\n",
+    "raw/other.txt": "raw\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", {
+        body: "B body.\n\nA body.\n",
+        edges: { raw_source: ["raw/doc.txt", "raw/other.txt"] },
+      }),
+      root,
+    ),
+    /edges\.raw_source holds a single link; pass one ref/,
+  );
+});
+
+test("a survivor whose prior frontmatter cannot be read is refused", () => {
+  const root = newVault({
+    "wiki/notes/a.md": "---\ntitle: A\nvolatility: stable\n---\nA body.\n",
+    // The prior block is unreadable, so its tags and volatility cannot enter the
+    // union; the plan re-authors raw_source, leaving the final block readable.
+    "wiki/notes/b.md":
+      "---\ntitle: B\nvolatility: stable\nraw_source: not-a-link\n---\nB body.\n",
+    "raw/doc.txt": "raw\n",
+  });
+  assert.match(
+    validationErrors(
+      consolidationInto(["wiki/notes/a.md"], "wiki/notes/b.md", {
+        body: "B body.\n\nA body.\n",
+        edges: { raw_source: ["raw/doc.txt"] },
+      }),
+      root,
+    ),
+    /the survivor's prior frontmatter could not be read/,
+  );
+});
+
 test("the executor's pre-delete re-check refuses a survivor mutated past validation", async () => {
   const root = newVault(fragmentedVault);
   const resolved = resolveOK(decodePlanOK(consolidatePlan), root);
@@ -1345,9 +1731,12 @@ test("shape validation requires the assessed pin on a consolidate plan", () => {
       },
     ],
   });
-  assert.match(
-    validationErrors(src, newVault(fragmentedVault)),
-    /plan\.assessed is required/,
+  const got = validationErrors(src, newVault(fragmentedVault));
+  assert.ok(
+    got.includes(
+      "plan.assessed is required when action is 'consolidate': pin the snapshot the cluster was assessed at with `enchiridion assess <page_ref...>`",
+    ),
+    got,
   );
 });
 

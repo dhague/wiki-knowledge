@@ -164,7 +164,7 @@ export async function assessmentErrors(
   const snapshot = await headPages(root);
   if (assessed.head !== snapshot.head) {
     return [
-      `the vault's HEAD moved since the cluster was assessed (assessed ${assessed.head || "(none)"}, now ${snapshot.head || "(none)"}); re-run against a fresh snapshot`,
+      `the vault's HEAD moved since the cluster was assessed (assessed ${assessed.head || "(none)"}, now ${snapshot.head || "(none)"}); re-run \`enchiridion assess <page_ref...>\` and repin plan.assessed`,
     ];
   }
   const pinned = new Map(
@@ -175,19 +175,27 @@ export async function assessmentErrors(
     const want = pinned.get(ref);
     const now = snapshot.pages.get(ref)?.blobOid;
     if (want === undefined) {
-      problems.push(`${ref} is named by the plan but was not assessed`);
+      problems.push(
+        `${ref} is named by the plan but was not assessed — assess it, or drop it from plan.consolidates`,
+      );
       continue;
     }
     if (now === undefined) {
-      problems.push(`${ref} is no longer a committed page at HEAD`);
+      problems.push(
+        `${ref} is no longer a committed page at HEAD — commit it, or pick a ref that is committed`,
+      );
       continue;
     }
     if (now !== want) {
-      problems.push(`${ref} changed since it was assessed`);
+      problems.push(
+        `${ref} changed since it was assessed — re-assess and repin`,
+      );
     }
   }
   if (problems.length > 0) {
-    problems.push("re-run against a fresh snapshot");
+    problems.push(
+      "re-run `enchiridion assess <page_ref...>` and repin plan.assessed",
+    );
   }
   return problems;
 }

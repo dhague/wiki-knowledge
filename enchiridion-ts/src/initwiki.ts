@@ -84,7 +84,7 @@ export async function init(
 
   if (await isVault(vaultRoot)) {
     throw new Error(
-      `${vaultRoot} already looks like a vault (a wiki/ or .wiki-root marker in a git work tree)`,
+      `${vaultRoot} already looks like a vault (a wiki/ or .wiki-root marker in a git work tree) — ingest into it, or scaffold a different path`,
     );
   }
 
