@@ -119,17 +119,32 @@ test("commit stages and returns a SHA", async () => {
   assert.ok(git.messages[0].startsWith("ingest: T"));
 });
 
+function noRepoMessage(root: string): string {
+  return `${root} has no git repository of its own (it may sit inside one); the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $WIKI_ROOT at the vault`;
+}
+
 test("commit requires a work tree", async () => {
   const git = new Fake();
   git.notAWorkTree = true;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-commit-"));
   await assert.rejects(
     commit(root, { title: "T" }, git),
-    (err: unknown) =>
-      (err as Error).message ===
-      `${root} is not a git work tree; the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $WIKI_ROOT at the vault`,
+    (err: unknown) => (err as Error).message === noRepoMessage(root),
   );
   assert.equal(git.messages.length, 0);
+});
+
+test("commit names the missing repository for a root nested inside another repo (#682)", async () => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-commit-"));
+  await git.init({ fs, dir: outer });
+  const nested = path.join(outer, "nested");
+  fs.mkdirSync(nested);
+
+  await assert.rejects(
+    commit(nested, { title: "T" }, new VaultGit(nested)),
+    (err: unknown) => (err as Error).message === noRepoMessage(nested),
+    "an ancestor's repository is not this root's repository",
+  );
 });
 
 test("commit gates on chain of evidence", async () => {
