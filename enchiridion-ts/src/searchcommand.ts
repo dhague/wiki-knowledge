@@ -183,12 +183,12 @@ export function registerSearchCommand(program: Command): void {
     )
     .option(
       "--since <date>",
-      "ISO date; inclusive lower bound on date_field",
+      `calendar date (${CANONICAL_DATE_FORMAT}); inclusive lower bound on date_field`,
       calendarDate("--since"),
     )
     .option(
       "--until <date>",
-      "ISO date; inclusive upper bound on date_field",
+      `calendar date (${CANONICAL_DATE_FORMAT}); inclusive upper bound on date_field`,
       calendarDate("--until"),
     )
     .option(

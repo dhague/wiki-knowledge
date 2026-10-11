@@ -58,8 +58,8 @@ export function folderToKind(folder: string): string {
 }
 
 /** The vault-relative path for a new page: canonical kinds resolve from
- * [KindFolders], custom ones from extraKindFolders. Throws on an unknown kind,
- * naming the known kinds. */
+ * [KindFolders], custom ones from extraKindFolders. Throws on an unknown kind
+ * or a title whose slug is empty, naming what it rejected. */
 export function path(
   kind: string,
   title: string,
