@@ -1,6 +1,7 @@
 /**
  * discover — single-call discovery for ingestion: overlap candidates plus the
- * tag vocabulary, driven off a draft IngestPlan.
+ * tag vocabulary, driven off a draft IngestPlan. `nominate` is the same search
+ * for a page that already exists, behind the `--ref` mode (ADR-0033).
  *
  * The query is OR of the candidate's own words (`raw=true`): an AND query over
  * a whole title+summary+body silently misses real duplicates, because the
@@ -156,18 +157,61 @@ export async function check(
     // "distinct" carries no action — its absence from the result is the
     // signal. A hit just under relatedThreshold is silently dropped.
     if (hint === HintDistinct) continue;
-    candidates.push({
-      page_ref: hit.pageRef,
-      title: hit.title,
-      score: hit.score,
-      hint,
-      summary: hit.summary,
-      tags: hit.tags,
-      volatility: hit.volatility,
-      superseded_by: hit.supersededBy,
-    });
+    candidates.push({ ...hitPayload(hit), hint });
   }
   return candidates.slice(0, o.maxCandidates);
+}
+
+/** One hit as the candidate payload, minus the classification. */
+function hitPayload(hit: Hit): Omit<Candidate, "hint"> {
+  return {
+    page_ref: hit.pageRef,
+    title: hit.title,
+    score: hit.score,
+    summary: hit.summary,
+    tags: hit.tags,
+    volatility: hit.volatility,
+    superseded_by: hit.supersededBy,
+  };
+}
+
+/** Hits one `--ref` nomination scans. Never the caller's `--limit`: the window
+ * must hold more rows than the caller asked for, because the rows this mode
+ * drops — the named page ranks its own query first — come out of it. */
+export const RefScanDefault = 200;
+
+/** Nominate pages that overlap one that already exists, for `--ref`. The text
+ * is the page's own title, summary and body as read from HEAD. No score gate,
+ * no `hint` and no `--max-candidates` cap: the highest-scoring `limit` rows are
+ * the nomination, and the agent reading bodies decides.
+ *
+ * `--limit 0` takes the whole scan. The named page is the caller's filter,
+ * never a `Query` field (ADR-0033). */
+export async function nominate(
+  searcher: Searcher,
+  ref: string,
+  title: string,
+  summary: string,
+  body: string,
+  opts: Pick<Options, "limit">,
+): Promise<Omit<Candidate, "hint">[]> {
+  const query = orQuery(title, summary, body);
+  if (query === "") return [];
+
+  const hits = await searcher.search({
+    text: query,
+    raw: true,
+    limit: RefScanDefault,
+  });
+
+  const nominees: Omit<Candidate, "hint">[] = [];
+  for (const hit of hits) {
+    if (hit.pageRef === ref) continue;
+    // The index drops superseded pages itself; a substituted searcher may not.
+    if (hit.supersededBy !== null) continue;
+    nominees.push(hitPayload(hit));
+  }
+  return opts.limit > 0 ? nominees.slice(0, opts.limit) : nominees;
 }
 
 /** Pairs one planned page's title with its discovered candidates. */

@@ -82,8 +82,25 @@ this check surfaces the conflict; deciding which side wins is judgment.
 
 ## `orphans`
 
-Pages with zero inbound links, body or frontmatter. Confirm first, because the
-repair deletes committed pages.
+Pages with zero inbound links, body or frontmatter. The count is read from the
+**working tree** — `resolveLinkDest` over each page's links, self-links excluded
+— and credits a link from any page, superseded ones included, so an orphan can
+be a page whose only linker is itself already superseded and a link that is not
+yet committed clears it while the page is still reported.
+
+The check names no route forward but deletion, so the judgment step reads the
+orphan's body and nominates the pages that could link to it. **The repair lands
+on the linker, not the orphan**: an edge written on the orphan is an outbound
+link and clears nothing, so the new edge goes on the candidate it names the
+orphan in. That candidate view is a `HEAD` view (`discover --ref`), where the
+check's own count is the working tree — an orphan that is not committed cannot be
+nominated at all, and the check says so rather than implying the vault is clean.
+
+Nomination is deliberately ungated: no score threshold, because a threshold is a
+precision control and finding the linker is a recall problem. The bodies the
+judgment step reads are the precision.
+
+Confirm first, because the other repair deletes committed pages.
 
 ## `split-links`
 

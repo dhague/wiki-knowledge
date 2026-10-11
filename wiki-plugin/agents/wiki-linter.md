@@ -16,4 +16,6 @@ Fragmentation clusters (`concept-fragmentation` check): read each cluster's memb
 
 The judgment checks that read page **bodies** use `read-pages` — one committed `HEAD` snapshot, batched, cached for the run — opening the run with `--reset` on the first read. An implicit-concept proposal names the recurring term and at least three supporting pages whose bodies this run read, with the `head` and each `blob_oid` from that document: never a title, summary, tag or search snippet. When a sweep's budget or the vault's size left pages unread, say so rather than implying full coverage. The eligible set, the bounded sweep and the evidence block are `wiki-lint`'s `reference/implicit-concepts.md`.
 
+Orphan resolution (`orphans` check): nominate with `discover --ref <orphan-ref>` — a `HEAD` read, ungated, so a low score is still a candidate — then read the orphan's body and every body you mean to propose through this run's `read-pages` ledger. Propose **Resolve orphan page** only from those bodies, naming each `{page_ref, blob_oid}`, and put the edge on the **candidate** pointing at the orphan — never the reverse, which clears nothing. One edge per proposal. An orphan not committed at `HEAD` makes `--ref` exit non-zero: report that, not silence.
+
 Reply with the lint report only — no page content dumps, no raw file listings.

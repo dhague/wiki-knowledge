@@ -19,6 +19,7 @@ import { Index } from "./searchindex.js";
 import {
   check as checkDiscover,
   discover as discoverCandidates,
+  nominate,
   tagsContaining,
   tagCounts,
   DefaultLimit as DiscoverDefaultLimit,
@@ -26,6 +27,9 @@ import {
   DuplicateThreshold as DiscoverDuplicateThreshold,
   RelatedThreshold as DiscoverRelatedThreshold,
 } from "./discover.js";
+import { headPages } from "./assess.js";
+import { newPageRecord } from "./pagerecord.js";
+import { splitFrontmatter } from "./wikipage.js";
 import {
   DefaultDebounceSeconds,
   DefaultPollIntervalSeconds,
@@ -189,6 +193,36 @@ async function runDiscoverPlan(
     }
   }
   emitDocument(payload);
+}
+
+/** The `--ref` page's own title, summary and body, read from HEAD (ADR-0033).
+ * Fails rather than returning empty text: an empty query prints nothing, which
+ * is indistinguishable from "no candidates". */
+async function runDiscoverRef(
+  index: Index,
+  root: string,
+  ref: string,
+  opts: { limit: number },
+): Promise<void> {
+  const { head, pages } = await headPages(root);
+  const page = pages.get(ref);
+  if (page === undefined) {
+    fail(
+      `${ref} is not a committed page at HEAD (${head || "no commits"}) — ` +
+        `discover --ref reads its query from the committed snapshot; commit it and retry`,
+    );
+  }
+  let title = "";
+  let summary = "";
+  try {
+    const record = newPageRecord(ref, page.content);
+    title = record.title;
+    summary = record.summary;
+  } catch {
+    // An unreadable frontmatter block still leaves a body to query with.
+  }
+  const body = splitFrontmatter(page.content).body;
+  emitRows(await nominate(index, ref, title, summary, body, opts));
 }
 
 /** Append rawRel to its own folder's `.ingestignore`. rawRel is
@@ -393,9 +427,10 @@ export function registerIngestCommands(program: Command): void {
       console.log(sha);
     });
 
-  // discover — two modes: --plan discovers candidates for every page in a
-  // draft plan plus the vault's tag vocabulary; --title/--summary/--body-file
-  // is single-page mode, emitting one candidate per line.
+  // discover — three modes: --plan discovers candidates for every page in a
+  // draft plan plus the vault's tag vocabulary; --ref nominates pages that
+  // could carry an inbound link to a committed page; --title/--summary/
+  // --body-file is single-page mode, emitting one candidate per line.
   program
     .command("discover")
     .description(
@@ -404,6 +439,10 @@ export function registerIngestCommands(program: Command): void {
     .option(
       "--plan <file>",
       "path to a draft IngestPlan JSON ('-' reads stdin); discovers candidates for every page in it, plus the vault's tag vocabulary",
+    )
+    .option(
+      "--ref <page_ref>",
+      "nominate pages overlapping a committed page read from HEAD; no score gate, no hint, and --limit caps the nomination (--max-candidates does not apply)",
     )
     .option("--title <text>", "the planned page's own title (single-page mode)")
     .option(
@@ -449,6 +488,7 @@ export function registerIngestCommands(program: Command): void {
     .action(
       async (opts: {
         plan?: string;
+        ref?: string;
         title?: string;
         summary?: string;
         bodyFile?: string;
@@ -470,6 +510,9 @@ export function registerIngestCommands(program: Command): void {
         // (ADR-0010).
         const index = await Index.open(root);
         try {
+          if (opts.plan && opts.ref) {
+            fail("--plan and --ref are separate discover modes; pass one");
+          }
           if (opts.plan) {
             await runDiscoverPlan(
               index,
@@ -478,6 +521,12 @@ export function registerIngestCommands(program: Command): void {
               opts.tagsContaining ?? "",
               opts.tagCount ?? "",
             );
+            return;
+          }
+          if (opts.ref) {
+            await runDiscoverRef(index, root, opts.ref, {
+              limit: discoverOpts.limit,
+            });
             return;
           }
           let body = "";

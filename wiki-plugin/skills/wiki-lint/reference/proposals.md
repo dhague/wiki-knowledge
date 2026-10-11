@@ -62,6 +62,26 @@ Command on yes: `"$RUNTIME" "$ENCHIRIDION" page merge <absolute-path> <specific-
 - **Drop** — `"$RUNTIME" "$ENCHIRIDION" page set <absolute-path> <type> --json '<remaining-links>'`, then delete the empty key by hand when that was its only link — the conventions omit a key with no links, and `page set` leaves an empty list. A page whose own claim is the error needs its body corrected too, which no edge edit does.
 - **Supersede** — `<page>` replaces `<target>`: keep the `contradicts:` edge and record the replacement with `"$RUNTIME" "$ENCHIRIDION" page merge <absolute-path> supersedes '["<target-ref>"]'`.
 
+**Resolve orphan page** (`orphans`) — "Page `<orphan>` has no inbound links.
+`<candidate>` should link to it `<reason from the two bodies>`. Add the `<type>`
+edge from `<candidate>` to `<orphan>`?" One edge per confirmation: never batch
+two candidates, and never pick a type the two bodies do not carry.
+
+Command on yes:
+
+```
+"$RUNTIME" "$ENCHIRIDION" page merge <candidate absolute path> <type> '["<orphan vault-relative ref>"]'
+git -C <vault-root> commit -m "chore: link <orphan> from <candidate>"
+```
+
+**The edge goes on the candidate, pointing at the orphan** — an edge written on
+the orphan is an outbound link and clears nothing. `related` is the default type;
+`refines`, `example-of`, `source` and `contradicts` each need the two bodies to
+support them. Where the candidate genuinely ought to *mention* the orphan in
+prose, say so and name that as the sharper manual alternative — no subcommand
+inserts a link at a chosen body position, and the linter has no `Write`, so that
+edit is the user's. The command the proposal carries is the frontmatter edge.
+
 **Delete orphan page** — "Page `<path>` has no inbound links and no apparent
 purpose. Delete it?"
 
