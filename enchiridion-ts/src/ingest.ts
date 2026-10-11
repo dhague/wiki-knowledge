@@ -52,10 +52,12 @@
  * validation reads only resolved facts and execution writes only resolved
  * pages, so the checked plan and the written plan cannot diverge. Resolve is
  * pure apart from vault reads. Validation runs entirely before any write —
- * shape (required fields, valid op) then semantic (an update's pageRef exists, a
- * create's target does not yet, every edge target resolves to a page on disk or
- * created by this same plan, and [chainofevidence.check] holds). The chain
- * check is a courtesy; [commit.commit] re-runs it as the hard gate.
+ * shape (required fields, valid op, a `frontmatter` key within
+ * [FrontmatterKeys], no edge pointing at its own page) then semantic (an
+ * update's pageRef exists, a create's target does not yet, every edge target
+ * resolves to a page on disk or created by this same plan, and
+ * [chainofevidence.check] holds). The chain check is a courtesy;
+ * [commit.commit] re-runs it as the hard gate.
  *
  * Two frontmatter fields are this module's to guarantee, not the agent's to
  * forget. A page omitting `source_date` inherits the plan's top-level
@@ -66,6 +68,12 @@
  * cannot be derived, so validation requires it — within [Volatilities] — on
  * every `create` and on any `update` that supplies a `frontmatter` map; a
  * body-only update leaves the existing block alone.
+ *
+ * An edge label is its target's `title`: a non-empty title on one of this plan's
+ * own pages wins, so a corrected title propagates to every link the plan writes;
+ * otherwise the on-disk title is read, and failing that the filename. An empty
+ * plan title is no title, never a decision — see [resolveTitle]. `raw_source` is
+ * the exception: its label is the artifact's filename by design.
  *
  * No rollback on failure, deliberately: a page written before a later step fails
  * stays on disk, uncommitted. Every write is idempotent, so re-running the plan
@@ -92,6 +100,7 @@ import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
 import {
+  EdgeKeys,
   Volatilities,
   newPageRecord,
   isSingleLinkEdgeKey,
@@ -113,6 +122,17 @@ export const SummaryWordGuideline = 20;
 
 export const OpCreate = "create";
 export const OpUpdate = "update";
+
+/** The whole page schema a plan's `frontmatter` map may name: the page's own
+ * keys, then every [EdgeKeys] edge in conventions-spec order. */
+export const FrontmatterKeys: string[] = [
+  "title",
+  "summary",
+  "tags",
+  "source_date",
+  "volatility",
+  ...EdgeKeys,
+];
 
 export const ActionIngest = "ingest";
 export const ActionSynthesize = "synthesize";
@@ -373,6 +393,8 @@ export class Resolved {
     for (let i = 0; i < this.pages.length; i++) {
       const page = this.pages[i].plan;
       const prefix = `pages[${i}]`;
+      // Empty when placement could not be computed — its own shape error.
+      const pageRef_ = this.pages[i].pageRef;
 
       if (page.op !== OpCreate && page.op !== OpUpdate) {
         problems.push(
@@ -468,6 +490,12 @@ export class Resolved {
       // single-link key, and the plan path must too rather than silently
       // writing the first ref.
       for (const [key, refs] of (page.edges as OrderedMap<unknown>).all()) {
+        if (!EdgeKeys.includes(key)) {
+          problems.push(
+            `${prefix}.edges.${key} is not an edge key; one of ${EdgeKeys.join(", ")}`,
+          );
+          continue;
+        }
         if (!Array.isArray(refs)) {
           problems.push(
             `${prefix}.edges.${key} must be a list of vault-relative page refs, got ${JSON.stringify(refs)}`,
@@ -485,6 +513,26 @@ export class Resolved {
               `${prefix}.edges.${key} entries must be strings, got ${JSON.stringify(entry)}`,
             );
           }
+        }
+      }
+
+      if (pageRef_ !== "") {
+        for (const target of pageLinkTargets(page, this.plan)) {
+          if (target.ref === pageRef_) {
+            problems.push(
+              `${prefix}.${target.key} points at ${pageRef_} itself — an edge needs a target other than the page carrying it`,
+            );
+          }
+        }
+      }
+
+      // The schema's accepted set, `raw_source` and the typed edges included;
+      // anything else is a typo the writer would otherwise carry to the page.
+      for (const [key] of page.frontmatter.all()) {
+        if (!FrontmatterKeys.includes(key)) {
+          problems.push(
+            `${prefix}.frontmatter.${key} is not a frontmatter key; one of ${FrontmatterKeys.join(", ")}`,
+          );
         }
       }
     }
@@ -672,7 +720,11 @@ export class Resolved {
           staged[rp.pageRef] = rp.page;
         }
       }
-      problems.push(...checkChainOfEvidence(staged, this.plan.raw));
+      problems.push(
+        ...checkChainOfEvidence(staged, this.plan.raw, (raw) =>
+          v.rawSourceStub(raw),
+        ),
+      );
     }
 
     if (this.plan.action === ActionConsolidate) {
@@ -1019,12 +1071,16 @@ export function resolve(plan: Plan, root: string): Resolved {
 
   const refs = plan.pages.map((page) => pageRef(page, extraKindFolders));
 
-  // First page wins, so a link's title matches the earliest plan page claiming it.
+  // First page wins, so a link's title matches the earliest plan page claiming
+  // it. An empty title is no title, not a decision: recording one would shadow
+  // the on-disk title with a filename label.
   const titles = new Map<string, string>();
   for (let i = 0; i < refs.length; i++) {
     const ref = refs[i];
     if (ref === "") continue;
-    if (!titles.has(ref)) titles.set(ref, plan.pages[i].title);
+    const title = plan.pages[i].title;
+    if (title === "") continue;
+    if (!titles.has(ref)) titles.set(ref, title);
   }
 
   const resolvedPages: ResolvedPage[] = [];

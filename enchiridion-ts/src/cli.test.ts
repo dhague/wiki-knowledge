@@ -1877,7 +1877,7 @@ test("commit: a manifest failing chain-of-evidence is rejected non-zero", async 
   assert.notEqual(status, 0);
   assert.match(
     stderr,
-    /needs a wiki\/sources\/ page whose raw_source points at it/,
+    /needs a wiki\/sources\/ stub among this plan's own pages whose raw_source points at it/,
   );
 });
 

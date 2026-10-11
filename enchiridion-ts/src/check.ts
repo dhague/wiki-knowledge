@@ -181,6 +181,27 @@ export async function tagsShape(read: VaultRead): Promise<Finding[]> {
   return findings;
 }
 
+/** selfReferentialEdge — an edge key pointing at the page that carries it. It
+ * is semantically empty and inflates the graph retrieval follows; the target a
+ * move repoints is the page itself. */
+export async function selfReferentialEdge(read: VaultRead): Promise<Finding[]> {
+  const pages = read.records();
+  const findings: Finding[] = [];
+  for (const [ref, record] of Object.entries(pages)) {
+    for (const edge of record.edges) {
+      for (const target of edge.targets) {
+        if (path.posix.normalize(target) === ref) {
+          findings.push({
+            pageRef: ref,
+            detail: `${edge.key} points at ${ref} itself`,
+          });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 /** Age at which a synthesis page reads as stale, in days. */
 export const StaleSynthesisDays = 30;
 
@@ -1081,6 +1102,7 @@ export const CHECKS: Record<string, CheckFn> = {
   "ingestion-source-integrity": ingestionSourceIntegrity,
   "frontmatter-link-format": frontmatterLinkFormat,
   "tags-shape": tagsShape,
+  "self-referential-edge": selfReferentialEdge,
   "stale-synthesis": staleSynthesis,
   "missing-volatility-source-date": missingVolatilitySourceDate,
   "unresolved-supersession": unresolvedSupersession,

@@ -389,6 +389,71 @@ test("resolve normalizes body links", () => {
   );
 });
 
+// A page's own omit is not a decision about the label: the title on disk wins.
+test("resolve takes the on-disk title for an untitled update in the plan", () => {
+  const root = newVault({
+    "wiki/concepts/target.md": "---\ntitle: The On-Disk Title\n---\nbody\n",
+  });
+  const plan = decodePlanOK(`{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/target.md","body":"b"},
+    {"op":"create","title":"New","kind":"synthesis","body":"b",
+     "edges":{"related":["wiki/concepts/target.md"]}}]}`);
+  const resolved = resolveOK(plan, root);
+
+  assert.ok(
+    resolved.pages[1].page!.text.includes(
+      '"[The On-Disk Title](../concepts/target.md)"',
+    ),
+    `on-disk title not used:\n${resolved.pages[1].page!.text}`,
+  );
+});
+
+test("resolve still lets a plan page's own title label edges pointing at it", () => {
+  const root = newVault({
+    "wiki/concepts/target.md": "---\ntitle: The On-Disk Title\n---\nbody\n",
+  });
+  const plan = decodePlanOK(`{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/target.md","title":"Corrected Title","body":"b"},
+    {"op":"create","title":"New","kind":"synthesis","body":"b",
+     "edges":{"related":["wiki/concepts/target.md"]}}]}`);
+  const resolved = resolveOK(plan, root);
+
+  assert.ok(
+    resolved.pages[1].page!.text.includes(
+      '"[Corrected Title](../concepts/target.md)"',
+    ),
+    `plan title not used:\n${resolved.pages[1].page!.text}`,
+  );
+});
+
+test("raw_source keeps the artifact filename, not the stub's title", () => {
+  const root = newVault({
+    "raw/artifact.md": "raw\n",
+    "wiki/sources/stub.md": "---\ntitle: Stub\n---\nbody\n",
+  });
+  const plan = decodePlanOK(`{"title":"T","raw":"raw/artifact.md","pages":[
+    {"op":"update","page_ref":"wiki/sources/stub.md","title":"A Corrected Stub Title",
+     "body":"b","frontmatter":{"volatility":"stable","raw_source":true}},
+    {"op":"create","title":"New","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"stable"},
+     "edges":{"source":["wiki/sources/stub.md"]}}]}`);
+  const resolved = resolveOK(plan, root);
+  resolved.validate();
+
+  assert.ok(
+    resolved.pages[0].page!.text.includes(
+      'raw_source: "[artifact.md](../../raw/artifact.md)"',
+    ),
+    `raw_source label must stay the filename:\n${resolved.pages[0].page!.text}`,
+  );
+  assert.ok(
+    resolved.pages[1].page!.text.includes(
+      '"[A Corrected Stub Title](../sources/stub.md)"',
+    ),
+    `source edge must carry the title:\n${resolved.pages[1].page!.text}`,
+  );
+});
+
 // An update starts from the on-disk page, so its old edges and the plan's new
 // ones both survive.
 test("update merges list-valued keys onto disk state", () => {
@@ -740,6 +805,133 @@ test("shape validation rejects a non-string edges entry", () => {
   );
 });
 
+// A typo in a plan's frontmatter map is written through to the page otherwise.
+test("shape validation rejects a frontmatter key outside the schema", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b",
+     "frontmatter":{"volatility":"evolving","summmary":"typo key"}}]}`,
+    newVault({}),
+  );
+  assert.ok(
+    got.includes(
+      "pages[0].frontmatter.summmary is not a frontmatter key; one of title, summary, tags, source_date, volatility, raw_source, supersedes, refines, contradicts, example-of, source, related",
+    ),
+    got,
+  );
+});
+
+test("shape validation accepts every key in the schema", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","body":"b","frontmatter":{
+      "summary":"s","tags":["t"],"source_date":"2026-01-01",
+      "volatility":"stable"}}]}`,
+    newVault({}),
+  );
+  assert.equal(got, "");
+});
+
+test("shape validation leaves an update with no frontmatter map alone", () => {
+  const root = newVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nvolatility: stable\nlegacy_key: kept\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[{"op":"update","page_ref":"wiki/concepts/a.md","body":"new"}]}`,
+    root,
+  );
+  assert.equal(got, "");
+});
+
+// --- self-referential edges -------------------------------------------------
+
+test("shape validation rejects a self-referential edge", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"b",
+     "edges":{"source":["wiki/concepts/./a.md"]}}]}`,
+    root,
+  );
+  assert.ok(
+    got.includes("pages[0].source points at wiki/concepts/a.md itself"),
+    got,
+  );
+});
+
+test("shape validation rejects a self-referential raw_source link", () => {
+  const root = newVault({
+    "wiki/sources/a.md": "---\ntitle: A\n---\nb\n",
+    "raw/artifact.md": "raw\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","raw":"raw/artifact.md","pages":[
+    {"op":"update","page_ref":"wiki/sources/a.md","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"raw_source":["wiki/sources/a.md"]}}]}`,
+    root,
+  );
+  assert.ok(
+    got.includes("pages[0].raw_source points at wiki/sources/a.md itself"),
+    got,
+  );
+});
+
+test("shape validation reports every self-edge, not the first", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nb\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"b",
+     "edges":{"related":["wiki/concepts/a.md"],"source":["wiki/concepts/a.md"]}},
+    {"op":"update","page_ref":"wiki/concepts/b.md","body":"b",
+     "edges":{"refines":["wiki/concepts/b.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("pages[0].related points at"), got);
+  assert.ok(got.includes("pages[0].source points at"), got);
+  assert.ok(got.includes("pages[1].refines points at"), got);
+});
+
+test("shape validation accepts an edge to a different page", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nb\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"b",
+     "edges":{"related":["wiki/concepts/b.md"]}}]}`,
+    root,
+  );
+  assert.equal(got, "");
+});
+
+// An edge key the schema does not name is the same silent write-through a
+// frontmatter typo is: nothing downstream reads the key.
+test("shape validation rejects an edge key outside the vocabulary", () => {
+  const root = newVault({
+    "wiki/concepts/a.md": "---\ntitle: A\n---\nb\n",
+    "wiki/concepts/b.md": "---\ntitle: B\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/concepts/a.md","body":"b",
+     "edges":{"relates-to":["wiki/concepts/b.md"]}}]}`,
+    root,
+  );
+  assert.ok(
+    got.includes(
+      "pages[0].edges.relates-to is not an edge key; one of raw_source, supersedes, refines, contradicts, example-of, source, related",
+    ),
+    got,
+  );
+});
+
 // --- semantic validation ----------------------------------------------------
 
 test("semantic validation rejects an existing create target", () => {
@@ -885,7 +1077,7 @@ test("semantic validation runs chain of evidence", () => {
     root,
   );
   assert.ok(
-    got.includes("needs a wiki/sources/ page whose raw_source points at it"),
+    got.includes("needs a wiki/sources/ stub among this plan's own pages"),
     got,
   );
 });
@@ -1195,6 +1387,35 @@ test("decodePlan reads consolidates and keeps the consolidate action", () => {
 
 test("decodePlan defaults consolidates to empty", () => {
   assert.deepEqual(decodePlanOK(`{"title":"T"}`).consolidates, []);
+});
+
+// The self-edge refusal must not catch a survivor carrying an absorbed page's
+// raw_source forward: edges.raw_source names a raw/ artifact, never a page.
+test("a survivor carrying a raw_source edge is not a self-edge", () => {
+  const absorbed = "wiki/sources/artifact.md";
+  const root = newVault({
+    "raw/a.md": "raw\n",
+    "wiki/sources/artifact.md":
+      '---\ntitle: Artifact\nraw_source: "[a.md](../../raw/a.md)"\n---\nArtifact body.\n',
+    "wiki/concepts/caching.md":
+      "---\ntitle: Caching\nvolatility: stable\n---\nArtifact body.\n",
+  });
+  const src = JSON.stringify({
+    title: "Caching",
+    action: "consolidate",
+    consolidates: [absorbed],
+    assessed: pinFor(absorbed),
+    pages: [
+      {
+        op: "update",
+        page_ref: "wiki/concepts/caching.md",
+        frontmatter: { volatility: "stable" },
+        edges: { raw_source: ["raw/a.md"] },
+      },
+    ],
+  });
+  const got = validationErrors(src, root);
+  assert.ok(!got.includes("points at"), got);
 });
 
 test("shape validation rejects consolidates without the consolidate action", () => {

@@ -55,6 +55,23 @@ Report only. The repair re-types the tag list, and which tags the author meant
 is judgment a rewrite cannot recover — a comma-or-quote-bearing entry is exactly
 the case where guessing would invent tags.
 
+## `self-referential-edge`
+
+A frontmatter edge key whose target resolves to the page carrying it — on any
+of `raw_source`, `supersedes`, `refines`, `contradicts`, `example-of`, `source`
+or `related`. The target is read the way the record parser reads it, so from
+`wiki/concepts/foo.md` a link written `[Foo](../concepts/./foo.md)` is the same
+self-edge as `[Foo](foo.md)`.
+
+A self-edge carries no information — it says the page relates to itself — and it
+inflates the graph `wiki-ask` follows: the one hop the edge promises lands back
+where it started. `enchiridion ingest` refuses to write one in the first place,
+so a finding here means the page predates that refusal or was hand-edited.
+
+Report only, and the repair depends on what the author meant: an edge to the
+page itself is either a typo for a real target, which only the author knows, or a
+line to delete because the target has no page of its own.
+
 ## `stale-synthesis`
 
 Synthesis pages whose last commit is more than 30 days old. Any churn in their
