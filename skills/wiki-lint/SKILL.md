@@ -54,7 +54,7 @@ One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row na
 - **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field.
 - **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead.
 - **Contradiction callouts** (`contradiction-callouts`) — pages carrying an active `> [!warning] Contradiction` callout.
-- **Orphans** (`orphans`) — pages with no inbound link, body or frontmatter; the repair deletes committed pages.
+- **Orphans** (`orphans`) — pages with no inbound link, body or frontmatter. A **working-tree** link count that credits a link from any page, superseded ones included, so it can disagree with the committed `HEAD` view the candidate list is drawn from. Resolution is a judgment check (step 4); the alternative repair deletes committed pages.
 - **Split links** (`split-links`) — no link split across lines, in frontmatter or body. A body split is reported but never joined: a break after a destination is legal markdown, and joining on sight can silently repoint the link. Scoped to double-quoted frontmatter scalars: raw text cannot tell a block scalar (`related: |`) from a fold, so nothing outside that shape is reported or joined.
 - **Duplicate frontmatter** (`duplicate-frontmatter`) — a page's frontmatter is exactly one leading `---` block. A second block is invisible: the parser reads only the first, so its edges reach no check and its text renders as body.
 - **Concept fragmentation** (`concept-fragmentation`) — clusters of small, closely-related pages whose knowledge reads better as one page with sections ([definition](reference/checks.md#concept-fragmentation)). Scope is an allowlist: `concept`, plus any kind whose `wiki/<kind>/KIND.md` declares `consolidatable: true`; `entity` and `source` are never in scope, and a cluster never mixes kinds. One finding per cluster, whose `cluster` payload carries the members with committed byte size and inbound-link count, the shared basis (tags / title words), the weakest pairwise similarity holding the cluster together, and a suggested survivor (most inbound links, largest body as tie-break). The `pageRef` is that survivor and the `detail` a one-line summary. `--min-similarity <n>` (default `0.5`) is the one cutoff. Reads the index, so it sees only committed pages — an uncommitted draft is invisible until committed. Two things suppress a cluster outright: a `contradicts` or `supersedes` edge between any two of its members, and an exact member-set match in that kind-folder's Consolidation-exclusion registry. A Consolidation, always one cluster per handoff.
@@ -102,6 +102,14 @@ Compare `git_date`; where a related page is substantially newer and covers the s
 
 **Missing cross-references:** a page naming another page's title in its body without linking to it.
 
+**Orphan resolution:** every `orphans` finding. Nominate the pages that could carry an inbound link, then judge from bodies:
+
+```bash
+"$RUNTIME" "$ENCHIRIDION" discover --ref <orphan-ref> --limit 0
+```
+
+This is the one nomination path with no score gate, so a weak hit is still a candidate — the bodies you read are the precision, not the score. Then read the orphan's own body and the body of every page you mean to propose, in one `read-pages` call through this run's ledger. Propose **Resolve orphan page** (`reference/proposals.md`) for the edge an orphan's content actually supports, and cite only those bodies — never a title, summary, tag, search snippet or score. An orphan that is not committed at `HEAD` makes `discover --ref` exit non-zero: say so, and do not report the vault clean or candidate-free.
+
 **Data gaps:** pages with `volatility: volatile` or `evolving` and a `source_date` > 180 days old, whose premises could have changed.
 
 **Summary quality:** for each page — missing, empty, over the ≤ ~20 words guideline (a little slack to ~25), or vague ("this page covers", "information about", "notes on", a bare restatement of the title).
@@ -116,7 +124,7 @@ Compare `git_date`; where a related page is substantially newer and covers the s
 - **Missing cross-references**: distinct concepts, one names the other, no link → **typed edge**. Two pages in, two pages out, now joined.
 - **Implicit concepts**: one concept with no page at all — its *term* recurs across ≥ 3 pages → **extract** a page. No page in, one page out.
 
-Direction is the tell: fragmentation collapses pages that exist, implicit concepts creates the missing one, cross-references joins two that already exist. A pair below the fragmentation bar is never a Consolidation — it is an edge, and Missing cross-references owns proposing it. Never downgrade a declined cluster to an edge.
+Direction is the tell: fragmentation collapses pages that exist, implicit concepts creates the missing one, cross-references joins two that already exist. A pair below the fragmentation bar is never a Consolidation — it is an edge, and Missing cross-references owns proposing it. Never downgrade a declined cluster to an edge. **Orphan resolution** is not a fourth claimant — the dial does not govern it, and its finding is a page with *no* link rather than a pair with the wrong treatment. But its rule is the same one, so read it before declining a cluster: *never downgrade a declined cluster to an edge* is exactly how this check must not behave either.
 
 ### 5. Apply auto-fixes
 
@@ -140,12 +148,13 @@ Add every confirm-first finding to the report's **confirm-first proposals** sect
 - The vault-relative path(s) of the affected page(s) — every member, for a cluster.
 - The exact command(s) to run on yes.
 - For an implicit concept, the evidence block its proposal carries — [`reference/implicit-concepts.md`](reference/implicit-concepts.md).
+- For an orphan, the body evidence: the orphan's `{page_ref, blob_oid}` and those of every page it proposes, all read by this run's body reader.
 
 Proposal shapes — present the entry, wait for a yes/no, apply the stated command on yes:
 
 [`reference/proposals.md`](reference/proposals.md) — the exact wording and command for each confirm-first shape; [`reference/consolidation.md`](reference/consolidation.md) — the Consolidation assessment, its three dispositions, and the exclusion offer; [`reference/implicit-concepts.md`](reference/implicit-concepts.md) — the implicit-concept evidence; read them before writing a proposal.
 
-Never author the merged body here: the merge is a judgment call that belongs to the ingest flow. Never batch two clusters into one handoff.
+Never author the merged body here: the merge is a judgment call that belongs to the ingest flow. Never batch two clusters into one handoff, and never batch two orphan edges into one proposal — one edge per confirmation.
 
 ### 7. Report
 
@@ -190,6 +199,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `unresolved-supersession` | report only |
 | `contradiction-callouts` | report only |
 | `orphans` | confirm first |
+| Orphan resolution (`orphans`) | confirm first |
 | `split-links` | auto-fix (frontmatter) / report only (body) |
 | `duplicate-frontmatter` | auto-fix (redundant) / report only (divergent) |
 | `concept-fragmentation` | confirm first |

@@ -63,6 +63,10 @@ _Avoid_: Blacklist, suppression list (they name a mechanism, not the decision th
 One `wiki-lint` procedure invocation, which owns one body-read ledger and one read budget. `enchiridion read-pages --reset` opens it; the page bodies a judgment check reads are served from that ledger, marked `cached` when the run already read them, and the run may newly read at most `--budget` bodies before its sweep stops. A ledger is keyed to the `HEAD` it was opened at, so a commit moves `HEAD` and the next read starts a fresh run without the flag; the ledger itself is disposable cache, not vault history ([ADR-0029](docs/adr/0029-lint-judgment-reads-bodies-through-a-run-ledger.md)).
 _Avoid_: Lint session (a host session spans many runs, and is not what the ledger or the budget is scoped to), cache (the ledger is one input to the run, not the run).
 
+**Orphan**:
+A page with zero inbound links, body or frontmatter — counted in the **working tree**, a link from a superseded page still clearing one. Resolved by the linker, not the orphan: `wiki-lint` nominates the pages that could carry the link (`enchiridion discover --ref`, a `HEAD` read) and proposes the one typed edge that resolves it, because an edge written on the orphan is an outbound link and clears nothing ([ADR-0031](docs/adr/0031-orphan-nomination-is-a-separate-ungated-discover-ref.md)). Distinct from concept fragmentation, which is about pages that already link to each other, and from a missing cross-reference, which is about a page that already names the orphan.
+_Avoid_: Dead page, unlinked page (both suggest the page itself is the fault).
+
 **Volatility**:
 A page's authored judgment of how likely its content is to go stale: `stable`, `evolving`, or `volatile`. Drives whether retrieval discounts a page's age.
 

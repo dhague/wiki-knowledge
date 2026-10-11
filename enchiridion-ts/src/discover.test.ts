@@ -13,6 +13,7 @@ import {
   orQuery,
   classify,
   check,
+  nominate,
   discover,
   tagsContaining,
   tagCounts,
@@ -23,6 +24,7 @@ import {
   UnboundedSearchLimit,
   DefaultLimit,
   DefaultMaxCandidates,
+  RefScanDefault,
   type Searcher,
   type Candidate,
 } from "./discover.js";
@@ -79,6 +81,14 @@ async function newFixtureSearcher(): Promise<Index> {
 function refOf(candidates: Candidate[], ref: string): Candidate | undefined {
   return candidates.find((c) => c.page_ref === ref);
 }
+
+/** `check`'s defaults: a zero threshold or cap takes its named default. */
+const CheckOpts = {
+  limit: 0,
+  duplicateThreshold: 0,
+  relatedThreshold: 0,
+  maxCandidates: 0,
+};
 
 // ---------------------------------------------------------------------------
 // classify: pure boundary logic
@@ -170,12 +180,7 @@ function hit(
 
 test("check sends an OR query with raw:true and a limit", async () => {
   const fake = new FakeSearcher();
-  await check(fake, "Connection Pooling", "Reuse", "connections", {
-    limit: 0,
-    duplicateThreshold: 0,
-    relatedThreshold: 0,
-    maxCandidates: 0,
-  });
+  await check(fake, "Connection Pooling", "Reuse", "connections", CheckOpts);
   assert.ok(fake.lastQuery);
   assert.equal(fake.lastQuery!.raw, true);
   assert.equal(fake.lastQuery!.limit, UnboundedSearchLimit);
@@ -187,12 +192,7 @@ test("check sends an OR query with raw:true and a limit", async () => {
 
 test("check returns no candidates for an empty query", async () => {
   const fake = new FakeSearcher();
-  const candidates = await check(fake, "", "", "", {
-    limit: 0,
-    duplicateThreshold: 0,
-    relatedThreshold: 0,
-    maxCandidates: 0,
-  });
+  const candidates = await check(fake, "", "", "", CheckOpts);
   assert.deepEqual(candidates, []);
   assert.equal(fake.lastQuery, null);
 });
@@ -211,12 +211,7 @@ test("check classifies each hit and carries the full payload", async () => {
       },
     ),
   ];
-  const candidates = await check(fake, "Connection Pooling", "", "", {
-    limit: 0,
-    duplicateThreshold: 0,
-    relatedThreshold: 0,
-    maxCandidates: 0,
-  });
+  const candidates = await check(fake, "Connection Pooling", "", "", CheckOpts);
   assert.equal(candidates.length, 1);
   const c = candidates[0];
   assert.equal(c.page_ref, "wiki/concepts/connection-pooling.md");
@@ -233,12 +228,7 @@ test("check honours custom thresholds", async () => {
     hit("a.md", "Connection Pooling", 10),
     hit("b.md", "Zebra Care", 3),
   ];
-  const candidates = await check(fake, "Connection Pooling", "", "", {
-    limit: 0,
-    duplicateThreshold: 0,
-    relatedThreshold: 0,
-    maxCandidates: 0,
-  });
+  const candidates = await check(fake, "Connection Pooling", "", "", CheckOpts);
   // score 10 → related (above default relatedThreshold 5.0); score 3 → distinct
   // (below 5.0) and therefore filtered out
   assert.equal(candidates.length, 1);
@@ -251,12 +241,7 @@ test("check does not emit distinct candidates", async () => {
     hit("low.md", "Unrelated Topic", 1.0),
     hit("high.md", "Connection Pooling Patterns", 10.0),
   ];
-  const candidates = await check(fake, "Connection Pooling", "", "", {
-    limit: 0,
-    duplicateThreshold: 0,
-    relatedThreshold: 0,
-    maxCandidates: 0,
-  });
+  const candidates = await check(fake, "Connection Pooling", "", "", CheckOpts);
   assert.ok(
     candidates.every((c) => c.hint !== HintDistinct),
     "no distinct candidate emitted",
@@ -483,6 +468,228 @@ test("withDefaults: maxCandidates 0 resolves to DefaultMaxCandidates", async () 
     maxCandidates: 0, // → DefaultMaxCandidates (15)
   });
   assert.equal(candidates.length, DefaultMaxCandidates);
+});
+
+// ---------------------------------------------------------------------------
+// nominate: the --ref mode
+// ---------------------------------------------------------------------------
+
+function refsOf(nominees: Omit<Candidate, "hint">[]): string[] {
+  return nominees.map((n) => n.page_ref);
+}
+
+test("nominate queries with the ref page's own text", async () => {
+  const fake = new FakeSearcher();
+  await nominate(
+    fake,
+    "wiki/concepts/self.md",
+    "Connection Pooling",
+    "Reuse connections",
+    "pooling body",
+    { limit: 0 },
+  );
+  assert.ok(fake.lastQuery);
+  assert.equal(fake.lastQuery!.raw, true);
+  assert.equal(
+    fake.lastQuery!.text,
+    `"connection" OR "pooling" OR "reuse" OR "connections" OR "body"`,
+  );
+});
+
+test("nominate never returns the named page itself", async () => {
+  const fake = new FakeSearcher();
+  fake.hits = [
+    hit("wiki/concepts/self.md", "Connection Pooling", 99),
+    hit("wiki/concepts/other.md", "Pool Sizing", 2),
+  ];
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "x", "", "", {
+    limit: 0,
+  });
+  assert.deepEqual(refsOf(nominees), ["wiki/concepts/other.md"]);
+});
+
+test("nominate drops a superseded page", async () => {
+  const fake = new FakeSearcher();
+  fake.hits = [
+    hit("wiki/concepts/old.md", "Connection Pooling", 9, {
+      supersededBy: "wiki/concepts/new.md",
+    }),
+    hit("wiki/concepts/other.md", "Pool Sizing", 2),
+  ];
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "x", "", "", {
+    limit: 0,
+  });
+  assert.deepEqual(refsOf(nominees), ["wiki/concepts/other.md"]);
+});
+
+test("nominate applies no score gate: a below-related hit is still returned", async () => {
+  const fake = new FakeSearcher();
+  // 0.4 is far below the existing RelatedThreshold of 5.0.
+  fake.hits = [hit("wiki/concepts/faint.md", "Barely Overlapping", 0.4)];
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "x", "", "", {
+    limit: 0,
+  });
+  assert.deepEqual(refsOf(nominees), ["wiki/concepts/faint.md"]);
+});
+
+test("nominate omits hint and carries the candidate payload", async () => {
+  const fake = new FakeSearcher();
+  fake.hits = [
+    hit("wiki/concepts/other.md", "Pool Sizing", 3, {
+      summary: "Size the pool.",
+      tags: ["database"],
+      volatility: "stable",
+    }),
+  ];
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "x", "", "", {
+    limit: 0,
+  });
+  assert.equal(nominees.length, 1);
+  assert.equal("hint" in nominees[0], false);
+  assert.equal(nominees[0].title, "Pool Sizing");
+  assert.equal(nominees[0].score, 3);
+  assert.equal(nominees[0].summary, "Size the pool.");
+  assert.deepEqual(nominees[0].tags, ["database"]);
+  assert.equal(nominees[0].volatility, "stable");
+  assert.equal(nominees[0].superseded_by, null);
+});
+
+test("nominate caps the nomination at limit, highest-scoring first", async () => {
+  const fake = new FakeSearcher();
+  fake.hits = Array.from({ length: 10 }, (_, i) =>
+    hit(`wiki/concepts/p${i}.md`, `Topic ${i}`, 10 - i),
+  );
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "x", "", "", {
+    limit: 3,
+  });
+  assert.deepEqual(refsOf(nominees), [
+    "wiki/concepts/p0.md",
+    "wiki/concepts/p1.md",
+    "wiki/concepts/p2.md",
+  ]);
+});
+
+test("nominate scans past the named page, so a small limit still nominates", async () => {
+  const fake = new FakeSearcher();
+  // The self hit ranks first: a window of exactly `limit` would return nothing.
+  fake.hits = [
+    hit("wiki/concepts/self.md", "Connection Pooling", 99),
+    hit("wiki/concepts/other.md", "Pool Sizing", 5),
+  ];
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "x", "", "", {
+    limit: 1,
+  });
+  assert.deepEqual(refsOf(nominees), ["wiki/concepts/other.md"]);
+});
+
+test("nominate sends nothing for an empty query", async () => {
+  const fake = new FakeSearcher();
+  const nominees = await nominate(fake, "wiki/concepts/self.md", "", "", "", {
+    limit: 0,
+  });
+  assert.deepEqual(nominees, []);
+  assert.equal(fake.lastQuery, null);
+});
+
+test("nominate scans a fixed window, not the caller's --limit", async () => {
+  const fake = new FakeSearcher();
+  await nominate(fake, "wiki/concepts/self.md", "x", "", "", { limit: 7 });
+  assert.ok(fake.lastQuery);
+  // The window must exceed the row cap, since the self row comes out of it.
+  assert.equal(fake.lastQuery!.limit, RefScanDefault);
+});
+
+test("nominate scans the same window for --limit 0", async () => {
+  const fake = new FakeSearcher();
+  await nominate(fake, "wiki/concepts/self.md", "x", "", "", { limit: 0 });
+  assert.ok(fake.lastQuery);
+  assert.equal(fake.lastQuery!.limit, RefScanDefault);
+});
+
+test("nominate on a real vault returns a non-self hit and never the named page", async () => {
+  // A dedicated vault: the shared fixture has no page overlapping the named one,
+  // so nominating from it could pass while returning nothing at all.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-nom-"));
+  writeFixturePage(
+    root,
+    "concepts/connection-pooling.md",
+    "---\ntitle: Connection Pooling in Postgres\n" +
+      "summary: Reuse connections instead of opening a new one per request.\n" +
+      "tags:\n  - database\nvolatility: stable\n---\n\n" +
+      "Connection pooling reduces per-request handshake overhead by " +
+      "reusing a fixed set of open connections across callers.\n",
+  );
+  writeFixturePage(
+    root,
+    "concepts/connection-limits.md",
+    "---\ntitle: Database Connection Limits\n" +
+      "summary: Every connection costs memory on both ends.\n" +
+      "tags:\n  - database\nvolatility: stable\n---\n\n" +
+      "An idle database connection still holds a server backend, so a high " +
+      "connection ceiling trades memory for concurrency.\n",
+  );
+  const repo = new VaultGit(root);
+  await repo.init();
+  await repo.add(["."]);
+  await repo.commit("fixtures");
+  const idx = await Index.open(root);
+  try {
+    const nominees = await nominate(
+      idx,
+      "wiki/concepts/connection-pooling.md",
+      "Connection Pooling in Postgres",
+      "Reuse connections instead of opening a new one per request.",
+      "Connection pooling reduces per-request handshake overhead by " +
+        "reusing a fixed set of open connections across callers.",
+      { limit: 0 },
+    );
+    assert.ok(
+      !refsOf(nominees).includes("wiki/concepts/connection-pooling.md"),
+    );
+    assert.ok(refsOf(nominees).includes("wiki/concepts/connection-limits.md"));
+  } finally {
+    idx.close();
+  }
+});
+
+test("nominate --limit 0 is not truncated by the gated mode's candidate cap", async () => {
+  // The regression the row cap caused: an orphan with more plausible linkers
+  // than DefaultMaxCandidates silently loses the rest.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-cap-"));
+  const overlaps = ["connection", "pooling", "handshake", "backend"];
+  for (let i = 0; i < DefaultMaxCandidates + 5; i++) {
+    const word = overlaps[i % overlaps.length];
+    writeFixturePage(
+      root,
+      `concepts/topic-${i}.md`,
+      `---\ntitle: Topic ${i}\nsummary: ${word} notes.\n` +
+        `tags:\n  - database\nvolatility: stable\n---\n\n` +
+        `A ${word} note about ${word} reuse and ${word} overhead.\n`,
+    );
+  }
+  const repo = new VaultGit(root);
+  await repo.init();
+  await repo.add(["."]);
+  await repo.commit("fixtures");
+  const idx = await Index.openInMemory(repo);
+  try {
+    const nominees = await nominate(
+      idx,
+      "wiki/concepts/self.md",
+      "Topic",
+      "",
+      "",
+      {
+        limit: 0,
+      },
+    );
+    assert.ok(
+      nominees.length > DefaultMaxCandidates,
+      `expected more than ${DefaultMaxCandidates} nominations, got ${nominees.length}`,
+    );
+  } finally {
+    idx.close();
+  }
 });
 
 // ---------------------------------------------------------------------------

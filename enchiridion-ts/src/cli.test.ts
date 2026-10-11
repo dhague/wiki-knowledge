@@ -2490,6 +2490,279 @@ test("discover: --plan --tag-count reports each asked-for tag's count in the one
 });
 
 // ---------------------------------------------------------------------------
+// discover --ref — nominating pages to link to an existing page
+// ---------------------------------------------------------------------------
+
+/** A committed vault with a page that overlaps another, plus a superseded pair,
+ * so `--ref` has a real non-self candidate to nominate. */
+async function buildNominationVault(): Promise<string> {
+  const root = await buildCommittedVault();
+  const write = (rel: string, content: string) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  };
+  write(
+    "wiki/concepts/connection-limits.md",
+    "---\ntitle: Database Connection Limits\nsummary: Every connection costs memory on both ends.\ntags:\n  - database\nvolatility: stable\n---\n\nAn idle database connection still holds a server backend, so a high connection ceiling trades memory for concurrency.\n",
+  );
+  write(
+    "wiki/concepts/legacy-pooling.md",
+    "---\ntitle: Legacy Connection Pooling\nsummary: The superseded take on pooling.\ntags:\n  - database\nvolatility: stable\n---\n\nLegacy connection pooling opened one connection per caller.\n",
+  );
+  // Supersession is an edge on the *newer* page, and the index derives the older
+  // page's `superseded_by` from it — a hand-written `superseded_by:` is not a
+  // page field and reaches nothing.
+  write(
+    "wiki/concepts/current-pooling.md",
+    '---\ntitle: Current Connection Pooling\nsummary: The current take on pooling.\ntags:\n  - database\nvolatility: stable\nsupersedes:\n  - "[Legacy Connection Pooling](legacy-pooling.md)"\n---\n\nCurrent connection pooling hands connections out from one shared pool.\n',
+  );
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "nomination fixtures",
+    author: { name: "test", email: "t@e.com", timestamp: 2, timezoneOffset: 0 },
+    committer: {
+      name: "test",
+      email: "t@e.com",
+      timestamp: 2,
+      timezoneOffset: 0,
+    },
+  });
+  return root;
+}
+
+test("discover --ref emits non-self candidates and no hint key", async () => {
+  const root = await buildNominationVault();
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--limit",
+      "0",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l !== "")
+    .map((l) => JSON.parse(l));
+  assert.ok(rows.length > 0, "expected at least one nominated page");
+  for (const row of rows) {
+    assert.equal(
+      "hint" in row,
+      false,
+      `hint leaked into ${JSON.stringify(row)}`,
+    );
+    assert.notEqual(row.page_ref, "wiki/concepts/connection-pooling.md");
+    for (const key of [
+      "page_ref",
+      "title",
+      "score",
+      "summary",
+      "tags",
+      "volatility",
+      "superseded_by",
+    ]) {
+      assert.ok(key in row, `missing ${key}`);
+    }
+  }
+  assert.ok(
+    rows.some((r) => r.page_ref === "wiki/concepts/connection-limits.md"),
+  );
+});
+
+test("discover --ref excludes a superseded page", async () => {
+  const root = await buildNominationVault();
+  // Proof the fixture's supersession landed: an unfiltered search still finds
+  // the page, which it would not if the `supersedes` edge reached nothing.
+  const all = runEnv(
+    ["search", "legacy pooling connection", "--include-superseded", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(all.status, 0, all.stderr);
+  assert.ok(
+    all.stdout.includes("wiki/concepts/legacy-pooling.md"),
+    "fixture is not superseded, so the exclusion assertion below is vacuous",
+  );
+
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--limit",
+      "0",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const refs = stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l !== "")
+    .map((l) => JSON.parse(l).page_ref);
+  assert.ok(!refs.includes("wiki/concepts/legacy-pooling.md"));
+});
+
+test("discover --ref rejects a page that is not committed at HEAD", async () => {
+  const root = await buildNominationVault();
+  const { status, stderr } = runEnv(
+    ["discover", "--ref", "wiki/concepts/never-committed.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /HEAD/);
+  assert.match(stderr, /never-committed\.md/);
+});
+
+test("discover --ref caps the nomination by --limit", async () => {
+  const root = await buildNominationVault();
+  // A first, uncapped run establishes how many pages the vault nominates.
+  const uncapped = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--limit",
+      "0",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(uncapped.status, 0, uncapped.stderr);
+  const all = uncapped.stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l !== "");
+  assert.ok(all.length >= 2, `expected >= 2 nominations, got ${all.length}`);
+
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--limit",
+      "1",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const lines = stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l !== "");
+  assert.equal(lines.length, 1);
+});
+
+test("discover rejects --plan with --ref", async () => {
+  const root = await buildNominationVault();
+  const planPath = path.join(root, "draft.json");
+  fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
+  const { status, stderr } = runEnv(
+    [
+      "discover",
+      "--plan",
+      planPath,
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.notEqual(status, 0);
+  assert.match(stderr, /--plan and --ref/);
+});
+
+test("discover --ref nomination is ungated: a weak overlap is still returned", async () => {
+  const root = await buildNominationVault();
+  // A high --related-threshold would drop every hit in the gated single-page
+  // mode; --ref must ignore it entirely.
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--limit",
+      "0",
+      "--related-threshold",
+      "1000000",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.ok(stdout.trim().length > 0, "ungated mode returned nothing");
+});
+
+test("discover --ref: writing the proposed edge clears the orphan", async () => {
+  const root = await buildNominationVault();
+  // connection-limits starts with no inbound link.
+  const before = runEnv(["check", "orphans", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(before.status, 0, before.stderr);
+  const orphanRows = before.stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l !== "")
+    .map((l) => JSON.parse(l));
+  assert.ok(
+    orphanRows.some((r) => r.pageRef === "wiki/concepts/connection-limits.md"),
+    `expected the orphan in ${before.stdout}`,
+  );
+
+  // The edge goes on the candidate and points at the orphan; an edge on the
+  // orphan would be an outbound link and clear nothing.
+  const pagePath = path.join(root, "wiki/concepts/connection-pooling.md");
+  const merge = runEnv(
+    [
+      "page",
+      "merge",
+      pagePath,
+      "related",
+      '["wiki/concepts/connection-limits.md"]',
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(merge.status, 0, merge.stderr);
+  await git.add({
+    fs,
+    dir: root,
+    filepath: "wiki/concepts/connection-pooling.md",
+  });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "chore: link the orphan",
+    author: { name: "test", email: "t@e.com", timestamp: 3, timezoneOffset: 0 },
+    committer: {
+      name: "test",
+      email: "t@e.com",
+      timestamp: 3,
+      timezoneOffset: 0,
+    },
+  });
+
+  const after = runEnv(["check", "orphans", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(after.status, 0, after.stderr);
+  const afterRows = after.stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l !== "")
+    .map((l) => JSON.parse(l));
+  assert.ok(
+    !afterRows.some((r) => r.pageRef === "wiki/concepts/connection-limits.md"),
+    `orphan still reported: ${after.stdout}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // search — JSON Lines for hits, one document for the index's own state
 // ---------------------------------------------------------------------------
 
