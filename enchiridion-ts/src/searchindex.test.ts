@@ -961,6 +961,10 @@ describe("reindex", () => {
 // Vault is a git repository
 // ---------------------------------------------------------------------------
 
+function noRepoMessage(root: string): string {
+  return `${root} has no git repository of its own (it may sit inside one); a vault is a git repository — run \`enchiridion init <root> --mode …\` to convert it`;
+}
+
 describe("Index.open on a candidate vault", () => {
   it("refuses when .wiki-knowledge exists as a file instead of a directory", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
@@ -979,18 +983,35 @@ describe("Index.open on a candidate vault", () => {
     }
   });
 
-  it("refuses a root that carries a vault marker but is not a git work tree", async () => {
+  it("refuses a root that carries a vault marker but has no repository of its own", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
     try {
       fs.mkdirSync(path.join(root, "wiki"), { recursive: true });
 
       await assert.rejects(
         () => Index.open(root),
-        /not a git work tree.*enchiridion init/,
+        (err: unknown) => (err as Error).message === noRepoMessage(root),
         "a marker without a repo is a candidate vault, not a vault",
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a root nested inside another repo, naming the missing repository (#682)", async () => {
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), "searchindex-test-"));
+    try {
+      await new VaultGit(outer).init();
+      const nested = path.join(outer, "nested");
+      fs.mkdirSync(path.join(nested, "wiki"), { recursive: true });
+
+      await assert.rejects(
+        () => Index.open(nested),
+        (err: unknown) => (err as Error).message === noRepoMessage(nested),
+        "an ancestor's repository is not this root's repository",
+      );
+    } finally {
+      fs.rmSync(outer, { recursive: true, force: true });
     }
   });
 

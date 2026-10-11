@@ -215,15 +215,16 @@ export class Index {
   ) {}
 
   /**
-   * Open (creating if needed) the index at root. Throws when root is not a git
-   * work tree; a work tree with no commits is an empty index, not an error.
+   * Open (creating if needed) the index at root. Throws when root has no git
+   * repository of its own; a work tree with no commits is an empty index, not
+   * an error.
    */
   static async open(root: string): Promise<Index> {
     const { VaultGit } = await import("./vaultgit.js");
     const git = new VaultGit(root);
     if (!(await git.isWorkTree())) {
       throw new Error(
-        `${root} is not a git work tree; a vault is a git repository — run \`enchiridion init <root> --mode …\` to convert it`,
+        `${root} has no git repository of its own (it may sit inside one); a vault is a git repository — run \`enchiridion init <root> --mode …\` to convert it`,
       );
     }
     return Index.openWithGit(root, git);
