@@ -615,16 +615,105 @@ test("shape validation lists a discovered custom kind in the refusal", () => {
   );
 });
 
-test("shape validation rejects a non-true raw_source", () => {
+// A typed edge's one spelled route is `edges`, where ingest composes the link;
+// under `frontmatter` the same key is written verbatim as a bare ref, which no
+// edge-consumer reads.
+test("shape validation rejects an edge key in a frontmatter map", () => {
+  const root = newVault({
+    "wiki/concepts/target-page.md": "---\ntitle: Target Page\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"New Page","kind":"entity","body":"b",
+     "frontmatter":{"summary":"s","volatility":"stable",
+                    "related":["wiki/concepts/target-page.md"]}}]}`,
+    root,
+  );
+  assert.ok(
+    got.includes(
+      "pages[0].frontmatter.related is an edge key — name it under pages[0].edges instead, where ingest composes the link",
+    ),
+    got,
+  );
+});
+
+test("shape validation rejects a scalar edge value in a frontmatter map", () => {
+  const root = newVault({
+    "wiki/concepts/target-page.md": "---\ntitle: Target Page\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"New Page","kind":"entity","body":"b",
+     "frontmatter":{"summary":"s","volatility":"stable",
+                    "related":"wiki/concepts/target-page.md"}}]}`,
+    root,
+  );
+  assert.ok(got.includes("pages[0].frontmatter.related is an edge key"), got);
+});
+
+test("shape validation rejects a non-true raw_source at its edge route", () => {
   const got = validationErrors(
     `{"title":"T","raw":"raw/d.md","pages":[
     {"op":"create","title":"A","kind":"source","body":"b","frontmatter":{"raw_source":"x"}}]}`,
     "",
   );
   assert.ok(
-    got.includes("raw_source must be true (derived from plan.raw)"),
+    got.includes(
+      "pages[0].frontmatter.raw_source is an edge key — name it under pages[0].edges instead, where ingest composes the link",
+    ),
     got,
   );
+});
+
+test("the frontmatter refusal is reported with every other problem, not first-only", () => {
+  const root = newVault({
+    "wiki/concepts/target-page.md": "---\ntitle: Target Page\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"New Page","kind":"entity","body":"b",
+     "frontmatter":{"summary":"s","volatility":"stable",
+                    "related":["wiki/concepts/target-page.md"],"summmary":"typo"}}]}`,
+    root,
+  );
+  assert.ok(got.includes("pages[0].frontmatter.related is an edge key"), got);
+  assert.ok(
+    got.includes("pages[0].frontmatter.summmary is not a frontmatter key"),
+    got,
+  );
+});
+
+test("the frontmatter refusal covers every typed-edge key", () => {
+  for (const key of [
+    "supersedes",
+    "refines",
+    "contradicts",
+    "example-of",
+    "source",
+  ]) {
+    const got = validationErrors(
+      `{"title":"T","pages":[
+      {"op":"create","title":"A","kind":"concept","body":"b",
+       "frontmatter":{"volatility":"stable","${key}":["wiki/concepts/a.md"]}}]}`,
+      newVault({}),
+    );
+    assert.ok(got.includes(`pages[0].frontmatter.${key} is an edge key`), got);
+  }
+});
+
+// A refused plan writes nothing: page_ref is supplied rather than computed, so
+// only the pre-write validation keeps a create's body off that path.
+test("a refused plan writes no page at its declared ref", () => {
+  const root = newVault({});
+  const ref = "wiki/concepts/raw-source-repro.md";
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"A","kind":"concept","page_ref":"${ref}","body":"b",
+     "frontmatter":{"volatility":"stable","related":["wiki/concepts/a.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("pages[0].frontmatter.related is an edge key"), got);
+  assert.ok(!fs.existsSync(path.join(root, ref)), `${ref} must not exist`);
 });
 
 test("shape validation rejects raw_source without plan.raw", () => {
@@ -686,11 +775,13 @@ test("shape validation treats null source_date as absent", () => {
   assert.equal(got, "");
 });
 
-test("shape validation treats null raw_source as absent", () => {
+// Null reads as absent on every key, the typed edges included — the edge-key
+// refusal names a value that would otherwise be written verbatim.
+test("shape validation treats a null edge key as absent", () => {
   const got = validationErrors(
     `{"title":"T","pages":[
     {"op":"create","title":"A","kind":"concept","body":"b",
-     "frontmatter":{"volatility":"stable","raw_source":null}}]}`,
+     "frontmatter":{"volatility":"stable","raw_source":null,"related":null}}]}`,
     "",
   );
   assert.equal(got, "");
@@ -815,7 +906,7 @@ test("shape validation rejects a frontmatter key outside the schema", () => {
   );
   assert.ok(
     got.includes(
-      "pages[0].frontmatter.summmary is not a frontmatter key; one of title, summary, tags, source_date, volatility, raw_source, supersedes, refines, contradicts, example-of, source, related",
+      "pages[0].frontmatter.summmary is not a frontmatter key; one of title, summary, tags, source_date, volatility, raw_source",
     ),
     got,
   );
