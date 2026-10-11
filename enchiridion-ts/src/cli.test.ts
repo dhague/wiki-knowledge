@@ -1632,6 +1632,55 @@ test("ingest: --dry-run prints the describe, writes nothing", async () => {
   assert.ok(!fs.existsSync(path.join(root, "wiki", "concepts", "a.md")));
 });
 
+test("ingest: --dry-run refuses a create title that cannot name a file", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  await git.init({ fs, dir: root });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "initial",
+    author: { name: "test", email: "t@e.com", timestamp: 1, timezoneOffset: 0 },
+    committer: {
+      name: "test",
+      email: "t@e.com",
+      timestamp: 1,
+      timezoneOffset: 0,
+    },
+  });
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "T",
+      pages: [
+        {
+          op: "create",
+          title: "!!!",
+          kind: "concept",
+          body: "b\n",
+          frontmatter: { volatility: "stable" },
+        },
+      ],
+    }),
+  );
+
+  const { status, stdout, stderr } = runEnv(
+    ["ingest", "--plan", planPath, "--dry-run"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(
+    status,
+    1,
+    "a plan the executor would refuse must not dry-run green",
+  );
+  assert.match(stderr, /pages\[0\]\.title "!!!" has no letters or digits/);
+  assert.equal(stdout.trim(), "", "a refused plan describes nothing");
+});
+
 test("ingest: --plan and --ignore are mutually exclusive, one required", () => {
   const { status, stderr } = run(["ingest"]);
   assert.notEqual(status, 0);

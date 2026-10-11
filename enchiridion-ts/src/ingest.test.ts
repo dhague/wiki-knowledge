@@ -508,6 +508,15 @@ test("shape validation still requires title on create", () => {
   assert.ok(got.includes("pages[0].title is required"), got);
 });
 
+test("shape validation rejects a create title that cannot name a file", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","kind":"concept","title":"!!!","body":"b","frontmatter":{"volatility":"stable"}}]}`,
+    "",
+  );
+  assert.ok(got.includes(`pages[0].title "!!!" has no letters or digits`), got);
+});
+
 test("shape validation rejects an unknown kind", () => {
   const got = validationErrors(
     `{"title":"T","pages":[

@@ -80,7 +80,13 @@ import {
   splitFrontmatter,
 } from "./wikipage.js";
 import { composeEdgeLink } from "./pageedge.js";
-import { path as placePath, Kinds, KindFolders } from "./place.js";
+import {
+  path as placePath,
+  MaxSlugLength,
+  Kinds,
+  KindFolders,
+  slugify,
+} from "./place.js";
 import { Vault } from "./vault.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
@@ -268,8 +274,9 @@ export function decodePlan(jsonText: string, source = ""): Plan {
 }
 
 /** One plan page, resolved to the exact file the vault will hold. pageRef is ""
- * and page null together when placement could not be computed (an invalid kind
- * or a missing pageRef), each already its own shape error. */
+ * and page null together when placement could not be computed (an invalid kind,
+ * a missing pageRef, or a title with nothing to slug), each already its own
+ * shape error. */
 export interface ResolvedPage {
   plan: PagePlan;
   pageRef: string;
@@ -376,6 +383,13 @@ export class Resolved {
       }
       if (page.op === OpCreate && page.title === "") {
         problems.push(`${prefix}.title is required`);
+      } else if (
+        page.op === OpCreate &&
+        slugify(page.title, MaxSlugLength) === ""
+      ) {
+        problems.push(
+          `${prefix}.title ${JSON.stringify(page.title)} has no letters or digits, so it cannot name a file`,
+        );
       }
 
       if (page.op === OpCreate) {
