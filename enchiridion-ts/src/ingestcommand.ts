@@ -485,6 +485,12 @@ export function registerIngestCommands(program: Command): void {
       "--tag-count <tags>",
       "comma-separated exact tag names; with --plan, selects the tag_counts field (per-tag page counts, 0 if the tag doesn't exist yet) in place of the full tag-vocabulary dump",
     )
+    .option(
+      "--exclude <ref>",
+      "single-page mode only: drop this vault-relative page ref from the candidates; repeatable",
+      collectFlag,
+      [] as string[],
+    )
     .action(
       async (opts: {
         plan?: string;
@@ -498,6 +504,7 @@ export function registerIngestCommands(program: Command): void {
         relatedThreshold: number;
         tagsContaining?: string;
         tagCount?: string;
+        exclude: string[];
       }) => {
         const root = resolveRoot();
         const discoverOpts = {
@@ -512,6 +519,13 @@ export function registerIngestCommands(program: Command): void {
         try {
           if (opts.plan && opts.ref) {
             fail("--plan and --ref are separate discover modes; pass one");
+          }
+          if (opts.exclude.length > 0 && (opts.plan || opts.ref)) {
+            fail(
+              opts.ref
+                ? "--exclude applies only to discover's single-page mode; --ref excludes the named page by construction"
+                : "--exclude applies only to discover's single-page mode, not --plan",
+            );
           }
           if (opts.plan) {
             await runDiscoverPlan(
@@ -538,7 +552,7 @@ export function registerIngestCommands(program: Command): void {
             opts.title ?? "",
             opts.summary ?? "",
             body,
-            discoverOpts,
+            { ...discoverOpts, exclude: opts.exclude },
           );
           emitRows(candidates);
         } finally {

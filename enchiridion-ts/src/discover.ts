@@ -61,10 +61,12 @@ export interface Options {
   duplicateThreshold: number;
   relatedThreshold: number;
   maxCandidates: number;
+  /** Vault-relative refs the query drops. */
+  exclude?: string[];
 }
 
 /** Zero values take their named defaults; `limit: 0` means unbounded. */
-function withDefaults(o: Options): Required<Options> {
+function withDefaults(o: Options): Required<Omit<Options, "exclude">> {
   return {
     limit: o.limit > 0 ? o.limit : UnboundedSearchLimit,
     duplicateThreshold:
@@ -136,6 +138,7 @@ export async function check(
     text: query,
     raw: true,
     limit: o.limit,
+    exclude: opts.exclude,
   });
 
   const planned = titleTokens(title);
@@ -186,7 +189,7 @@ export const RefScanDefault = 200;
  * the nomination, and the agent reading bodies decides.
  *
  * `--limit 0` takes the whole scan. The named page is the caller's filter,
- * never a `Query` field (ADR-0033). */
+ * never `Query.exclude` (ADR-0033). */
 export async function nominate(
   searcher: Searcher,
   ref: string,

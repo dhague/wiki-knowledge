@@ -587,6 +587,72 @@ describe("search", () => {
     }
   });
 
+  it("drops excluded refs, keeping the remaining rows' order and scores", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "a", "s", "shared word", [], "", ""),
+      pageChange("wiki/concepts/b.md", "b", "s", "shared word", [], "", ""),
+      pageChange("wiki/concepts/c.md", "c", "s", "shared word", [], "", ""),
+    );
+    const index = await openIndex(fake);
+    try {
+      const all = await index.search({ text: "shared" });
+      const filtered = await index.search({
+        text: "shared",
+        exclude: ["wiki/concepts/a.md", "wiki/concepts/c.md"],
+      });
+      assert.deepEqual(refsOf(filtered), ["wiki/concepts/b.md"]);
+      assert.equal(
+        filtered[0].score,
+        all.find((h) => h.pageRef === "wiki/concepts/b.md")!.score,
+      );
+    } finally {
+      index.close();
+    }
+  });
+
+  it("counts limit against rows returned, not rows scanned", async () => {
+    // The filter sits inside the query, before LIMIT: dropping the top row
+    // still yields `limit` rows. A post-filter would return one.
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "a", "s", "shared word", [], "", ""),
+      pageChange("wiki/concepts/b.md", "b", "s", "shared word", [], "", ""),
+      pageChange("wiki/concepts/c.md", "c", "s", "shared word", [], "", ""),
+    );
+    const index = await openIndex(fake);
+    try {
+      const top = refsOf(await index.search({ text: "shared" }))[0];
+      const hits = await index.search({
+        text: "shared",
+        limit: 2,
+        exclude: [top],
+      });
+      assert.equal(hits.length, 2);
+      assert.ok(!refsOf(hits).includes(top));
+    } finally {
+      index.close();
+    }
+  });
+
+  it("applies exclude to a pure-metadata query too", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "A", "First.", "body", ["x"], "", ""),
+      pageChange("wiki/entities/b.md", "B", "Second.", "body", ["x"], "", ""),
+    );
+    const index = await openIndex(fake);
+    try {
+      const hits = await index.search({
+        tagsAll: ["x"],
+        exclude: ["wiki/entities/b.md"],
+      });
+      assert.deepEqual(refsOf(hits), ["wiki/concepts/a.md"]);
+    } finally {
+      index.close();
+    }
+  });
+
   it("raw mode is the FTS5 escape hatch", async () => {
     const fake = fakeAtHead(
       "head1",

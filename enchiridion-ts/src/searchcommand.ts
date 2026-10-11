@@ -256,6 +256,12 @@ export function registerSearchCommand(program: Command): void {
       "include pages that have been superseded (default: filter them out)",
     )
     .option(
+      "--exclude <ref>",
+      "drop this vault-relative page ref from the results; repeatable, and --limit still counts the rows returned",
+      collectFlag,
+      [] as string[],
+    )
+    .option(
       "--raw",
       "pass the text through as a literal FTS5 expression (escape hatch)",
     )
@@ -279,6 +285,7 @@ export function registerSearchCommand(program: Command): void {
           volatility: string[];
           limit: number;
           includeSuperseded?: boolean;
+          exclude: string[];
           raw?: boolean;
           json?: boolean;
           reindex?: boolean;
@@ -328,6 +335,7 @@ export function registerSearchCommand(program: Command): void {
             dateField: opts.dateField,
             volatility: opts.volatility,
             includeSuperseded: opts.includeSuperseded ?? false,
+            exclude: opts.exclude,
             limit: opts.limit,
           };
           const hits = await index.search(query);
