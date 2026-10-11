@@ -639,7 +639,10 @@ test("a consolidate plan validates its assessed pin", async () => {
         kind: "concept",
         title: "Cache coherence",
         body: "Body text.\n\n## Cache invalidation\n\nBody text.\n",
-        frontmatter: { volatility: "stable" },
+        frontmatter: {
+          volatility: "stable",
+          tags: ["caching", "performance"],
+        },
       },
     ],
   };
