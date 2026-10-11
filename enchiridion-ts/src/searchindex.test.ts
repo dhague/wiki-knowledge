@@ -751,6 +751,38 @@ describe("malformed pages", () => {
     }
   });
 
+  it("reports an unparsable page by ref and indexes the valid ones", async () => {
+    const fake = fakeAtHead(
+      "head1",
+      pageChange("wiki/concepts/a.md", "A", "s", "shared word", [], "", ""),
+      {
+        pageRef: "wiki/concepts/broken.md",
+        content: "---\ntitle: [unclosed\n---\n\nshared word\n",
+        oid: "broken",
+        date: "",
+        deleted: false,
+      },
+    );
+    const index = await openIndex(fake);
+    try {
+      const stats = await index.reindex(true);
+      assert.equal(stats.pages, 1, "only the well-formed page is indexed");
+      assert.deepEqual(
+        stats.skipped.map((s) => s.pageRef),
+        ["wiki/concepts/broken.md"],
+      );
+      assert.match(stats.skipped[0].reason, /frontmatter is not valid YAML/);
+      assert.ok(
+        !stats.skipped[0].reason.includes("\n"),
+        "a diagnostic must be one line",
+      );
+      const hits = await index.search({ text: "shared" });
+      assert.deepEqual(refsOf(hits), ["wiki/concepts/a.md"]);
+    } finally {
+      index.close();
+    }
+  });
+
   it("skips a page whose frontmatter edge is not a markdown link", async () => {
     const fake = fakeAtHead(
       "head1",
@@ -804,6 +836,11 @@ describe("malformed pages", () => {
       const stats = await index.reindex(false);
       assert.equal(stats.removed, 1, "skip drops the previously-indexed page");
       assert.equal(stats.pages, 0);
+      assert.deepEqual(
+        stats.skipped.map((s) => s.pageRef),
+        ["wiki/concepts/a.md"],
+      );
+      assert.match(stats.skipped[0].reason, /not a markdown link/);
 
       const hits = await index.search({ text: "shared" });
       assert.equal(hits.length, 0, "malformed page is not searchable");
@@ -1297,6 +1334,108 @@ describe("status", () => {
           status.uncommittedPages,
           0,
           "every page on disk is committed and indexed",
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a page an earlier pass dropped, with an empty walk", async () => {
+    // `Index.open` rebuilds a fresh index, so the skip happens before the
+    // reindex that a caller sees; the skip must still be named.
+    const { root, git } = await committedVault(["wiki/concepts/a.md"]);
+    try {
+      writeFile(
+        root,
+        "wiki/concepts/broken.md",
+        "---\ntitle: [unclosed\n---\n\nbody\n",
+      );
+      await git.add(["wiki"]);
+      await git.commit("add an unparsable page");
+
+      const index = await Index.openWithGit(root, git);
+      try {
+        const stats = await index.reindex(false);
+        assert.equal(stats.pages, 1, "the valid page is indexed");
+        assert.deepEqual(
+          stats.skipped.map((s) => s.pageRef),
+          ["wiki/concepts/broken.md"],
+        );
+        assert.match(stats.skipped[0].reason, /frontmatter is not valid YAML/);
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps an unparsable page out of the uncommitted count", async () => {
+    // The two surfaces partition the same on-disk-not-indexed set: a clean page
+    // stays uncommitted while the unparsable one moves to unindexed.
+    const { root, git } = await committedVault(["wiki/concepts/a.md"]);
+    try {
+      writeFile(
+        root,
+        "wiki/concepts/broken.md",
+        "---\ntitle: [unclosed\n---\n\nbody\n",
+      );
+      await git.add(["wiki"]);
+      await git.commit("add an unparsable page");
+      writeFile(root, "wiki/concepts/draft.md", pageText("draft"));
+
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.reindex(true);
+        const status = await index.status();
+        assert.deepEqual(
+          status.unindexedPages.map((p) => p.pageRef),
+          ["wiki/concepts/broken.md"],
+        );
+        assert.equal(
+          status.uncommittedPages,
+          1,
+          "only the draft is uncommitted",
+        );
+      } finally {
+        index.close();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("names an unparsable committed page as unindexed, not uncommitted", async () => {
+    const { root, git } = await committedVault(["wiki/concepts/a.md"]);
+    try {
+      writeFile(
+        root,
+        "wiki/concepts/broken.md",
+        "---\ntitle: [unclosed\n---\n\nbody\n",
+      );
+      await git.add(["wiki"]);
+      await git.commit("add an unparsable page");
+
+      const index = await Index.openWithGit(root, git);
+      try {
+        await index.reindex(true);
+        const status = await index.status();
+        assert.equal(status.pages, 1, "the valid page is indexed");
+        assert.deepEqual(
+          status.unindexedPages.map((p) => p.pageRef),
+          ["wiki/concepts/broken.md"],
+        );
+        assert.match(
+          status.unindexedPages[0].reason,
+          /frontmatter is not valid YAML/,
+        );
+        assert.equal(
+          status.uncommittedPages,
+          0,
+          "a page committed at HEAD is not uncommitted, however it parses",
         );
       } finally {
         index.close();

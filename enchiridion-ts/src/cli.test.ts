@@ -2439,6 +2439,31 @@ async function buildCommittedVault(): Promise<string> {
   return root;
 }
 
+/** The committed fixture vault plus one committed page whose frontmatter is
+ * not valid YAML. */
+async function buildVaultWithUnparsablePage(): Promise<string> {
+  const root = await buildCommittedVault();
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "broken.md"),
+    "---\ntitle: [unclosed\n---\n\nBody text.\n",
+  );
+  const identity = {
+    name: "test",
+    email: "t@e.com",
+    timestamp: 2,
+    timezoneOffset: 0,
+  };
+  await git.add({ fs, dir: root, filepath: "." });
+  await git.commit({
+    fs,
+    dir: root,
+    message: "add an unparsable page",
+    author: identity,
+    committer: identity,
+  });
+  return root;
+}
+
 test("discover: single-page mode finds the overlapping page and emits one candidate per line", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
@@ -2898,10 +2923,57 @@ test("search --status --json: one compact JSON document", async () => {
     "schema_version",
     "git_head",
     "uncommitted_pages",
+    "unindexed_pages",
   ]) {
     assert.ok(key in payload, `status is missing ${key}`);
   }
   assert.equal(stdout, JSON.stringify(payload) + "\n");
+});
+
+test("search --reindex: names a page it cannot index on stderr", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = runEnv(["search", "--reindex"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(
+    stderr,
+    /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
+  );
+  assert.match(stdout, /reindex: 2 pages/);
+});
+
+test("search --status --json: unparsable page is unindexed, not uncommitted", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = runEnv(["search", "--status", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const payload = JSON.parse(stdout);
+  assert.deepEqual(
+    payload.unindexed_pages.map((p: { page_ref: string }) => p.page_ref),
+    ["wiki/concepts/broken.md"],
+  );
+  assert.match(payload.unindexed_pages[0].reason, /not valid YAML/);
+  assert.equal(payload.uncommitted_pages, 0);
+});
+
+test("search --status: names the unindexed page, its reason and the remedy", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = runEnv(["search", "--status"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /unindexed_pages: 1 page/);
+  assert.match(
+    stdout,
+    /wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
+  );
+  assert.match(stdout, /fix the frontmatter, then search --reindex/);
+  assert.match(stdout, /uncommitted_pages: 0/);
 });
 
 test("vault kinds: canonical-only vault returns four entries", () => {

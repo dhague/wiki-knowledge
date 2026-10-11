@@ -4,7 +4,12 @@
  */
 
 import type { Command } from "commander";
-import { Index, type Hit, type Query } from "./searchindex.js";
+import {
+  Index,
+  type Hit,
+  type Query,
+  type SkippedPage,
+} from "./searchindex.js";
 import { Volatilities } from "./pagerecord.js";
 import { resolveRoot } from "./vault.js";
 import { emitDocument, emitRows, fail } from "./output.js";
@@ -62,6 +67,7 @@ function renderStatus(
     schemaVersion: string;
     gitHead: string;
     uncommittedPages: number;
+    unindexedPages: SkippedPage[];
   },
   asJSON: boolean,
 ): void {
@@ -73,6 +79,10 @@ function renderStatus(
       schema_version: st.schemaVersion,
       git_head: st.gitHead,
       uncommitted_pages: st.uncommittedPages,
+      unindexed_pages: st.unindexedPages.map((p) => ({
+        page_ref: p.pageRef,
+        reason: p.reason,
+      })),
     });
     return;
   }
@@ -81,6 +91,16 @@ function renderStatus(
   console.log(`backend:           ${st.backend}`);
   console.log(`schema_version:    ${st.schemaVersion}`);
   console.log(`git_head:          ${orDash(st.gitHead)}`);
+  if (st.unindexedPages.length > 0) {
+    console.log(
+      `unindexed_pages: ${st.unindexedPages.length} page(s) the index cannot read — fix the frontmatter, then search --reindex.`,
+    );
+    for (const page of st.unindexedPages) {
+      console.log(`  ${page.pageRef}: ${page.reason}`);
+    }
+  } else {
+    console.log(`unindexed_pages: 0`);
+  }
   if (st.uncommittedPages > 0) {
     console.log(
       `uncommitted_pages: ${st.uncommittedPages} page(s) on disk not yet committed — not searchable.`,
@@ -96,11 +116,15 @@ function renderReindex(
     inserted: number;
     updated: number;
     removed: number;
+    skipped: SkippedPage[];
     durationMs: number;
   },
   full: boolean,
   asJSON: boolean,
 ): void {
+  for (const page of stats.skipped) {
+    console.error(`skipped ${page.pageRef}: ${page.reason}`);
+  }
   if (asJSON) {
     emitDocument({
       pages: stats.pages,
@@ -172,7 +196,10 @@ export function registerSearchCommand(program: Command): void {
     .option("--json", "emit results as JSON Lines (one object per line)")
     .option("--reindex", "rebuild the index")
     .option("--full", "with --reindex: wipe the index and rebuild from scratch")
-    .option("--status", "print index status and exit")
+    .option(
+      "--status",
+      "print index status and exit; unindexed_pages lists {page_ref, reason} for pages the index cannot read",
+    )
     .action(
       async (
         text: string | undefined,
