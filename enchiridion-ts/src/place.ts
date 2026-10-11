@@ -57,6 +57,13 @@ export function folderToKind(folder: string): string {
   return folder.replace(/s$/, "");
 }
 
+/** The refusal for a title that yields no slug, or null when it yields one.
+ * Shared with `ingest`'s plan validator so the rule reads the same in both. */
+export function emptySlugRefusal(title: string): string | null {
+  if (slugify(title, MaxSlugLength) !== "") return null;
+  return `title ${JSON.stringify(title)} slugifies to nothing — a page filename is built from a-z and 0-9, so the title needs at least one of those`;
+}
+
 /** The vault-relative path for a new page: canonical kinds resolve from
  * [KindFolders], custom ones from extraKindFolders. Throws on an unknown kind
  * or a title whose slug is empty, naming what it rejected. */
@@ -74,11 +81,9 @@ export function path(
       `unknown kind "${kind}"; must be one of ${known.join(", ")}`,
     );
   }
-  const slug = slugify(title, MaxSlugLength);
-  if (slug === "") {
-    throw new Error(
-      `title "${title}" slugifies to nothing; a title needs at least one letter or digit`,
-    );
+  const refusal = emptySlugRefusal(title);
+  if (refusal !== null) {
+    throw new Error(refusal);
   }
-  return `wiki/${folder}/${slug}.md`;
+  return `wiki/${folder}/${slugify(title, MaxSlugLength)}.md`;
 }

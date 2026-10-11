@@ -82,10 +82,9 @@ import {
 import { composeEdgeLink } from "./pageedge.js";
 import {
   path as placePath,
-  MaxSlugLength,
+  emptySlugRefusal,
   Kinds,
   KindFolders,
-  slugify,
 } from "./place.js";
 import { Vault } from "./vault.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
@@ -383,13 +382,9 @@ export class Resolved {
       }
       if (page.op === OpCreate && page.title === "") {
         problems.push(`${prefix}.title is required`);
-      } else if (
-        page.op === OpCreate &&
-        slugify(page.title, MaxSlugLength) === ""
-      ) {
-        problems.push(
-          `${prefix}.title ${JSON.stringify(page.title)} has no letters or digits, so it cannot name a file`,
-        );
+      } else if (page.op === OpCreate) {
+        const refusal = emptySlugRefusal(page.title);
+        if (refusal !== null) problems.push(`${prefix}.${refusal}`);
       }
 
       if (page.op === OpCreate) {

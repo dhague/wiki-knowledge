@@ -514,7 +514,12 @@ test("shape validation rejects a create title that cannot name a file", () => {
     {"op":"create","kind":"concept","title":"!!!","body":"b","frontmatter":{"volatility":"stable"}}]}`,
     "",
   );
-  assert.ok(got.includes(`pages[0].title "!!!" has no letters or digits`), got);
+  assert.ok(
+    got.includes(
+      `pages[0].title "!!!" slugifies to nothing — a page filename is built from a-z and 0-9`,
+    ),
+    got,
+  );
 });
 
 test("shape validation rejects an unknown kind", () => {

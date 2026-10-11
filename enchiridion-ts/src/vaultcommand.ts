@@ -47,7 +47,7 @@ export function registerPlacementCommands(program: Command): void {
   program
     .command("place <kind> <title>")
     .description(
-      `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder`,
+      `Compute a new page's vault-relative path from its kind and title; kind is one of: ${Kinds.join(", ")}, or a discovered custom kind-folder; a title needs at least one a-z letter or digit`,
     )
     .action((kind: string, title: string) => {
       const root = resolveRoot();

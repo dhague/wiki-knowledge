@@ -10,7 +10,7 @@ import { Kinds } from "./place.js";
 import { Vault, resolveRoot } from "./vault.js";
 import { emitDocument, emitRows, fail } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
-import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
+import { CANONICAL_DATE_FORMAT, canonicalSourceDate } from "./sourcedate.js";
 
 /** Render "" as "-". */
 function orDash(s: string): string {
@@ -119,24 +119,29 @@ function renderReindex(
   );
 }
 
-/** A whole number above zero, or a refusal naming the flag and the value. */
+/** A digits-only positive integer the index can bind; Number() alone accepts
+ * `1e21` and `0x10`, which the index rejects with a leaked datatype mismatch. */
 function positiveInteger(flag: string): (value: string) => number {
   return (value: string) => {
     const n = Number(value);
-    if (!Number.isInteger(n) || n <= 0) {
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(n) || n < 1) {
       fail(`${flag} must be a positive integer, got "${value}"`);
     }
     return n;
   };
 }
 
-const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** A real calendar date, or a refusal naming the flag and the value. The bound
- * binds straight into a SQL date comparison, so a non-date is silently wrong. */
+/** A date the index's YYYY-MM-DD columns can hold exactly, or a refusal naming
+ * the flag and the value — a timestamp or a loose spelling compares wrongly. */
 function calendarDate(flag: string): (value: string) => string {
   return (value: string) => {
-    if (!DATE_ONLY_RE.test(value) || parseSourceDate(value) === null) {
+    let canonical: string | null | undefined = null;
+    try {
+      canonical = canonicalSourceDate(value);
+    } catch {
+      // Refused below, under this flag's name rather than source_date's.
+    }
+    if (canonical !== value) {
       fail(
         `${flag} must be a calendar date (${CANONICAL_DATE_FORMAT}), got "${value}"`,
       );
@@ -177,7 +182,7 @@ export function registerSearchCommand(program: Command): void {
     )
     .option(
       "--kind <kinds>",
-      "filter by kind — a canonical kind or a folder's declared kind; comma-separated for multiple",
+      "filter by kind — a canonical kind or a discovered custom kind-folder; comma-separated for multiple",
       splitCommaList,
       [] as string[],
     )
@@ -196,7 +201,9 @@ export function registerSearchCommand(program: Command): void {
       "which date the --since/--until bounds apply to (source_date|git_date)",
       (value: string) => {
         if (value !== "source_date" && value !== "git_date") {
-          fail(`must be 'source_date' or 'git_date', got "${value}"`);
+          fail(
+            `--date-field must be 'source_date' or 'git_date', got "${value}"`,
+          );
         }
         return value;
       },
@@ -208,7 +215,12 @@ export function registerSearchCommand(program: Command): void {
       volatilityList,
       [] as string[],
     )
-    .option("--limit <n>", "max hits", positiveInteger("--limit"), 20)
+    .option(
+      "--limit <n>",
+      "max hits (a positive integer)",
+      positiveInteger("--limit"),
+      20,
+    )
     .option(
       "--include-superseded",
       "include pages that have been superseded (default: filter them out)",
@@ -242,17 +254,20 @@ export function registerSearchCommand(program: Command): void {
         },
       ) => {
         const root = resolveRoot();
-        // The vocabulary is canonical kinds plus the vault's discovered custom
-        // kinds, which only the vault can supply — so this one validates here.
-        const knownKinds = [
-          ...Kinds,
-          ...Object.keys(new Vault(root).discoveredKinds()),
-        ];
-        for (const kind of opts.kind) {
-          if (!knownKinds.includes(kind)) {
-            fail(
-              `--kind must be one of ${knownKinds.join(", ")}, got "${kind}"`,
-            );
+        if (opts.kind.length > 0) {
+          // The accepted set is canonical kinds plus the vault's discovered
+          // custom kinds, which only the vault can supply — so it validates
+          // here, and only when a kind filter was actually asked for.
+          const knownKinds = [
+            ...Kinds,
+            ...Object.keys(new Vault(root).discoveredKinds()),
+          ];
+          for (const kind of opts.kind) {
+            if (!knownKinds.includes(kind)) {
+              fail(
+                `--kind must be one of ${knownKinds.join(", ")}, got "${kind}"`,
+              );
+            }
           }
         }
         const index = await Index.open(root);

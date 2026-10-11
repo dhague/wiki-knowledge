@@ -338,11 +338,12 @@ test("place: a legacy singular folder does not repeat a canonical kind in the er
 });
 
 test("place: refuses a title whose slug is empty", () => {
-  for (const title of ["", "!!!"]) {
+  // 日本語のページ has letters, but none the ASCII-only slug keeps.
+  for (const title of ["", "!!!", "日本語のページ"]) {
     const { status, stderr } = run(["place", "concept", title]);
     assert.equal(status, 1, stderr);
-    assert.ok(stderr.includes(`title "${title}"`), stderr);
-    assert.match(stderr, /slugifies to nothing/);
+    assert.ok(stderr.includes(`title ${JSON.stringify(title)}`), stderr);
+    assert.match(stderr, /a page filename is built from a-z and 0-9/);
   }
 });
 
@@ -1677,7 +1678,10 @@ test("ingest: --dry-run refuses a create title that cannot name a file", async (
     1,
     "a plan the executor would refuse must not dry-run green",
   );
-  assert.match(stderr, /pages\[0\]\.title "!!!" has no letters or digits/);
+  assert.match(
+    stderr,
+    /pages\[0\]\.title "!!!" slugifies to nothing — a page filename is built from a-z and 0-9/,
+  );
   assert.equal(stdout.trim(), "", "a refused plan describes nothing");
 });
 
@@ -2922,13 +2926,28 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
 // search — JSON Lines for hits, one document for the index's own state
 // ---------------------------------------------------------------------------
 
-test("search --limit: refuses a value that is not a positive integer, naming it", () => {
-  for (const value of ["abc", "0", "-1", "2.5"]) {
+test("search --limit: refuses a value that is not a positive integer, naming it", async () => {
+  // 1e21, 0x10 and " 5" all satisfy Number(), and 1e21 then fails the index's
+  // integer binding rather than this flag.
+  for (const value of ["abc", "0", "-1", "2.5", "1e21", "0x10", " 5"]) {
     const { status, stdout, stderr } = run(["search", "x", "--limit", value]);
     assert.equal(status, 1, stderr);
     assert.equal(stdout, "");
     assert.ok(stderr.includes(`"${value}"`), stderr);
   }
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    ["search", "connection", "--limit", "5", "--json"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+});
+
+test("search --date-field: names its own flag in the refusal", () => {
+  const { status, stderr } = run(["search", "x", "--date-field", "bogus"]);
+  assert.equal(status, 1, stderr);
+  assert.ok(stderr.includes("--date-field"), stderr);
+  assert.ok(stderr.includes('"bogus"'), stderr);
 });
 
 test("search --volatility: refuses an unknown value, naming it and the vocabulary", () => {
@@ -2975,7 +2994,14 @@ test("search --kind: refuses an unknown kind, naming it and the accepted set", (
 
 test("search --since/--until: refuses a value that is not a calendar date, naming it", async () => {
   for (const flag of ["--since", "--until"]) {
-    for (const value of ["bogus", "2024-13-45", "2024-1-1"]) {
+    // The index columns hold canonical YYYY-MM-DD, so a timestamp or a loose
+    // spelling would compare as text and silently drop rows.
+    for (const value of [
+      "bogus",
+      "2024-13-45",
+      "2024-1-1",
+      "2026-01-01T00:00:00Z",
+    ]) {
       const { status, stdout, stderr } = run(["search", "x", flag, value]);
       assert.equal(status, 1, stderr);
       assert.equal(stdout, "");
@@ -3266,6 +3292,24 @@ test("export: refuses a stray positional argument, naming it", async () => {
   assert.equal(status, 1, stderr);
   assert.equal(stdout, "");
   assert.ok(stderr.includes('"nonsense"'), stderr);
+});
+
+test("export --starters: a ref after the variadic option is not a stray operand", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(
+    [
+      "export",
+      "--starters",
+      "wiki/concepts/connection-pooling.md=Read this first",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  const idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
+  assert.ok(
+    idx.includes("Read this first"),
+    "the supplied starter reached the front page",
+  );
 });
 
 test("export --candidates: the ranked list is one compact JSON document", async () => {

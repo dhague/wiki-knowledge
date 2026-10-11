@@ -162,8 +162,7 @@ export function registerExportCommands(program: Command): void {
         cmd: Command,
       ) => {
         // The root's allowExcessArguments leaves a stray word here as an
-        // operand, which the action would otherwise ignore. Refs after
-        // --starters are consumed by that variadic option, not as operands.
+        // operand, which the action would otherwise ignore.
         if (cmd.args.length > 0) {
           fail(`export takes no positional arguments, got "${cmd.args[0]}"`);
         }

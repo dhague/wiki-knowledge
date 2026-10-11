@@ -83,12 +83,13 @@ test("path rejects an unknown kind", () => {
 });
 
 test("path rejects a title whose slug is empty", () => {
-  for (const title of ["", "   ", "!!!", "---"]) {
+  // 日本語のページ has letters, but none the ASCII-only slug keeps.
+  for (const title of ["", "   ", "!!!", "---", "日本語のページ"]) {
     assert.throws(
       () => path("concept", title),
       (err: Error) =>
         err.message ===
-        `title "${title}" slugifies to nothing; a title needs at least one letter or digit`,
+        `title ${JSON.stringify(title)} slugifies to nothing — a page filename is built from a-z and 0-9, so the title needs at least one of those`,
     );
   }
 });
