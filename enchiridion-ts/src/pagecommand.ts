@@ -123,6 +123,13 @@ function formatScalar(value: unknown): string {
   return String(value);
 }
 
+/** The shared missing-page refusal, so both commands name the ref the same way. */
+function noSuchPage(ref: string, root: string): never {
+  fail(
+    `page not found: ${ref} in ${root} — refs are vault-relative (wiki/<kind-folder>/<file>.md); list pages with \`enchiridion search <term>\``,
+  );
+}
+
 export function registerPageCommands(program: Command): void {
   // page get|set|merge <file> <key> ... — the frontmatter trio. Resolves no
   // vault root for a plain value, but an edge key's value may be a
@@ -228,9 +235,7 @@ export function registerPageCommands(program: Command): void {
       const root = resolveRoot();
       const vault = new Vault(root);
       if (!vault.exists(ref)) {
-        fail(
-          `page not found: ${ref} in ${root} — refs are vault-relative (wiki/<kind-folder>/<file>.md); list pages with \`enchiridion search <term>\``,
-        );
+        noSuchPage(ref, root);
       }
       const page = onPage(ref, () => vault.load(ref));
       if (opts.json) {
@@ -252,7 +257,15 @@ export function registerPageCommands(program: Command): void {
     .option("--json", "emit results as JSON Lines (one object per line)")
     .action(async (pageRefs: string[], opts: { json?: boolean }) => {
       const root = resolveRoot();
-      const records = new Vault(root).pages();
+      const vault = new Vault(root);
+      // A ref with no page would otherwise resolve to itself and print
+      // "(current)", which an agent cannot tell from a real head.
+      for (const ref of pageRefs) {
+        if (!vault.exists(ref)) {
+          noSuchPage(ref, root);
+        }
+      }
+      const records = vault.pages();
       const resolutions = resolveSuperseded(pageRefs, records);
 
       if (opts.json) {

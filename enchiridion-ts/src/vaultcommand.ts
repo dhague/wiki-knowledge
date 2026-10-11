@@ -10,7 +10,7 @@ import { KindFolders, Kinds, path as placePath } from "./place.js";
 import { Vault, resolveRoot } from "./vault.js";
 import { readKindMeta } from "./kindmeta.js";
 import { init as initWiki, Modes } from "./initwiki.js";
-import { emitDocument } from "./output.js";
+import { emitDocument, fail } from "./output.js";
 import { KindDefinitionFields, KindFields } from "./contract.js";
 
 export function registerPlacementCommands(program: Command): void {
@@ -66,7 +66,14 @@ export function registerVaultCommand(program: Command): void {
     .description(
       "Resolve the vault root, or move a page within it (moves need exactly two page refs)",
     )
-    .action(() => {
+    .action((_opts: unknown, cmd: Command) => {
+      // The root's allowExcessArguments leaves an unrecognised word here as an
+      // operand, which the action would otherwise ignore.
+      if (cmd.args.length > 0) {
+        fail(
+          `unknown vault command "${cmd.args[0]}"; must be one of root, move, kinds`,
+        );
+      }
       const root = resolveRoot();
       console.log(root);
     });

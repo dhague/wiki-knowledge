@@ -145,19 +145,28 @@ export function registerExportCommands(program: Command): void {
       "page refs (optionally as ref=annotation) for the get-started block",
     )
     .action(
-      async (opts: {
-        singleFile?: boolean;
-        out?: string;
-        raw?: boolean;
-        force?: boolean;
-        allowDirty?: boolean;
-        title?: string;
-        saveTitle?: string;
-        startPage?: string;
-        saveStartPage?: string;
-        candidates?: boolean;
-        starters?: string[];
-      }) => {
+      async (
+        opts: {
+          singleFile?: boolean;
+          out?: string;
+          raw?: boolean;
+          force?: boolean;
+          allowDirty?: boolean;
+          title?: string;
+          saveTitle?: string;
+          startPage?: string;
+          saveStartPage?: string;
+          candidates?: boolean;
+          starters?: string[];
+        },
+        cmd: Command,
+      ) => {
+        // The root's allowExcessArguments leaves a stray word here as an
+        // operand, which the action would otherwise ignore. Refs after
+        // --starters are consumed by that variadic option, not as operands.
+        if (cmd.args.length > 0) {
+          fail(`export takes no positional arguments, got "${cmd.args[0]}"`);
+        }
         const root = resolveRoot();
 
         // Persist-and-exit, like --candidates: a second full export over a

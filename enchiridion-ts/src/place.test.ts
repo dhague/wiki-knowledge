@@ -82,6 +82,17 @@ test("path rejects an unknown kind", () => {
   assert.throws(() => path("nonsense", "X"), /unknown kind "nonsense"/);
 });
 
+test("path rejects a title whose slug is empty", () => {
+  for (const title of ["", "   ", "!!!", "---"]) {
+    assert.throws(
+      () => path("concept", title),
+      (err: Error) =>
+        err.message ===
+        `title "${title}" slugifies to nothing; a title needs at least one letter or digit`,
+    );
+  }
+});
+
 test("path's unknown-kind error names the custom kinds it was handed", () => {
   assert.throws(
     () => path("nonsense", "X", { person: "people", research: "research" }),

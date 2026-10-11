@@ -74,5 +74,11 @@ export function path(
       `unknown kind "${kind}"; must be one of ${known.join(", ")}`,
     );
   }
-  return `wiki/${folder}/${slugify(title, MaxSlugLength)}.md`;
+  const slug = slugify(title, MaxSlugLength);
+  if (slug === "") {
+    throw new Error(
+      `title "${title}" slugifies to nothing; a title needs at least one letter or digit`,
+    );
+  }
+  return `wiki/${folder}/${slug}.md`;
 }

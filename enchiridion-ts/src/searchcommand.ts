@@ -6,9 +6,11 @@
 import type { Command } from "commander";
 import { Index, type Hit, type Query } from "./searchindex.js";
 import { Volatilities } from "./pagerecord.js";
-import { resolveRoot } from "./vault.js";
+import { Kinds } from "./place.js";
+import { Vault, resolveRoot } from "./vault.js";
 import { emitDocument, emitRows, fail } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
+import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 
 /** Render "" as "-". */
 function orDash(s: string): string {
@@ -117,6 +119,44 @@ function renderReindex(
   );
 }
 
+/** A whole number above zero, or a refusal naming the flag and the value. */
+function positiveInteger(flag: string): (value: string) => number {
+  return (value: string) => {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n <= 0) {
+      fail(`${flag} must be a positive integer, got "${value}"`);
+    }
+    return n;
+  };
+}
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar date, or a refusal naming the flag and the value. The bound
+ * binds straight into a SQL date comparison, so a non-date is silently wrong. */
+function calendarDate(flag: string): (value: string) => string {
+  return (value: string) => {
+    if (!DATE_ONLY_RE.test(value) || parseSourceDate(value) === null) {
+      fail(
+        `${flag} must be a calendar date (${CANONICAL_DATE_FORMAT}), got "${value}"`,
+      );
+    }
+    return value;
+  };
+}
+
+/** A comma-separated volatility list, refusing any value outside the
+ * vocabulary — the index would otherwise match nothing, silently. */
+function volatilityList(value: string): string[] {
+  const values = splitCommaList(value);
+  for (const v of values) {
+    if (!(Volatilities as readonly string[]).includes(v)) {
+      fail(`--volatility must be one of ${Volatilities.join("|")}, got "${v}"`);
+    }
+  }
+  return values;
+}
+
 export function registerSearchCommand(program: Command): void {
   // search [text] — query the lexical index, or manage it with --reindex /
   // --status. --json emits one Hit per line, else the compact table.
@@ -141,8 +181,16 @@ export function registerSearchCommand(program: Command): void {
       splitCommaList,
       [] as string[],
     )
-    .option("--since <date>", "ISO date; inclusive lower bound on date_field")
-    .option("--until <date>", "ISO date; inclusive upper bound on date_field")
+    .option(
+      "--since <date>",
+      "ISO date; inclusive lower bound on date_field",
+      calendarDate("--since"),
+    )
+    .option(
+      "--until <date>",
+      "ISO date; inclusive upper bound on date_field",
+      calendarDate("--until"),
+    )
     .option(
       "--date-field <field>",
       "which date the --since/--until bounds apply to (source_date|git_date)",
@@ -157,10 +205,10 @@ export function registerSearchCommand(program: Command): void {
     .option(
       "--volatility <vols>",
       `filter by volatility (${Volatilities.join("|")}); comma-separated for multiple`,
-      splitCommaList,
+      volatilityList,
       [] as string[],
     )
-    .option("--limit <n>", "max hits", (v: string) => Number(v), 20)
+    .option("--limit <n>", "max hits", positiveInteger("--limit"), 20)
     .option(
       "--include-superseded",
       "include pages that have been superseded (default: filter them out)",
@@ -194,6 +242,19 @@ export function registerSearchCommand(program: Command): void {
         },
       ) => {
         const root = resolveRoot();
+        // The vocabulary is canonical kinds plus the vault's discovered custom
+        // kinds, which only the vault can supply — so this one validates here.
+        const knownKinds = [
+          ...Kinds,
+          ...Object.keys(new Vault(root).discoveredKinds()),
+        ];
+        for (const kind of opts.kind) {
+          if (!knownKinds.includes(kind)) {
+            fail(
+              `--kind must be one of ${knownKinds.join(", ")}, got "${kind}"`,
+            );
+          }
+        }
         const index = await Index.open(root);
         try {
           if (opts.status) {

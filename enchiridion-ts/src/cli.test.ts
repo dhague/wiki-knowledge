@@ -337,6 +337,15 @@ test("place: a legacy singular folder does not repeat a canonical kind in the er
   );
 });
 
+test("place: refuses a title whose slug is empty", () => {
+  for (const title of ["", "!!!"]) {
+    const { status, stderr } = run(["place", "concept", title]);
+    assert.equal(status, 1, stderr);
+    assert.ok(stderr.includes(`title "${title}"`), stderr);
+    assert.match(stderr, /slugifies to nothing/);
+  }
+});
+
 test("vault (bare): prints the resolved root", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   fs.mkdirSync(path.join(root, "wiki"));
@@ -402,6 +411,25 @@ test("vault move: missing source errors non-zero", () => {
     { cwd: root, env: { WIKI_ROOT: root } },
   );
   assert.notEqual(status, 0);
+});
+
+/** Assert `vault` refuses `args`, naming `word` and the real subcommands. */
+function assertVaultRefusal(args: string[], word: string): void {
+  const { status, stdout, stderr } = run(args);
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes(`"${word}"`), stderr);
+  for (const real of ["root", "move", "kinds"]) {
+    assert.ok(stderr.includes(real), stderr);
+  }
+}
+
+test("vault: refuses a typo'd subcommand, naming the word and the real ones", () => {
+  assertVaultRefusal(["vault", "mve", "a", "b"], "mve");
+});
+
+test("vault: refuses an unknown word, naming it and the real ones", () => {
+  assertVaultRefusal(["vault", "nonsense"], "nonsense");
 });
 
 test("vault root: falls back to cwd with no marker or WIKI_ROOT", () => {
@@ -1931,6 +1959,20 @@ test("superseded-by: no args errors non-zero", () => {
   assert.notEqual(status, 0);
 });
 
+test("superseded-by: refuses a ref that names no page, naming it", () => {
+  const root = makeVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nsummary: s\ntags: []\nsource_date: 2026-01-01\nvolatility: stable\n---\n\n",
+  });
+  const { status, stdout, stderr } = runEnv(
+    ["superseded-by", "wiki/concepts/a.md", "wiki/concepts/missing.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes("wiki/concepts/missing.md"), stderr);
+});
+
 test("ingest-scan: lists eligible raw files", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-iscan-"));
   fs.mkdirSync(path.join(root, "raw"), { recursive: true });
@@ -2831,6 +2873,78 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
 // search — JSON Lines for hits, one document for the index's own state
 // ---------------------------------------------------------------------------
 
+test("search --limit: refuses a value that is not a positive integer, naming it", () => {
+  for (const value of ["abc", "0", "-1", "2.5"]) {
+    const { status, stdout, stderr } = run(["search", "x", "--limit", value]);
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, "");
+    assert.ok(stderr.includes(`"${value}"`), stderr);
+  }
+});
+
+test("search --volatility: refuses an unknown value, naming it and the vocabulary", () => {
+  for (const value of ["bogus", "stable,bogus"]) {
+    const { status, stdout, stderr } = run([
+      "search",
+      "x",
+      "--volatility",
+      value,
+    ]);
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, "");
+    assert.ok(stderr.includes('"bogus"'), stderr);
+    for (const known of ["stable", "evolving", "volatile"]) {
+      assert.ok(stderr.includes(known), stderr);
+    }
+  }
+});
+
+test("search --kind: refuses an unknown kind, naming it and the accepted set", () => {
+  const root = makeVault({
+    "wiki/concepts/.keep": "",
+    "wiki/research/KIND.md": "---\nkind: research\n---\n",
+  });
+  for (const value of ["bogus", "concept,bogus"]) {
+    const { status, stdout, stderr } = runEnv(
+      ["search", "x", "--kind", value],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, "");
+    assert.ok(stderr.includes('"bogus"'), stderr);
+    for (const known of [
+      "concept",
+      "entity",
+      "source",
+      "synthesis",
+      "research",
+    ]) {
+      assert.ok(stderr.includes(known), stderr);
+    }
+  }
+});
+
+test("search --since/--until: refuses a value that is not a calendar date, naming it", async () => {
+  for (const flag of ["--since", "--until"]) {
+    for (const value of ["bogus", "2024-13-45", "2024-1-1"]) {
+      const { status, stdout, stderr } = run(["search", "x", flag, value]);
+      assert.equal(status, 1, stderr);
+      assert.equal(stdout, "");
+      assert.ok(stderr.includes(flag), stderr);
+      assert.ok(stderr.includes(`"${value}"`), stderr);
+    }
+  }
+  // A real date still reaches the index — no hits is silence, not a refusal.
+  const root = await buildCommittedVault();
+  for (const flag of ["--since", "--until"]) {
+    const { status, stderr } = runEnv(
+      ["search", "connection", flag, "2026-07-20", "--json"],
+      { cwd: root, env: { WIKI_ROOT: root } },
+    );
+    assert.equal(status, 0, stderr);
+  }
+});
+
 test("search --json: one hit object per line", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
@@ -3093,6 +3207,17 @@ test("vault kinds --help names every field the command emits", () => {
 // ---------------------------------------------------------------------------
 // export: --candidates, and the wiki title
 // ---------------------------------------------------------------------------
+
+test("export: refuses a stray positional argument, naming it", async () => {
+  const root = await buildCommittedVault();
+  const { status, stdout, stderr } = runEnv(
+    ["export", "nonsense", "--candidates"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(status, 1, stderr);
+  assert.equal(stdout, "");
+  assert.ok(stderr.includes('"nonsense"'), stderr);
+});
 
 test("export --candidates: the ranked list is one compact JSON document", async () => {
   const root = await buildCommittedVault();
