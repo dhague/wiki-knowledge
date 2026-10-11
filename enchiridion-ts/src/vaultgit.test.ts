@@ -95,6 +95,28 @@ test("isWorkTree is false on a bare temp dir and true after init", async () => {
   assert.equal(await repo.isWorkTree(), true);
 });
 
+test("isWorkTree is false for a dir nested inside another repo (#671)", async () => {
+  const outer = tmpRepo();
+  await git.init({ fs, dir: outer });
+  const nested = path.join(outer, "nested");
+  fs.mkdirSync(nested);
+
+  const repo = new VaultGit(nested);
+  assert.equal(
+    await repo.isWorkTree(),
+    false,
+    "an ancestor's repo made a nested dir look like a work tree",
+  );
+  await repo.init();
+  assert.equal(await repo.isWorkTree(), true);
+});
+
+test("isWorkTree is true for the repo root itself (#671)", async () => {
+  const root = tmpRepo();
+  await git.init({ fs, dir: root });
+  assert.equal(await new VaultGit(root).isWorkTree(), true);
+});
+
 test("init throws on an invalid root (strict)", async () => {
   // Root is a *file*, so git init can't create a repo inside it.
   const root = tmpRepo();
