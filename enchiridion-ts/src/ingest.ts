@@ -19,7 +19,9 @@
  * and the link is composed from it. [Plan.raw] itself is never renamed or moved
  * — the file keeps its name forever, and the link destination is
  * percent-encoded rather than the file sanitized. Body links are re-encoded on
- * write by [normalizeBodyLinks].
+ * write by [normalizeBodyLinks]. A plan may instead name `raw_source` directly
+ * in `edges` — the single-link key — which is how a Consolidation survivor
+ * carries forward an absorbed page's `raw_source` when [Plan.raw] is unset.
  *
  * `action` is one of `ingest` (the default), `synthesize`, or `consolidate` —
  * [PlanActions], and any other value is refused with the set named. `synthesize`
@@ -33,7 +35,9 @@
  * mechanical: validation, and the executor again immediately before the delete,
  * refuses a survivor body that no longer reads an absorbed page's content as
  * one unbroken run of top-level markdown blocks, and — for an `update`
- * survivor — the survivor's own former body. What separates content from
+ * survivor — the survivor's own former body; it likewise refuses frontmatter
+ * that drops an absorbed edge target or tag, or a `volatility` more stable than
+ * the cluster's most volatile member (ADR-0031). What separates content from
  * presentation is [bodycontent]'s, stated there once (ADR-0030).
  *
  * A `consolidate` plan must pin the snapshot the cluster was assessed at —
@@ -82,7 +86,12 @@ import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
-import { Volatilities } from "./pagerecord.js";
+import {
+  Volatilities,
+  newPageRecord,
+  isSingleLinkEdgeKey,
+  type PageRecord,
+} from "./pagerecord.js";
 import { decodeAssessment, type PlanAssessment } from "./assess.js";
 import {
   bodyBlocks,
@@ -255,11 +264,20 @@ export interface ResolvedPage {
   loaded: boolean;
 }
 
-/** One page a Consolidation absorbs, with the body [resolve] read from disk. */
+/** Volatility ordered least to most durable; a value's index is its rank. */
+const VolatilityOrder: readonly string[] = Volatilities;
+
+/** One page's frontmatter decoded, or why it could not be. */
+export type FrontmatterRead = { record: PageRecord } | { error: string };
+
+/** One page a Consolidation absorbs, with the body and frontmatter [resolve]
+ * read from disk. */
 export interface AbsorbedPage {
   pageRef: string;
   body: string;
   found: boolean;
+  /** null when the page is absent; otherwise its frontmatter or the refusal. */
+  frontmatter: FrontmatterRead | null;
 }
 
 export interface ResolvedConsolidation {
@@ -267,6 +285,8 @@ export interface ResolvedConsolidation {
   absorbed: AbsorbedPage[];
   /** The survivor's on-disk body before this plan rewrote it; null for a create. */
   survivorPriorBody: string | null;
+  /** The survivor's frontmatter before this plan rewrote it; null for a create. */
+  survivorPrior: FrontmatterRead | null;
 }
 
 /** One page [Resolved.execute] wrote, with the op it wrote it under. */
@@ -413,6 +433,16 @@ export class Resolved {
           // can never match.
           problems.push(
             `${prefix}.frontmatter.volatility must be one of ${Volatilities.join("|")}, got ${String(volatility.value)}`,
+          );
+        }
+      }
+
+      // `page set` refuses a multi-entry single-link key; the plan path must too,
+      // rather than silently writing the first ref.
+      for (const [key, refs] of page.edges.all()) {
+        if (isSingleLinkEdgeKey(key) && refs.length > 1) {
+          problems.push(
+            `${prefix}.edges.${key} holds a single link; pass one ref, got ${refs.length}`,
           );
         }
       }
@@ -645,13 +675,13 @@ export class Resolved {
   }
 
   /**
-   * The losslessness gate (ADR-0021, ADR-0030): every absorbed body's content,
-   * and an `update` survivor's own former body, must still be readable — as one
-   * unbroken run of top-level blocks — in the survivor's authored body.
+   * The losslessness gate (ADR-0021, ADR-0030, ADR-0031): every absorbed body's
+   * content, and an `update` survivor's own former body, must still be readable
+   * — as one unbroken run of top-level blocks — in the survivor's authored body.
    * Compared through [canonicalizeLinkTargets] — by where links point, not how
    * they are spelled — so a body re-based into another kind-folder compares
-   * equal and a link the merge broke does not. Frontmatter is deliberately
-   * outside the comparison.
+   * equal and a link the merge broke does not. The survivor's frontmatter is
+   * checked too, by [frontmatterLosslessnessErrors].
    */
   private losslessnessErrors(): string[] {
     const c = this.consolidation;
@@ -687,6 +717,99 @@ export class Resolved {
           `plan.consolidates: the survivor's body does not contain ${absorbed.pageRef}'s content, starting at ${describeBlock(want[at])} — a Consolidation is lossless (ADR-0021)`,
         );
       }
+    }
+    problems.push(...this.frontmatterLosslessnessErrors(c, survivor));
+    return problems;
+  }
+
+  /**
+   * Frontmatter losslessness (ADR-0031): the survivor's authored frontmatter
+   * must carry every absorbed edge target under any key, the cluster's tags,
+   * and the most volatile member's `volatility`. An edge pointing at an absorbed
+   * page or the survivor is exempt — both collapse into the survivor.
+   */
+  private frontmatterLosslessnessErrors(
+    c: ResolvedConsolidation,
+    survivor: Page,
+  ): string[] {
+    const problems: string[] = [];
+    const read = readFrontmatter(c.survivorRef, survivor.text);
+    if ("error" in read) {
+      return [unreadableFrontmatter("the survivor's frontmatter", read.error)];
+    }
+    const have = read.record;
+
+    const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
+    const haveTargets = new Set(
+      have.edges.flatMap((edge) =>
+        edge.targets.map((ref) => path.posix.normalize(ref)),
+      ),
+    );
+    const wantTags = new Set<string>();
+    let mostVolatile = "";
+    let mostRank = -1;
+    const considerVolatility = (value: string): void => {
+      const rank = VolatilityOrder.indexOf(value);
+      if (rank > mostRank) {
+        mostRank = rank;
+        mostVolatile = value;
+      }
+    };
+    if (c.survivorPrior !== null) {
+      if ("error" in c.survivorPrior) {
+        problems.push(
+          unreadableFrontmatter(
+            "the survivor's prior frontmatter",
+            c.survivorPrior.error,
+          ),
+        );
+      } else {
+        for (const tag of c.survivorPrior.record.tags) wantTags.add(tag);
+        considerVolatility(c.survivorPrior.record.volatility);
+      }
+    }
+
+    for (const absorbed of c.absorbed) {
+      // A non-page (KIND.md, a nested file) or a missing one is already its own
+      // error; there is no frontmatter here to compare.
+      if (!absorbed.found || !isPageRef(absorbed.pageRef)) continue;
+      if (absorbed.frontmatter === null) continue;
+      if ("error" in absorbed.frontmatter) {
+        problems.push(
+          unreadableFrontmatter(
+            `${absorbed.pageRef}'s frontmatter`,
+            absorbed.frontmatter.error,
+          ),
+        );
+        continue;
+      }
+      const record = absorbed.frontmatter.record;
+      for (const edge of record.edges) {
+        for (const raw of edge.targets) {
+          const ref = path.posix.normalize(raw);
+          if (consolidated.has(ref) || ref === c.survivorRef) continue;
+          if (!haveTargets.has(ref)) {
+            problems.push(
+              `plan.consolidates: the survivor's frontmatter does not carry ${absorbed.pageRef}'s ${describeEdge(edge.key)} to ${ref} — a Consolidation is lossless (ADR-0021)`,
+            );
+          }
+        }
+      }
+      for (const tag of record.tags) wantTags.add(tag);
+      considerVolatility(record.volatility);
+    }
+
+    const haveTags = new Set(have.tags);
+    const missing = [...wantTags].filter((tag) => !haveTags.has(tag));
+    if (missing.length > 0) {
+      problems.push(
+        `plan.consolidates: the survivor's tags must union the cluster's; missing ${missing.map((tag) => JSON.stringify(tag)).join(", ")} — a Consolidation is lossless (ADR-0021)`,
+      );
+    }
+    if (mostVolatile !== "" && have.volatility !== mostVolatile) {
+      problems.push(
+        `plan.consolidates: the survivor's volatility is ${JSON.stringify(have.volatility)}, but the cluster's most volatile member is ${JSON.stringify(mostVolatile)} — a Consolidation is only as durable as its shakiest part (ADR-0021)`,
+      );
     }
     return problems;
   }
@@ -911,9 +1034,9 @@ export function resolve(plan: Plan, root: string): Resolved {
 }
 
 /** Read the consolidation a plan declares: its survivor and the survivor's
- * former body, and each absorbed page's body as it stands on disk — captured
- * once so validate and execute read the same content, including on a second
- * execute after the file is gone. */
+ * former body, and each absorbed page's body and frontmatter as they stand on
+ * disk — captured once so validate and execute read the same content, including
+ * on a second execute after the file is gone. */
 function resolveConsolidation(
   plan: Plan,
   resolvedPages: ResolvedPage[],
@@ -924,25 +1047,52 @@ function resolveConsolidation(
   }
   const survivorRef = resolvedPages[0].pageRef;
   let survivorPriorBody: string | null = null;
+  let survivorPrior: FrontmatterRead | null = null;
   if (
     resolvedPages[0].plan.op === OpUpdate &&
     survivorRef !== "" &&
     v !== null &&
     v.exists(survivorRef)
   ) {
-    survivorPriorBody = v.load(survivorRef).body();
+    const prior = v.load(survivorRef);
+    survivorPriorBody = prior.body();
+    survivorPrior = readFrontmatter(survivorRef, prior.text);
   }
   const absorbed: AbsorbedPage[] = plan.consolidates.map((ref) => {
     const pageRef = path.posix.normalize(ref);
     let body = "";
     let found = false;
+    let frontmatter: FrontmatterRead | null = null;
     if (v !== null && pageRef !== "" && v.exists(pageRef)) {
-      body = v.load(pageRef).body();
+      const page = v.load(pageRef);
+      body = page.body();
       found = true;
+      frontmatter = readFrontmatter(pageRef, page.text);
     }
-    return { pageRef, body, found };
+    return { pageRef, body, found, frontmatter };
   });
-  return { survivorRef, absorbed, survivorPriorBody };
+  return { survivorRef, absorbed, survivorPriorBody, survivorPrior };
+}
+
+/** Read one page's frontmatter; the error branch lets a caller refuse rather
+ * than read an undecodable page as edge-less. */
+function readFrontmatter(pageRef: string, text: string): FrontmatterRead {
+  try {
+    return { record: newPageRecord(pageRef, text) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** The refusal for a page whose frontmatter cannot be decoded. */
+function unreadableFrontmatter(where: string, error: string): string {
+  return `plan.consolidates: ${where} could not be read (${error}) — a Consolidation is lossless (ADR-0021)`;
+}
+
+/** What one [EdgeKeys] key's link to a target is called in a refusal: a
+ * single-link key points at a raw artifact, not a page. */
+function describeEdge(key: string): string {
+  return isSingleLinkEdgeKey(key) ? `${key} link` : `${key} edge`;
 }
 
 /** The vault-relative path a plan page will occupy, or "" when it cannot be
@@ -1019,10 +1169,16 @@ function applyFrontmatter(
   }
 
   for (const [key, refs] of planPage.edges.all()) {
+    const single = isSingleLinkEdgeKey(key);
+    if (single && refs.length === 0) continue; // nothing to point at
     const links = refs.map((ref) =>
       composeEdgeLink(key, ref, pageDir, resolveTitle(ref, titles, v)),
     );
-    if (merging) {
+    // A single-link key (`raw_source`) is a scalar; validation already refused
+    // more than one ref, and every other edge is a list.
+    if (single) {
+      page = page.set(key, links[0]);
+    } else if (merging) {
       page = page.mergeStrings(key, links);
     } else {
       page = page.set(key, links);
