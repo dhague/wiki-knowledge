@@ -9,8 +9,8 @@ import { createHash } from "node:crypto";
 import type { PageRecord } from "./pagerecord.js";
 
 /** CRLF and lone CR both read as LF, so a checkout's line endings cannot
- * invalidate an exclusion. */
-function normalizeNewlines(text: string): string {
+ * invalidate a comparison. */
+export function normalizeNewlines(text: string): string {
   return text.replace(/\r\n?/g, "\n");
 }
 
