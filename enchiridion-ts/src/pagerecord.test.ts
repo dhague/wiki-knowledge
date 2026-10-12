@@ -32,9 +32,18 @@ test("newPageRecord decodes the frontmatter schema", () => {
 test("newPageRecord resolves edge targets to vault-relative", () => {
   const rec = newPageRecord("wiki/concepts/pooling.md", conceptPage);
   assert.deepEqual(rec.edges, [
-    { key: "raw_source", targets: ["raw/notes (1).md"] },
-    { key: "supersedes", targets: ["wiki/concepts/old-pooling.md"] },
-    { key: "refines", targets: ["wiki/entities/databases.md"] },
+    {
+      key: "raw_source",
+      links: [{ label: "notes.md", target: "raw/notes (1).md" }],
+    },
+    {
+      key: "supersedes",
+      links: [{ label: "Old pooling", target: "wiki/concepts/old-pooling.md" }],
+    },
+    {
+      key: "refines",
+      links: [{ label: "Databases", target: "wiki/entities/databases.md" }],
+    },
   ]);
 });
 

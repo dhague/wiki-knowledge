@@ -71,6 +71,27 @@ Report only: the repair depends on what the author meant, and an edge to the pag
 itself is either a typo for a real target or a line to delete because the target
 has no page of its own.
 
+## `edge-shape`
+
+Two frontmatter-graph defects no other check reads: a destination listed twice
+under one edge key, and a label that is not the target's title.
+
+Identity for the duplicate rule is the reference the record parser resolves, per
+key: a `#fragment` or a `./` spelling is the same target, while the same target
+under two different keys is two relationships and stays clean. One finding per
+repeated target, naming the occurrence count. The count is the point —
+`concept-fragmentation` increments a page's inbound-link count per link without
+deduping, so an inflated count can pick a survivor a Consolidation then deletes.
+
+A label is the target's title, never its filename. A label ending `.md` is
+`HIGH`; one that differs from the target's title once whitespace, case and
+punctuation are normalised is `LOW`. A target absent from the vault, or carrying
+no title, is not judged here — a link that reaches nothing is its own matter.
+`raw_source` is exempt: its label is the artifact's filename by design.
+
+Report only: which label a duplicate should keep, and the title a link meant to
+name, are both judgment.
+
 ## `stale-synthesis`
 
 Synthesis pages whose last commit is more than 30 days old. Any churn in their

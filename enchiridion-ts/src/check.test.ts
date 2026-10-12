@@ -16,6 +16,7 @@ import {
   missingVolatilitySourceDate,
   tagsShape,
   selfReferentialEdge,
+  edgeShape,
   unresolvedSupersession,
   contradictionCallouts,
   orphans,
@@ -999,16 +1000,154 @@ test("self-referential-edge: an edge to another page is clean", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// edgeShape
+// ---------------------------------------------------------------------------
+
+test("edge-shape: one key listing one target twice reports one finding", async () => {
+  const root = writeVault({
+    "wiki/entities/water.md":
+      fmBlock(
+        'source:\n  - "[Eton Wick](../sources/waterways.md)"\n  - "[eton wick](../sources/./waterways.md)"\n',
+      ) + "Body.\n",
+    "wiki/sources/waterways.md": "---\ntitle: Eton Wick\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.equal(findings[0].pageRef, "wiki/entities/water.md");
+  assert.equal(findings[0].severity, "HIGH");
+  assert.match(findings[0].detail, /source/);
+  assert.match(findings[0].detail, /wiki\/sources\/waterways\.md/);
+  assert.match(findings[0].detail, /2/);
+});
+
+test("edge-shape: fragment and ./-spelling variants of one target count", async () => {
+  const root = writeVault({
+    "wiki/entities/water.md":
+      fmBlock(
+        'related:\n  - "[Eton Wick](../sources/waterways.md#history)"\n  - "[Eton Wick](../sources/./waterways.md)"\n',
+      ) + "Body.\n",
+    "wiki/sources/waterways.md": "---\ntitle: Eton Wick\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.match(findings[0].detail, /2/);
+});
+
+test("edge-shape: a target listed three times is one finding, not two", async () => {
+  const root = writeVault({
+    "wiki/entities/water.md":
+      fmBlock(
+        'related:\n  - "[Eton Wick](../sources/waterways.md)"\n  - "[Eton Wick](../sources/waterways.md)"\n  - "[Eton Wick](../sources/waterways.md)"\n',
+      ) + "Body.\n",
+    "wiki/sources/waterways.md": "---\ntitle: Eton Wick\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.match(findings[0].detail, /3/);
+});
+
+test("edge-shape: the same target under two different keys is clean", async () => {
+  const root = writeVault({
+    "wiki/entities/water.md":
+      fmBlock(
+        'source:\n  - "[Eton Wick](../sources/waterways.md)"\nrelated:\n  - "[Eton Wick](../sources/waterways.md)"\n',
+      ) + "Body.\n",
+    "wiki/sources/waterways.md": "---\ntitle: Eton Wick\n---\nBody.\n",
+  });
+  assert.deepEqual(await edgeShape(read(root)), []);
+});
+
+test("edge-shape: a filename label is HIGH", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md":
+      fmBlock('related:\n  - "[beta.md](beta.md)"\n') + "Body.\n",
+    "wiki/concepts/beta.md": "---\ntitle: Beta Wad\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.equal(findings[0].pageRef, "wiki/concepts/alpha.md");
+  assert.equal(findings[0].severity, "HIGH");
+  assert.match(findings[0].detail, /beta\.md/);
+});
+
+test("edge-shape: a .md label is HIGH even when it equals the title", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md":
+      fmBlock('related:\n  - "[beta.md](beta.md)"\n') + "Body.\n",
+    "wiki/concepts/beta.md": "---\ntitle: beta.md\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.equal(findings[0].severity, "HIGH");
+});
+
+test("edge-shape: a label equal to the title after normalisation is clean", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md":
+      fmBlock('related:\n  - "[eton  wick waterways 2025](beta.md)"\n') +
+      "Body.\n",
+    "wiki/concepts/beta.md":
+      "---\ntitle: Eton Wick Waterways (2025)\n---\nBody.\n",
+  });
+  assert.deepEqual(await edgeShape(read(root)), []);
+});
+
+test("edge-shape: a title mismatch that is no filename is LOW", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md":
+      fmBlock('related:\n  - "[Wrong label](beta.md)"\n') + "Body.\n",
+    "wiki/concepts/beta.md": "---\ntitle: Beta Wad\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.equal(findings[0].severity, "LOW");
+});
+
+test("edge-shape: a target absent from the vault raises no label finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md":
+      fmBlock('related:\n  - "[beta.md](beta.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await edgeShape(read(root)), []);
+});
+
+test("edge-shape: a target with an empty title raises no label finding", async () => {
+  const root = writeVault({
+    "wiki/concepts/alpha.md":
+      fmBlock('related:\n  - "[beta.md](beta.md)"\n') + "Body.\n",
+    "wiki/concepts/beta.md": "---\ntitle:\n---\nBody.\n",
+  });
+  assert.deepEqual(await edgeShape(read(root)), []);
+});
+
+test("edge-shape: raw_source is excluded from the label rules", async () => {
+  const root = writeVault({
+    "wiki/sources/alpha.md":
+      fmBlock('raw_source: "[notes.md](../../raw/notes.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await edgeShape(read(root)), []);
+});
+
+test("edge-shape: a self-referential edge belongs to self-referential-edge", async () => {
+  const root = writeVault({
+    "wiki/concepts/foo.md":
+      fmBlock('related:\n  - "[Foo](foo.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await edgeShape(read(root)), []);
+});
+
+// ---------------------------------------------------------------------------
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all fourteen check names", () => {
+test("CHECKS registry contains all fifteen check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
     "frontmatter-link-format",
     "tags-shape",
     "self-referential-edge",
+    "edge-shape",
     "stale-synthesis",
     "missing-volatility-source-date",
     "unresolved-supersession",
@@ -1158,7 +1297,10 @@ test("fix frontmatter-link-format: repairs a folded destination whole", async ()
   const findings = await frontmatterLinkFormat(read(root));
   assert.deepEqual(findings, []);
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
-    { key: "related", targets: ["wiki/entities/bar(draft).md"] },
+    {
+      key: "related",
+      links: [{ label: "Bar", target: "wiki/entities/bar(draft).md" }],
+    },
   ]);
 });
 
@@ -1368,7 +1510,9 @@ test("fix split-links: joins a boundary fold with nothing", async () => {
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
     {
       key: "related",
-      targets: ["wiki/concepts/a-missing-both.md"],
+      links: [
+        { label: "A missing both", target: "wiki/concepts/a-missing-both.md" },
+      ],
     },
   ]);
 });
@@ -1395,8 +1539,13 @@ test("fix split-links: joins a boundary fold and a destination fold together", a
   assert.deepEqual(newPageRecord("wiki/sources/foo.md", text).edges, [
     {
       key: "raw_source",
-      targets: [
-        "raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md",
+      links: [
+        {
+          label:
+            "2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md",
+          target:
+            "raw/sources/2026-09-14-2127-bce-2023-review-volume-two-south-east-windsor.md",
+        },
       ],
     },
   ]);
@@ -1438,7 +1587,12 @@ test("fix split-links: both folds on one link, every other byte untouched", asyn
   assert.deepEqual(newPageRecord("wiki/concepts/foo.md", text).edges, [
     {
       key: "related",
-      targets: ["wiki/entities/a-rather-long-target-page-title.md"],
+      links: [
+        {
+          label: "A rather long label continued",
+          target: "wiki/entities/a-rather-long-target-page-title.md",
+        },
+      ],
     },
   ]);
   assert.deepEqual(await splitLinks(read(root)), []);

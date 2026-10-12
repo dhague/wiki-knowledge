@@ -6,6 +6,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { edgeTargets } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 
 /** CRLF and lone CR both read as LF, so a checkout's line endings cannot
@@ -19,7 +20,7 @@ export function normalizeNewlines(text: string): string {
  * can change the fingerprint. */
 export function fingerprintInput(record: PageRecord, body: string): string {
   const edges = record.edges
-    .map((edge) => [edge.key, [...new Set(edge.targets)].sort()] as const)
+    .map((edge) => [edge.key, [...new Set(edgeTargets(edge))].sort()] as const)
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return JSON.stringify({
     title: record.title,

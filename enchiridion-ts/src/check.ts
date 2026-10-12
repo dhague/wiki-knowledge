@@ -19,7 +19,12 @@ import {
   Page,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
-import { loadRecords, malformedEdges, malformedTags } from "./pagerecord.js";
+import {
+  edgeTargets,
+  loadRecords,
+  malformedEdges,
+  malformedTags,
+} from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 import { KindFolders } from "./place.js";
 import {
@@ -57,10 +62,16 @@ export type FixFn = (root: string, opts?: FixOptions) => Promise<string[]>;
 export interface Finding {
   pageRef: string;
   detail: string;
+  /** Set by a check whose findings carry a priority tier; JSONL output only. */
+  severity?: Severity;
   /** Set only by `concept-fragmentation`; the JSONL consumer reads it, the text
    * renderer ignores it. */
   cluster?: FragmentationCluster;
 }
+
+/** The priority tiers a finding may carry, named for the `wiki-lint` report's
+ * HIGH/LOW ordering. */
+export type Severity = "HIGH" | "LOW";
 
 /** A finding naming the check that raised it — `check --all`'s row shape, the
  * one run where the caller did not name the check itself. */
@@ -114,7 +125,7 @@ export async function ingestionSourceIntegrity(
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
     const hasRawSource = record.edges.some(
-      (e) => e.key === "raw_source" && e.targets.length > 0,
+      (e) => e.key === "raw_source" && e.links.length > 0,
     );
     if (!hasRawSource)
       findings.push({
@@ -189,13 +200,86 @@ export async function selfReferentialEdge(read: VaultRead): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     for (const edge of record.edges) {
-      for (const target of edge.targets) {
+      for (const target of edgeTargets(edge)) {
         if (path.posix.normalize(target) === ref) {
           findings.push({
             pageRef: ref,
             detail: `${edge.key} points at ${ref} itself`,
           });
         }
+      }
+    }
+  }
+  return findings;
+}
+
+/** edgeShape — frontmatter edge defects the link-format check cannot see: a
+ * destination repeated within one edge key, and a label that is not the
+ * target's title. */
+export async function edgeShape(read: VaultRead): Promise<Finding[]> {
+  const pages = read.records();
+  const findings: Finding[] = [];
+  for (const [ref, record] of Object.entries(pages)) {
+    findings.push(...duplicateEdgeTargets(ref, record));
+    findings.push(...edgeLabelShape(ref, record, pages));
+  }
+  return findings;
+}
+
+/** One finding per target a single key lists more than once — the target's
+ * resolved reference is the identity, so a fragment or a `./` spelling does not
+ * make a second relationship. */
+function duplicateEdgeTargets(ref: string, record: PageRecord): Finding[] {
+  const findings: Finding[] = [];
+  for (const edge of record.edges) {
+    const counts = new Map<string, number>();
+    for (const target of edgeTargets(edge))
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+    for (const [target, count] of counts) {
+      if (count < 2) continue;
+      findings.push({
+        pageRef: ref,
+        severity: "HIGH",
+        detail: `${edge.key} lists ${target} ${count} times`,
+      });
+    }
+  }
+  return findings;
+}
+
+/** A label and a title compared so punctuation, case and whitespace cannot make
+ * them differ. */
+function labelKey(text: string): string {
+  return text.toLowerCase().replace(/\p{P}/gu, "").replace(/\s+/g, " ").trim();
+}
+
+/** One finding per edge label that reads as a filename or departs from the
+ * target's title. `raw_source`'s label *is* the artifact's filename by design,
+ * and a target absent from the vault or carrying no title is not this check's
+ * to judge. */
+function edgeLabelShape(
+  ref: string,
+  record: PageRecord,
+  pages: Record<string, PageRecord>,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const edge of record.edges) {
+    if (edge.key === "raw_source") continue;
+    for (const link of edge.links) {
+      const target = pages[link.target];
+      if (target === undefined || target.title === "") continue;
+      if (link.label.endsWith(".md")) {
+        findings.push({
+          pageRef: ref,
+          severity: "HIGH",
+          detail: `${edge.key} labels ${link.target} with its filename: "${link.label}"`,
+        });
+      } else if (labelKey(link.label) !== labelKey(target.title)) {
+        findings.push({
+          pageRef: ref,
+          severity: "LOW",
+          detail: `${edge.key} labels ${link.target} "${link.label}", not its title "${target.title}"`,
+        });
       }
     }
   }
@@ -252,11 +336,11 @@ export async function unresolvedSupersession(
   const findings: Finding[] = [];
   for (const [ref, { record, text }] of Object.entries(pagesWithText)) {
     const hasContradicts = record.edges.some(
-      (e) => e.key === "contradicts" && e.targets.length > 0,
+      (e) => e.key === "contradicts" && e.links.length > 0,
     );
     if (!hasContradicts) continue;
     const hasSupersedes = record.edges.some(
-      (e) => e.key === "supersedes" && e.targets.length > 0,
+      (e) => e.key === "supersedes" && e.links.length > 0,
     );
     if (hasSupersedes) continue;
     const { body } = splitFrontmatter(text);
@@ -627,7 +711,7 @@ function conflictingPairs(records: Record<string, PageRecord>): Set<string> {
   for (const [ref, record] of Object.entries(records)) {
     for (const edge of record.edges) {
       if (edge.key !== "contradicts" && edge.key !== "supersedes") continue;
-      for (const target of edge.targets) {
+      for (const target of edgeTargets(edge)) {
         if (target !== ref) pairs.add(pairKey(ref, target));
       }
     }
@@ -1103,6 +1187,7 @@ export const CHECKS: Record<string, CheckFn> = {
   "frontmatter-link-format": frontmatterLinkFormat,
   "tags-shape": tagsShape,
   "self-referential-edge": selfReferentialEdge,
+  "edge-shape": edgeShape,
   "stale-synthesis": staleSynthesis,
   "missing-volatility-source-date": missingVolatilitySourceDate,
   "unresolved-supersession": unresolvedSupersession,
