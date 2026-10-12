@@ -13,6 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { failBadInvocation } from "./output.js";
 
 /**
  * The vault config as read. `title` and `startPage` are the only keys
@@ -84,7 +85,7 @@ export function isSupplied(value: string | undefined): value is string {
  *  refused: "no title" is spelled by not having one. */
 export function saveExportTitle(root: string, title: string): void {
   if (!isSupplied(title)) {
-    throw new Error("--save-title needs a non-empty title");
+    failBadInvocation("--save-title needs a non-empty title");
   }
   writeExportConfig(root, { ...readExportConfig(root), title: title.trim() });
 }

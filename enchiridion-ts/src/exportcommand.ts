@@ -27,7 +27,12 @@ import {
   saveExportTitle,
 } from "./exportconfig.js";
 import type { StarterEntry } from "./exportmeta.js";
-import { emitDocument, fail } from "./output.js";
+import {
+  BadInvocationError,
+  emitDocument,
+  fail,
+  failBadInvocation,
+} from "./output.js";
 import { resolveRoot } from "./vault.js";
 
 export function registerSessionCommands(program: Command): void {
@@ -85,7 +90,7 @@ export function registerHookCommands(program: Command): void {
     .action(() => {
       // A bare or unrecognised event is an error, not commander's
       // help-and-exit-0 — a hooks.json typo must not look like it worked.
-      fail(
+      failBadInvocation(
         `hook: name the event, one of ${["session-start", "post-tool-use"].join(", ")}`,
       );
     });
@@ -164,7 +169,9 @@ export function registerExportCommands(program: Command): void {
         // The root's allowExcessArguments leaves a stray word here as an
         // operand, which the action would otherwise ignore.
         if (cmd.args.length > 0) {
-          fail(`export takes no positional arguments, got "${cmd.args[0]}"`);
+          failBadInvocation(
+            `export takes no positional arguments, got "${cmd.args[0]}"`,
+          );
         }
         const root = resolveRoot();
 
@@ -174,6 +181,11 @@ export function registerExportCommands(program: Command): void {
           try {
             saveExportTitle(root, opts.saveTitle);
           } catch (err) {
+            // A blank title is the flag at fault; the wrapper must not turn it
+            // into bad environment.
+            if (err instanceof BadInvocationError) {
+              failBadInvocation(`enchiridion export: ${err.message}`);
+            }
             fail(`enchiridion export: ${(err as Error).message}`);
           }
           console.log(

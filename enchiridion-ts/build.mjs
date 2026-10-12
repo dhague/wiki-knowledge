@@ -5,6 +5,16 @@ import fs from "node:fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Bake the plugin version into the bundle: plugin.json is the single source of
+// truth for it (scripts/release.sh bumps it and rebuilds), and a packaged
+// install has no reliable path from a bundled copy back to that file.
+const { version: pluginVersion } = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "..", "wiki-plugin", ".claude-plugin", "plugin.json"),
+    "utf8",
+  ),
+);
+
 // Copy the .wasm sidecar next to the bundle: node-sqlite3-wasm is inlined
 // (not external), so it looks for the .wasm beside the output — the
 // co-location a packaged plugin ships.
@@ -33,6 +43,8 @@ await esbuild.build({
   platform: "node",
   format: "cjs",
   outfile: "dist/cli.cjs",
+  // [version.ts] reads this; without the define, a source run falls back.
+  define: { __ENCHIRIDION_VERSION__: JSON.stringify(pluginVersion) },
   external: [
     // node built-ins are external automatically under platform: "node".
     "node:*",

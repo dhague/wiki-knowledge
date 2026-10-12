@@ -55,6 +55,17 @@ export interface SkippedPage {
   reason: string;
 }
 
+/** FTS5 refused the MATCH expression. The index cannot tell whose fault that
+ * is — a caller-supplied query is bad invocation, an expression built from
+ * page content is bad environment — so the command that supplied it classifies
+ * the throw (ADR-0034). */
+export class FtsQueryError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "FtsQueryError";
+  }
+}
+
 export interface Stats {
   pages: number;
   inserted: number;
@@ -799,7 +810,7 @@ export class Index {
     } catch (err) {
       // FTS5 rejects a malformed MATCH at prepare time; --raw is the escape
       // hatch, so an unguarded throw hands the agent a bare `fts5: syntax error`.
-      throw new Error(
+      throw new FtsQueryError(
         `search: the query is not a valid FTS5 expression: ${
           err instanceof Error ? err.message : String(err)
         } — simplify the query, or pass --raw with a valid FTS5 MATCH expression`,

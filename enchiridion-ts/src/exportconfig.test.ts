@@ -122,7 +122,7 @@ test("saveExportTitle: a blank title is refused", () => {
   const root = tmpDir();
   assert.throws(
     () => saveExportTitle(root, "   "),
-    /^Error: --save-title needs a non-empty title$/,
+    /^BadInvocationError: --save-title needs a non-empty title$/,
   );
   assert.ok(
     !fs.existsSync(exportConfigPath(root)),

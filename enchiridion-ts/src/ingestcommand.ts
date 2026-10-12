@@ -43,7 +43,7 @@ import {
   WatchLockedMarker,
   WatchStartedMarker,
 } from "./contract.js";
-import { emitDocument, emitRows, fail } from "./output.js";
+import { emitDocument, emitRows, fail, failBadInvocation } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 
 /** Read a plan or manifest from a path, or stdin when the path is "-". `flag`
@@ -230,7 +230,7 @@ async function runDiscoverRef(
 function ignoreRawFile(root: string, rawRel: string, comment: string): void {
   const rel = path.posix.normalize(rawRel);
   if (!rel.startsWith("raw/") || rel.length <= "raw/".length) {
-    fail(
+    failBadInvocation(
       `--ignore takes a vault-relative path under raw/, got ${JSON.stringify(rawRel)}`,
     );
   }
@@ -379,12 +379,12 @@ export function registerIngestCommands(program: Command): void {
         const planPath = opts.plan ?? "";
         const ignoreRels = opts.ignore ?? [];
         if (opts.dryRun && planPath === "") {
-          fail(
+          failBadInvocation(
             "--dry-run only applies to --plan; --ignore always writes. Run `enchiridion ingest --plan <file> --dry-run`",
           );
         }
         if ((planPath === "") === (ignoreRels.length === 0)) {
-          fail(
+          failBadInvocation(
             "exactly one of --plan or --ignore is required. Run `enchiridion ingest --plan <file>` to execute a plan, or `enchiridion ingest --ignore <raw-file>` to withdraw one",
           );
         }
@@ -411,7 +411,7 @@ export function registerIngestCommands(program: Command): void {
     )
     .action(async (opts: { manifest?: string }) => {
       if (!opts.manifest) {
-        fail("required option '--manifest <file>' not specified");
+        failBadInvocation("required option '--manifest <file>' not specified");
       }
       const root = resolveRoot();
       const text = readInput(opts.manifest, "--manifest");
@@ -518,10 +518,12 @@ export function registerIngestCommands(program: Command): void {
         const index = await Index.open(root);
         try {
           if (opts.plan && opts.ref) {
-            fail("--plan and --ref are separate discover modes; pass one");
+            failBadInvocation(
+              "--plan and --ref are separate discover modes; pass one",
+            );
           }
           if (opts.exclude.length > 0 && (opts.plan || opts.ref)) {
-            fail(
+            failBadInvocation(
               opts.ref
                 ? "--exclude applies only to discover's single-page mode; --ref excludes the named page by construction"
                 : "--exclude applies only to discover's single-page mode, not --plan",

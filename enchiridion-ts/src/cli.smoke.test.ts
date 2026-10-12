@@ -88,6 +88,53 @@ async function buildCommittedVault(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// exit codes (ADR-0034) and --version
+// ---------------------------------------------------------------------------
+
+test(
+  `[${runtimeName}] --version: prints the version baked in from plugin.json, exit 0`,
+  { skip: skipReason },
+  () => {
+    // The bundle is built from the checkout, so the version `--version` prints
+    // is the one `scripts/release.sh` last bumped — the define, not a runtime
+    // lookup that a packaged copy could miss.
+    const pluginJson = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          __dirname,
+          "..",
+          "..",
+          "wiki-plugin",
+          ".claude-plugin",
+          "plugin.json",
+        ),
+        "utf8",
+      ),
+    ) as { version: string };
+    const { status, stdout, stderr } = runBundled(["--version"]);
+    assert.equal(status, 0, stderr);
+    assert.equal(stdout.trim(), pluginJson.version);
+  },
+);
+
+test(
+  `[${runtimeName}] exit codes: 2 for a bad invocation, 1 for a bad environment`,
+  { skip: skipReason },
+  () => {
+    const namespace = runBundled(["nonsense"]);
+    assert.equal(namespace.status, 2, namespace.stderr);
+
+    const missingArg = runBundled(["place"]);
+    assert.equal(missingArg.status, 2, missingArg.stderr);
+
+    const badPage = runBundled(["read-page", "wiki/concepts/missing.md"], {
+      env: { WIKI_ROOT: fs.mkdtempSync(path.join(os.tmpdir(), "empty-root-")) },
+    });
+    assert.equal(badPage.status, 1, badPage.stderr);
+  },
+);
+
+// ---------------------------------------------------------------------------
 // search
 // ---------------------------------------------------------------------------
 
