@@ -54,6 +54,20 @@ test("readLog parses each line oldest-first and skips blank/malformed lines", ()
   assert.equal(events[1]["tool"], "Write");
 });
 
+test("readLog skips a JSON line that is not an object", () => {
+  // A `null` line reached summarize as a null event before, and crashed it.
+  const stateDir = tmp();
+  writeLog(stateDir, "sess-1", [
+    "null",
+    "42",
+    '["Read"]',
+    '{"tool":"Read","prompt_id":"p1"}',
+  ]);
+  const events = readLog("sess-1", stateDir);
+  assert.equal(events.length, 1);
+  assert.equal(events[0]["tool"], "Read");
+});
+
 // ---------------------------------------------------------------------------
 // summarize
 // ---------------------------------------------------------------------------

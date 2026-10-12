@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { captureSession } from "./transcriptcapture.js";
 import { formatSummary, logPath, readLog, summarize } from "./toolcallstats.js";
-import { sessionStart, postToolUse } from "./hooks.js";
+import { HOOK_EVENTS, runHook } from "./hooks.js";
 import {
   runExport,
   buildCandidates,
@@ -91,24 +91,17 @@ export function registerHookCommands(program: Command): void {
       // A bare or unrecognised event is an error, not commander's
       // help-and-exit-0 — a hooks.json typo must not look like it worked.
       failBadInvocation(
-        `hook: name the event, one of ${["session-start", "post-tool-use"].join(", ")}`,
+        `hook: name the event, one of ${HOOK_EVENTS.join(", ")}`,
       );
     });
-  for (const action of ["session-start", "post-tool-use"] as const) {
+  for (const action of HOOK_EVENTS) {
     hook
       .command(action)
       .description("Handle the " + action + " hook event")
       .action(() => {
-        // Fail open: read the payload, run the handler, and swallow every
-        // error, malformed JSON on stdin included.
-        try {
-          const payload = JSON.parse(fs.readFileSync(0, "utf8"));
-          if (action === "session-start") sessionStart(payload);
-          else postToolUse(payload);
-        } catch {
-          // Deliberately dropped, not reported: hook stderr surfaces to the
-          // user mid-session with nothing they can act on.
-        }
+        // Fail open: runHook records a failure in the session's trace and
+        // returns; nothing here may throw or print.
+        runHook(action, () => fs.readFileSync(0, "utf8"));
       });
   }
 }

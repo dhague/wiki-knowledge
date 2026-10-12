@@ -18,6 +18,8 @@ import {
   readTranscriptPath,
   processLookupEnv,
   findProjectSessionsDir,
+  hookErrorPath,
+  readHookErrors,
 } from "./sessionstate.js";
 import type { HostLayout, LookupEnv } from "./sessionstate.js";
 
@@ -221,15 +223,7 @@ export function findTranscriptPath(
 
   const transcriptPath = readTranscriptPath(sessionID, stateDir);
   if (transcriptPath === undefined) {
-    throw new CaptureError(
-      "No state recorded for session " +
-        sessionID +
-        " under " +
-        stateDir +
-        ". (If this session was started before the " +
-        "SessionStart hook was installed, its transcript was never " +
-        "recorded; start a new session and try again.)",
-    );
+    throw noRecordedTranscript(sessionID, stateDir);
   }
 
   let trStat: fs.Stats;
@@ -247,6 +241,40 @@ export function findTranscriptPath(
   }
 
   return transcriptPath;
+}
+
+/**
+ * The refusal for a session with no recorded transcript. A SessionStart failure
+ * in the trace means the hook ran and could not record one, so its cause replaces
+ * the installed-hook guess; a trace with no session-start line says nothing about
+ * the transcript, and that guess still fits.
+ */
+function noRecordedTranscript(
+  sessionID: string,
+  stateDir: string,
+): CaptureError {
+  const head =
+    "No state recorded for session " + sessionID + " under " + stateDir + ". ";
+  const failure = readHookErrors(sessionID, stateDir)
+    .filter((entry) => entry.event === "session-start")
+    .pop();
+  if (failure === undefined) {
+    return new CaptureError(
+      head +
+        "(If this session was started before the SessionStart hook was " +
+        "installed, its transcript was never recorded; start a new session " +
+        "and try again.)",
+    );
+  }
+  return new CaptureError(
+    head +
+      "(The SessionStart hook ran and failed: " +
+      failure.error +
+      ". That failure is recorded in " +
+      hookErrorPath(sessionID, stateDir) +
+      "; this session's transcript was never recorded, so start a new " +
+      "session once it is fixed.)",
+  );
 }
 
 function stateDirNotLocated(cwd: string): CaptureError {

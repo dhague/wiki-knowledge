@@ -3,10 +3,10 @@
  * JSON on stdin and writes per-session state under the project's
  * `.claude/wiki-knowledge/sessions/`.
  *
- * Hooks run automatically and unattended and must fail open: the `hook`
- * subcommands swallow every handler error, and hooks.json tolerates even the
- * bootstrap failing, so a failure costs one session's side effect rather than
- * blocking the session.
+ * Hooks run automatically and unattended and must fail open: `runHook` swallows
+ * every failure, recording it in the session's diagnostic trace instead of
+ * reporting it, and hooks.json tolerates even the bootstrap failing, so a failure
+ * costs one session's side effect rather than blocking the session.
  *
  * The two hooks locate the project differently on purpose. The payload's `cwd` is
  * the project root at SessionStart but has followed the session's `cd`s by
@@ -18,6 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { mkdirSafe } from "./fsutil.js";
 import {
+  appendHookError,
   findSessionsDir,
   processLookupEnv,
   sessionsDir,
@@ -95,4 +96,70 @@ export function postToolUse(
   const logFile = logPath(p.session_id, stateDir);
   mkdirSafe(path.dirname(logFile), 0o755);
   fs.appendFileSync(logFile, line + "\n", { mode: 0o644 });
+}
+
+/** The events `hook` dispatches, in the order the help lists them; each also
+ * names its own trace lines. */
+export const HOOK_EVENTS = ["session-start", "post-tool-use"] as const;
+
+export type HookEvent = (typeof HOOK_EVENTS)[number];
+
+/**
+ * Runs one hook event and fails open: a payload that will not parse, or a
+ * handler that throws, appends a line to the session's diagnostic trace and
+ * returns. Nothing reaches stderr and no exit code changes.
+ */
+export function runHook(
+  event: HookEvent,
+  readInput: () => string,
+  lookupEnv: LookupEnv = processLookupEnv,
+): void {
+  let sessionID = "";
+  let cwd = "";
+  try {
+    const payload: unknown = JSON.parse(readInput());
+    sessionID = payloadField(payload, "session_id");
+    cwd = payloadField(payload, "cwd");
+    if (event === "session-start") sessionStart(payload, lookupEnv);
+    else postToolUse(payload, lookupEnv);
+  } catch (err) {
+    if (sessionID === "") sessionID = envSessionID(lookupEnv);
+    recordHookFailure(event, sessionID, cwd, err, lookupEnv);
+  }
+}
+
+/** A string field of a parsed payload; an absent or non-string one reads as
+ * empty, as the handlers' own casts do. */
+function payloadField(payload: unknown, key: string): string {
+  if (typeof payload !== "object" || payload === null) return "";
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+/** The session the host exports to every subprocess it spawns. Claude Code keeps
+ * it equal to the payload's session_id, and it is all an unparsable payload
+ * leaves behind. */
+function envSessionID(lookupEnv: LookupEnv): string {
+  return lookupEnv("CLAUDE_CODE_SESSION_ID")[0] ?? "";
+}
+
+/** Appends the failure to the session's trace. An unwritable state directory
+ * stays silent: the trace has nowhere to live then, so there is no second place
+ * to record it. */
+function recordHookFailure(
+  event: HookEvent,
+  sessionID: string,
+  cwd: string,
+  err: unknown,
+  lookupEnv: LookupEnv,
+): void {
+  // sessionsDir, not findSessionsDir: a failed session-start handler was writing
+  // to the fallback path too, and findTranscriptPath reads that path back.
+  const stateDir = sessionsDir(cwd, lookupEnv);
+  const error = err instanceof Error ? err.message : String(err);
+  try {
+    appendHookError(sessionID, stateDir, event, error);
+  } catch {
+    // The trace cannot be written either; fail open regardless.
+  }
 }

@@ -3,15 +3,16 @@
  *
  * One rule locates a host's session-state directory, and every writer and reader
  * goes through it so they cannot disagree; each host supplies only its own layout
- * (HostLayout). State is one JSON file per session_id under the project's
- * `.claude/wiki-knowledge/sessions/`, not the vault — in query-from-anywhere mode
- * the vault is elsewhere.
+ * (HostLayout). State is per-session_id files under the project's
+ * `.claude/wiki-knowledge/sessions/` — the transcript record, the tool-call log
+ * and the hook-failure trace — not the vault: in query-from-anywhere mode the
+ * vault is elsewhere.
  */
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { mkdirSafe } from "./fsutil.js";
+import { mkdirSafe, readJsonLines } from "./fsutil.js";
 
 /** A lookupEnv matching `process.env`'s semantics: (value, wasPresent). */
 export type LookupEnv = (key: string) => [string | undefined, boolean];
@@ -188,4 +189,56 @@ export function readTranscriptPath(
   } catch {
     return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// The hook-failure trace
+// ---------------------------------------------------------------------------
+
+/** One line of a session's diagnostic trace: what failed, when, and why. */
+export interface TraceEntry {
+  at: string;
+  event: string;
+  error: string;
+}
+
+/** sessionID's trace path, beside its transcript record and tool-call log. A
+ * failure with no session id to attribute it to shares one `hook-errors.jsonl`,
+ * because only the directory is then knowable. */
+export function hookErrorPath(sessionID: string, stateDir: string): string {
+  const name =
+    sessionID === "" ? "hook-errors.jsonl" : `${sessionID}-hook-errors.jsonl`;
+  return path.join(stateDir, name);
+}
+
+/** Appends one failure to sessionID's trace, creating the state directory as
+ * needed. Append-only: the trace is read after the fact, possibly in a later
+ * session. */
+export function appendHookError(
+  sessionID: string,
+  stateDir: string,
+  event: string,
+  error: string,
+): void {
+  const entry: TraceEntry = { at: new Date().toISOString(), event, error };
+  const file = hookErrorPath(sessionID, stateDir);
+  mkdirSafe(path.dirname(file));
+  fs.appendFileSync(file, JSON.stringify(entry) + "\n", { mode: 0o644 });
+}
+
+/** sessionID's trace, oldest first; empty when none exists. Malformed and blank
+ * lines are skipped, as in the tool-call log. */
+export function readHookErrors(
+  sessionID: string,
+  stateDir: string,
+): TraceEntry[] {
+  const entries: TraceEntry[] = [];
+  for (const record of readJsonLines(hookErrorPath(sessionID, stateDir))) {
+    const event = record["event"];
+    const error = record["error"];
+    if (typeof event !== "string" || typeof error !== "string") continue;
+    const at = typeof record["at"] === "string" ? record["at"] : "";
+    entries.push({ at, event, error });
+  }
+  return entries;
 }

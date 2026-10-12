@@ -6,9 +6,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { sessionStart, postToolUse } from "./hooks.js";
-import { sessionsDir, readTranscriptPath } from "./sessionstate.js";
-import type { LookupEnv } from "./sessionstate.js";
+import { sessionStart, postToolUse, runHook } from "./hooks.js";
+import {
+  sessionsDir,
+  readTranscriptPath,
+  readHookErrors,
+} from "./sessionstate.js";
+import type { LookupEnv, TraceEntry } from "./sessionstate.js";
 
 /** Build a LookupEnv from a fixed map (missing keys report not-present). */
 function env(map: Record<string, string>): LookupEnv {
@@ -245,4 +249,164 @@ test("sessionStart and postToolUse agree on one directory (#485)", () => {
     true,
   );
   assert.deepEqual(fs.readdirSync(path.dirname(contentDir)), ["concepts"]);
+});
+
+// --- runHook: the one fail-open wrapper both events go through --------------
+
+/** The trace lines recorded for sessionID under `project`. */
+function traceEntries(project: string, sessionID: string): TraceEntry[] {
+  return readHookErrors(sessionID, sessionsDirFor(project));
+}
+
+test("runHook records an unparsable payload against the exported session id", () => {
+  const project = tmp();
+  const lookupEnv = env({
+    CLAUDE_PROJECT_DIR: project,
+    CLAUDE_CODE_SESSION_ID: "sess-env",
+  });
+
+  assert.doesNotThrow(() =>
+    runHook("session-start", () => "not json", lookupEnv),
+  );
+
+  const entries = traceEntries(project, "sess-env");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, "session-start");
+  assert.match(entries[0].error, /JSON/);
+});
+
+test("runHook leaves an unattributable failure in one session-less trace", () => {
+  const project = tmp();
+  runHook(
+    "post-tool-use",
+    () => "not json",
+    env({ CLAUDE_PROJECT_DIR: project }),
+  );
+
+  const entries = traceEntries(project, "");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, "post-tool-use");
+});
+
+test("runHook records a session-start handler throw, naming event and cause", () => {
+  const project = tmp();
+  // A directory where the transcript record belongs: the handler's write fails
+  // while the trace's own file stays writable.
+  fs.mkdirSync(path.join(sessionsDirFor(project), "sess-1.json"), {
+    recursive: true,
+  });
+  // The payload's session_id outranks the exported one.
+  const lookupEnv = env({
+    CLAUDE_PROJECT_DIR: project,
+    CLAUDE_CODE_SESSION_ID: "sess-env",
+  });
+
+  runHook(
+    "session-start",
+    () =>
+      JSON.stringify({
+        session_id: "sess-1",
+        transcript_path: "/x/t.jsonl",
+        cwd: project,
+      }),
+    lookupEnv,
+  );
+
+  assert.deepEqual(traceEntries(project, "sess-env"), []);
+  const entries = traceEntries(project, "sess-1");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, "session-start");
+  assert.match(entries[0].error, /EISDIR|illegal operation|is a directory/i);
+});
+
+test("runHook records a post-tool-use handler throw the same way", () => {
+  const project = tmp();
+  fs.mkdirSync(path.join(sessionsDirFor(project), "sess-2-tool-calls.jsonl"), {
+    recursive: true,
+  });
+
+  runHook(
+    "post-tool-use",
+    () =>
+      JSON.stringify({ session_id: "sess-2", cwd: project, tool_name: "Bash" }),
+    env({ CLAUDE_PROJECT_DIR: project }),
+  );
+
+  const entries = traceEntries(project, "sess-2");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, "post-tool-use");
+  assert.match(entries[0].error, /EISDIR|illegal operation|is a directory/i);
+});
+
+test("runHook appends repeated failures rather than overwriting", () => {
+  const project = tmp();
+  const lookupEnv = env({
+    CLAUDE_PROJECT_DIR: project,
+    CLAUDE_CODE_SESSION_ID: "sess-3",
+  });
+
+  runHook("session-start", () => "not json", lookupEnv);
+  runHook("post-tool-use", () => "still not json", lookupEnv);
+
+  const entries = traceEntries(project, "sess-3");
+  assert.deepEqual(
+    entries.map((entry) => entry.event),
+    ["session-start", "post-tool-use"],
+  );
+});
+
+test("runHook writes no trace when the state directory cannot be written", () => {
+  // The trace's own directory is what failed, so there is nowhere to record
+  // it; the hook still fails open.
+  const home = tmp();
+  const project = path.join(home, "project");
+  fs.mkdirSync(project, { recursive: true });
+  fs.writeFileSync(path.join(project, ".claude"), "a file, not a directory");
+  const lookupEnv = env({ HOME: home });
+
+  assert.doesNotThrow(() =>
+    runHook(
+      "session-start",
+      () =>
+        JSON.stringify({
+          session_id: "sess-4",
+          transcript_path: "/x/t.jsonl",
+          cwd: project,
+        }),
+      lookupEnv,
+    ),
+  );
+
+  assert.ok(!fs.existsSync(sessionsDirFor(project)));
+});
+
+test("runHook dispatches a good payload and leaves no trace", () => {
+  const project = tmp();
+  const lookupEnv = env({ CLAUDE_PROJECT_DIR: project });
+
+  runHook(
+    "session-start",
+    () =>
+      JSON.stringify({
+        session_id: "sess-5",
+        transcript_path: "/x/t.jsonl",
+        cwd: project,
+      }),
+    lookupEnv,
+  );
+  runHook(
+    "post-tool-use",
+    () =>
+      JSON.stringify({ session_id: "sess-5", cwd: project, tool_name: "Bash" }),
+    lookupEnv,
+  );
+
+  const dir = sessionsDirFor(project);
+  assert.equal(readTranscriptPath("sess-5", dir), "/x/t.jsonl");
+  assert.equal(
+    fs.readFileSync(path.join(dir, "sess-5-tool-calls.jsonl"), "utf8").trim()
+      .length > 0,
+    true,
+  );
+  assert.deepEqual(traceEntries(project, "sess-5"), []);
 });

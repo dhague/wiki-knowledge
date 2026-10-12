@@ -21,7 +21,11 @@ import {
   ErrTooFewTurns,
   CaptureError,
 } from "./transcriptcapture.js";
-import { findSessionsDir } from "./sessionstate.js";
+import {
+  findSessionsDir,
+  hookErrorPath,
+  appendHookError,
+} from "./sessionstate.js";
 import type { Turn } from "./transcriptcapture.js";
 import type { LookupEnv } from "./sessionstate.js";
 
@@ -35,6 +39,16 @@ function env(map: Record<string, string>): LookupEnv {
     const value = map[key];
     return [value, value !== undefined];
   };
+}
+
+/** The message findTranscriptPath refuses with, or "" when it does not throw. */
+function refusalMessage(cwd: string, lookupEnv: LookupEnv): string {
+  try {
+    findTranscriptPath(cwd, lookupEnv);
+    return "";
+  } catch (err) {
+    return err instanceof Error ? err.message : "";
+  }
 }
 
 const NOW = new Date("2026-01-02T03:04:00");
@@ -312,12 +326,66 @@ test("findTranscriptPath throws when the session was never recorded", () => {
     CLAUDE_PROJECT_DIR: project,
     CLAUDE_CODE_SESSION_ID: "unknown",
   });
-  assert.throws(
-    () => findTranscriptPath("", lookupEnv),
-    (err: unknown) =>
-      err instanceof CaptureError &&
-      /No state recorded for session unknown/.test(err.message),
+  // Without a trace there is no evidence the hook ran, so the wording is the one
+  // that predates the trace.
+  assert.equal(
+    refusalMessage("", lookupEnv),
+    "No state recorded for session unknown under " +
+      stateDir +
+      ". (If this session was started before the SessionStart hook was " +
+      "installed, its transcript was never recorded; start a new session and " +
+      "try again.)",
   );
+});
+
+test("findTranscriptPath names the recorded SessionStart failure when a trace exists", () => {
+  const project = tmp();
+  const stateDir = path.join(project, ".claude", "wiki-knowledge", "sessions");
+  fs.mkdirSync(stateDir, { recursive: true });
+  appendHookError(
+    "unknown",
+    stateDir,
+    "session-start",
+    "EISDIR: illegal operation on a directory, open 'x.json'",
+  );
+  const lookupEnv = env({
+    CLAUDE_PROJECT_DIR: project,
+    CLAUDE_CODE_SESSION_ID: "unknown",
+  });
+
+  const message = refusalMessage("", lookupEnv);
+  assert.match(message, /^No state recorded for session unknown under /);
+  assert.match(message, /The SessionStart hook ran and failed: EISDIR/);
+  assert.ok(
+    message.includes(hookErrorPath("unknown", stateDir)),
+    `the refusal must name the trace, got: ${message}`,
+  );
+  assert.doesNotMatch(
+    message,
+    /started before the SessionStart hook was installed/,
+  );
+});
+
+test("findTranscriptPath keeps the installed-hook wording when the trace holds no session-start failure", () => {
+  // A post-tool-use failure says nothing about the transcript record, so naming
+  // it would misattribute the cause.
+  const project = tmp();
+  const stateDir = path.join(project, ".claude", "wiki-knowledge", "sessions");
+  fs.mkdirSync(stateDir, { recursive: true });
+  appendHookError(
+    "unknown",
+    stateDir,
+    "post-tool-use",
+    "ENOSPC: no space left",
+  );
+  const lookupEnv = env({
+    CLAUDE_PROJECT_DIR: project,
+    CLAUDE_CODE_SESSION_ID: "unknown",
+  });
+
+  const message = refusalMessage("", lookupEnv);
+  assert.match(message, /started before the SessionStart hook was installed/);
+  assert.doesNotMatch(message, /ENOSPC/);
 });
 
 test("findTranscriptPath throws when the recorded transcript is missing", () => {

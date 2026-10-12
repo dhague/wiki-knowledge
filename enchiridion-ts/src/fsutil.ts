@@ -1,6 +1,37 @@
 /** Filesystem utilities shared across the enchiridion script layer. */
 import fs from "node:fs";
 
+/** The objects in a JSON Lines file, oldest first; empty when the file does not
+ * exist. Blank, unparsable and non-object lines are skipped, so one bad line
+ * never costs the rest of a log. */
+export function readJsonLines(file: string): Array<Record<string, unknown>> {
+  let data: string;
+  try {
+    data = fs.readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const rows: Array<Record<string, unknown>> = [];
+  for (const line of data.split("\n")) {
+    if (line.trim() === "") continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      continue;
+    }
+    rows.push(parsed as Record<string, unknown>);
+  }
+  return rows;
+}
+
 /**
  * `fs.mkdirSync(path, { recursive: true })` that tolerates EEXIST when the
  * target already exists as a directory — Windows + OneDrive ReparsePoint stubs

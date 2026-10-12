@@ -88,6 +88,7 @@ function runWithStdin(
   args: string[],
   input: string,
   env?: Record<string, string>,
+  cwd?: string,
 ): {
   status: number | null;
   stdout: string;
@@ -96,6 +97,7 @@ function runWithStdin(
   const result = spawnSync(tsxBin, [cliPath, ...args], {
     encoding: "utf8",
     input,
+    cwd,
     env: env ? { ...process.env, ...env } : undefined,
   });
   return {
@@ -103,6 +105,28 @@ function runWithStdin(
     stdout: result.stdout,
     stderr: result.stderr,
   };
+}
+
+/** The CLI's sessions directory under `project`. */
+function hookStateDir(project: string): string {
+  return path.join(project, ".claude", "wiki-knowledge", "sessions");
+}
+
+/** The parsed diagnostic-trace lines for sessionID; the on-disk shape is part of
+ * the hook contract, so this reads the file rather than the trace module. */
+function hookTrace(
+  project: string,
+  sessionID: string,
+): Array<Record<string, unknown>> {
+  const file = path.join(
+    hookStateDir(project),
+    `${sessionID}-hook-errors.jsonl`,
+  );
+  return fs
+    .readFileSync(file, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 test("no arguments: prints help, exits 0", () => {
@@ -944,12 +968,79 @@ test("hook session-start: reads stdin, records transcript path, exits 0", () => 
   );
 });
 
-test("hook session-start: malformed stdin fails open, exits 0", () => {
-  const { status, stderr } = runWithStdin(
+test("hook session-start: malformed stdin fails open, exits 0, and leaves a trace", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hook-"));
+  const sessionID = "hook-sess-bad";
+  const { status, stdout, stderr } = runWithStdin(
     ["hook", "session-start"],
     "not json",
+    { CLAUDE_PROJECT_DIR: project, CLAUDE_CODE_SESSION_ID: sessionID },
   );
   assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
+
+  const trace = hookTrace(project, sessionID);
+  assert.equal(trace.length, 1);
+  assert.equal(trace[0].event, "session-start");
+  assert.match(String(trace[0].error), /JSON/);
+});
+
+test("hook session-start: malformed stdin outside any project traces anyway", () => {
+  // No $CLAUDE_PROJECT_DIR and no `.claude` ancestor: sessionsDir's fallback is
+  // the only directory the refusal could look in, so the trace belongs there
+  // rather than nowhere. $HOME is the sandbox, which stops the walk up.
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hook-"));
+  const { status, stdout, stderr } = runWithStdin(
+    ["hook", "session-start"],
+    "not json",
+    { CLAUDE_PROJECT_DIR: "", CLAUDE_CODE_SESSION_ID: "", HOME: sandbox },
+    sandbox,
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
+
+  const lines = fs
+    .readFileSync(path.join(hookStateDir(sandbox), "hook-errors.jsonl"), "utf8")
+    .trim()
+    .split("\n");
+  assert.equal(lines.length, 1);
+  assert.equal(
+    (JSON.parse(lines[0]) as Record<string, unknown>).event,
+    "session-start",
+  );
+});
+
+test("hook session-start: a handler that throws is swallowed and traced", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hook-"));
+  const sessionID = "hook-sess-throw";
+  // A directory where the transcript record belongs: the handler's write fails,
+  // so the failure reaches the wrapper's catch.
+  fs.mkdirSync(path.join(hookStateDir(project), `${sessionID}.json`), {
+    recursive: true,
+  });
+  const payload = JSON.stringify({
+    session_id: sessionID,
+    transcript_path: "/x/transcript.jsonl",
+    cwd: project,
+  });
+  const { status, stdout, stderr } = runWithStdin(
+    ["hook", "session-start"],
+    payload,
+    { CLAUDE_PROJECT_DIR: project },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
+
+  const trace = hookTrace(project, sessionID);
+  assert.equal(trace.length, 1);
+  assert.equal(trace[0].event, "session-start");
+  assert.match(
+    String(trace[0].error),
+    /EISDIR|illegal operation|is a directory/i,
+  );
 });
 
 test("hook post-tool-use: reads stdin, appends one JSON line, exits 0", () => {
@@ -987,12 +1078,21 @@ test("hook post-tool-use: reads stdin, appends one JSON line, exits 0", () => {
   assert.equal(event.duration_ms, 42);
 });
 
-test("hook post-tool-use: malformed stdin fails open, exits 0", () => {
-  const { status, stderr } = runWithStdin(
+test("hook post-tool-use: malformed stdin fails open, exits 0, and leaves a trace", () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-hook-"));
+  const sessionID = "hook-sess-bad-2";
+  const { status, stdout, stderr } = runWithStdin(
     ["hook", "post-tool-use"],
     "not json",
+    { CLAUDE_PROJECT_DIR: project, CLAUDE_CODE_SESSION_ID: sessionID },
   );
   assert.equal(status, 0, stderr);
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
+
+  const trace = hookTrace(project, sessionID);
+  assert.equal(trace.length, 1);
+  assert.equal(trace[0].event, "post-tool-use");
 });
 
 test("hook (bare): errors listing the events, non-zero", () => {
