@@ -5,7 +5,15 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emitDocument, emitRows, fail, failureMessage } from "./output.js";
+import {
+  BadInvocationError,
+  emitDocument,
+  emitRows,
+  exitCodeFor,
+  fail,
+  failBadInvocation,
+  failureMessage,
+} from "./output.js";
 
 /** Capture what `console.log` would have written to stdout. */
 function captureLog(fn: () => void): string {
@@ -121,6 +129,19 @@ test("fail: throws the message, so the run cannot continue past it", () => {
     name: "Error",
     message: 'enchiridion check: unknown check "nope"',
   });
+});
+
+test("failBadInvocation: throws the class that exits 2, message unchanged", () => {
+  assert.throws(() => failBadInvocation('unknown kind "nonsense"'), {
+    name: "BadInvocationError",
+    message: 'unknown kind "nonsense"',
+  });
+});
+
+test("exitCodeFor: 2 for a bad invocation, 1 for every other throw", () => {
+  assert.equal(exitCodeFor(new BadInvocationError("x")), 2);
+  assert.equal(exitCodeFor(new Error("x")), 1);
+  assert.equal(exitCodeFor("plain"), 1);
 });
 
 test("failureMessage: the message, newline-terminated exactly once", () => {

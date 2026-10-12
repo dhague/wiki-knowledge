@@ -5,6 +5,7 @@
 
 import type { Command } from "commander";
 import {
+  FtsQueryError,
   Index,
   type Hit,
   type Query,
@@ -13,7 +14,7 @@ import {
 import { Volatilities } from "./pagerecord.js";
 import { Kinds } from "./place.js";
 import { Vault, resolveRoot } from "./vault.js";
-import { emitDocument, emitRows, fail } from "./output.js";
+import { emitDocument, emitRows, failBadInvocation } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 import { CANONICAL_DATE_FORMAT, canonicalSourceDate } from "./sourcedate.js";
 
@@ -155,7 +156,7 @@ function positiveInteger(flag: string): (value: string) => number {
   return (value: string) => {
     const n = Number(value);
     if (!/^\d+$/.test(value) || !Number.isSafeInteger(n) || n < 1) {
-      fail(`${flag} must be a positive integer, got "${value}"`);
+      failBadInvocation(`${flag} must be a positive integer, got "${value}"`);
     }
     return n;
   };
@@ -172,7 +173,7 @@ function calendarDate(flag: string): (value: string) => string {
       // Refused below, under this flag's name rather than source_date's.
     }
     if (canonical !== value) {
-      fail(
+      failBadInvocation(
         `${flag} must be a calendar date (${CANONICAL_DATE_FORMAT}), got "${value}"`,
       );
     }
@@ -186,7 +187,9 @@ function volatilityList(value: string): string[] {
   const values = splitCommaList(value);
   for (const v of values) {
     if (!(Volatilities as readonly string[]).includes(v)) {
-      fail(`--volatility must be one of ${Volatilities.join("|")}, got "${v}"`);
+      failBadInvocation(
+        `--volatility must be one of ${Volatilities.join("|")}, got "${v}"`,
+      );
     }
   }
   return values;
@@ -231,7 +234,7 @@ export function registerSearchCommand(program: Command): void {
       "which date the --since/--until bounds apply to (source_date|git_date)",
       (value: string) => {
         if (value !== "source_date" && value !== "git_date") {
-          fail(
+          failBadInvocation(
             `--date-field must be 'source_date' or 'git_date', got "${value}"`,
           );
         }
@@ -304,7 +307,7 @@ export function registerSearchCommand(program: Command): void {
           ];
           for (const kind of opts.kind) {
             if (!knownKinds.includes(kind)) {
-              fail(
+              failBadInvocation(
                 `--kind must be one of ${knownKinds.join(", ")}, got "${kind}"`,
               );
             }
@@ -338,7 +341,16 @@ export function registerSearchCommand(program: Command): void {
             exclude: opts.exclude,
             limit: opts.limit,
           };
-          const hits = await index.search(query);
+          // `search`'s query text is the caller's, so FTS5 refusing the MATCH
+          // expression is the invocation at fault — unlike the index's other
+          // callers, which build the expression from page content.
+          let hits: Hit[];
+          try {
+            hits = await index.search(query);
+          } catch (err) {
+            if (err instanceof FtsQueryError) failBadInvocation(err.message);
+            throw err;
+          }
           renderSkipped(index.skippedPages());
           renderHits(hits, opts.json ?? false);
         } finally {

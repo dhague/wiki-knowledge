@@ -5,7 +5,8 @@
  *
  * [init] refuses a directory that is already a vault ([isVault]: a marker and a
  * git work tree of its own). Deployment mode (ADR-0004) is the caller's
- * judgment, never inferred here.
+ * judgment, never inferred here — an unknown mode, or the mode whose plugin
+ * root is missing, is the caller's invocation at fault (ADR-0034).
  */
 
 import fs from "node:fs";
@@ -14,6 +15,7 @@ import { mkdirSafe } from "./fsutil.js";
 import { KindFolders } from "./place.js";
 import { hasMarker } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
+import { failBadInvocation } from "./output.js";
 
 /** The two deployment modes of ADR-0004. */
 export const ModeQueryFromAnywhere = "query-from-anywhere";
@@ -72,13 +74,15 @@ export async function init(
   switch (mode) {
     case ModeQueryFromAnywhere:
       if (pluginRoot === "") {
-        throw new Error(`${ModeQueryFromAnywhere} mode requires a plugin root`);
+        failBadInvocation(
+          `${ModeQueryFromAnywhere} mode requires a plugin root`,
+        );
       }
       break;
     case ModeDedicated:
       break;
     default:
-      throw new Error(
+      failBadInvocation(
         `unknown mode "${mode}"; must be one of ${Modes.join(", ")}`,
       );
   }

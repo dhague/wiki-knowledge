@@ -365,7 +365,7 @@ test("place: refuses a title whose slug is empty", () => {
   // 日本語のページ has letters, but none the ASCII-only slug keeps.
   for (const title of ["", "!!!", "日本語のページ"]) {
     const { status, stderr } = run(["place", "concept", title]);
-    assert.equal(status, 1, stderr);
+    assert.equal(status, 2, stderr);
     assert.ok(stderr.includes(`title ${JSON.stringify(title)}`), stderr);
     assert.match(stderr, /a page filename is built from a-z and 0-9/);
   }
@@ -441,7 +441,7 @@ test("vault move: missing source errors non-zero", () => {
 /** Assert `vault` refuses `args`, naming `word` and the real subcommands. */
 function assertVaultRefusal(args: string[], word: string): void {
   const { status, stdout, stderr } = run(args);
-  assert.equal(status, 1, stderr);
+  assert.equal(status, 2, stderr);
   assert.equal(stdout, "");
   assert.ok(stderr.includes(`"${word}"`), stderr);
   for (const real of ["root", "move", "kinds"]) {
@@ -1333,23 +1333,169 @@ test("tool-call-stats: errors when no log exists for the session", () => {
   assert.match(stderr, /no log found/);
 });
 
-test("unknown command: commander itself errors non-zero", () => {
+test("unknown command: commander itself errors with the bad-invocation code", () => {
   const { status } = run(["totally-bogus-command"]);
-  assert.notEqual(status, 0);
+  assert.equal(status, 2);
 });
 
 test("root: a stray leading option is named instead of answering with the usage block", () => {
   const { status, stdout, stderr } = run(["--json", "search", "x"]);
-  assert.notEqual(status, 0);
+  assert.equal(status, 2, stderr);
   assert.equal(stdout, "");
   assert.match(stderr, /^unknown option '--json'/);
   assert.match(stderr, /after the subcommand/);
 });
 
-test("root: --version is reported as an unknown option", () => {
-  const { status, stderr } = run(["--version"]);
-  assert.notEqual(status, 0);
-  assert.match(stderr, /^unknown option '--version'/);
+test("root: --version prints the plugin version and exits 0", () => {
+  // A source run has no build-time define, so it prints the dev fallback;
+  // cli.smoke.test.ts asserts the real version baked into the bundle.
+  const { status, stdout, stderr } = run(["--version"]);
+  assert.equal(status, 0, stderr);
+  assert.match(stdout.trim(), /^\d+\.\d+\.\d+(-dev)?$/);
+  assert.equal(stderr, "");
+});
+
+// ---------------------------------------------------------------------------
+// The exit-code contract (ADR-0034): 2 = bad invocation, 1 = bad environment.
+// Its own section because what is pinned here is the classification, not
+// merely "something failed" — per class, by exact code.
+// ---------------------------------------------------------------------------
+
+test("exit 0: help, --version and the bare-invocation usage dump", () => {
+  for (const args of [[], ["--help", "search"]]) {
+    const { status, stdout, stderr } = run(args);
+    assert.equal(status, 0, `${args.join(" ")}: ${stderr}`);
+    assert.match(stdout, /Usage:/);
+  }
+  assert.equal(run(["--version"]).status, 0);
+});
+
+test("exit 2: an unknown subcommand, a stray root option and a missing required argument", () => {
+  const cases = [
+    ["totally-bogus-command"],
+    ["--json", "search", "x"],
+    ["place"],
+    ["vault", "move", "only-one-arg"],
+    // A hook event is an argument too, even though hooks.json swallows the code.
+    ["hook"],
+  ];
+  for (const args of cases) {
+    const { status, stdout, stderr } = run(args);
+    assert.equal(status, 2, `${args.join(" ")}: ${stderr}`);
+    assert.equal(stdout, "");
+  }
+});
+
+test("exit 2: an out-of-range enum value and an unparseable numeric flag", () => {
+  const cases = [
+    ["place", "nonsense", "X"],
+    ["search", "x", "--limit", "abc"],
+    ["search", "x", "--volatility", "bogus"],
+    ["search", "x", "--date-field", "bogus"],
+  ];
+  for (const args of cases) {
+    const { status, stdout, stderr } = run(args);
+    assert.equal(status, 2, `${args.join(" ")}: ${stderr}`);
+    assert.equal(stdout, "");
+  }
+});
+
+test("exit 2: a malformed --raw FTS5 expression", async () => {
+  const root = await buildCommittedVault();
+  const { status, stderr } = runEnv(["search", "--raw", "AND"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 2, stderr);
+  assert.match(stderr, /not a valid FTS5 expression/);
+});
+
+test("exit 1: a malformed plan document is bad environment, not bad invocation", async () => {
+  // The case that separates "the remedy is in the invocation" from "the remedy
+  // is in the file": the flag named an existing file and the fault is inside
+  // it, so re-reading `--help` would not have prevented this.
+  const root = await buildCommittedVault();
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(planPath, "{ not json at all");
+  const { status, stderr } = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 1, stderr);
+  assert.match(stderr, /invalid plan JSON/);
+});
+
+test("exit 1: a named page that does not exist, and an absent frontmatter key", () => {
+  const root = makeVault({
+    "wiki/concepts/a.md":
+      "---\ntitle: A\nsummary: s\ntags: []\nsource_date: 2026-01-01\nvolatility: stable\n---\n\n",
+  });
+  const missing = runEnv(["read-page", "wiki/concepts/missing.md"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(missing.status, 1, missing.stderr);
+  assert.match(missing.stderr, /page not found: wiki\/concepts\/missing\.md/);
+
+  // `page get` on a key the page does not carry is the documented probe.
+  const absent = runEnv(
+    ["page", "get", pagePath(root, "wiki/concepts/a.md"), "no-such-key"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(absent.status, 1, absent.stderr);
+  assert.match(absent.stderr, /no frontmatter key "no-such-key"/);
+
+  // A ref that names no page is the same class as an absent file, even though
+  // the ref arrived as an argument.
+  const badEdge = runEnv(
+    [
+      "page",
+      "set",
+      pagePath(root, "wiki/concepts/a.md"),
+      "related",
+      "wiki/concepts/missing.md",
+    ],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(badEdge.status, 1, badEdge.stderr);
+  assert.match(badEdge.stderr, /no page at "wiki\/concepts\/missing\.md"/);
+});
+
+test("exit 1: a vault refusal, and discover --ref naming an uncommitted page", async () => {
+  const root = await buildCommittedVault();
+  const moved = runEnv(
+    ["vault", "move", "wiki/concepts/missing.md", "wiki/concepts/x.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(moved.status, 1, moved.stderr);
+
+  const uncommitted = runEnv(
+    ["discover", "--ref", "wiki/concepts/uncommitted.md"],
+    { cwd: root, env: { WIKI_ROOT: root } },
+  );
+  assert.equal(uncommitted.status, 1, uncommitted.stderr);
+  assert.match(uncommitted.stderr, /not a committed page at HEAD/);
+
+  // A git refusal: a manifest that changes nothing.
+  const manifest = path.join(root, "manifest.json");
+  fs.writeFileSync(manifest, JSON.stringify({ created: [] }));
+  const committed = runEnv(["commit", "--manifest", manifest], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(committed.status, 1, committed.stderr);
+});
+
+test("exit 1: a search-index refusal — a directory that is no vault of its own", () => {
+  // Not a missing flag but a missing repository: `Index.open` refuses the root,
+  // and re-reading `--help` would not have prevented it.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-no-git-"));
+  const { status, stderr } = runEnv(["search", "anything"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 1, stderr);
+  assert.match(stderr, /no git repository of its own/);
 });
 
 test("ingest: executes a plan against a real git vault, printing the SHA, the written refs then the cost summary", async () => {
@@ -1819,7 +1965,7 @@ test("ingest: --dry-run refuses a create title that cannot name a file", async (
 
 test("ingest: --plan and --ignore are mutually exclusive, one required", () => {
   const { status, stderr } = run(["ingest"]);
-  assert.notEqual(status, 0);
+  assert.equal(status, 2, stderr);
   assert.match(stderr, /--plan|--ignore/);
 });
 
@@ -1974,7 +2120,7 @@ test("commit: a manifest failing chain-of-evidence is rejected non-zero", async 
     cwd: root,
     env: { WIKI_ROOT: root },
   });
-  assert.notEqual(status, 0);
+  assert.equal(status, 1, stderr);
   assert.match(
     stderr,
     /needs a wiki\/sources\/ stub among the pages this plan writes whose raw_source points at it/,
@@ -1987,9 +2133,9 @@ test("place: prints the vault-relative path for a valid kind and title", () => {
   assert.equal(stdout.trim(), "wiki/concepts/connection-pooling.md");
 });
 
-test("place: unknown kind errors non-zero", () => {
+test("place: unknown kind errors with the bad-invocation code", () => {
   const { status, stderr } = run(["place", "nonsense", "X"]);
-  assert.notEqual(status, 0);
+  assert.equal(status, 2, stderr);
   assert.match(stderr, /unknown kind/);
 });
 
@@ -2903,7 +3049,7 @@ test("discover: --exclude applies to single-page mode only, refused elsewhere", 
     ],
     { cwd: root, env: { WIKI_ROOT: root } },
   );
-  assert.equal(status, 1, stderr);
+  assert.equal(status, 2, stderr);
   assert.equal(stdout, "");
   assert.ok(stderr.includes("--exclude"), stderr);
 });
@@ -3286,7 +3432,7 @@ test("search --limit: refuses a value that is not a positive integer, naming it"
   // integer binding rather than this flag.
   for (const value of ["abc", "0", "-1", "2.5", "1e21", "0x10", " 5"]) {
     const { status, stdout, stderr } = run(["search", "x", "--limit", value]);
-    assert.equal(status, 1, stderr);
+    assert.equal(status, 2, stderr);
     assert.equal(stdout, "");
     assert.ok(stderr.includes(`"${value}"`), stderr);
   }
@@ -3300,7 +3446,7 @@ test("search --limit: refuses a value that is not a positive integer, naming it"
 
 test("search --date-field: names its own flag in the refusal", () => {
   const { status, stderr } = run(["search", "x", "--date-field", "bogus"]);
-  assert.equal(status, 1, stderr);
+  assert.equal(status, 2, stderr);
   assert.ok(stderr.includes("--date-field"), stderr);
   assert.ok(stderr.includes('"bogus"'), stderr);
 });
@@ -3313,7 +3459,7 @@ test("search --volatility: refuses an unknown value, naming it and the vocabular
       "--volatility",
       value,
     ]);
-    assert.equal(status, 1, stderr);
+    assert.equal(status, 2, stderr);
     assert.equal(stdout, "");
     assert.ok(stderr.includes('"bogus"'), stderr);
     for (const known of ["stable", "evolving", "volatile"]) {
@@ -3332,7 +3478,7 @@ test("search --kind: refuses an unknown kind, naming it and the accepted set", (
       ["search", "x", "--kind", value],
       { cwd: root, env: { WIKI_ROOT: root } },
     );
-    assert.equal(status, 1, stderr);
+    assert.equal(status, 2, stderr);
     assert.equal(stdout, "");
     assert.ok(stderr.includes('"bogus"'), stderr);
     for (const known of [
@@ -3358,7 +3504,7 @@ test("search --since/--until: refuses a value that is not a calendar date, namin
       "2026-01-01T00:00:00Z",
     ]) {
       const { status, stdout, stderr } = run(["search", "x", flag, value]);
-      assert.equal(status, 1, stderr);
+      assert.equal(status, 2, stderr);
       assert.equal(stdout, "");
       assert.ok(stderr.includes(flag), stderr);
       assert.ok(stderr.includes(`"${value}"`), stderr);
@@ -3801,7 +3947,7 @@ test("export: refuses a stray positional argument, naming it", async () => {
     ["export", "nonsense", "--candidates"],
     { cwd: root, env: { WIKI_ROOT: root } },
   );
-  assert.equal(status, 1, stderr);
+  assert.equal(status, 2, stderr);
   assert.equal(stdout, "");
   assert.ok(stderr.includes('"nonsense"'), stderr);
 });
@@ -3992,7 +4138,7 @@ test("export --single-file: a directory --out is refused with a clear message", 
     ["export", "--single-file", "--out", path.join(root, "web")],
     { cwd: root, env: { WIKI_ROOT: root } },
   );
-  assert.notEqual(status, 0, "a directory target should fail");
+  assert.equal(status, 1, stderr);
   assert.match(stderr, /directory/i, "the message should name the problem");
   assert.ok(
     !fs.existsSync(path.join(root, "wiki.html")),
@@ -4010,7 +4156,7 @@ test("export --single-file: a vault with uncommitted changes is still refused", 
     cwd: root,
     env: { WIKI_ROOT: root },
   });
-  assert.notEqual(status, 0, "the dirty-tree check applies in this mode too");
+  assert.equal(status, 1, stderr);
   assert.match(stderr, /uncommitted/i);
   assert.ok(
     !fs.existsSync(path.join(root, "wiki.html")),

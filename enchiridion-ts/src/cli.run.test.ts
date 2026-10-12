@@ -142,6 +142,46 @@ test(
 );
 
 test(
+  "run(): the in-process exit code carries the same class as the process entry point",
+  { skip: skipReason },
+  async () => {
+    // Bad invocation, including a parse refusal on a *subcommand* — which
+    // without the whole-tree exit override would process.exit(1) and kill this
+    // host rather than return.
+    for (const argv of [
+      ["place", "nonsense", "X"],
+      ["place"],
+      ["totally-bogus-command"],
+    ]) {
+      const result = await run(argv);
+      assert.equal(result.exitCode, 2, `${argv.join(" ")}: ${result.stderr}`);
+    }
+
+    // Bad environment: a well-formed invocation naming a page that is not
+    // there. `read-page` resolves the root, so point it at an empty one.
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "enchiridion-run-root-"),
+    );
+    const prevWikiRoot = process.env.WIKI_ROOT;
+    process.env.WIKI_ROOT = root;
+    try {
+      const result = await run(["read-page", "wiki/concepts/missing.md"]);
+      assert.equal(result.exitCode, 1, result.stderr);
+      assert.match(result.stderr, /page not found/);
+    } finally {
+      if (prevWikiRoot === undefined) delete process.env.WIKI_ROOT;
+      else process.env.WIKI_ROOT = prevWikiRoot;
+    }
+
+    assert.equal((await run(["--version"])).exitCode, 0);
+    assert.ok(
+      process.exitCode == null || process.exitCode === 0,
+      "host exitCode left set",
+    );
+  },
+);
+
+test(
   "after runs: streams restored to the real ones, host can still write",
   { skip: skipReason },
   async () => {
