@@ -629,7 +629,23 @@ test("runExport: the title resolution is the same in both modes", async () => {
   );
 });
 
-test("runExport: an oversized single file is still written, and warns", async (t) => {
+/** Run `fn` with console.error captured, returning the lines written. Bun's
+ *  node:test shim has no `mock`, so the swap is by hand. */
+async function warningsFrom(fn: () => Promise<void>): Promise<string[]> {
+  const warnings: string[] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  try {
+    await fn();
+  } finally {
+    console.error = originalError;
+  }
+  return warnings;
+}
+
+test("runExport: an oversized single file is still written, and warns", async () => {
   const root = tmpDir();
   await setupVault(root);
   // One page whose rendered form clears the warning threshold.
@@ -640,13 +656,10 @@ test("runExport: an oversized single file is still written, and warns", async (t
   );
   await commitAll(root, "add huge page");
 
-  const warnings: string[] = [];
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  });
-
   const outFile = path.join(root, "wiki.html");
-  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+  const warnings = await warningsFrom(() =>
+    runExport(root, { out: outFile, allowDirty: true, singleFile: true }),
+  );
 
   const bytes = fs.statSync(outFile).size;
   assert.ok(bytes > 5 * 1024 * 1024, `fixture should be oversized (${bytes})`);
@@ -654,20 +667,17 @@ test("runExport: an oversized single file is still written, and warns", async (t
   assert.match(warnings[0], /multi-page/i, "the warning suggests multi-page");
 });
 
-test("runExport: a comfortably-sized single file writes no warning", async (t) => {
+test("runExport: a comfortably-sized single file writes no warning", async () => {
   const root = tmpDir();
   await setupVault(root);
 
-  const warnings: string[] = [];
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  });
-
-  await runExport(root, {
-    out: path.join(root, "wiki.html"),
-    allowDirty: true,
-    singleFile: true,
-  });
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "wiki.html"),
+      allowDirty: true,
+      singleFile: true,
+    }),
+  );
   assert.deepEqual(warnings, [], "a small export should say nothing");
 });
 
@@ -896,30 +906,159 @@ test("runExport: a malformed config still degrades to the generated front page",
 test("runExport: --starters beside a start page warns and still writes the export", async () => {
   const root = tmpDir();
   await setupVaultWithHome(root);
-  // Swapped by hand: Bun's node:test shim has no `mock`, and this must pass on
-  // both runtimes.
-  const warnings: string[] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  };
-  try {
-    const outDir = path.join(root, "web");
-    await runExport(root, {
+  const outDir = path.join(root, "web");
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
       out: outDir,
       allowDirty: true,
       startPage: START_PAGE_REF,
       starters: [{ pageRef: "wiki/concepts/alpha-concept.md" }],
-    });
+    }),
+  );
 
-    assert.equal(warnings.length, 1, "exactly one warning");
-    assert.match(warnings[0], /--starters/);
-    assert.match(warnings[0], /start page/);
-    const idx = readOut(outDir, "index.html");
-    assert.ok(idx.includes("<h1>Home</h1>"), "the export was written anyway");
-  } finally {
-    console.error = originalError;
-  }
+  assert.equal(warnings.length, 1, "exactly one warning");
+  assert.match(warnings[0], /--starters/);
+  assert.match(warnings[0], /start page/);
+  const idx = readOut(outDir, "index.html");
+  assert.ok(idx.includes("<h1>Home</h1>"), "the export was written anyway");
+});
+
+// ---------------------------------------------------------------------------
+// runExport — a --starters ref the export does not carry
+// ---------------------------------------------------------------------------
+
+/** The front page's get-started block — the one list `--starters` governs. */
+function getStartedBlock(html: string): string {
+  const start = html.indexOf("<h2>Get Started</h2>");
+  assert.ok(start >= 0, "the front page should carry a get-started block");
+  const end = html.indexOf("</section>", start);
+  assert.ok(end > start, "the get-started block should close with </section>");
+  return html.slice(start, end);
+}
+
+test("runExport: a --starters ref the export does not carry warns, naming it", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: outDir,
+      allowDirty: true,
+      starters: [
+        { pageRef: "wiki/concepts/alpha-concept.md" },
+        { pageRef: "wiki/concepts/nope.md" },
+      ],
+    }),
+  );
+
+  assert.equal(warnings.length, 1, "exactly one warning");
+  assert.match(
+    warnings[0],
+    /^Warning: --starters ref "wiki\/concepts\/nope\.md"/,
+    "the warning names the dropped ref and the flag that dropped it",
+  );
+  assert.ok(
+    !warnings[0].includes("alpha-concept"),
+    "the carried ref is not named",
+  );
+
+  const block = getStartedBlock(readOut(outDir, "index.html"));
+  assert.ok(
+    block.includes("Alpha Concept"),
+    "the surviving supplied ref still leads the get-started block",
+  );
+  assert.ok(
+    !block.includes("Beta Concept"),
+    "a surviving ref means no fallback to the ranked candidates",
+  );
+});
+
+test("runExport: every --starters ref dropped warns for each and still falls back", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const outDir = path.join(root, "web");
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: outDir,
+      allowDirty: true,
+      starters: [
+        { pageRef: "wiki/concepts/nope.md" },
+        { pageRef: "wiki/gone/gone.md" },
+      ],
+    }),
+  );
+
+  assert.deepEqual(
+    warnings.map((w) => w.match(/--starters ref "([^"]+)"/)?.[1]),
+    ["wiki/concepts/nope.md", "wiki/gone/gone.md"],
+    "one warning per dropped ref, in the order supplied",
+  );
+
+  const block = getStartedBlock(readOut(outDir, "index.html"));
+  assert.ok(
+    block.includes("Alpha Concept") && block.includes("Beta Concept"),
+    "an all-dropped set leaves the ranked fallback in place",
+  );
+});
+
+test("runExport: a --starters ref the export carries warns about nothing", async () => {
+  const root = tmpDir();
+  await setupVault(root);
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "web"),
+      allowDirty: true,
+      starters: [{ pageRef: "wiki/concepts/beta-concept.md" }],
+    }),
+  );
+
+  assert.deepEqual(warnings, []);
+});
+
+test("runExport: a raw/ --starters ref warns without --raw and is silent with it", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const starters = [{ pageRef: "raw/transcript.md" }];
+
+  const withoutRaw = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "web-no-raw"),
+      allowDirty: true,
+      starters,
+    }),
+  );
+  assert.equal(withoutRaw.length, 1);
+  assert.match(withoutRaw[0], /--starters ref "raw\/transcript\.md"/);
+
+  const withRaw = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "web-raw"),
+      allowDirty: true,
+      raw: true,
+      starters,
+    }),
+  );
+  assert.deepEqual(withRaw, [], "--raw is what admits the ref");
+});
+
+test("runExport: a dropped ref beside a start page warns only about the start page", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "web"),
+      allowDirty: true,
+      startPage: START_PAGE_REF,
+      starters: [{ pageRef: "wiki/concepts/nope.md" }],
+    }),
+  );
+
+  assert.equal(warnings.length, 1, "the start-page warning, and only it");
+  assert.match(warnings[0], /start page/);
+  assert.ok(
+    !warnings[0].includes("nope"),
+    "the whole list is ignored, so naming one ref on top is noise",
+  );
 });
 
 test("runExport: --single-file with a start page makes it the __front section", async () => {

@@ -4,6 +4,7 @@ import { Vault } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
 import {
   buildExportMeta,
+  droppedStarters,
   type ExportOptions,
   type StarterEntry,
 } from "./exportmeta.js";
@@ -308,11 +309,18 @@ export async function runExport(
 
   // A supplied get-started set is meaningless beside a start page, but a
   // warning not a failure: the documented --candidates → pick → --starters
-  // flow must keep working.
+  // flow must keep working. A dropped ref is a warning for the same reason —
+  // the export is still written, and an all-dropped set still falls back.
   if (startPageRef !== undefined && starters.length > 0) {
     console.error(
       `Warning: --starters is ignored because "${startPageRef}" is the start page. Exporting the start page without a get-started block.`,
     );
+  } else {
+    for (const { pageRef } of droppedStarters(starters, meta)) {
+      console.error(
+        `Warning: --starters ref "${pageRef}" names no page this export carries; it was dropped from the get-started block.`,
+      );
+    }
   }
 
   function* allPages(): Generator<{ path: string; content: string }> {

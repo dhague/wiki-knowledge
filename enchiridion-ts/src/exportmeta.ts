@@ -45,8 +45,9 @@ export interface StarterEntry {
 export interface ExportOptions {
   /** Include raw/ pages in the exported set; default false. */
   includeRaw?: boolean;
-  /** User-supplied get-started list, replacing the fallback ranking; refs not
-   *  in the exported set are silently skipped. */
+  /** User-supplied get-started list, replacing the fallback ranking; a ref the
+   *  exported set does not carry is dropped from the block (the CLI warns — see
+   *  [droppedStarters]). */
   starters?: StarterEntry[];
   /** Wiki title for the nav and front page, already resolved by the caller. */
   title?: string;
@@ -261,6 +262,29 @@ export function buildExportMeta(
     startPage,
     outputPathFor,
   };
+}
+
+/** The one admission test for a supplied starter: the export carries its ref. */
+function carries(meta: ExportMeta, starter: StarterEntry): boolean {
+  return meta.exported.has(starter.pageRef);
+}
+
+/** The supplied starters the export carries, in the order supplied — what the
+ *  get-started block renders. */
+export function carriedStarters(
+  starters: StarterEntry[],
+  meta: ExportMeta,
+): StarterEntry[] {
+  return starters.filter((s) => carries(meta, s));
+}
+
+/** The supplied starters the export does not carry, in the order supplied — the
+ *  ones the block drops, which the CLI names on stderr ([ADR-0032]). */
+export function droppedStarters(
+  starters: StarterEntry[],
+  meta: ExportMeta,
+): StarterEntry[] {
+  return starters.filter((s) => !carries(meta, s));
 }
 
 /**
