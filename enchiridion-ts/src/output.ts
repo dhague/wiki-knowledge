@@ -11,6 +11,9 @@
  * `page set --json` is the exception: it parses its value argument as JSON,
  * i.e. input, not output. Every other `--json` selects an output dialect.
  *
+ * [emitSkippedPages] is neither dialect: a stderr diagnostic naming each page
+ * the index could not hold.
+ *
  * A command that cannot do its job calls [fail] (bad environment) or
  * [failBadInvocation] (bad invocation), which throw. Both entry points — `main`
  * and the in-process `run` — render that throw through [failureMessage] onto
@@ -31,6 +34,16 @@ export function emitRows(rows: Iterable<unknown>): void {
 
 export function emitDocument(value: unknown): void {
   console.log(JSON.stringify(value));
+}
+
+/** Name every page the index could not hold, one `skipped <page_ref>: <reason>`
+ * line each on stderr — never stdout, so no dialect above is touched. */
+export function emitSkippedPages(
+  skipped: Iterable<{ pageRef: string; reason: string }>,
+): void {
+  for (const page of skipped) {
+    console.error(`skipped ${page.pageRef}: ${page.reason}`);
+  }
 }
 
 /** A failure whose remedy is in the invocation the caller typed — an unknown

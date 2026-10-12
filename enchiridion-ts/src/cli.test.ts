@@ -3205,6 +3205,11 @@ async function buildVaultWithUnparsablePage(): Promise<string> {
   return root;
 }
 
+/** The `skipped` line that page must draw — one spelling, so `search`'s
+ * contract and `discover`'s cannot drift apart. */
+const skippedBrokenPageRE =
+  /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/;
+
 test("discover: single-page mode finds the overlapping page and emits one candidate per line", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
@@ -3632,6 +3637,173 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
 });
 
 // ---------------------------------------------------------------------------
+// discover — naming the pages the index cannot hold (the dedup gate's blind spot)
+// ---------------------------------------------------------------------------
+
+/** Write a draft plan creating one page per title and return its path. */
+function writeDraftPlan(root: string, titles: string[]): string {
+  const planPath = path.join(root, "draft.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "Draft",
+      pages: titles.map((title) => ({
+        op: "create",
+        title,
+        kind: "concept",
+        frontmatter: {},
+        body: "",
+      })),
+    }),
+  );
+  return planPath;
+}
+
+test("discover --plan: names a page the index cannot hold on stderr, stdout unchanged", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const planPath = writeDraftPlan(root, ["Connection Pooling in Postgres"]);
+  const { status, stdout, stderr } = runEnv(["discover", "--plan", planPath], {
+    cwd: root,
+    env: { VAULT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  // The one-document stdout contract is untouched: still exactly one compact
+  // JSON document, and no new field in it.
+  const payload = JSON.parse(stdout);
+  assert.equal(stdout, JSON.stringify(payload) + "\n");
+  assert.deepEqual(Object.keys(payload).sort(), ["pages", "vocabulary"]);
+});
+
+test("discover single-page mode: names a page the index cannot hold on stderr", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--title",
+      "Connection Pooling in Postgres",
+      "--related-threshold",
+      "0.000001",
+    ],
+    { cwd: root, env: { VAULT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  // JSON Lines, one complete object per line — no diagnostic leaked into stdout.
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(rows[0].page_ref, "wiki/concepts/connection-pooling.md");
+});
+
+test("discover --ref: names a page the index cannot hold on stderr", async () => {
+  const root = await buildNominationVault();
+  await commitUnparsablePage(root);
+  const { status, stdout, stderr } = runEnv(
+    [
+      "discover",
+      "--ref",
+      "wiki/concepts/connection-pooling.md",
+      "--limit",
+      "0",
+    ],
+    { cwd: root, env: { VAULT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  // A real nomination beside the diagnostic: the rows are still JSON Lines, and
+  // the diagnostic took nothing from them.
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.ok(
+    rows.some((r) => r.page_ref === "wiki/concepts/connection-limits.md"),
+    `expected a nomination in ${stdout}`,
+  );
+});
+
+test("discover --plan: names a page a later commit made unindexable", async () => {
+  const root = await buildCommittedVault();
+  const planPath = writeDraftPlan(root, ["Connection Pooling in Postgres"]);
+
+  // Builds the index at this HEAD; a clean vault says nothing.
+  const first = runEnv(["discover", "--plan", planPath], {
+    cwd: root,
+    env: { VAULT: root },
+  });
+  assert.equal(first.status, 0, first.stderr);
+  assert.doesNotMatch(first.stderr, /skipped/);
+
+  await commitUnparsablePage(root);
+
+  // The delta this run walks is what drops the page; nothing re-walks disk.
+  const second = runEnv(["discover", "--plan", planPath], {
+    cwd: root,
+    env: { VAULT: root },
+  });
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(second.stderr, skippedBrokenPageRE);
+});
+
+test("discover single-page mode: names a page a later commit made unindexable", async () => {
+  const root = await buildCommittedVault();
+  const args = [
+    "discover",
+    "--title",
+    "Connection Pooling in Postgres",
+    "--related-threshold",
+    "0.000001",
+  ];
+
+  const first = runEnv(args, { cwd: root, env: { VAULT: root } });
+  assert.equal(first.status, 0, first.stderr);
+  assert.doesNotMatch(first.stderr, /skipped/);
+
+  await commitUnparsablePage(root);
+
+  const second = runEnv(args, { cwd: root, env: { VAULT: root } });
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(second.stderr, skippedBrokenPageRE);
+  assert.ok(second.stdout.trim().length > 0, "the rows were lost with it");
+});
+
+test("discover: a clean vault says nothing on stderr from any mode", async () => {
+  const root = await buildCommittedVault();
+  const planPath = writeDraftPlan(root, ["Connection Pooling in Postgres"]);
+  const modes = [
+    ["discover", "--plan", planPath],
+    ["discover", "--title", "Connection Pooling in Postgres"],
+    ["discover", "--ref", "wiki/concepts/connection-pooling.md"],
+  ];
+  for (const args of modes) {
+    const { status, stderr } = runEnv(args, {
+      cwd: root,
+      env: { VAULT: root },
+    });
+    assert.equal(status, 0, `${args.join(" ")}: ${stderr}`);
+    assert.equal(stderr, "", `${args.join(" ")} printed ${stderr}`);
+  }
+});
+
+test("discover: reports the pass the index itself ran, not the plan's query count", async () => {
+  // A fresh index walks HEAD at Index.open, so a plan with no pages — which
+  // runs no query of its own — still has that pass's drops to name, exactly as
+  // `search ''` does on the same vault state.
+  const root = await buildVaultWithUnparsablePage();
+  const planPath = writeDraftPlan(root, []);
+  const { status, stdout, stderr } = runEnv(["discover", "--plan", planPath], {
+    cwd: root,
+    env: { VAULT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  assert.deepEqual(JSON.parse(stdout).pages, []);
+});
+
+// ---------------------------------------------------------------------------
 // search — JSON Lines for hits, one document for the index's own state
 // ---------------------------------------------------------------------------
 
@@ -3876,10 +4048,7 @@ test("search --reindex: names a page it cannot index on stderr", async () => {
     env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
-  assert.match(
-    stderr,
-    /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
-  );
+  assert.match(stderr, skippedBrokenPageRE);
   assert.match(stdout, /reindex: 2 pages/);
 });
 
@@ -3921,10 +4090,7 @@ test("search: names a page the index cannot hold on stderr, stdout unchanged", a
     env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
-  assert.match(
-    stderr,
-    /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
-  );
+  assert.match(stderr, skippedBrokenPageRE);
   // The JSON-Lines stdout contract: every line is one complete document.
   const rows = stdout
     .trim()
@@ -3952,10 +4118,7 @@ test("search: names a page a later commit made unindexable", async () => {
     env: { VAULT: root },
   });
   assert.equal(second.status, 0, second.stderr);
-  assert.match(
-    second.stderr,
-    /skipped wiki\/concepts\/broken\.md: frontmatter is not valid YAML/,
-  );
+  assert.match(second.stderr, skippedBrokenPageRE);
   assert.match(second.stdout, /wiki\/concepts\/connection-pooling\.md/);
 });
 

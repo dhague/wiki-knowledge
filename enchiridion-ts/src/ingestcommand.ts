@@ -43,7 +43,13 @@ import {
   WatchLockedMarker,
   WatchStartedMarker,
 } from "./contract.js";
-import { emitDocument, emitRows, fail, failBadInvocation } from "./output.js";
+import {
+  emitDocument,
+  emitRows,
+  emitSkippedPages,
+  fail,
+  failBadInvocation,
+} from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 
 /** Read a plan or manifest from a path, or stdin when the path is "-". `flag`
@@ -180,6 +186,7 @@ async function runDiscoverPlan(
   }));
 
   const vocab = await index.tagCounts();
+  emitSkippedPages(index.skippedPages());
 
   const payload: PlanPayload = { pages };
   if (tagsContain === "" && tagCount === "") {
@@ -222,7 +229,9 @@ async function runDiscoverRef(
     // An unreadable frontmatter block still leaves a body to query with.
   }
   const body = splitFrontmatter(page.content).body;
-  emitRows(await nominate(index, ref, title, summary, body, opts));
+  const nominees = await nominate(index, ref, title, summary, body, opts);
+  emitSkippedPages(index.skippedPages());
+  emitRows(nominees);
 }
 
 /** Append rawRel to its own folder's `.ingestignore`. rawRel is
@@ -544,6 +553,7 @@ export function registerIngestCommands(program: Command): void {
             body,
             { ...discoverOpts, exclude: opts.exclude },
           );
+          emitSkippedPages(index.skippedPages());
           emitRows(candidates);
         } finally {
           index.close();

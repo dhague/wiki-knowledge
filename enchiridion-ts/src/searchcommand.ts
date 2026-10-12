@@ -14,7 +14,12 @@ import {
 import { Volatilities } from "./pagerecord.js";
 import { Kinds } from "./place.js";
 import { Vault, resolveRoot } from "./vault.js";
-import { emitDocument, emitRows, failBadInvocation } from "./output.js";
+import {
+  emitDocument,
+  emitRows,
+  emitSkippedPages,
+  failBadInvocation,
+} from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
 import { CANONICAL_DATE_FORMAT, canonicalSourceDate } from "./sourcedate.js";
 
@@ -113,14 +118,6 @@ function renderStatus(
   }
 }
 
-/** Name each ref the index could not hold, on stderr, so no stdout contract —
- * the JSON-Lines query rows included — is touched. */
-function renderSkipped(skipped: SkippedPage[]): void {
-  for (const page of skipped) {
-    console.error(`skipped ${page.pageRef}: ${page.reason}`);
-  }
-}
-
 function renderReindex(
   stats: {
     pages: number;
@@ -133,7 +130,7 @@ function renderReindex(
   full: boolean,
   asJSON: boolean,
 ): void {
-  renderSkipped(stats.skipped);
+  emitSkippedPages(stats.skipped);
   if (asJSON) {
     emitDocument({
       pages: stats.pages,
@@ -351,7 +348,7 @@ export function registerSearchCommand(program: Command): void {
             if (err instanceof FtsQueryError) failBadInvocation(err.message);
             throw err;
           }
-          renderSkipped(index.skippedPages());
+          emitSkippedPages(index.skippedPages());
           renderHits(hits, opts.json ?? false);
         } finally {
           index.close();
