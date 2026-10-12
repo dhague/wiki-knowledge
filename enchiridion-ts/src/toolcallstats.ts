@@ -6,8 +6,8 @@
  * per-assistant-message id, and prompt_id spans a whole user turn.
  */
 
-import fs from "node:fs";
 import path from "node:path";
+import { readJsonLines } from "./fsutil.js";
 import { sessionsDir, processLookupEnv } from "./sessionstate.js";
 
 /** The log path for sessionID; an empty stateDir resolves the session state
@@ -23,19 +23,7 @@ export function readLog(
   sessionID: string,
   stateDir: string,
 ): Array<Record<string, unknown>> {
-  const file = logPath(sessionID, stateDir);
-  if (!fs.existsSync(file)) return [];
-  const data = fs.readFileSync(file, "utf8");
-  const events: Array<Record<string, unknown>> = [];
-  for (const line of data.split("\n")) {
-    if (line.trim() === "") continue;
-    try {
-      events.push(JSON.parse(line) as Record<string, unknown>);
-    } catch {
-      // malformed line — skip
-    }
-  }
-  return events;
+  return readJsonLines(logPath(sessionID, stateDir));
 }
 
 export interface ToolCount {

@@ -11,6 +11,9 @@ import {
   findSessionsDir,
   writeTranscriptPath,
   readTranscriptPath,
+  hookErrorPath,
+  appendHookError,
+  readHookErrors,
 } from "./sessionstate.js";
 import type { LookupEnv } from "./sessionstate.js";
 
@@ -177,4 +180,64 @@ test("readTranscriptPath is undefined when transcript_path is not a string", () 
     JSON.stringify({ transcript_path: 42 }),
   );
   assert.equal(readTranscriptPath("x", stateDir), undefined);
+});
+
+// ---------------------------------------------------------------------------
+// the hook-failure trace
+// ---------------------------------------------------------------------------
+
+test("hookErrorPath gives the trace its own suffix, per session", () => {
+  const stateDir = "/state";
+  assert.equal(
+    hookErrorPath("sess-1", stateDir),
+    path.join(stateDir, "sess-1-hook-errors.jsonl"),
+  );
+  assert.notEqual(
+    hookErrorPath("sess-1", stateDir),
+    path.join(stateDir, "sess-1.json"),
+  );
+  assert.notEqual(
+    hookErrorPath("sess-1", stateDir),
+    path.join(stateDir, "sess-1-tool-calls.jsonl"),
+  );
+});
+
+test("hookErrorPath: a failure with no session id shares one trace file", () => {
+  assert.equal(
+    hookErrorPath("", "/state"),
+    path.join("/state", "hook-errors.jsonl"),
+  );
+});
+
+test("appendHookError then readHookErrors round-trips, oldest first", () => {
+  const stateDir = path.join(tmp(), "nested", "state");
+  appendHookError("sess-1", stateDir, "session-start", "EISDIR: a directory");
+  appendHookError("sess-1", stateDir, "post-tool-use", "ENOSPC: no space");
+
+  const entries = readHookErrors("sess-1", stateDir);
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].event, "session-start");
+  assert.equal(entries[0].error, "EISDIR: a directory");
+  assert.match(entries[0].at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(entries[1].event, "post-tool-use");
+  assert.equal(entries[1].error, "ENOSPC: no space");
+});
+
+test("readHookErrors is empty with no trace, and skips unusable lines", () => {
+  const stateDir = path.join(tmp(), "state");
+  assert.deepEqual(readHookErrors("none", stateDir), []);
+
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(stateDir, "sess-1-hook-errors.jsonl"),
+    "not json\n" +
+      "\n" +
+      JSON.stringify({ event: "session-start" }) +
+      "\n" +
+      JSON.stringify({ event: "session-start", error: "boom" }) +
+      "\n",
+  );
+  const entries = readHookErrors("sess-1", stateDir);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].error, "boom");
 });
