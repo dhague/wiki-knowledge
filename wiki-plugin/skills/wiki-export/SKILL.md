@@ -84,6 +84,6 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 ## Errors
 
-Surface the message as-is — each one names its own remedy. A `Warning:` line on stderr (the size warning, the `--starters`-ignored warning) is not a failure: the file was written.
+Surface the message as-is — each one names its own remedy. A `Warning:` line on stderr (the size warning, the `--starters`-ignored warning, the dropped-`--starters` warning) is not a failure: the file was written.
 
-**A `--starters` ref that names no page the export carries is dropped with no message and no change in the exit code** — a typo, or a `raw/` page without `--raw`. When no supplied ref resolves at all, the get-started block silently falls back to the ranked candidates, so a block that does not match the set you chose is not an error. Check the exported front page holds the pages step 6 picked; when one is missing, fix the ref and re-export rather than reporting success.
+**A `--starters` ref that names no page the export carries warns and is dropped** — a typo, or a `raw/` page without `--raw`. The export is still written; when no supplied ref survives, the get-started block falls back to the ranked candidates. Fix the ref or add `--raw` and re-export, rather than reporting success over a get-started block that does not match step 6's choice.

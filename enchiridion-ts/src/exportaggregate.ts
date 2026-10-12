@@ -18,6 +18,7 @@ import {
   GetStartedEntry,
   TAGS_INDEX_PATH,
   buildTagSlugMap,
+  carriedStarters,
   exportTitle,
   kindFolder,
   kindLabel,
@@ -178,14 +179,12 @@ function renderFrontPage(
     },
   );
 
-  // A supplied starter is admitted only when the export carries it
-  // (`meta.exported`, raw/ included under includeRaw); the fallback list is the
-  // ranked candidates, which are wiki-only by construction (see buildExportMeta).
+  // The fallback list is the ranked candidates, which are wiki-only by
+  // construction (see buildExportMeta); a supplied starter the export does not
+  // carry is dropped here, and the CLI warns about it (see droppedStarters).
   let startedItems: string[];
-  const suppliedStarters = opts.starters?.filter((s) =>
-    meta.exported.has(s.pageRef),
-  );
-  if (suppliedStarters && suppliedStarters.length > 0) {
+  const suppliedStarters = carriedStarters(opts.starters ?? [], meta);
+  if (suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef, annotation }) => {
       const title = pages.get(pageRef)?.record?.title ?? pageRef;
       const link = pageLink(htmlPath, pageRef, title, context);

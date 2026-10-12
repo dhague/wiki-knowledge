@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
-import { buildExportMeta } from "./exportmeta.js";
+import { buildExportMeta, droppedStarters } from "./exportmeta.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -373,6 +373,47 @@ test("buildExportMeta: getStarted excludes raw/ pages", () => {
       "getStarted should not include raw/ pages",
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// Supplied starters — the admission test the get-started block and its warning
+// both read
+// ---------------------------------------------------------------------------
+
+test("droppedStarters: names every supplied ref the export does not carry, in the order supplied", () => {
+  const meta = buildExportMeta(wikiPages);
+  const dropped = droppedStarters(
+    [
+      { pageRef: "wiki/concepts/alpha-concept.md" },
+      { pageRef: "wiki/knowledge/nope.md" },
+      { pageRef: "wiki/concepts/beta-concept.md", annotation: "kept" },
+      { pageRef: "wiki/gone/gone.md" },
+    ],
+    meta,
+  );
+  assert.deepEqual(
+    dropped.map((s) => s.pageRef),
+    ["wiki/knowledge/nope.md", "wiki/gone/gone.md"],
+  );
+});
+
+test("droppedStarters: a raw/ ref is dropped without --raw and carried with it", () => {
+  const pages = makePages([
+    ["wiki/concepts/alpha-concept.md", conceptA],
+    ["raw/notes/transcript.md", rawDoc],
+  ]);
+  const starters = [{ pageRef: "raw/notes/transcript.md" }];
+
+  assert.deepEqual(
+    droppedStarters(starters, buildExportMeta(pages)).map((s) => s.pageRef),
+    ["raw/notes/transcript.md"],
+  );
+  assert.deepEqual(
+    droppedStarters(starters, buildExportMeta(pages, { includeRaw: true })).map(
+      (s) => s.pageRef,
+    ),
+    [],
+  );
 });
 
 // ---------------------------------------------------------------------------
