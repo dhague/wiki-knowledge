@@ -23,7 +23,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 ## Procedure
 
-1. **Set the vault root** — `WIKI_ROOT` when the session's working directory is not the vault. Every subcommand resolves the root itself ([the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)).
+1. **Set the vault root** — `VAULT` when the session's working directory is not the vault. Every subcommand resolves the root itself ([the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)).
 
 2. **Launch the `enchiridion watch` subcommand in the background**:
    ```

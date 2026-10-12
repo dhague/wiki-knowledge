@@ -16,7 +16,7 @@ no commits in the real vault.
 
 ## Files
 
-- `snapshot_vault.sh` — `cp -r`s `$WIKI_ROOT` (or an explicit path) into a
+- `snapshot_vault.sh` — `cp -r`s `$VAULT` (or an explicit path) into a
   fresh temp dir and reindexes it (`enchiridion search --reindex --full`). Prints
   the snapshot path on stdout.
 - `fixed-test-note.md` — the committed test document, ~150 words,
@@ -43,10 +43,10 @@ cp wiki-plugin/evals/measurement/fixed-test-note.md \
    "$DEST/raw/notes/2026-08-06-test-backup-rotation.md"
 
 # 3. Run the ingest as its own headless session, from inside the snapshot,
-#    with WIKI_ROOT pointed at it. ingest.py prints the tool-call summary
+#    with VAULT pointed at it. ingest.py prints the tool-call summary
 #    (from #100) after the commit SHA — that's the number to record.
 cd "$DEST"
-WIKI_ROOT="$DEST" claude -p \
+VAULT="$DEST" claude -p \
   "/wiki-ingest raw/notes/2026-08-06-test-backup-rotation.md" \
   --permission-mode acceptEdits
 

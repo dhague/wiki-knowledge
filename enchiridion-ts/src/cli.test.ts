@@ -29,6 +29,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(__dirname, "cli.ts");
 const tsxBin = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
 
+// Spawned children inherit this environment; an exported root override would
+// redirect cases whose env means "no vault root set".
+delete process.env.VAULT;
+delete process.env.WIKI_ROOT;
+
 function run(args: string[]): {
   status: number | null;
   stdout: string;
@@ -170,6 +175,33 @@ test("watch --help declares the startup lines its caller gates on", () => {
   }
 });
 
+test("watch --help offers no --vault: it resolves the root like every other command", () => {
+  const { status, stdout } = run(["watch", "--help"]);
+  assert.equal(status, 0);
+  assert.ok(
+    !stdout.includes("--vault"),
+    "watch must not advertise a vault argument agents would carry to commands that have none",
+  );
+});
+
+test("watch: --vault is refused as an unknown option", () => {
+  // The root carries a live lock, so a commander that still accepted --vault
+  // would refuse on the lock and exit instead of watching /tmp forever.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-watch-"));
+  const wk = path.join(root, ".wiki-knowledge");
+  fs.mkdirSync(wk, { recursive: true });
+  fs.mkdirSync(path.join(root, "raw"), { recursive: true });
+  fs.writeFileSync(
+    path.join(wk, "watch.lock"),
+    JSON.stringify({ pid: process.pid, started_at: new Date().toISOString() }),
+  );
+
+  // Bad invocation, not bad environment (ADR-0034): re-reading --help fixes it.
+  const { status, stderr } = runEnv(["watch", "--vault", root]);
+  assert.equal(status, 2, stderr);
+  assert.match(stderr, /unknown option '--vault'/);
+});
+
 test("place: prints the vault-relative path from kind and title", () => {
   const { status, stdout, stderr } = run([
     "place",
@@ -213,7 +245,7 @@ test("place: the ref it prints is the ref ingest writes for the same kind and ti
 
   const placed = runEnv(["place", "source", title], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(placed.status, 0, placed.stderr);
   const stubRef = placed.stdout.trim();
@@ -250,7 +282,7 @@ test("place: the ref it prints is the ref ingest writes for the same kind and ti
   );
   const ingested = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.equal(ingested.status, 0, ingested.stderr);
   assert.ok(
@@ -276,7 +308,7 @@ test("place: resolves a custom kind-folder declaring its kind", () => {
   });
   const { status, stdout, stderr } = runEnv(
     ["place", "research", "Windsor desk research"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "wiki/research/windsor-desk-research.md");
@@ -290,7 +322,7 @@ test("place: resolves an irregular folder via its declared kind value", () => {
     ["place", "person", "Ada Lovelace"],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -301,7 +333,7 @@ test("place: a custom folder with no KIND.md resolves via the strip-s fallback",
   const root = makeVault({ "wiki/decisions/.keep": "" });
   const { status, stdout, stderr } = runEnv(["place", "decision", "Use FTS5"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "wiki/decisions/use-fts5.md");
@@ -318,7 +350,7 @@ test("place: the canonical four resolve with no vault present", () => {
   for (const [kind, title, want] of cases) {
     const { status, stdout, stderr } = runEnv(["place", kind, title], {
       cwd: plain,
-      env: { WIKI_ROOT: "" },
+      env: { VAULT: "" },
     });
     assert.equal(status, 0, stderr);
     assert.equal(stdout.trim(), want);
@@ -332,7 +364,7 @@ test("place: an unknown kind fails, naming the discovered kinds", () => {
   });
   const { status, stderr } = runEnv(["place", "nonsense", "X"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /unknown kind "nonsense"/);
@@ -352,7 +384,7 @@ test("place: a legacy singular folder does not repeat a canonical kind in the er
   const root = makeVault({ "wiki/concept/.keep": "" });
   const { status, stderr } = runEnv(["place", "nonsense", "X"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.equal(
@@ -376,7 +408,7 @@ test("vault (bare): prints the resolved root", () => {
   fs.mkdirSync(path.join(root, "wiki"));
   const { status, stdout, stderr } = runEnv(["vault"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), fs.realpathSync(root));
@@ -387,7 +419,7 @@ test("vault root: prints the resolved root", () => {
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
   const { status, stdout, stderr } = runEnv(["vault", "root"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), fs.realpathSync(root));
@@ -407,7 +439,7 @@ test("vault move: moves a page and fixes inbound links", () => {
   );
   const { status, stdout, stderr } = runEnv(
     ["vault", "move", "wiki/concepts/b.md", "wiki/entities/b.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   // Both changed pages are reported, sorted (MovePage's changed set).
@@ -433,7 +465,7 @@ test("vault move: missing source errors non-zero", () => {
   fs.mkdirSync(path.join(root, "wiki"));
   const { status } = runEnv(
     ["vault", "move", "wiki/concepts/missing.md", "wiki/entities/missing.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0);
 });
@@ -457,11 +489,11 @@ test("vault: refuses an unknown word, naming it and the real ones", () => {
   assertVaultRefusal(["vault", "nonsense"], "nonsense");
 });
 
-test("vault root: falls back to cwd with no marker or WIKI_ROOT", () => {
+test("vault root: falls back to cwd with no marker or VAULT", () => {
   const plain = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   const { status, stdout, stderr } = runEnv(["vault", "root"], {
     cwd: plain,
-    env: { WIKI_ROOT: "" },
+    env: { VAULT: "" },
   });
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), fs.realpathSync(plain));
@@ -500,7 +532,7 @@ test("page set: writes the file back", () => {
 test("page set and page merge each leave one frontmatter block", () => {
   const root = buildLintableVault();
   const file = path.join(root, "wiki/concepts/a.md");
-  const env = { WIKI_ROOT: root };
+  const env = { VAULT: root };
   const set = runEnv(["page", "set", file, "volatility", "stable"], {
     cwd: root,
     env,
@@ -682,7 +714,7 @@ test("page set: tags written this way are indexed and findable by --tag", async 
     ["search", "--tag", "alpha", "--json"],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -708,7 +740,7 @@ test("page merge: composes a vault-relative ref into an edge link", () => {
   const file = pagePath(root, "wiki/concepts/bar.md");
   const { status, stderr } = runEnv(
     ["page", "merge", file, "related", '["wiki/concepts/foo.md"]'],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -725,7 +757,7 @@ test("page merge: relativises across folders and percent-encodes", () => {
   const file = pagePath(root, "wiki/concepts/bar.md");
   const { status, stderr } = runEnv(
     ["page", "merge", file, "related", '["wiki/entities/A B.md"]'],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -743,7 +775,7 @@ test("page set: on an edge key writes a list, replacing the old one", () => {
   const file = pagePath(root, "wiki/concepts/bar.md");
   const { status, stderr } = runEnv(
     ["page", "set", file, "refines", "wiki/concepts/foo.md"],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -760,7 +792,7 @@ test("page set --json: an empty list clears a list-valued edge key", () => {
   const file = pagePath(root, "wiki/concepts/bar.md");
   const { status, stderr } = runEnv(
     ["page", "set", file, "related", "[]", "--json"],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -776,7 +808,7 @@ test("page set: passes an already-composed link through unchanged", () => {
   const file = pagePath(root, "wiki/concepts/bar.md");
   const { status, stderr } = runEnv(
     ["page", "set", file, "related", "[Foo](foo.md#ttl)"],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -793,7 +825,7 @@ test("page set: composes raw_source from a vault-relative raw path", () => {
   const file = pagePath(root, "wiki/sources/stub.md");
   const { status, stderr } = runEnv(
     ["page", "set", file, "raw_source", "raw/notes/x y.txt"],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -811,7 +843,7 @@ test("page set: a page's own vault wins over cwd", () => {
   const file = pagePath(root, "wiki/concepts/bar.md");
   const { status, stderr } = runEnv(
     ["page", "merge", file, "related", '["wiki/concepts/foo.md"]'],
-    { cwd: elsewhere, env: { WIKI_ROOT: "" } },
+    { cwd: elsewhere, env: { VAULT: "" } },
   );
   assert.equal(status, 0, stderr);
   assert.match(fs.readFileSync(file, "utf8"), /"\[Foo\]\(foo\.md\)"/);
@@ -841,7 +873,7 @@ test("read-pages: prints eligible bodies from HEAD as one JSON document", async 
 
   const { status, stdout, stderr } = runEnv(["read-pages", "--limit", "10"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const doc = JSON.parse(stdout);
@@ -862,7 +894,7 @@ test("read-pages: a ref that is not a committed page errors, naming it", async (
 
   const { status, stderr } = runEnv(["read-pages", "wiki/concepts/a.md"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /wiki\/concepts\/a\.md is not a committed page at HEAD/);
@@ -882,7 +914,7 @@ test(
     const file = path.join(link, "wiki", "concepts", "bar.md");
     const { status, stderr } = runEnv(
       ["page", "merge", file, "related", '["wiki/concepts/foo.md"]'],
-      { cwd: linkDir, env: { WIKI_ROOT: "" } },
+      { cwd: linkDir, env: { VAULT: "" } },
     );
     assert.equal(status, 0, stderr);
     assert.match(fs.readFileSync(file, "utf8"), /"\[Foo\]\(foo\.md\)"/);
@@ -897,7 +929,7 @@ test("page merge: refuses an unresolvable ref, naming key and value", () => {
   const before = fs.readFileSync(file, "utf8");
   const { status, stderr } = runEnv(
     ["page", "merge", file, "related", '["wiki/concepts/nope.md"]'],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /related/);
@@ -913,7 +945,7 @@ test("page set: refuses a link embedded in prose", () => {
   const before = fs.readFileSync(file, "utf8");
   const { status, stderr } = runEnv(
     ["page", "set", file, "related", "see [Foo](foo.md) here"],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /related/);
@@ -928,7 +960,7 @@ test("page set: refuses a value that is neither link nor ref", () => {
   const before = fs.readFileSync(file, "utf8");
   const { status, stderr } = runEnv(["page", "set", file, "related", "junk"], {
     cwd: root,
-    env: { WIKI_ROOT: "" },
+    env: { VAULT: "" },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /related/);
@@ -944,7 +976,7 @@ test("page merge: raw_source is a single link, not a list", () => {
   const before = fs.readFileSync(file, "utf8");
   const { status, stderr } = runEnv(
     ["page", "merge", file, "raw_source", '["raw/notes/x.txt"]'],
-    { cwd: root, env: { WIKI_ROOT: "" } },
+    { cwd: root, env: { VAULT: "" } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /raw_source/);
@@ -1247,7 +1279,7 @@ test("save-session: writes a raw capture and prints its vault-relative path", ()
     JSON.stringify({ transcript_path: transcript }),
   );
 
-  // cwd must be inside `project` so the hook's state is found; WIKI_ROOT points
+  // cwd must be inside `project` so the hook's state is found; VAULT points
   // at the vault, and an inherited OPENCODE_SESSION_ID must not divert the path.
   const { status, stdout, stderr } = runEnv(
     ["save-session", "--slug", "a session"],
@@ -1256,7 +1288,7 @@ test("save-session: writes a raw capture and prints its vault-relative path", ()
       env: {
         CLAUDE_CODE_SESSION_ID: sessionID,
         OPENCODE_SESSION_ID: "",
-        WIKI_ROOT: vault,
+        VAULT: vault,
       },
     },
   );
@@ -1278,7 +1310,7 @@ test("save-session: errors and exits non-zero when no session id is set", () => 
   const { status, stderr } = runEnv(["save-session"], {
     cwd: project,
     env: {
-      WIKI_ROOT: vault,
+      VAULT: vault,
       // Clear inherited session-id vars so this exercises the no-id path.
       CLAUDE_CODE_SESSION_ID: "",
       OPENCODE_SESSION_ID: "",
@@ -1404,7 +1436,7 @@ test("exit 2: a malformed --raw FTS5 expression", async () => {
   const root = await buildCommittedVault();
   const { status, stderr } = runEnv(["search", "--raw", "AND"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 2, stderr);
   assert.match(stderr, /not a valid FTS5 expression/);
@@ -1419,7 +1451,7 @@ test("exit 1: a malformed plan document is bad environment, not bad invocation",
   fs.writeFileSync(planPath, "{ not json at all");
   const { status, stderr } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 1, stderr);
   assert.match(stderr, /invalid plan JSON/);
@@ -1432,7 +1464,7 @@ test("exit 1: a named page that does not exist, and an absent frontmatter key", 
   });
   const missing = runEnv(["read-page", "wiki/concepts/missing.md"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(missing.status, 1, missing.stderr);
   assert.match(missing.stderr, /page not found: wiki\/concepts\/missing\.md/);
@@ -1440,7 +1472,7 @@ test("exit 1: a named page that does not exist, and an absent frontmatter key", 
   // `page get` on a key the page does not carry is the documented probe.
   const absent = runEnv(
     ["page", "get", pagePath(root, "wiki/concepts/a.md"), "no-such-key"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(absent.status, 1, absent.stderr);
   assert.match(absent.stderr, /no frontmatter key "no-such-key"/);
@@ -1455,7 +1487,7 @@ test("exit 1: a named page that does not exist, and an absent frontmatter key", 
       "related",
       "wiki/concepts/missing.md",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(badEdge.status, 1, badEdge.stderr);
   assert.match(badEdge.stderr, /no page at "wiki\/concepts\/missing\.md"/);
@@ -1465,13 +1497,13 @@ test("exit 1: a vault refusal, and discover --ref naming an uncommitted page", a
   const root = await buildCommittedVault();
   const moved = runEnv(
     ["vault", "move", "wiki/concepts/missing.md", "wiki/concepts/x.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(moved.status, 1, moved.stderr);
 
   const uncommitted = runEnv(
     ["discover", "--ref", "wiki/concepts/uncommitted.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(uncommitted.status, 1, uncommitted.stderr);
   assert.match(uncommitted.stderr, /not a committed page at HEAD/);
@@ -1481,7 +1513,7 @@ test("exit 1: a vault refusal, and discover --ref naming an uncommitted page", a
   fs.writeFileSync(manifest, JSON.stringify({ created: [] }));
   const committed = runEnv(["commit", "--manifest", manifest], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(committed.status, 1, committed.stderr);
 });
@@ -1492,7 +1524,7 @@ test("exit 1: a search-index refusal — a directory that is no vault of its own
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-no-git-"));
   const { status, stderr } = runEnv(["search", "anything"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 1, stderr);
   assert.match(stderr, /no git repository of its own/);
@@ -1573,7 +1605,7 @@ test("ingest: executes a plan against a real git vault, printing the SHA, the wr
   const { status, stdout, stderr } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
     env: {
-      WIKI_ROOT: root,
+      VAULT: root,
       CLAUDE_PROJECT_DIR: root,
       CLAUDE_CODE_SESSION_ID: "ingest-order",
     },
@@ -1667,13 +1699,13 @@ test("ingest: a freshly ingested vault is clean under missing-volatility-source-
 
   const ingested = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.equal(ingested.status, 0, ingested.stderr);
 
   const { status, stdout, stderr } = runEnv(
     ["check", "missing-volatility-source-date", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "");
@@ -1737,7 +1769,7 @@ test("ingest: a consolidate plan absorbs, deletes and commits once", async () =>
 
   const { status, stdout, stderr } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.equal(status, 0, stderr);
   const consolidateLines = stdout.split("\n");
@@ -1809,7 +1841,7 @@ test("ingest: plan file NOT deleted when ingest fails", async () => {
 
   const { status } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.notEqual(status, 0);
   assert.ok(fs.existsSync(planPath), "plan file must survive a failed ingest");
@@ -1854,7 +1886,7 @@ test("ingest: a misspelled action is refused before any commit", async () => {
 
   const { status, stderr } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.notEqual(status, 0);
   assert.match(
@@ -1913,7 +1945,7 @@ test("ingest: a source-to-source edge is refused, and nothing is written", async
 
   const { status, stderr } = runEnv(["ingest", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+    env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" },
   });
   assert.notEqual(status, 0);
   assert.match(
@@ -1968,7 +2000,7 @@ test("ingest: --dry-run prints the describe, writes nothing", async () => {
 
   const { status, stdout, stderr } = runEnv(
     ["ingest", "--plan", planPath, "--dry-run"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "ingest: T\n  create wiki/concepts/a.md");
@@ -2013,7 +2045,7 @@ test("ingest: --dry-run refuses a create title that cannot name a file", async (
 
   const { status, stdout, stderr } = runEnv(
     ["ingest", "--plan", planPath, "--dry-run"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(
     status,
@@ -2043,7 +2075,7 @@ test("ingest: --ignore appends to the folder's .ingestignore", () => {
 
   const { status, stderr } = runEnv(
     ["ingest", "--ignore", "raw/emails/foo.eml", "--ignore-comment", "done"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const ignoreFile = fs.readFileSync(
@@ -2072,7 +2104,7 @@ test("ingest: multiple --ignore flags in one call all get written", () => {
       "--ignore-comment",
       "bulk",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const ignoreFile = fs.readFileSync(
@@ -2090,7 +2122,7 @@ test("ingest: --ignore rejects a path outside raw/", () => {
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
   const { status, stderr } = runEnv(["ingest", "--ignore", "notes/x.md"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /under raw\//);
@@ -2131,7 +2163,7 @@ test("commit: writes one structured commit per manifest, printing the SHA", asyn
     ["commit", "--manifest", manifest],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -2182,7 +2214,7 @@ test("commit: a manifest failing chain-of-evidence is rejected non-zero", async 
 
   const { status, stderr } = runEnv(["commit", "--manifest", manifest], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 1, stderr);
   assert.match(
@@ -2216,7 +2248,7 @@ test("read-page: prints a page's full markdown by vault-relative ref", () => {
     ["read-page", "wiki/concepts/a.md"],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -2234,7 +2266,7 @@ test("read-page --json: emits {page_ref, frontmatter, body} as one compact line"
 
   const { status, stdout, stderr } = runEnv(
     ["read-page", "wiki/concepts/a.md", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const payload = JSON.parse(stdout);
@@ -2252,7 +2284,7 @@ test("read-page: a missing ref errors non-zero", () => {
 
   const { status, stderr } = runEnv(["read-page", "wiki/concepts/missing.md"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /page not found: wiki\/concepts\/missing\.md in /);
@@ -2279,7 +2311,7 @@ test("page: a missing relative path reports the absolute path it resolved to", (
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-cwd-"));
   const { status, stderr } = runEnv(
     ["page", "get", "wiki/concepts/alpha.md", "title"],
-    { cwd, env: { WIKI_ROOT: "" } },
+    { cwd, env: { VAULT: "" } },
   );
   assert.notEqual(status, 0);
   const resolved = path.join(
@@ -2301,7 +2333,7 @@ test("page: a vault-relative ref naming a real page is named as a ref", () => {
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
   const { status, stderr } = runEnv(
     ["page", "get", "wiki/concepts/alpha.md", "title"],
-    { cwd: elsewhere, env: { WIKI_ROOT: fs.realpathSync(root) } },
+    { cwd: elsewhere, env: { VAULT: fs.realpathSync(root) } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /is a vault-relative page ref/);
@@ -2318,7 +2350,7 @@ test("page get|set|merge: a vault-relative ref fails without writing", () => {
   const file = pagePath(root, "wiki/concepts/alpha.md");
   const before = fs.readFileSync(file, "utf8");
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
-  const env = { WIKI_ROOT: fs.realpathSync(root) };
+  const env = { VAULT: fs.realpathSync(root) };
   const invocations: string[][] = [
     ["page", "get", "wiki/concepts/alpha.md", "title"],
     ["page", "set", "wiki/concepts/alpha.md", "volatility", "stable"],
@@ -2337,7 +2369,7 @@ test("page: a vault-relative path that is not a page is not called a ref", () =>
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
   const { status, stderr } = runEnv(
     ["page", "get", "raw/notes/x.txt", "title"],
-    { cwd: elsewhere, env: { WIKI_ROOT: fs.realpathSync(root) } },
+    { cwd: elsewhere, env: { VAULT: fs.realpathSync(root) } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /not a vault-relative page ref/);
@@ -2361,7 +2393,7 @@ test("page commands name the file when its frontmatter will not parse", () => {
 
   const get = runEnv(["page", "get", "wiki/concepts/bad.md", "title"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(get.status, 0);
   assert.ok(
@@ -2372,7 +2404,7 @@ test("page commands name the file when its frontmatter will not parse", () => {
 
   const readJson = runEnv(["read-page", "wiki/concepts/bad.md", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(readJson.status, 0);
   assert.match(
@@ -2401,7 +2433,7 @@ test("superseded-by: resolves a seed to its current head", () => {
 
   const { status, stdout, stderr } = runEnv(
     ["superseded-by", "wiki/concepts/old.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "wiki/concepts/old.md  ->  wiki/concepts/new.md");
@@ -2418,7 +2450,7 @@ test("superseded-by: a current page prints (current)", () => {
 
   const { status, stdout, stderr } = runEnv(
     ["superseded-by", "wiki/concepts/a.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout.trim(), "wiki/concepts/a.md  (current)");
@@ -2436,7 +2468,7 @@ test("superseded-by: refuses a ref that names no page, naming it", () => {
   });
   const { status, stdout, stderr } = runEnv(
     ["superseded-by", "wiki/concepts/a.md", "wiki/concepts/missing.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 1, stderr);
   assert.equal(stdout, "");
@@ -2456,7 +2488,7 @@ test("ingest-scan: lists eligible raw files", () => {
 
   const { status, stdout, stderr } = runEnv(["ingest-scan", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const records = stdout
@@ -2508,7 +2540,7 @@ test("check --json: one finding per line, each a self-contained object", () => {
   const root = buildLintableVault();
   const { status, stdout, stderr } = runEnv(
     ["check", "kind-folder-conformance", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2528,7 +2560,7 @@ test("check --json: a clean check is silence, not []", () => {
   const root = buildLintableVault();
   const { status, stdout, stderr } = runEnv(
     ["check", "contradiction-callouts", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout, "");
@@ -2546,7 +2578,7 @@ test("check tags-shape --json: names each page and its offending value", () => {
   );
   const { status, stdout, stderr } = runEnv(["check", "tags-shape", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2569,7 +2601,7 @@ test("check duplicate-frontmatter --json: names a page with a second block", () 
   fs.writeFileSync(path.join(root, "wiki/concepts/a.md"), block + block + "\n");
   const { status, stdout, stderr } = runEnv(
     ["check", "duplicate-frontmatter", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2587,7 +2619,7 @@ test("check: an unknown name errors non-zero, naming the known ones", () => {
   const root = buildLintableVault();
   const { status, stderr } = runEnv(["check", "nope"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /unknown check "nope"/);
@@ -2608,7 +2640,7 @@ test("check frontmatter-link-format --json: a bare-path edge is a finding, not a
   const root = buildBareEdgeVault();
   const { status, stdout, stderr } = runEnv(
     ["check", "frontmatter-link-format", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2627,7 +2659,7 @@ test("check missing-volatility-source-date --json: a bare-path edge does not bla
   const root = buildBareEdgeVault();
   const { status, stdout, stderr } = runEnv(
     ["check", "missing-volatility-source-date", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2689,7 +2721,7 @@ test("check concept-fragmentation --json: a cluster carries the structured propo
   const root = await buildFragmentedVault();
   const { status, stdout, stderr } = runEnv(
     ["check", "concept-fragmentation", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2716,7 +2748,7 @@ test("check --min-similarity: a value above every pair scores is silent", async 
   const root = await buildFragmentedVault();
   const { status, stdout, stderr } = runEnv(
     ["check", "concept-fragmentation", "--min-similarity", "0.9", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout, "");
@@ -2730,7 +2762,7 @@ test("check --all --json: every row names its check, in registry order", async (
   });
   const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2762,7 +2794,7 @@ test("check: neither a name nor --all errors non-zero", () => {
   const root = buildLintableVault();
   const { status, stderr } = runEnv(["check"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /--all/);
@@ -2780,7 +2812,7 @@ test("check edge-shape --json: rows carry a severity tier", async () => {
   const root = await buildFragmentedVault(EDGE_SHAPE_PAGES);
   const { status, stdout, stderr } = runEnv(["check", "edge-shape", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2799,7 +2831,7 @@ test("check --all --json: only edge-shape's rows carry severity", async () => {
   const root = await buildFragmentedVault(EDGE_SHAPE_PAGES);
   const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2828,7 +2860,7 @@ test("check self-referential-edge: a self-edge on disk is reported", () => {
     ["check", "self-referential-edge"],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -2850,7 +2882,7 @@ test("check source-to-source-edge: a stub chain is reported in text and JSON", a
   const root = await buildFragmentedVault(STUB_CHAIN_PAGES);
   const text = runEnv(["check", "source-to-source-edge"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(text.status, 0, text.stderr);
   assert.equal(
@@ -2860,7 +2892,7 @@ test("check source-to-source-edge: a stub chain is reported in text and JSON", a
 
   const json = runEnv(["check", "source-to-source-edge", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(json.status, 0, json.stderr);
   const rows = json.stdout
@@ -2876,7 +2908,7 @@ test("check --all: the stub chain is tagged with its slug", async () => {
   const root = await buildFragmentedVault(STUB_CHAIN_PAGES);
   const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -2895,7 +2927,7 @@ test("check --all: a source page's self-edge is one row, from self-referential-e
   });
   const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const flagged = stdout
@@ -2918,7 +2950,7 @@ test("check --all: the text form prefixes each finding with its check", async ()
   const root = await buildFragmentedVault();
   const { status, stdout, stderr } = runEnv(["check", "--all"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.match(
@@ -2931,7 +2963,7 @@ test("check --min-similarity: rejects a value outside [0, 1]", () => {
   const root = buildLintableVault();
   const { status, stderr } = runEnv(
     ["check", "concept-fragmentation", "--min-similarity", "1.5"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /min-similarity/);
@@ -2943,7 +2975,7 @@ test("fix: prints each changed page ref, one per line", () => {
     ["fix", "frontmatter-link-format"],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -2961,7 +2993,7 @@ test("fix missing-cross-references: leaves a heading mention alone unless --incl
 
   const bare = runEnv(["fix", "missing-cross-references"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(bare.status, 0, bare.stderr);
   assert.equal(bare.stdout, "");
@@ -2972,7 +3004,7 @@ test("fix missing-cross-references: leaves a heading mention alone unless --incl
 
   const opted = runEnv(
     ["fix", "missing-cross-references", "--include-headings"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(opted.status, 0, opted.stderr);
   assert.equal(opted.stdout, "wiki/concepts/a.md\n");
@@ -2983,7 +3015,7 @@ test("fix: --include-headings on a fix that ignores it errors rather than no-opi
   const root = buildLintableVault();
   const { status, stderr } = runEnv(
     ["fix", "split-links", "--include-headings"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /--include-headings applies only to/);
@@ -2995,7 +3027,7 @@ test("fix duplicate-frontmatter: collapses the redundant block", () => {
   fs.writeFileSync(path.join(root, "wiki/concepts/a.md"), block + block + "\n");
   const { status, stdout, stderr } = runEnv(["fix", "duplicate-frontmatter"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.equal(stdout, "wiki/concepts/a.md\n");
@@ -3009,7 +3041,7 @@ test("fix: an unknown name errors non-zero, naming the known ones", () => {
   const root = buildLintableVault();
   const { status, stderr } = runEnv(["fix", "nope"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /unknown fix "nope"/);
@@ -3019,7 +3051,7 @@ test("fix edge-shape: edge-shape is report only, so the fix registry refuses it"
   const root = buildLintableVault();
   const { status, stderr } = runEnv(["fix", "edge-shape"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /unknown fix "edge-shape"/);
@@ -3034,7 +3066,7 @@ test("watch --dequeue: removes one queue entry and exits", () => {
 
   const { status, stderr } = runEnv(["watch", "--dequeue", "raw/a.md"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const remaining = fs
@@ -3042,6 +3074,42 @@ test("watch --dequeue: removes one queue entry and exits", () => {
     .trim()
     .split("\n");
   assert.deepEqual(remaining, ["raw/b.md"]);
+});
+
+test("watch --dequeue: finds the vault through $VAULT, not the working directory", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-watch-"));
+  const wk = path.join(root, ".wiki-knowledge");
+  fs.mkdirSync(wk, { recursive: true });
+  fs.writeFileSync(path.join(wk, "watch-queue.jsonl"), "raw/a.md\nraw/b.md\n");
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
+
+  const { status, stderr } = runEnv(["watch", "--dequeue", "raw/a.md"], {
+    cwd: elsewhere,
+    env: { VAULT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(path.join(wk, "watch-queue.jsonl"), "utf8"),
+    "raw/b.md\n",
+  );
+});
+
+test("watch --dequeue: falls back to $WIKI_ROOT when $VAULT is empty", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-watch-"));
+  const wk = path.join(root, ".wiki-knowledge");
+  fs.mkdirSync(wk, { recursive: true });
+  fs.writeFileSync(path.join(wk, "watch-queue.jsonl"), "raw/a.md\nraw/b.md\n");
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-away-"));
+
+  const { status, stderr } = runEnv(["watch", "--dequeue", "raw/a.md"], {
+    cwd: elsewhere,
+    env: { VAULT: "", WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  assert.equal(
+    fs.readFileSync(path.join(wk, "watch-queue.jsonl"), "utf8"),
+    "raw/b.md\n",
+  );
 });
 
 test("watch: without --dequeue requires a lock and errors when held", () => {
@@ -3058,7 +3126,7 @@ test("watch: without --dequeue requires a lock and errors when held", () => {
 
   const { status, stderr } = runEnv(["watch", "--poll-interval", "1"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.ok(
@@ -3147,7 +3215,7 @@ test("discover: single-page mode finds the overlapping page and emits one candid
       "--related-threshold",
       "0.000001",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const lines = stdout.trim().split("\n");
@@ -3165,13 +3233,13 @@ test("discover single-page mode: --exclude drops the named candidate", async () 
     "--related-threshold",
     "0.000001",
   ];
-  const baseline = runEnv(args, { cwd: root, env: { WIKI_ROOT: root } });
+  const baseline = runEnv(args, { cwd: root, env: { VAULT: root } });
   assert.equal(baseline.status, 0, baseline.stderr);
   const top = JSON.parse(baseline.stdout.trim().split("\n")[0]).page_ref;
 
   const { status, stdout, stderr } = runEnv(
     [...args, "--exclude", top, "--exclude", "wiki/concepts/never-matches.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.ok(!stdout.includes(top), stdout);
@@ -3187,7 +3255,7 @@ test("discover: --exclude applies to single-page mode only, refused elsewhere", 
       "--exclude",
       "wiki/concepts/sourdough-starter.md",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 2, stderr);
   assert.equal(stdout, "");
@@ -3214,7 +3282,7 @@ test("discover: --plan emits the pages and vocabulary payload", async () => {
   );
   const { status, stdout, stderr } = runEnv(["discover", "--plan", planPath], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const payload = JSON.parse(stdout);
@@ -3242,7 +3310,7 @@ test("discover: --plan - reads the draft from stdin", async () => {
     encoding: "utf8",
     input: draft,
     cwd: root,
-    env: { ...process.env, WIKI_ROOT: root },
+    env: { ...process.env, VAULT: root },
   });
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
@@ -3256,7 +3324,7 @@ test("discover: --plan --tags-containing folds the matches into the one document
   fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
   const { status, stdout, stderr } = runEnv(
     ["discover", "--plan", planPath, "--tags-containing", "data"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   // One JSON document: the matches ride inside it as a named field.
@@ -3279,7 +3347,7 @@ test("discover: --plan --tag-count reports each asked-for tag's count in the one
       "--tag-count",
       "database,never-minted",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const payload = JSON.parse(stdout);
@@ -3344,7 +3412,7 @@ test("discover --ref emits non-self candidates and no hint key", async () => {
       "--limit",
       "0",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -3383,7 +3451,7 @@ test("discover --ref excludes a superseded page", async () => {
   // the page, which it would not if the `supersedes` edge reached nothing.
   const all = runEnv(
     ["search", "legacy pooling connection", "--include-superseded", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(all.status, 0, all.stderr);
   assert.ok(
@@ -3399,7 +3467,7 @@ test("discover --ref excludes a superseded page", async () => {
       "--limit",
       "0",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const refs = stdout
@@ -3414,7 +3482,7 @@ test("discover --ref rejects a page that is not committed at HEAD", async () => 
   const root = await buildNominationVault();
   const { status, stderr } = runEnv(
     ["discover", "--ref", "wiki/concepts/never-committed.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /HEAD/);
@@ -3432,7 +3500,7 @@ test("discover --ref caps the nomination by --limit", async () => {
       "--limit",
       "0",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(uncapped.status, 0, uncapped.stderr);
   const all = uncapped.stdout
@@ -3449,7 +3517,7 @@ test("discover --ref caps the nomination by --limit", async () => {
       "--limit",
       "1",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const lines = stdout
@@ -3471,7 +3539,7 @@ test("discover rejects --plan with --ref", async () => {
       "--ref",
       "wiki/concepts/connection-pooling.md",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /--plan and --ref/);
@@ -3491,7 +3559,7 @@ test("discover --ref nomination is ungated: a weak overlap is still returned", a
       "--related-threshold",
       "1000000",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.ok(stdout.trim().length > 0, "ungated mode returned nothing");
@@ -3502,7 +3570,7 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
   // connection-limits starts with no inbound link.
   const before = runEnv(["check", "orphans", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(before.status, 0, before.stderr);
   const orphanRows = before.stdout
@@ -3526,7 +3594,7 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
       "related",
       '["wiki/concepts/connection-limits.md"]',
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(merge.status, 0, merge.stderr);
   await git.add({
@@ -3549,7 +3617,7 @@ test("discover --ref: writing the proposed edge clears the orphan", async () => 
 
   const after = runEnv(["check", "orphans", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(after.status, 0, after.stderr);
   const afterRows = after.stdout
@@ -3579,7 +3647,7 @@ test("search --limit: refuses a value that is not a positive integer, naming it"
   const root = await buildCommittedVault();
   const { status, stderr } = runEnv(
     ["search", "connection", "--limit", "5", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
 });
@@ -3616,7 +3684,7 @@ test("search --kind: refuses an unknown kind, naming it and the accepted set", (
   for (const value of ["bogus", "concept,bogus"]) {
     const { status, stdout, stderr } = runEnv(
       ["search", "x", "--kind", value],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 2, stderr);
     assert.equal(stdout, "");
@@ -3655,7 +3723,7 @@ test("search --since/--until: refuses a value that is not a calendar date, namin
   for (const flag of ["--since", "--until"]) {
     const { status, stderr } = runEnv(
       ["search", "connection", flag, "2026-07-20", "--json"],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 0, stderr);
   }
@@ -3665,7 +3733,7 @@ test("search --json: one hit object per line", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
     ["search", "connection pooling", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const rows = stdout
@@ -3695,7 +3763,7 @@ test("search --json: no hits is silence, not []", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
     ["search", "zzzznothingmatchesthis", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(stdout, "");
@@ -3711,7 +3779,7 @@ test("search --exclude: drops the named ref, keeping the rest's order and scores
       .map((l) => JSON.parse(l));
   const baseline = runEnv(["search", "a", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(baseline.status, 0, baseline.stderr);
   const all = parse(baseline.stdout);
@@ -3720,7 +3788,7 @@ test("search --exclude: drops the named ref, keeping the rest's order and scores
 
   const filtered = runEnv(["search", "a", "--exclude", dropped, "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(filtered.status, 0, filtered.stderr);
   const kept = parse(filtered.stdout);
@@ -3739,7 +3807,7 @@ test("search --exclude: repeatable, and --limit still counts returned rows", asy
   const root = await buildCommittedVault();
   const baseline = runEnv(["search", "a", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   const refs = baseline.stdout
     .trim()
@@ -3751,7 +3819,7 @@ test("search --exclude: repeatable, and --limit still counts returned rows", asy
   // Every matching ref excluded leaves silence, not a partial table.
   const all = runEnv(
     ["search", "a", ...refs.flatMap((ref) => ["--exclude", ref]), "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(all.status, 0, all.stderr);
   assert.equal(all.stdout, "");
@@ -3759,7 +3827,7 @@ test("search --exclude: repeatable, and --limit still counts returned rows", asy
   // Excluding the top hit still fills the limit from the rows behind it.
   const limited = runEnv(
     ["search", "a", "--exclude", refs[0], "--limit", "1", "--json"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(limited.status, 0, limited.stderr);
   const rows = limited.stdout.trim().split("\n").filter(Boolean);
@@ -3771,7 +3839,7 @@ test("search --reindex --json: one compact JSON document", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(["search", "--reindex", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const payload = JSON.parse(stdout);
@@ -3783,7 +3851,7 @@ test("search --status --json: one compact JSON document", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(["search", "--status", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const payload = JSON.parse(stdout);
@@ -3805,7 +3873,7 @@ test("search --reindex: names a page it cannot index on stderr", async () => {
   const root = await buildVaultWithUnparsablePage();
   const { status, stdout, stderr } = runEnv(["search", "--reindex"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.match(
@@ -3819,7 +3887,7 @@ test("search --status --json: unparsable page is unindexed, not uncommitted", as
   const root = await buildVaultWithUnparsablePage();
   const { status, stdout, stderr } = runEnv(["search", "--status", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const payload = JSON.parse(stdout);
@@ -3835,7 +3903,7 @@ test("search --status: names the unindexed page and its reason", async () => {
   const root = await buildVaultWithUnparsablePage();
   const { status, stdout, stderr } = runEnv(["search", "--status"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.match(stdout, /unindexed_pages: 1 page\(s\) the index cannot hold:/);
@@ -3850,7 +3918,7 @@ test("search: names a page the index cannot hold on stderr, stdout unchanged", a
   const root = await buildVaultWithUnparsablePage();
   const { status, stdout, stderr } = runEnv(["search", "pooling", "--json"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   assert.match(
@@ -3871,7 +3939,7 @@ test("search: names a page a later commit made unindexable", async () => {
   // Builds the index at this HEAD; a clean vault says nothing.
   const first = runEnv(["search", "pooling"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(first.status, 0, first.stderr);
   assert.doesNotMatch(first.stderr, /skipped/);
@@ -3881,7 +3949,7 @@ test("search: names a page a later commit made unindexable", async () => {
   // The delta this search walks is what drops the page; nothing re-walks disk.
   const second = runEnv(["search", "pooling"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(second.status, 0, second.stderr);
   assert.match(
@@ -3898,7 +3966,7 @@ test("vault kinds: canonical-only vault returns four entries", () => {
   fs.mkdirSync(path.join(root, "wiki", "sources"), { recursive: true });
   fs.mkdirSync(path.join(root, "wiki", "synthesis"), { recursive: true });
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as {
@@ -3934,7 +4002,7 @@ test("vault kinds: synthesis reports consolidatable when its KIND.md opts in", (
     "---\nconsolidatable: true\n---\n",
   );
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as {
@@ -3948,7 +4016,7 @@ test("vault kinds: custom folder without KIND.md has definition null", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   fs.mkdirSync(path.join(root, "wiki", "decisions"), { recursive: true });
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as {
@@ -3974,7 +4042,7 @@ test("vault kinds: custom folder with KIND.md reports declared kind and summary"
     "---\nkind: person\nsummary: A human individual.\n---\nOptional body.\n",
   );
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as {
@@ -4004,7 +4072,7 @@ test("vault kinds: a custom kind declaring consolidatable reports it", () => {
     "---\nkind: research\nsummary: Long-form research.\nconsolidatable: true\n---\n",
   );
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as {
@@ -4014,7 +4082,7 @@ test("vault kinds: a custom kind declaring consolidatable reports it", () => {
   assert.equal(kinds.find((e) => e.kind === "research")!.consolidatable, true);
 });
 
-test("vault kinds: respects WIKI_ROOT env var", () => {
+test("vault kinds: respects VAULT env var", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   const other = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-vault-"));
   fs.mkdirSync(path.join(root, "wiki", "concepts"), { recursive: true });
@@ -4025,7 +4093,7 @@ test("vault kinds: respects WIKI_ROOT env var", () => {
   );
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
     cwd: root,
-    env: { WIKI_ROOT: other },
+    env: { VAULT: other },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as {
@@ -4046,7 +4114,7 @@ test("vault kinds: every entry carries exactly the fields its help declares", ()
   );
   // `vault kinds` is always one JSON document — no `--json` dialect to select.
   const { status, stdout, stderr } = runEnv(["vault", "kinds"], {
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const kinds = JSON.parse(stdout.trim()) as Array<Record<string, unknown>>;
@@ -4085,7 +4153,7 @@ test("export: refuses a stray positional argument, naming it", async () => {
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
     ["export", "nonsense", "--candidates"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 2, stderr);
   assert.equal(stdout, "");
@@ -4100,7 +4168,7 @@ test("export --starters: a ref after the variadic option is not a stray operand"
       "--starters",
       "wiki/concepts/connection-pooling.md=Read this first",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
@@ -4114,7 +4182,7 @@ test("export --candidates: the ranked list is one compact JSON document", async 
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(["export", "--candidates"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
   const candidates = JSON.parse(stdout);
@@ -4137,7 +4205,7 @@ test("export --save-title: persists the title, writes no site", async () => {
     ["export", "--save-title", "Team Wiki"],
     {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     },
   );
   assert.equal(status, 0, stderr);
@@ -4160,7 +4228,7 @@ test("export --save-title: a blank title errors non-zero and writes nothing", ()
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
   const { status, stderr } = runEnv(["export", "--save-title", "  "], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /title/i);
@@ -4169,7 +4237,7 @@ test("export --save-title: a blank title errors non-zero and writes nothing", ()
 
 test("export: a saved title persists across runs; --title overrides one run only", async () => {
   const root = await buildCommittedVault();
-  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  const env = { cwd: root, env: { VAULT: root } };
   const navTitle = (): string => {
     const html = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
     const match = /<span class="wiki-nav-title">([^<]*)<\/span>/.exec(html);
@@ -4206,7 +4274,7 @@ test("export --single-file: defaults to wiki.html at the vault root", async () =
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(["export", "--single-file"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0, stderr);
 
@@ -4222,7 +4290,7 @@ test("export --single-file: defaults to wiki.html at the vault root", async () =
 test("export --single-file --out: names the file, and re-running replaces it", async () => {
   const root = await buildCommittedVault();
   const outFile = path.join(root, "share", "team.html");
-  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  const env = { cwd: root, env: { VAULT: root } };
 
   const first = runEnv(
     ["export", "--single-file", "--out", outFile, "--allow-dirty"],
@@ -4254,7 +4322,7 @@ test("export --single-file: the written file is self-contained", async () => {
   const root = await buildCommittedVault();
   const { status } = runEnv(["export", "--single-file"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 0);
 
@@ -4276,7 +4344,7 @@ test("export --single-file: a directory --out is refused with a clear message", 
   fs.mkdirSync(path.join(root, "web"));
   const { status, stderr } = runEnv(
     ["export", "--single-file", "--out", path.join(root, "web")],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 1, stderr);
   assert.match(stderr, /directory/i, "the message should name the problem");
@@ -4294,7 +4362,7 @@ test("export --single-file: a vault with uncommitted changes is still refused", 
   );
   const { status, stderr } = runEnv(["export", "--single-file"], {
     cwd: root,
-    env: { WIKI_ROOT: root },
+    env: { VAULT: root },
   });
   assert.equal(status, 1, stderr);
   assert.match(stderr, /uncommitted/i);
@@ -4312,7 +4380,7 @@ test("export --save-start-page: persists the ref, normalised, and writes no site
   const root = await buildCommittedVault();
   const { status, stdout, stderr } = runEnv(
     ["export", "--save-start-page", "./wiki/concepts/connection-pooling"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(
@@ -4339,7 +4407,7 @@ test("export --save-start-page: refuses a ref that names no page of the vault", 
   const root = await buildCommittedVault();
   const { status, stderr } = runEnv(
     ["export", "--save-start-page", "wiki/nope/nope.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0);
   assert.match(stderr, /nope\.md/);
@@ -4351,7 +4419,7 @@ test("export --save-start-page: refuses a ref that names no page of the vault", 
 
 test("export --save-start-page: a blank ref clears the saved key", async () => {
   const root = await buildCommittedVault();
-  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  const env = { cwd: root, env: { VAULT: root } };
   runEnv(
     ["export", "--save-start-page", "wiki/concepts/connection-pooling.md"],
     env,
@@ -4378,7 +4446,7 @@ test("export --start-page: the nominated page becomes the landing page", async (
   const root = await buildCommittedVault();
   const { status, stderr } = runEnv(
     ["export", "--start-page", "wiki/concepts/connection-pooling.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   const idx = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
@@ -4399,7 +4467,7 @@ test("export --start-page: an unknown ref exits non-zero with no fallback site",
   const root = await buildCommittedVault();
   const { status, stderr } = runEnv(
     ["export", "--start-page", "wiki/nope/nope.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.notEqual(status, 0, "a bad start page is fatal, not a warning");
   assert.match(stderr, /nope\.md/);
@@ -4411,7 +4479,7 @@ test("export --start-page: an unknown ref exits non-zero with no fallback site",
 
 test("export: a saved start page persists; --start-page overrides one run only", async () => {
   const root = await buildCommittedVault();
-  const env = { cwd: root, env: { WIKI_ROOT: root } };
+  const env = { cwd: root, env: { VAULT: root } };
   const configPath = path.join(root, ".wiki-knowledge", "config.json");
 
   runEnv(
@@ -4450,7 +4518,7 @@ test("export --candidates: --start-page is ignored by the persist-and-exit flag"
   const root = await buildCommittedVault();
   const { status, stdout } = runEnv(
     ["export", "--candidates", "--start-page", "wiki/nope/nope.md"],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, "an ignored flag must not fail the run");
   assert.ok(Array.isArray(JSON.parse(stdout)), "the candidate list is emitted");
@@ -4466,7 +4534,7 @@ test("export --save-title: --start-page is ignored by the persist-and-exit flag"
       "--start-page",
       "wiki/nope/nope.md",
     ],
-    { cwd: root, env: { WIKI_ROOT: root } },
+    { cwd: root, env: { VAULT: root } },
   );
   assert.equal(status, 0, stderr);
   assert.equal(

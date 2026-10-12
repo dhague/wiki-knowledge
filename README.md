@@ -33,7 +33,7 @@ The package is host-neutral, so it carries no model tiers and no hooks: every ho
 
 2. Create a vault — either:
    - **Local**: `/wiki-init .` inside a project to keep the vault alongside your codebase.
-   - **Remote**: `/wiki-init /some/remote/path` then set `WIKI_ROOT` to query it from anywhere. Useful when a wiki spans multiple projects or lives on a shared drive.
+   - **Remote**: `/wiki-init /some/remote/path` then set `VAULT` to query it from anywhere. Useful when a wiki spans multiple projects or lives on a shared drive.
 
 The plugin is the fuller install: the same eight skills, plus the three model-pinned subagents and the session hooks.
 
@@ -158,7 +158,7 @@ supporting pages with the revision each was read at, so anyone can re-run the
 read and check it; when a large vault leaves pages unread, the report says so
 rather than implying full coverage.
 
-Invocation follows the usual vault-root resolution: `$WIKI_ROOT` if set, else a
+Invocation follows the usual vault-root resolution: `$VAULT` if set, else a
 path argument, else the current directory.
 
 ### Export flags
@@ -232,8 +232,8 @@ npm run build   # esbuild bundle to dist/cli.cjs + wasm sidecar
 npm test
 
 # Run any subcommand against the built bundle
-WIKI_ROOT=<path_to_vault> node dist/cli.cjs search "connection pooling" --limit 10
-WIKI_ROOT=<path_to_vault> node dist/cli.cjs ingest-scan --json
+VAULT=<path_to_vault> node dist/cli.cjs search "connection pooling" --limit 10
+VAULT=<path_to_vault> node dist/cli.cjs ingest-scan --json
 ```
 
 `wiki-plugin/skills/` is the canonical, hand-edited skill tree; repo-root

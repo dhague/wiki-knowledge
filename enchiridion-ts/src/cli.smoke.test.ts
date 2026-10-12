@@ -17,6 +17,11 @@ import { SCHEMA_VERSION } from "./searchindex.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distCli = path.join(__dirname, "..", "dist", "cli.cjs");
 
+// Spawned children inherit this environment; an exported root override would
+// redirect cases whose env means "no vault root set".
+delete process.env.VAULT;
+delete process.env.WIKI_ROOT;
+
 // `process.execPath` is node under `npm test` and bun under `npm run test:bun`,
 // so the one spawn covers both legs of the CI matrix.
 const runtimeName = process.versions.bun !== undefined ? "bun" : "node";
@@ -128,7 +133,7 @@ test(
     assert.equal(missingArg.status, 2, missingArg.stderr);
 
     const badPage = runBundled(["read-page", "wiki/concepts/missing.md"], {
-      env: { WIKI_ROOT: fs.mkdtempSync(path.join(os.tmpdir(), "empty-root-")) },
+      env: { VAULT: fs.mkdtempSync(path.join(os.tmpdir(), "empty-root-")) },
     });
     assert.equal(badPage.status, 1, badPage.stderr);
   },
@@ -146,14 +151,14 @@ test(
 
     const query = runBundled(["search", "pooling"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(query.status, 0, query.stderr);
     assert.match(query.stdout, /wiki\/concepts\/connection-pooling\.md/);
 
     const status = runBundled(["search", "--status"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(status.status, 0, status.stderr);
     assert.match(status.stdout, /pages:\s+2/);
@@ -165,21 +170,21 @@ test(
 
     const reindex = runBundled(["search", "--reindex"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(reindex.status, 0, reindex.stderr);
     assert.match(reindex.stdout, /^reindex: 2 pages/);
 
     const full = runBundled(["search", "--reindex", "--full"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(full.status, 0, full.stderr);
     assert.match(full.stdout, /^full reindex: 2 pages/);
 
     const asJSON = runBundled(["search", "--json", "pooling"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(asJSON.status, 0, asJSON.stderr);
     const hit = JSON.parse(asJSON.stdout.trim().split("\n")[0]);
@@ -194,7 +199,7 @@ test(
     const root = await buildCommittedVault();
     const r = runBundled(["search", "--date-field", "bogus", "x"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.notEqual(r.status, 0);
     assert.match(r.stderr, /source_date' or 'git_date/);
@@ -345,7 +350,7 @@ test(
 
     const { status, stdout, stderr } = runBundled(
       ["ingest", "--plan", planPath],
-      { cwd: root, env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" } },
+      { cwd: root, env: { VAULT: root, CLAUDE_CODE_SESSION_ID: "" } },
     );
     assert.equal(status, 0, stderr);
     assert.match(stdout.split("\n")[0], /^[0-9a-f]{40}$/);
@@ -370,7 +375,7 @@ test(
         "--related-threshold",
         "0.000001",
       ],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 0, stderr);
     const lines = stdout.trim().split("\n");
@@ -386,7 +391,7 @@ test(
     fs.writeFileSync(planPath, JSON.stringify({ title: "Draft", pages: [] }));
     const plan = runBundled(
       ["discover", "--plan", planPath, "--tags-containing", "data"],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(plan.status, 0, plan.stderr);
     assert.deepEqual(JSON.parse(plan.stdout).tag_matches, ["database"]);
@@ -415,7 +420,7 @@ test(
 
     const { status, stdout, stderr } = runBundled(["ingest-scan", "--json"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(status, 0, stderr);
     const records = stdout
@@ -449,7 +454,7 @@ test(
 
     const { status, stderr } = runBundled(["watch", "--dequeue", "raw/a.md"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(status, 0, stderr);
     const remaining = fs
@@ -476,7 +481,7 @@ test(
       [distCli, "watch", "--poll-interval", "1"],
       {
         cwd: root,
-        env: { ...process.env, WIKI_ROOT: root },
+        env: { ...process.env, VAULT: root },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -568,7 +573,7 @@ test(
         env: {
           CLAUDE_CODE_SESSION_ID: sessionID,
           OPENCODE_SESSION_ID: "",
-          WIKI_ROOT: vault,
+          VAULT: vault,
         },
       },
     );
@@ -656,7 +661,7 @@ test(
 
     const { status, stdout, stderr } = runBundled(
       ["commit", "--manifest", manifest],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 0, stderr);
     assert.match(stdout.trim(), /^[0-9a-f]{40}$/);
@@ -683,7 +688,7 @@ test(
 
     const { status, stdout, stderr } = runBundled(
       ["superseded-by", "wiki/concepts/old.md"],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 0, stderr);
     assert.equal(
@@ -694,7 +699,7 @@ test(
     // --json is JSON Lines: the same one row, as one object on one line.
     const asJSON = runBundled(
       ["superseded-by", "wiki/concepts/old.md", "--json"],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(asJSON.status, 0, asJSON.stderr);
     const rows = asJSON.stdout
@@ -727,14 +732,14 @@ test(
 
     const plain = runBundled(["read-page", "wiki/concepts/a.md"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(plain.status, 0, plain.stderr);
     assert.equal(plain.stdout, "---\ntitle: A\nsummary: s\n---\n\nbody text\n");
 
     const asJSON = runBundled(["read-page", "wiki/concepts/a.md", "--json"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(asJSON.status, 0, asJSON.stderr);
     const payload = JSON.parse(asJSON.stdout);
@@ -773,7 +778,7 @@ test(
 
     const { status, stdout, stderr } = runBundled(
       ["check", "kind-folder-conformance", "--json"],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 0, stderr);
     const rows = stdout
@@ -787,14 +792,14 @@ test(
 
     const clean = runBundled(["check", "contradiction-callouts", "--json"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(clean.status, 0, clean.stderr);
     assert.equal(clean.stdout, "");
 
     const unknown = runBundled(["check", "nope"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.notEqual(unknown.status, 0);
     assert.match(unknown.stderr, /unknown check "nope"/);
@@ -815,14 +820,14 @@ test(
     fs.mkdirSync(path.join(root, "wiki"));
     const bare = runBundled(["vault"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(bare.status, 0, bare.stderr);
     assert.equal(bare.stdout.trim(), fs.realpathSync(root));
 
     const sub = runBundled(["vault", "root"], {
       cwd: root,
-      env: { WIKI_ROOT: root },
+      env: { VAULT: root },
     });
     assert.equal(sub.status, 0, sub.stderr);
     assert.equal(sub.stdout.trim(), fs.realpathSync(root));
@@ -849,7 +854,7 @@ test(
 
     const { status, stdout, stderr } = runBundled(
       ["vault", "move", "wiki/concepts/b.md", "wiki/entities/b.md"],
-      { cwd: root, env: { WIKI_ROOT: root } },
+      { cwd: root, env: { VAULT: root } },
     );
     assert.equal(status, 0, stderr);
     assert.equal(stdout.trim(), "wiki/concepts/a.md\nwiki/entities/b.md");

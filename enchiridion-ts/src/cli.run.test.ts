@@ -16,6 +16,11 @@ import * as git from "isomorphic-git";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distCli = path.join(__dirname, "..", "dist", "cli.cjs");
 
+// `run()` reads this process's environment; an exported root override would
+// redirect cases whose env means "no vault root set".
+delete process.env.VAULT;
+delete process.env.WIKI_ROOT;
+
 const skipReason = fs.existsSync(distCli)
   ? false
   : "dist/cli.cjs not built — run `npm run build` first";
@@ -162,15 +167,15 @@ test(
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "enchiridion-run-root-"),
     );
-    const prevWikiRoot = process.env.WIKI_ROOT;
-    process.env.WIKI_ROOT = root;
+    const prevVault = process.env.VAULT;
+    process.env.VAULT = root;
     try {
       const result = await run(["read-page", "wiki/concepts/missing.md"]);
       assert.equal(result.exitCode, 1, result.stderr);
       assert.match(result.stderr, /page not found/);
     } finally {
-      if (prevWikiRoot === undefined) delete process.env.WIKI_ROOT;
-      else process.env.WIKI_ROOT = prevWikiRoot;
+      if (prevVault === undefined) delete process.env.VAULT;
+      else process.env.VAULT = prevVault;
     }
 
     assert.equal((await run(["--version"])).exitCode, 0);
@@ -204,8 +209,8 @@ test(
   { skip: skipReason },
   async () => {
     const root = await buildCommittedVault();
-    const prevWikiRoot = process.env.WIKI_ROOT;
-    process.env.WIKI_ROOT = root;
+    const prevVault = process.env.VAULT;
+    process.env.VAULT = root;
     try {
       const result = await run(["search", "bm25", "--limit", "2"]);
       assert.equal(result.exitCode, 0, result.stderr);
@@ -216,8 +221,8 @@ test(
       assert.equal(console.log, realConsoleLog);
       assert.equal(console.error, realConsoleError);
     } finally {
-      if (prevWikiRoot === undefined) delete process.env.WIKI_ROOT;
-      else process.env.WIKI_ROOT = prevWikiRoot;
+      if (prevVault === undefined) delete process.env.VAULT;
+      else process.env.VAULT = prevVault;
     }
   },
 );

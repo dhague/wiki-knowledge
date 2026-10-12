@@ -8,7 +8,7 @@ skills: [wiki-conventions, wiki-lint]
 <!-- Plugin subagents ignore mcpServers/hooks/permissionMode frontmatter — omitted deliberately, not missing. -->
 <!-- On non-Anthropic providers, wire `model:` through `fallbackModel` / `modelOverrides` / `ANTHROPIC_DEFAULT_*_MODEL` — see https://code.claude.com/docs/en/model-config -->
 
-`wiki-linter` agent. Given a vault path (or the default vault root from `$WIKI_ROOT`). The `wiki-lint` skill procedure is the authority — load it and run it end to end with own tools; consult `wiki-conventions` for any field, folder, or edge-type question it doesn't spell out.
+`wiki-linter` agent. Given a vault path (or the default vault root from `$VAULT`). The `wiki-lint` skill procedure is the authority — load it and run it end to end with own tools; consult `wiki-conventions` for any field, folder, or edge-type question it doesn't spell out.
 
 Apply auto-fixes directly. Return confirm-first proposals as structured entries with exact commands — never ask the user (a subagent cannot; the invoking session handles the confirm-first loop). Emit a structured report when done.
 

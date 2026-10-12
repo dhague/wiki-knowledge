@@ -40,21 +40,44 @@ function writeVault(pages: Record<string, string>): Vault {
   return new Vault(root);
 }
 
-test("resolveRoot prefers WIKI_ROOT env", () => {
-  // $WIKI_ROOT wins even when `start` is itself a marked vault (ADR-0004).
+test("resolveRoot prefers VAULT env", () => {
+  // $VAULT wins even when `start` is itself a marked vault (ADR-0004).
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   const start = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   fs.mkdirSync(path.join(start, "wiki"));
 
-  const root = resolveRoot(start, env({ WIKI_ROOT: elsewhere }));
+  const root = resolveRoot(start, env({ VAULT: elsewhere }));
   assert.equal(root, resolve(elsewhere));
 });
 
-test("resolveRoot ignores an empty WIKI_ROOT", () => {
+test("resolveRoot prefers VAULT over WIKI_ROOT", () => {
+  const vault = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
+  const legacy = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
+
+  const root = resolveRoot("", env({ VAULT: vault, WIKI_ROOT: legacy }));
+  assert.equal(root, resolve(vault));
+});
+
+test("resolveRoot falls back to WIKI_ROOT when VAULT is absent", () => {
+  const legacy = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
+
+  assert.equal(resolveRoot("", env({ WIKI_ROOT: legacy })), resolve(legacy));
+});
+
+test("resolveRoot falls back to WIKI_ROOT when VAULT is empty", () => {
+  const legacy = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
+
+  assert.equal(
+    resolveRoot("", env({ VAULT: "", WIKI_ROOT: legacy })),
+    resolve(legacy),
+  );
+});
+
+test("resolveRoot ignores an empty VAULT", () => {
   const start = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-ss-"));
   fs.mkdirSync(path.join(start, "wiki"));
 
-  const root = resolveRoot(start, env({ WIKI_ROOT: "" }));
+  const root = resolveRoot(start, env({ VAULT: "" }));
   assert.equal(root, resolve(start));
 });
 
@@ -505,13 +528,16 @@ test("vaultForFile: resolves the vault and page dir from the file's own path", (
   assert.equal(pageDir, "wiki/concepts");
 });
 
-test("vaultForFile: ignores $WIKI_ROOT in favour of the file's own vault", () => {
+test("vaultForFile: ignores $VAULT in favour of the file's own vault", () => {
   // The file's own vault is authoritative. The env rule (ADR-0004) covers the
   // no-path case; honouring it here would resolve the wrong vault.
   const own = writeVault({ "wiki/concepts/a.md": "a\n" });
   const other = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-other-"));
-  const saved = process.env.WIKI_ROOT;
-  process.env.WIKI_ROOT = other;
+  const saved = [
+    ["VAULT", process.env.VAULT],
+    ["WIKI_ROOT", process.env.WIKI_ROOT],
+  ] as const;
+  for (const [key] of saved) process.env[key] = other;
   try {
     const { vault, pageDir } = vaultForFile(
       path.join(own.root, "wiki", "concepts", "a.md"),
@@ -519,7 +545,9 @@ test("vaultForFile: ignores $WIKI_ROOT in favour of the file's own vault", () =>
     assert.equal(vault.root, resolve(own.root));
     assert.equal(pageDir, "wiki/concepts");
   } finally {
-    if (saved === undefined) delete process.env.WIKI_ROOT;
-    else process.env.WIKI_ROOT = saved;
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });

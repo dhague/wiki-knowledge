@@ -32,7 +32,10 @@ import {
 export const Markers = ["wiki", ".wiki-root"] as const;
 
 /** The environment variable that overrides every other root-resolution step. */
-export const RootEnvVar = "WIKI_ROOT";
+export const RootEnvVar = "VAULT";
+
+/** [RootEnvVar]'s pre-rename spelling, still honoured and deliberately unannounced. */
+const LegacyRootEnvVar = "WIKI_ROOT";
 
 /** A lookupEnv matching `process.env`'s semantics: (value, wasPresent). */
 export type LookupEnv = (key: string) => [string | undefined, boolean];
@@ -56,8 +59,9 @@ export function hasMarker(dir: string): boolean {
 }
 
 /**
- * Resolve the vault root (ADR-0004): `$WIKI_ROOT` if set and non-empty, else
- * the nearest ancestor of `start` carrying a marker, else `start` itself.
+ * Resolve the vault root (ADR-0004): `$VAULT` if set and non-empty, else
+ * `$WIKI_ROOT` on the same terms, else the nearest ancestor of `start` carrying
+ * a marker, else `start` itself.
  *
  * `start` defaults to cwd; both parameters are injectable for tests.
  */
@@ -65,9 +69,9 @@ export function resolveRoot(
   start = "",
   lookupEnv: LookupEnv = processLookupEnv,
 ): string {
-  const [wikiRoot, ok] = lookupEnv(RootEnvVar);
-  if (ok && wikiRoot !== "" && wikiRoot !== undefined) {
-    return resolve(wikiRoot);
+  for (const envVar of [RootEnvVar, LegacyRootEnvVar]) {
+    const [value, ok] = lookupEnv(envVar);
+    if (ok && value !== "" && value !== undefined) return resolve(value);
   }
 
   const startPath = resolve(start === "" ? process.cwd() : start);
@@ -458,7 +462,7 @@ export class Vault {
 /**
  * The vault a **file** lives in and that file's vault-relative directory.
  *
- * Not [resolveRoot]'s question: `$WIKI_ROOT` pointing at another vault must not
+ * Not [resolveRoot]'s question: `$VAULT` pointing at another vault must not
  * redirect an edit handed an explicit path, so the file's own nearest-ancestor
  * marker wins and cwd never enters it.
  */
