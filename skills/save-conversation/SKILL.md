@@ -1,10 +1,10 @@
 ---
 name: save-conversation
-description: Save the current conversation to $WIKI_ROOT as a raw markdown artifact, then ingest it into the wiki. Use when the user wants this session's conversation captured.
+description: Save the current conversation to $VAULT as a raw markdown artifact, then ingest it into the wiki. Use when the user wants this session's conversation captured.
 ---
 # Save Conversation
 
-Captures session transcript into `$WIKI_ROOT/raw/conversations/`, files it into wiki.
+Captures session transcript into `$VAULT/raw/conversations/`, files it into wiki.
 
 The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:
 
@@ -23,9 +23,9 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 `save-session` detects the host session from the environment and fetches its transcript where the host records one.
 
-1. Run capture script with `WIKI_ROOT` set to target vault (the session may run outside the vault, so set it explicitly — [the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)):
+1. Run capture script with `VAULT` set to target vault (the session may run outside the vault, so set it explicitly — [the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)):
    ```
-   WIKI_ROOT="<path to vault>" "$RUNTIME" "$ENCHIRIDION" save-session --slug "<short phrase>"
+   VAULT="<path to vault>" "$RUNTIME" "$ENCHIRIDION" save-session --slug "<short phrase>"
    ```
    `--slug`: short phrase naming what session **covered**, judged from whole conversation — not how it opened. Session that started "look at issue 33" and became filename design argument is `wayfinder-33-raw-filename-slugs`, not `look-at-issue-33`. Few words right; script caps it.
    - Script **sanitizes rather than trusts** phrase (lowercased, `[^a-z0-9]+` → `-`, capped) — printed path differs from what you passed. Read path from stdout; never reconstruct from phrase.

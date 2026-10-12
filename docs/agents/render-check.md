@@ -27,7 +27,7 @@ A session that has not restarted since the server was added has no `chrome-devto
 1. **Export to a scratch directory.** From `enchiridion-ts/`:
 
    ```
-   WIKI_ROOT=<vault root> npx tsx src/cli.ts export --out /tmp/check --force --allow-dirty
+   VAULT=<vault root> npx tsx src/cli.ts export --out /tmp/check --force --allow-dirty
    ```
 
    From source, not through the `enchiridion` shim: a render check is usually verifying work you have just changed, and the shim runs the committed bundle. `--out` names a directory outside the vault and the source tree — the vault's `web/` belongs to the user, and the source tree must stay clean. `--allow-dirty` because the dogfooding vault usually has uncommitted pages.

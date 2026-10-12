@@ -132,7 +132,7 @@ export async function commit(
 ): Promise<string> {
   if (!(await git.isWorkTree())) {
     throw new Error(
-      `${root} has no git repository of its own (it may sit inside one); the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $WIKI_ROOT at the vault`,
+      `${root} has no git repository of its own (it may sit inside one); the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $VAULT at the vault`,
     );
   }
   await checkChainOfEvidence(root, m);

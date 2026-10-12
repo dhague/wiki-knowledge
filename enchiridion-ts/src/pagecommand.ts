@@ -42,7 +42,7 @@ function vaultRefPath(file: string): string | null {
 }
 
 /** Name a file `page` could not read as the path it resolved to — the argument
- * is cwd-relative, never `$WIKI_ROOT`-relative, which is the trap a
+ * is cwd-relative, never `$VAULT`-relative, which is the trap a
  * vault-relative ref walks into. */
 function noSuchFile(file: string): never {
   const abs = path.resolve(file);
@@ -84,7 +84,7 @@ function writePageFile(file: string, page: Page): void {
 /**
  * A normalizer over one page's vault, so a list of values resolves the root
  * and reads each target's title once. The vault is the file's own location
- * ([vaultForFile]) — never `$WIKI_ROOT` or cwd.
+ * ([vaultForFile]) — never `$VAULT` or cwd.
  */
 function edgeNormalizer(file: string): (key: string, value: string) => string {
   const { vault, pageDir } = vaultForFile(file);

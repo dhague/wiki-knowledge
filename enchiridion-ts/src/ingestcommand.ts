@@ -285,7 +285,6 @@ export function registerIngestCommands(program: Command): void {
     .description(
       `Watch raw/ for new files and enqueue eligible ones; once observing it prints "${WatchStartedMarker}<raw> (debounce=<s>s, pid=<pid>)", and refuses with "${WatchLockedMarker}<lock>)" when another watcher holds the lock`,
     )
-    .option("--vault <root>", "vault root; defaults to resolve_vault_root()")
     .option(
       "--debounce <seconds>",
       `per-file debounce, seconds (default ${DefaultDebounceSeconds})`,
@@ -304,22 +303,11 @@ export function registerIngestCommands(program: Command): void {
     )
     .action(
       async (opts: {
-        vault?: string;
         debounce: number;
         pollInterval: number;
         dequeue?: string;
       }) => {
-        let root = opts.vault ?? "";
-        if (root === "") {
-          root = resolveRoot();
-        } else {
-          try {
-            root = fs.realpathSync(root);
-          } catch {
-            // A root that doesn't exist yet resolves as-is.
-          }
-        }
-        const paths = forRoot(root);
+        const paths = forRoot(resolveRoot());
 
         if (opts.dequeue) {
           removeFromQueue(paths.queue, opts.dequeue);

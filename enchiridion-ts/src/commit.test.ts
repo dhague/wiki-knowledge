@@ -120,7 +120,7 @@ test("commit stages and returns a SHA", async () => {
 });
 
 function noRepoMessage(root: string): string {
-  return `${root} has no git repository of its own (it may sit inside one); the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $WIKI_ROOT at the vault`;
+  return `${root} has no git repository of its own (it may sit inside one); the vault's history is not optional — run \`enchiridion init ${root} --mode dedicated\` to make it one, or point $VAULT at the vault`;
 }
 
 test("commit requires a work tree", async () => {

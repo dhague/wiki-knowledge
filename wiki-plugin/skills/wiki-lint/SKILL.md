@@ -34,7 +34,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 ### 1. Resolve vault root
 
-The script resolves it ([the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)); when invoked with a vault-root argument, put it in `WIKI_ROOT` for the run so every call below resolves there. Verify the resolved root has a `wiki/` subdirectory, else stop and report "not a vault root."
+The script resolves it ([the rule](../wiki-conventions/reference/scripts.md#script-runtime-contract)); when invoked with a vault-root argument, put it in `VAULT` for the run so every call below resolves there. Verify the resolved root has a `wiki/` subdirectory, else stop and report "not a vault root."
 
 ### 2. Run mechanical checks
 
