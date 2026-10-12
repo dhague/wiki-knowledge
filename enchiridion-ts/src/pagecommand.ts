@@ -19,7 +19,7 @@ import {
   isListEdgeKey,
   type RefLookup,
 } from "./pageedge.js";
-import { emitDocument, emitRows, fail } from "./output.js";
+import { emitDocument, emitRows, fail, failBadInvocation } from "./output.js";
 
 /** Run an operation on one page, naming that page in any refusal — [Page]'s
  * YAML refusals carry no path of their own. */
@@ -106,13 +106,13 @@ function edgeSetValue(
   const normalize = edgeNormalizer(file);
   if (!isListEdgeKey(key)) {
     if (Array.isArray(value))
-      fail(`${key} holds a single link; pass one value`);
-    if (typeof value !== "string") fail(edgeRefusal(key, value));
+      failBadInvocation(`${key} holds a single link; pass one value`);
+    if (typeof value !== "string") failBadInvocation(edgeRefusal(key, value));
     return normalize(key, value);
   }
   const items = Array.isArray(value) ? value : [value];
   return items.map((item) => {
-    if (typeof item !== "string") fail(edgeRefusal(key, item));
+    if (typeof item !== "string") failBadInvocation(edgeRefusal(key, item));
     return normalize(key, item);
   });
 }
@@ -129,13 +129,17 @@ function stringListSetValue(key: string, value: unknown): string[] {
     try {
       parsed = JSON.parse(text);
     } catch {
-      fail(`${key} starts like a JSON list but does not parse: ${value}`);
+      failBadInvocation(
+        `${key} starts like a JSON list but does not parse: ${value}`,
+      );
     }
     return stringListSetValue(key, parsed);
   }
-  if (!Array.isArray(value)) fail(`${key} expects a JSON list of values`);
+  if (!Array.isArray(value))
+    failBadInvocation(`${key} expects a JSON list of values`);
   return value.map((item) => {
-    if (typeof item !== "string") fail(`${key} expects a JSON list of strings`);
+    if (typeof item !== "string")
+      failBadInvocation(`${key} expects a JSON list of strings`);
     return item;
   });
 }
@@ -207,12 +211,19 @@ export function registerPageCommands(program: Command): void {
           try {
             value = JSON.parse(raw);
           } catch {
-            fail(
+            failBadInvocation(
               `parsing ${key} as JSON: invalid JSON — drop --json to set the value as a literal string`,
             );
           }
         }
-        if (key === "source_date") value = canonicalSourceDate(value);
+        if (key === "source_date") {
+          try {
+            value = canonicalSourceDate(value);
+          } catch (err) {
+            // A non-date is the value argument at fault, not the file.
+            failBadInvocation((err as Error).message);
+          }
+        }
         if (isEdgeKey(key)) value = edgeSetValue(file, key, value);
         // The writer wraps a scalar; the CLI's job is the argument, so a
         // non-string is refused here.
@@ -239,18 +250,19 @@ export function registerPageCommands(program: Command): void {
       try {
         values = JSON.parse(raw);
       } catch {
-        fail(`merge expects a JSON list for ${key}`);
+        failBadInvocation(`merge expects a JSON list for ${key}`);
       }
       if (!Array.isArray(values)) {
-        fail(`merge expects a JSON list for ${key}`);
+        failBadInvocation(`merge expects a JSON list for ${key}`);
       }
       if (isEdgeKey(key) && !isListEdgeKey(key)) {
-        fail(`${key} holds a single link; use page set`);
+        failBadInvocation(`${key} holds a single link; use page set`);
       }
       if (isEdgeKey(key)) {
         const normalize = edgeNormalizer(file);
         values = values.map((item) => {
-          if (typeof item !== "string") fail(edgeRefusal(key, item));
+          if (typeof item !== "string")
+            failBadInvocation(edgeRefusal(key, item));
           return normalize(key, item);
         });
       }

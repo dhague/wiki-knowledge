@@ -10,20 +10,20 @@ Every failure an agent can reach names **(1) the offending entity** — the ref,
 
 A leaked host-runtime error, or a message that names no entity, is a defect in the message layer — not a cosmetic one — even when the refusal itself is correct.
 
-The bar is a property of the message text. Exit codes are unchanged, no new failure mode is introduced, and a wrapped error names the path the *agent* supplied, never an internal one.
+The bar is a property of the message text. No new failure mode is introduced, and a wrapped error names the path the *agent* supplied, never an internal one. Exit codes were left alone here because the bar is about what a message says; they were settled separately by [#674](https://github.com/dhague/wiki-knowledge/issues/674) and now carry the failure's class — 2 for a bad invocation, 1 for a bad environment ([ADR-0034](0034-exit-codes-carry-the-failure-class.md)) — without changing a word of the messages this ADR governs.
 
 ## Why
 
 - **The agent's fallback is reading the bundle.** With no usable message its next move is to read `scripts/enchiridion.cjs` — a build artifact ADR-0017 regenerates, and not a spec. A message that says what to do is what prevents that, and #662 is the complementary half rather than a substitute: a document the agent must read to interpret a line is one more thing that can drift.
 - **Remedy clauses are not free, so they are not universal.** Most validator problems — `plan.title is required`, `pages[0].kind must not be set for op=update` — already name the field and the rule, and the remedy is their mechanical inverse. Demanding a remedy on every string would be churn, and churn is what makes the next genuine gap invisible. The clause is spent where the fix is *not* derivable: which valid kind, which `op`, which command produces the snapshot pin, which lock file to remove.
 - **A wrong cause is worse than no cause.** The legacy kind-folder remedy is the clearest case: it named an entity and a next step, and the next step was wrong. So the bar applies to the *content* of each clause, not merely its presence.
-- **The message is the only channel that has to carry it.** Prose is the whole contract today, and the surface question — a stable code, or a `--json` error document — has no caller that needs it yet; it is split out to [#674](https://github.com/dhague/wiki-knowledge/issues/674).
+- **The message is the only channel that has to carry it.** Prose is the whole contract here, and the surface question — a stable code, or a `--json` error document — has no caller that needs it; [#674](https://github.com/dhague/wiki-knowledge/issues/674) settled that question against both, leaving the exit code as the only other machine channel ([ADR-0034](0034-exit-codes-carry-the-failure-class.md)).
 
 ## Considered options
 
 - **A strict three-part bar on every message.** Rejected: it converts ~200 mechanical restatements into diff noise and buries the handful that actually fail.
 - **Fix only the messages that name nothing at all.** Rejected: it leaves the messages whose cause is *wrong*, which is the more expensive failure — an agent follows the advice and creates `wiki/entitys/`.
-- **A stable leading error code, or a `--json` error document.** Deferred to [#674](https://github.com/dhague/wiki-knowledge/issues/674). It is a cross-cutting change to the output contract, and the distinction an agent most needs — bad invocation versus bad environment — is an exit-code change, which is out of scope here.
+- **A stable leading error code, or a `--json` error document.** Deferred to [#674](https://github.com/dhague/wiki-knowledge/issues/674): a cross-cutting change to the output contract, and the distinction an agent most needs — bad invocation versus bad environment — is an exit-code change, which was out of scope here. #674 rejected the machine-readable identity for the reason above and adopted the exit-code class instead ([ADR-0034](0034-exit-codes-carry-the-failure-class.md)).
 - **A command-name prefix on every failure** (`enchiridion check: …`). Rejected: the verb is usually already in the message, so the prefix duplicates rather than informs.
 - **Do nothing to the messages and document them all in the skill text.** Rejected: it makes the agent interpret a one-line refusal through a document, and the two drift apart.
 

@@ -10,6 +10,7 @@
 import path from "node:path";
 import { EdgeKeys, isSingleLinkEdgeKey } from "./pagerecord.js";
 import { composeLink, isVaultRelativeDest, iterLinks } from "./wikipage.js";
+import { fail, failBadInvocation } from "./output.js";
 
 /** The [EdgeKeys] that hold a list of links, not a single one. */
 const listEdgeKeys: string[] = EdgeKeys.filter(
@@ -85,8 +86,9 @@ export function composeEdgeLink(
 }
 
 /** The frontmatter link scalar for one CLI-supplied edge value: a whole link
- * returned unchanged, or a ref composed through [composeEdgeLink]. Throws when
- * value is neither. */
+ * returned unchanged, or a ref composed through [composeEdgeLink]. A value
+ * that is neither shape is the caller's invocation at fault; a ref that names
+ * no page is bad environment (ADR-0034). */
 export function edgeLink(
   key: string,
   value: string,
@@ -95,8 +97,8 @@ export function edgeLink(
 ): string {
   if (isWholeLink(value)) return value;
   const ref = path.posix.normalize(value);
-  if (!isVaultRef(value)) throw new Error(edgeRefusal(key, value));
+  if (!isVaultRef(value)) failBadInvocation(edgeRefusal(key, value));
   const found = lookup(ref);
-  if (!found.exists) throw new Error(edgeTargetMissing(key, value));
+  if (!found.exists) fail(edgeTargetMissing(key, value));
   return composeEdgeLink(key, ref, pageDir, found.title);
 }

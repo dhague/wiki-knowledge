@@ -15,7 +15,7 @@ import {
   type FixOptions,
 } from "./check.js";
 import { VaultRead } from "./vaultread.js";
-import { emitRows, fail } from "./output.js";
+import { emitRows, failBadInvocation } from "./output.js";
 import { resolveRoot } from "./vault.js";
 
 export function registerCheckFixCommands(program: Command): void {
@@ -65,7 +65,7 @@ export function registerCheckFixCommands(program: Command): void {
         }
         const fn = name ? CHECKS[name] : undefined;
         if (!fn) {
-          fail(
+          failBadInvocation(
             name
               ? `enchiridion check: unknown check "${name}"; known: ${checkNames}`
               : `enchiridion check: name a check or pass --all; known: ${checkNames}`,
@@ -99,17 +99,19 @@ export function registerCheckFixCommands(program: Command): void {
     .action(async (name: string, opts: FixOptions) => {
       const fn = FIXES[name];
       if (!fn) {
-        fail(`enchiridion fix: unknown fix "${name}"; known: ${fixNames}`);
+        failBadInvocation(
+          `enchiridion fix: unknown fix "${name}"; known: ${fixNames}`,
+        );
       }
       // Each flag belongs to one fix; on any other it is an error rather than a
       // silent no-op.
       if (opts.includeHeadings && name !== IncludeHeadingsFix) {
-        fail(
+        failBadInvocation(
           `enchiridion fix: --include-headings applies only to fix "${IncludeHeadingsFix}", not "${name}"`,
         );
       }
       if (opts.prune && name !== PruneFix) {
-        fail(
+        failBadInvocation(
           `enchiridion fix: --prune applies only to fix "${PruneFix}", not "${name}"`,
         );
       }

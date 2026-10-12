@@ -11,7 +11,13 @@ import { Command } from "commander";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import util from "node:util";
-import { failureMessage } from "./output.js";
+import {
+  ExitBadInvocation,
+  ExitSuccess,
+  exitCodeFor,
+  failureMessage,
+} from "./output.js";
+import { PluginVersion } from "./version.js";
 import { registerPageCommands } from "./pagecommand.js";
 import { registerSearchCommand } from "./searchcommand.js";
 import { registerIngestCommands } from "./ingestcommand.js";
@@ -36,6 +42,7 @@ export function buildProgram(): Command {
     .description(
       "Wiki-knowledge plugin script layer (TypeScript bundle — ADR-0017)",
     )
+    .version(PluginVersion, "-V, --version", "print the plugin version")
     .allowExcessArguments(true)
     .allowUnknownOption(true);
 
@@ -64,10 +71,10 @@ export function buildProgram(): Command {
   return program;
 }
 
-/** The root command owns no option but help, and allows unknown options so a
- * host-injected flag cannot break invocation. Commander then answers a stray
- * leading option by printing the whole usage with exit 1, naming nothing, so
- * the stray token is refused here instead. */
+/** The root command owns no option but help and version, and allows unknown
+ * options so a host-injected flag cannot break invocation. Commander then
+ * answers a stray leading option by printing the whole usage, naming nothing,
+ * so the stray token is refused here instead. */
 function rootOptionRefusal(argv: string[]): string | null {
   const first = argv[0];
   if (
@@ -76,6 +83,8 @@ function rootOptionRefusal(argv: string[]): string | null {
     first === "--" ||
     first === "-h" ||
     first === "--help" ||
+    first === "-V" ||
+    first === "--version" ||
     !first.startsWith("-")
   ) {
     return null;
@@ -86,6 +95,24 @@ function rootOptionRefusal(argv: string[]): string | null {
   );
 }
 
+/** Commander's own outcome as an exit code: help and version carry 0, and
+ * every parse refusal (unknown command or option, missing argument, an
+ * `InvalidArgumentError` from an option parser) is the caller's invocation at
+ * fault. Null when the throw did not come from commander. */
+function commanderExitCode(err: unknown): number | null {
+  if (
+    err === null ||
+    typeof err !== "object" ||
+    !("exitCode" in err) ||
+    typeof (err as { exitCode: unknown }).exitCode !== "number"
+  ) {
+    return null;
+  }
+  return (err as { exitCode: number }).exitCode === 0
+    ? ExitSuccess
+    : ExitBadInvocation;
+}
+
 /** Detect a direct CLI invocation across both execution shapes: the esbuild
  * CJS bundle (require.main === module) and the tsx/ESM source path
  * (import.meta.url vs argv[1]). */
@@ -94,6 +121,15 @@ function isMainModule(): boolean {
   const arg = process.argv[1];
   if (arg === undefined) return false;
   return import.meta.url === pathToFileURL(path.resolve(arg)).href;
+}
+
+/** Commander copies the exit override into a subcommand only when it is
+ * *created*, so setting it on the root after `buildProgram` would leave every
+ * subcommand's own parse refusal to call `process.exit(1)` — killing an
+ * in-process host and bypassing the exit-code contract. */
+function overrideEveryExit(program: Command): void {
+  program.exitOverride();
+  for (const cmd of program.commands) overrideEveryExit(cmd);
 }
 
 /** The in-process (plugin) entry. Captures stdout/stderr as data instead of
@@ -109,7 +145,8 @@ export async function run(argv: string[]): Promise<RunResult> {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const program = buildProgram();
-  program.exitOverride().configureOutput({
+  overrideEveryExit(program);
+  program.configureOutput({
     writeOut: (s: string) => stdout.push(s),
     writeErr: (s: string) => stderr.push(s),
   });
@@ -152,25 +189,34 @@ export async function run(argv: string[]): Promise<RunResult> {
     const stray = rootOptionRefusal(argv);
     if (stray !== null) {
       stderr.push(stray + "\n");
-      return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 1 };
+      return {
+        stdout: stdout.join(""),
+        stderr: stderr.join(""),
+        exitCode: ExitBadInvocation,
+      };
     }
 
     try {
       await program.parseAsync([process.execPath, "enchiridion", ...argv]);
     } catch (err) {
-      // CommanderError (help/version/exit) — its .exitCode is the outcome.
-      if (err && typeof err === "object" && "exitCode" in err) {
+      const commanderCode = commanderExitCode(err);
+      if (commanderCode !== null) {
         return {
           stdout: stdout.join(""),
           stderr: stderr.join(""),
-          exitCode: (err as { exitCode: number }).exitCode,
+          exitCode: commanderCode,
         };
       }
       // An action handler failed — `fail`, or an error commander rejected
       // parseAsync with rather than wrapping in a CommanderError. Render it as
-      // main() does: message on stderr, exit 1, as data rather than an exit.
+      // main() does: message on stderr, the class's exit code, as data rather
+      // than an exit.
       stderr.push(failureMessage(err));
-      return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 1 };
+      return {
+        stdout: stdout.join(""),
+        stderr: stderr.join(""),
+        exitCode: exitCodeFor(err),
+      };
     }
     // Read a leaked process.exitCode so it is reported rather than swallowed,
     // but never leave it set on the host process.
@@ -190,7 +236,7 @@ function main(): void {
   const stray = rootOptionRefusal(argv);
   if (stray !== null) {
     process.stderr.write(stray + "\n");
-    process.exitCode = 1;
+    process.exitCode = ExitBadInvocation;
     return;
   }
   const program = buildProgram();
@@ -201,11 +247,21 @@ function main(): void {
     program.help();
     return;
   }
-  // Render a failed command exactly as run() does: message on stderr, exit 1,
-  // no stack trace standing in for a diagnostic.
+  // Classify exactly as run() does. Without the override commander answers its
+  // own parse errors with process.exit(1), which would leave every one of them
+  // outside the exit-code contract.
+  overrideEveryExit(program);
+  // Render a failed command exactly as run() does: message on stderr, the
+  // class's exit code, no stack trace standing in for a diagnostic.
   void program.parseAsync(process.argv).catch((err: unknown) => {
+    const commanderCode = commanderExitCode(err);
+    if (commanderCode !== null) {
+      // Commander already wrote its message (help to stdout, errors to stderr).
+      process.exitCode = commanderCode;
+      return;
+    }
     process.stderr.write(failureMessage(err));
-    process.exitCode = 1;
+    process.exitCode = exitCodeFor(err);
   });
 }
 

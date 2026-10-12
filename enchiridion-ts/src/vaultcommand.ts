@@ -10,7 +10,7 @@ import { KindFolders, Kinds, path as placePath } from "./place.js";
 import { Vault, resolveRoot } from "./vault.js";
 import { readKindMeta } from "./kindmeta.js";
 import { init as initWiki, Modes } from "./initwiki.js";
-import { emitDocument, fail } from "./output.js";
+import { emitDocument, failBadInvocation } from "./output.js";
 import { KindDefinitionFields, KindFields } from "./contract.js";
 
 export function registerPlacementCommands(program: Command): void {
@@ -51,7 +51,17 @@ export function registerPlacementCommands(program: Command): void {
     )
     .action((kind: string, title: string) => {
       const root = resolveRoot();
-      const rel = placePath(kind, title, new Vault(root).discoveredKinds());
+      // Reading the vault's custom kinds is the world's job, so it stays
+      // outside the wrap: only [placePath]'s own refusal is the invocation's.
+      // A plan's kind and title are validated in `ingest.ts`, where the same
+      // refusal is bad environment instead.
+      const extraKindFolders = new Vault(root).discoveredKinds();
+      let rel: string;
+      try {
+        rel = placePath(kind, title, extraKindFolders);
+      } catch (err) {
+        failBadInvocation((err as Error).message);
+      }
       console.log(rel);
     });
 }
@@ -70,7 +80,7 @@ export function registerVaultCommand(program: Command): void {
       // The root's allowExcessArguments leaves an unrecognised word here as an
       // operand, which the action would otherwise ignore.
       if (cmd.args.length > 0) {
-        fail(
+        failBadInvocation(
           `unknown vault command "${cmd.args[0]}"; must be one of root, move, kinds`,
         );
       }

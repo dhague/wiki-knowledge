@@ -1,0 +1,49 @@
+# The exit code carries the failure class, and prose carries nothing else
+
+`enchiridion` is a script layer an *agent* drives ([ADR-0017](0017-bundled-typescript-on-installed-interpreter.md)), and its only machine channel is the exit code. Until now that channel carried one bit: 0 or not-0. Every failure was exit 1, whether the caller had mistyped a flag or the vault was in a state the command could not work with, so an agent could tell *that* something failed and never *what kind* of thing — it had to read the prose to know which way to turn. [#667](https://github.com/dhague/wiki-knowledge/issues/667) settled the message bar ([ADR-0032](0032-agent-facing-errors-name-what-failed.md)), explicitly left exit codes alone, and split the surface question out to [#674](https://github.com/dhague/wiki-knowledge/issues/674), which asked two things: whether a failure should carry a **machine-readable identity** (a stable leading code on the prose, or a `--json` error document), and whether the exit code should distinguish failure **kinds**. This answers both — no identity, yes a coarse class — and reverses ADR-0032's "exit codes are unchanged" claim, which is amended in place.
+
+## Decision
+
+The exit code carries exactly three values, and the distinction it adds is the one an agent acts on:
+
+| code | meaning | the test |
+|---|---|---|
+| `0` | success | — |
+| `2` | **bad invocation** | a caller who re-read `--help` would fix it |
+| `1` | **bad environment** | anything else — the fix is the vault, a file, or the world |
+
+**Classification follows the remedy, not the origin of the token.** A failure is bad invocation only when the fault is in the invocation the caller typed: an unknown subcommand, flag or value, a missing argument, a value outside its documented vocabulary or format, or a combination of flags the help forbids. A fault that merely *arrived* as an argument is still bad environment when the remedy is in the file or the vault — the separating case is a plan document that is malformed JSON, which is exit 1 because the caller named a file and the fault is inside it. The rule is a remedy rule, not a table: a new failure site is classified by applying it.
+
+Worked cases the rule must produce:
+
+- **Exit 2** — an unknown subcommand or stray root option; a missing required argument; `place nonsense X` or a title whose slug is empty; an out-of-range enum value (`--volatility`, `--date-field`, `--kind`, `init --mode`); an unparseable numeric or date flag (`--limit abc`, `--since 2024-1-1`); a malformed `--raw` FTS5 expression; an inline JSON argument that does not parse (`page set --json`, `page merge`); flags misapplied to the wrong mode or fix (`discover --exclude` outside single-page mode, `fix --prune` on another fix); a stray positional argument.
+- **Exit 1** — a malformed or invalid plan or manifest document, including every validator problem; a named page, file or ref that does not exist; `page get` on a key the page does not carry, which the script catalogue documents as a probe; `discover --ref` naming a page that is not committed; a refusal from the vault, git, the commit gate, the search index, or the export writer; session capture; an `init` target that is already a vault.
+
+**The class is asserted by the code, and never inferred from message text.** Messages are not parsed, not prefixed, and not otherwise changed, so a message reworded in a future audit cannot silently reclassify a failure. `output.ts` owns one error type — `BadInvocationError`, thrown by `failBadInvocation` — and a `fail()`, a library `Error`, or anything else is bad environment. The opt-in list is therefore the short one, and a new failure site that nobody classifies defaults to the safer class. Commander's own parse refusals are mapped where its exit code is read: help, `--version`, and the bare-invocation usage dump carry `0`, and every other commander outcome is the caller's invocation at fault.
+
+**`RunResult.exitCode` inherits the contract unchanged.** The in-process `run()` reports the same class as the process entry point for the same failure, and leaves the host's own `process.exitCode` clean. That required one fix rather than a decision: commander copies the exit callback into a subcommand only when the subcommand is *created*, so overriding the root after `buildProgram` left every subcommand's parse refusal to call `process.exit(1)` — killing an in-process host and putting the process entry point outside the contract. Both entry points now override the whole command tree.
+
+## Why
+
+- **The remedy rule is the agent's actual decision.** "Is my command line wrong, or is the world wrong?" is the first thing an agent must settle, and it determines a different next action: re-read the help, or go look at the file. No finer distinction than that one has a distinct remedy.
+- **Prose cannot be branched on, and this repo's premise is that it need not be.** ADR-0032's bar is that the agent *reads the remedy and acts*. A stable code would be read off the very line the agent is already reading, and would buy nothing the prose does not already give it, while freezing the codes as a public API for no consumer. A `--json` error document would cost a code at every failure site, commander's own errors wrapped, the in-process result contract reshaped, and a new output surface — and the audit found no shipped script, hook, workflow, or skill that branches on *which* failure it hit. The one genuine failure-kind branch in the shipped prose — `wiki-ask`'s synthesis save, which prescribes a different action for a title collision than for a generic plan failure — discriminates on message text today and works.
+- **Exit 2 is a positive assertion, and that is the cost accepted here.** Today's uniform exit 1 asserts nothing, so a misclassified failure is harmless — the agent falls back on the message. Exit 2 asserts "your invocation is wrong", so a vault problem misfiled as 2 sends the agent to re-read help for a problem `--help` cannot fix. That is why the rule is stated as a testable sentence, why the ambiguous cases are decided by "is the remedy in the invocation or in the world", and why the classification is exercised per class by exact exit code in the tests rather than spot-checked as "non-zero".
+- **The exit code is the only channel that survives every host.** Both shims are transparent — the POSIX shim `exec`s the runtime and the Windows shim exits with `%ERRORLEVEL%` — so a class carried by the exit status reaches the agent on Claude Code, Joule Desktop and OpenCode alike, with no per-host adapter.
+
+## Considered options
+
+- **A stable leading code on every failure message** (`E_PLAN_KIND: …`). Rejected: it pays off only when a caller must branch without reading the message, which is the opposite of this surface's premise, and it freezes the codes as an API for no consumer.
+- **A `--json` error document** (`{"error": {"code", "message"}}`). Rejected on cost and on absent demand as above; `--json` stays a success-path dialect selector.
+- **Three or more failure classes.** Rejected: no third class has a distinct remedy. "Nothing found", "absent", and "not yet committed" are all the world failing to satisfy a well-formed invocation, so they are exit 1 — the absent-key probe included, which must keep behaving as the documented probe.
+- **Classify by the origin of the token** — any fault that arrived as an argument is exit 2. Rejected: it would make a malformed plan document exit 2 and send the agent to `--help` for a file it must repair, which is exactly the misclassification the rule exists to prevent.
+- **Keep one failure code and let the agent parse the message.** Rejected: it is the status quo, and it makes the class a property of prose that this ADR has just promised not to change.
+- **Change the exit code only where a consumer exists today.** Rejected: none does, so nothing would change; the class exists for the agent hitting the failure now, which is the same consumer ADR-0032 serves.
+
+## Consequences
+
+- `output.ts` owns `BadInvocationError`, `failBadInvocation`, and `exitCodeFor`; the command modules classify their own argument refusals. A library module decides the class itself only when it can tell the two faults apart *and* the value is unambiguously the caller's — `pageedge` (a value that is neither a link nor a ref), `initwiki` (an unknown mode), `exportconfig` (a blank title), and the `place` command's wrap of `place.path`. Where it cannot know who supplied the value it exposes a type instead: `searchindex` throws `FtsQueryError`, and `search` maps it to exit 2 because its query text is the caller's, while `check` and `discover` build the same expression from page content and leave it exit 1.
+- A module that wraps a classified failure must preserve its class rather than re-throw with `fail()`; `export`'s `--save-title` branch is the first such wrapper.
+- ADR-0032 is amended in place — both sentences asserting that exit codes are unchanged — and the script catalogue's runtime contract states the scheme beside the stderr/message contract, so the agent-facing shape of a failure is one paragraph rather than two documents.
+- `--version` became a real root option in the same change, because the contract names the version path as an exit-0 one and it had never been wired: it prints the version `build.mjs` inlines from `wiki-plugin/.claude-plugin/plugin.json`, which stays the single source of truth for it. Previously `--version` was refused as a stray root option.
+- Nothing here is frozen. Prose is not an API, the class is derivable from one rule, and the whole scheme can be re-decided cheaply if a consumer that genuinely needs failure codes ever appears.
+- Out of scope, and unchanged: the wording of any message, which failures exist, and any machine-readable token or error dialect. The message bar remains ADR-0032's.
