@@ -52,6 +52,7 @@ One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row na
 - **Tags shape** (`tags-shape`) — every page's `tags` is a YAML list of plain tags: non-empty strings with no whitespace, comma or quote. A scalar, or an entry holding a delimited list collapsed into one string, indexes as a single junk tag every tag filter misses while the file still shows a value.
 - **Self-referential edge** (`self-referential-edge`) — no frontmatter edge key points at the page carrying it. A self-edge says nothing and inflates the graph retrieval follows; `ingest` refuses to write one, so a finding means a hand edit or a page predating that refusal.
 - **Edge shape** (`edge-shape`) — no edge key lists one target twice, and every edge label is its target's title rather than its filename. A duplicate inflates the inbound-link count that picks a `concept-fragmentation` survivor, so the miscount can feed a Consolidation a page it should not have proposed; a filename label degrades the readable graph an agent walks. `severity` is `HIGH` for a duplicate or a label ending `.md`, `LOW` for a label that differs from the target's title. `raw_source` is exempt — its label is the artifact's filename by design.
+- **Source-to-source edge** (`source-to-source-edge`) — no `source` edge joins two pages of kind `source`. The chain of evidence runs page → `sources/` stub → `raw/` artifact, so a stub citing a stub ends the walk at another stub rather than at the evidence. One-directional, not a blanket ban: a `synthesis`/`concept` → `source` edge is the chain working, and a `source` page's `source` edge to a non-`source` page stays legal. Kind is read from the folder, so a custom kind-folder declaring `source` counts; a target no page resolves to has no kind to judge and is skipped. `ingest` refuses one, so a finding means a hand edit or a page predating that refusal.
 - **Stale synthesis** (`stale-synthesis`) — synthesis pages whose last commit is > 30 days old.
 - **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field.
 - **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead.
@@ -198,6 +199,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `tags-shape` | report only |
 | `self-referential-edge` | report only |
 | `edge-shape` | report only |
+| `source-to-source-edge` | report only |
 | `stale-synthesis` | report only |
 | `missing-volatility-source-date` | report only |
 | `unresolved-supersession` | report only |

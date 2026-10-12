@@ -1866,6 +1866,70 @@ test("ingest: a misspelled action is refused before any commit", async () => {
   assert.equal(log.length, 1, "a refused plan must not commit");
 });
 
+test("ingest: a source-to-source edge is refused, and nothing is written", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
+  );
+  fs.writeFileSync(path.join(root, ".wiki-root"), "");
+  fs.mkdirSync(path.join(root, "wiki", "sources"), { recursive: true });
+  const alpha = "---\ntitle: Alpha\n---\nbody\n";
+  const beta = "---\ntitle: Beta\n---\nbody\n";
+  fs.writeFileSync(path.join(root, "wiki", "sources", "alpha.md"), alpha);
+  fs.writeFileSync(path.join(root, "wiki", "sources", "beta.md"), beta);
+  await git.init({ fs, dir: root });
+  for (const filepath of ["wiki/sources/alpha.md", "wiki/sources/beta.md"]) {
+    await git.add({ fs, dir: root, filepath });
+  }
+  const author = {
+    name: "test",
+    email: "t@e.com",
+    timestamp: 1,
+    timezoneOffset: 0,
+  };
+  await git.commit({
+    fs,
+    dir: root,
+    message: "initial",
+    author,
+    committer: author,
+  });
+
+  const planPath = path.join(root, "plan.json");
+  fs.writeFileSync(
+    planPath,
+    JSON.stringify({
+      title: "Stub chain",
+      action: "ingest",
+      pages: [
+        {
+          op: "update",
+          page_ref: "wiki/sources/beta.md",
+          body: "rewritten\n",
+          edges: { source: ["wiki/sources/alpha.md"] },
+        },
+      ],
+    }),
+  );
+
+  const { status, stderr } = runEnv(["ingest", "--plan", planPath], {
+    cwd: root,
+    env: { WIKI_ROOT: root, CLAUDE_CODE_SESSION_ID: "" },
+  });
+  assert.notEqual(status, 0);
+  assert.match(
+    stderr,
+    /pages\[0\]\.edges\.source .*wiki\/sources\/beta\.md .*wiki\/sources\/alpha\.md/,
+    stderr,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki", "sources", "beta.md"), "utf8"),
+    beta,
+    "a refused plan must write nothing",
+  );
+  const log = await git.log({ fs, dir: root });
+  assert.equal(log.length, 1, "a refused plan must not commit");
+});
+
 test("ingest: --dry-run prints the describe, writes nothing", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "enchiridion-cli-ingest-"),
@@ -2771,6 +2835,82 @@ test("check self-referential-edge: a self-edge on disk is reported", () => {
   assert.equal(
     stdout.trim(),
     "wiki/concepts/foo.md: related points at wiki/concepts/foo.md itself",
+  );
+});
+
+/** Two stubs, the second citing the first through `source:`. */
+const STUB_CHAIN_PAGES = {
+  "wiki/sources/alpha.md":
+    '---\ntitle: Alpha\nraw_source: "[notes.md](../../raw/notes.md)"\n---\nbody\n',
+  "wiki/sources/beta.md":
+    '---\ntitle: Beta\nraw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[Alpha](alpha.md)"\n---\nbody\n',
+};
+
+test("check source-to-source-edge: a stub chain is reported in text and JSON", async () => {
+  const root = await buildFragmentedVault(STUB_CHAIN_PAGES);
+  const text = runEnv(["check", "source-to-source-edge"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(text.status, 0, text.stderr);
+  assert.equal(
+    text.stdout.trim(),
+    "wiki/sources/beta.md: source points at wiki/sources/alpha.md, another source page — a stub citing a stub inverts the chain of evidence",
+  );
+
+  const json = runEnv(["check", "source-to-source-edge", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(json.status, 0, json.stderr);
+  const rows = json.stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].pageRef, "wiki/sources/beta.md");
+  assert.ok(!("severity" in rows[0]), JSON.stringify(rows[0]));
+});
+
+test("check --all: the stub chain is tagged with its slug", async () => {
+  const root = await buildFragmentedVault(STUB_CHAIN_PAGES);
+  const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  const row = rows.find((r) => r.check === "source-to-source-edge");
+  assert.ok(row, `no source-to-source-edge row in ${stdout}`);
+  assert.equal(row.pageRef, "wiki/sources/beta.md");
+});
+
+test("check --all: a source page's self-edge is one row, from self-referential-edge", async () => {
+  const root = await buildFragmentedVault({
+    "wiki/sources/alpha.md":
+      '---\ntitle: Alpha\nraw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[Alpha](alpha.md)"\n---\nbody\n',
+  });
+  const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const flagged = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l))
+    .filter((r) => r.pageRef === "wiki/sources/alpha.md");
+  assert.deepEqual(
+    flagged.filter((r) => r.check === "source-to-source-edge"),
+    [],
+    "a self-edge belongs to self-referential-edge alone",
+  );
+  assert.equal(
+    flagged.filter((r) => r.check === "self-referential-edge").length,
+    1,
   );
 });
 

@@ -59,7 +59,8 @@
  * [FrontmatterKeys] and no edge key on that map, no edge pointing at its own
  * page) then semantic (an update's pageRef exists, a create's target does not
  * yet, every edge target resolves to a page on disk or created by this same
- * plan, and [chainofevidence.check] holds). The chain check is a courtesy;
+ * plan, no `source` edge joins two `source` pages, and
+ * [chainofevidence.check] holds). The chain check is a courtesy;
  * [commit.commit] re-runs it as the hard gate.
  *
  * Two frontmatter fields are this module's to guarantee, not the agent's to
@@ -99,6 +100,7 @@ import {
   KindFolders,
 } from "./place.js";
 import { Vault } from "./vault.js";
+import { kindForFolder } from "./kindmeta.js";
 import { check as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
@@ -711,13 +713,27 @@ export class Resolved {
         );
       }
 
-      for (const target of pageLinkTargets(page, this.plan)) {
+      const targets = pageLinkTargets(page, this.plan);
+      for (const target of targets) {
         if (prospective.has(target.ref)) continue;
         // `exists` is file-only, so a directory target fails here rather than
         // composing a link to something unopenable.
         if (!v.exists(target.ref)) {
           problems.push(
             `${prefix}: ${target.key} target ${JSON.stringify(target.ref)} does not resolve to a real page — create it in this plan, fix the ref, or drop the ${target.key} entry`,
+          );
+        }
+      }
+
+      // A source -> source edge ends the chain of evidence at a second stub.
+      // Both ends' kinds are vault facts (ADR-0020), hence the semantic pass.
+      if (rp.pageRef !== "") {
+        for (const target of targets) {
+          if (target.key !== "source" || target.ref === rp.pageRef) continue;
+          if (kindAt(rp.pageRef, this.pages, v) !== "source") continue;
+          if (kindAt(target.ref, this.pages, v) !== "source") continue;
+          problems.push(
+            `${prefix}.${target.at} gives ${rp.pageRef} a source edge to ${target.ref}, another source page — the chain of evidence runs page -> wiki/${KindFolders["source"]}/ stub -> raw/ artifact, so a stub may not cite a stub`,
           );
         }
       }
@@ -1351,6 +1367,18 @@ interface LinkTarget {
   at: string;
   key: string;
   ref: string;
+}
+
+/** The kind of the page at ref: a plan create's own kind field (its folder is
+ * not on disk yet), else the vault's folder -> kind ladder (ADR-0020). Null when
+ * no page resolves there — a dangling target has no kind to judge. */
+function kindAt(ref: string, pages: ResolvedPage[], v: Vault): string | null {
+  for (const rp of pages) {
+    if (rp.pageRef === ref && rp.plan.op === OpCreate) return rp.plan.kind;
+  }
+  if (!v.exists(ref)) return null;
+  const folder = path.posix.basename(path.posix.dirname(ref));
+  return kindForFolder(v.root, folder);
 }
 
 /** The targets this page's plan asks to link to — plain refs, so a normalize
