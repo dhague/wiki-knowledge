@@ -89,6 +89,9 @@ punctuation are normalised is `LOW`. A target absent from the vault, or carrying
 no title, is not judged here — a link that reaches nothing is its own matter.
 `raw_source` is exempt: its label is the artifact's filename by design.
 
+A link resolving to the page carrying it belongs to `self-referential-edge`, so
+neither rule here reads one — the two checks never report the same edge.
+
 Report only: which label a duplicate should keep, and the title a link meant to
 name, are both judgment.
 

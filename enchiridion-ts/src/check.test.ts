@@ -1057,6 +1057,25 @@ test("edge-shape: the same target under two different keys is clean", async () =
   assert.deepEqual(await edgeShape(read(root)), []);
 });
 
+test("edge-shape: one key with two repeated targets is still one finding", async () => {
+  const root = writeVault({
+    "wiki/entities/water.md":
+      fmBlock(
+        "source:\n" +
+          '  - "[Eton Wick](../sources/waterways.md)"\n' +
+          '  - "[Eton Wick](../sources/waterways.md)"\n' +
+          '  - "[Thames Water](../sources/thames.md)"\n' +
+          '  - "[Thames Water](../sources/thames.md)"\n',
+      ) + "Body.\n",
+    "wiki/sources/waterways.md": "---\ntitle: Eton Wick\n---\nBody.\n",
+    "wiki/sources/thames.md": "---\ntitle: Thames Water\n---\nBody.\n",
+  });
+  const findings = await edgeShape(read(root));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.match(findings[0].detail, /waterways\.md 2 times/);
+  assert.match(findings[0].detail, /thames\.md 2 times/);
+});
+
 test("edge-shape: a filename label is HIGH", async () => {
   const root = writeVault({
     "wiki/concepts/alpha.md":
@@ -1129,11 +1148,15 @@ test("edge-shape: raw_source is excluded from the label rules", async () => {
 });
 
 test("edge-shape: a self-referential edge belongs to self-referential-edge", async () => {
+  // The label ends `.md` and the target repeats, so only the self-edge skip
+  // keeps this page out of edge-shape — a title-matching label proves nothing.
   const root = writeVault({
     "wiki/concepts/foo.md":
-      fmBlock('related:\n  - "[Foo](foo.md)"\n') + "Body.\n",
+      fmBlock('related:\n  - "[foo.md](foo.md)"\n  - "[foo.md](./foo.md)"\n') +
+      "Body.\n",
   });
   assert.deepEqual(await edgeShape(read(root)), []);
+  assert.equal((await selfReferentialEdge(read(root))).length, 2);
 });
 
 // ---------------------------------------------------------------------------

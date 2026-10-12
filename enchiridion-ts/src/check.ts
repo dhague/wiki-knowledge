@@ -192,6 +192,12 @@ export async function tagsShape(read: VaultRead): Promise<Finding[]> {
   return findings;
 }
 
+/** The one identity rule for a self-edge, shared so `edge-shape` skips exactly
+ * what `self-referential-edge` owns. */
+function isSelfEdge(ref: string, target: string): boolean {
+  return path.posix.normalize(target) === ref;
+}
+
 /** selfReferentialEdge — an edge key pointing at the page that carries it. It
  * is semantically empty and inflates the graph retrieval follows; the target a
  * move repoints is the page itself. */
@@ -201,7 +207,7 @@ export async function selfReferentialEdge(read: VaultRead): Promise<Finding[]> {
   for (const [ref, record] of Object.entries(pages)) {
     for (const edge of record.edges) {
       for (const target of edgeTargets(edge)) {
-        if (path.posix.normalize(target) === ref) {
+        if (isSelfEdge(ref, target)) {
           findings.push({
             pageRef: ref,
             detail: `${edge.key} points at ${ref} itself`,
@@ -226,23 +232,24 @@ export async function edgeShape(read: VaultRead): Promise<Finding[]> {
   return findings;
 }
 
-/** One finding per target a single key lists more than once — the target's
+/** One finding per (page, key) whose links repeat a target — the target's
  * resolved reference is the identity, so a fragment or a `./` spelling does not
- * make a second relationship. */
+ * make a second relationship. A self-edge is left to `self-referential-edge`. */
 function duplicateEdgeTargets(ref: string, record: PageRecord): Finding[] {
   const findings: Finding[] = [];
   for (const edge of record.edges) {
     const counts = new Map<string, number>();
-    for (const target of edgeTargets(edge))
+    for (const target of edgeTargets(edge)) {
+      if (isSelfEdge(ref, target)) continue;
       counts.set(target, (counts.get(target) ?? 0) + 1);
-    for (const [target, count] of counts) {
-      if (count < 2) continue;
-      findings.push({
-        pageRef: ref,
-        severity: "HIGH",
-        detail: `${edge.key} lists ${target} ${count} times`,
-      });
     }
+    const repeated = [...counts].filter(([, count]) => count > 1);
+    if (repeated.length === 0) continue;
+    findings.push({
+      pageRef: ref,
+      severity: "HIGH",
+      detail: `${edge.key} lists ${repeated.map(([target, count]) => `${target} ${count} times`).join(", ")}`,
+    });
   }
   return findings;
 }
@@ -255,8 +262,8 @@ function labelKey(text: string): string {
 
 /** One finding per edge label that reads as a filename or departs from the
  * target's title. `raw_source`'s label *is* the artifact's filename by design,
- * and a target absent from the vault or carrying no title is not this check's
- * to judge. */
+ * a target absent from the vault or carrying no title is not this check's to
+ * judge, and a self-edge belongs to `self-referential-edge`. */
 function edgeLabelShape(
   ref: string,
   record: PageRecord,
@@ -266,6 +273,7 @@ function edgeLabelShape(
   for (const edge of record.edges) {
     if (edge.key === "raw_source") continue;
     for (const link of edge.links) {
+      if (isSelfEdge(ref, link.target)) continue;
       const target = pages[link.target];
       if (target === undefined || target.title === "") continue;
       if (link.label.endsWith(".md")) {
