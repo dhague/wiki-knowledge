@@ -9,6 +9,7 @@ The rules an ingestion follows when it authors a page: the chain of evidence tha
 - **No exemption for distillation.** When raw file's value lands in `concepts/`/`entities/` pages, stub still created — just a **thin stub**: `title`, one-paragraph `summary`, required `raw_source` link. Its job is to be the addressable link target.
 - **`source` back-edge is not judgment.** Unlike `refines`/`contradicts`/`example-of`/`related` (weighed per page), this edge is mandatory on every page of the pass — each page of a multi-chunk split, and a page **updated in place** as much as newly created.
 - **Enforced, not merely conventional.** `enchiridion ingest` validates both halves before writing: plan naming a `raw` artifact must place a `sources/` page whose `raw_source` resolves to it, and every other page in that plan must carry a `source` edge to that stub. Plan that doesn't is rejected.
+- **A stub is never evidence.** Stub's own provenance is its `raw_source`, never a sibling stub: `source` edge joining two `sources/` pages inverts the walk above, so it ends at a second stub instead of an artifact. `ingest` refuses it, `check` reports it (`source-to-source-edge`); `source` from a stub to a non-stub page stays legal.
 - **Raw file ingestion declines outright** — spam, exact duplicate, junk — produces no pages; rule doesn't apply.
 
 ## Verify against the source

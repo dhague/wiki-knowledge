@@ -294,6 +294,33 @@ function edgeLabelShape(
   return findings;
 }
 
+/** sourceToSourceEdge — a `source:` edge between two pages of kind `source`.
+ * The chain of evidence runs page → `sources/` stub → `raw/` artifact, so a stub
+ * citing a stub inverts it: the walk ends at another stub rather than at the
+ * evidence. Kind is the folder → kind ladder both ends resolve through
+ * (ADR-0020), so a custom folder declaring `source` reads as one; a target no
+ * page resolves to has no kind to judge and is skipped. */
+export async function sourceToSourceEdge(read: VaultRead): Promise<Finding[]> {
+  const pages = read.records();
+  const findings: Finding[] = [];
+  for (const [ref, record] of Object.entries(pages)) {
+    if (record.kind !== "source") continue;
+    for (const edge of record.edges) {
+      if (edge.key !== "source") continue;
+      for (const target of edgeTargets(edge)) {
+        // A self-edge is `self-referential-edge`'s row.
+        if (isSelfEdge(ref, target)) continue;
+        if (pages[target]?.kind !== "source") continue;
+        findings.push({
+          pageRef: ref,
+          detail: `${edge.key} points at ${target}, another source page — a stub citing a stub inverts the chain of evidence`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
 /** Age at which a synthesis page reads as stale, in days. */
 export const StaleSynthesisDays = 30;
 
@@ -1196,6 +1223,7 @@ export const CHECKS: Record<string, CheckFn> = {
   "tags-shape": tagsShape,
   "self-referential-edge": selfReferentialEdge,
   "edge-shape": edgeShape,
+  "source-to-source-edge": sourceToSourceEdge,
   "stale-synthesis": staleSynthesis,
   "missing-volatility-source-date": missingVolatilitySourceDate,
   "unresolved-supersession": unresolvedSupersession,

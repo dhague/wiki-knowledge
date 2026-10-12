@@ -95,6 +95,28 @@ neither rule here reads one — the two checks never report the same edge.
 Report only: which label a duplicate should keep, and the title a link meant to
 name, are both judgment.
 
+## `source-to-source-edge`
+
+A `source` edge whose both ends are pages of kind `source` — a stub citing a
+stub. The chain of evidence runs page → `sources/` stub → `raw/` artifact; a
+stub's own provenance is its `raw_source`, so pointing its `source` key at a
+second stub inverts the direction and leaves the walk ending at another stub,
+with neither page the evidence.
+
+The rule is one-directional, not a ban on `source` for a `source` page:
+`synthesis` and `concept` pages exist to carry `source` edges at their inputs,
+and a stub's `source` edge to a non-`source` page stays legal. Kind is read from
+the folder through the ladder every read path shares, so a custom kind-folder
+declaring `source` behaves exactly as `wiki/sources/`. A `source` edge whose
+target resolves to no page is skipped: no kind is knowable for it, and the ingest
+path already refuses a dangling target as it refuses this edge.
+
+A `source` page's edge to itself is `self-referential-edge`'s row, never this
+one's.
+
+Report only: whether the stub should cite a real page, or lose the line, is
+judgment a rewrite cannot supply.
+
 ## `stale-synthesis`
 
 Synthesis pages whose last commit is more than 30 days old. Any churn in their

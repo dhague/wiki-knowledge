@@ -17,6 +17,7 @@ import {
   tagsShape,
   selfReferentialEdge,
   edgeShape,
+  sourceToSourceEdge,
   unresolvedSupersession,
   contradictionCallouts,
   orphans,
@@ -1160,10 +1161,118 @@ test("edge-shape: a self-referential edge belongs to self-referential-edge", asy
 });
 
 // ---------------------------------------------------------------------------
+// sourceToSourceEdge
+// ---------------------------------------------------------------------------
+
+/** Two stubs, the second citing the first through `source:` — the stub chain
+ * that inverts the evidence direction. */
+const stubCitingStub = (): Record<string, string> => ({
+  "wiki/sources/alpha.md":
+    fmBlock('raw_source: "[notes.md](../../raw/notes.md)"\n') + "Body.\n",
+  "wiki/sources/beta.md":
+    fmBlock(
+      'raw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[alpha](alpha.md)"\n',
+    ) + "Body.\n",
+});
+
+test("source-to-source-edge: a stub citing a stub is reported", async () => {
+  const findings = await sourceToSourceEdge(read(writeVault(stubCitingStub())));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/sources/beta.md");
+  assert.match(findings[0].detail, /wiki\/sources\/alpha\.md/);
+  assert.match(findings[0].detail, /chain of evidence/);
+});
+
+test("source-to-source-edge: one finding per offending target", async () => {
+  const pages = stubCitingStub();
+  pages["wiki/sources/beta.md"] =
+    fmBlock(
+      'raw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[alpha](alpha.md)"\n  - "[gamma](gamma.md)"\n',
+    ) + "Body.\n";
+  pages["wiki/sources/gamma.md"] =
+    fmBlock('raw_source: "[notes.md](../../raw/notes.md)"\n') + "Body.\n";
+  const findings = await sourceToSourceEdge(read(writeVault(pages)));
+  assert.equal(findings.length, 2);
+  for (const finding of findings)
+    assert.equal(finding.pageRef, "wiki/sources/beta.md");
+});
+
+test("source-to-source-edge: a synthesis or concept page citing a stub is the chain working", async () => {
+  const root = writeVault({
+    "wiki/sources/alpha.md":
+      fmBlock('raw_source: "[notes.md](../../raw/notes.md)"\n') + "Body.\n",
+    "wiki/synthesis/roundup.md":
+      fmBlock('source:\n  - "[alpha](../sources/alpha.md)"\n') + "Body.\n",
+    "wiki/concepts/water.md":
+      fmBlock('source:\n  - "[alpha](../sources/alpha.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await sourceToSourceEdge(read(root)), []);
+});
+
+test("source-to-source-edge: a stub citing a non-stub is legal", async () => {
+  const pages = stubCitingStub();
+  pages["wiki/concepts/water.md"] = fmBlock() + "Body.\n";
+  pages["wiki/sources/beta.md"] =
+    fmBlock(
+      'raw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[water](../concepts/water.md)"\n',
+    ) + "Body.\n";
+  assert.deepEqual(await sourceToSourceEdge(read(writeVault(pages))), []);
+});
+
+test("source-to-source-edge: a target with no page is skipped, not guessed", async () => {
+  const pages = stubCitingStub();
+  pages["wiki/sources/beta.md"] =
+    fmBlock(
+      'raw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[gone](gone.md)"\n',
+    ) + "Body.\n";
+  assert.deepEqual(await sourceToSourceEdge(read(writeVault(pages))), []);
+});
+
+test("source-to-source-edge: raw_source is a different key and out of scope", async () => {
+  const root = writeVault({
+    "wiki/sources/alpha.md": fmBlock() + "Body.\n",
+    "wiki/sources/beta.md":
+      fmBlock('raw_source: "[alpha](alpha.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await sourceToSourceEdge(read(root)), []);
+});
+
+test("source-to-source-edge: a custom folder declaring source reads as one", async () => {
+  const root = writeVault({
+    "wiki/artifacts/KIND.md": "---\nkind: source\n---\n",
+    "wiki/sources/alpha.md": fmBlock() + "Body.\n",
+    "wiki/artifacts/beta.md":
+      fmBlock('source:\n  - "[alpha](../sources/alpha.md)"\n') + "Body.\n",
+  });
+  const findings = await sourceToSourceEdge(read(root));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/artifacts/beta.md");
+});
+
+test("source-to-source-edge: a custom folder declaring another kind is no source page", async () => {
+  const root = writeVault({
+    "wiki/artifacts/KIND.md": "---\nkind: artifact\n---\n",
+    "wiki/sources/alpha.md": fmBlock() + "Body.\n",
+    "wiki/artifacts/beta.md":
+      fmBlock('source:\n  - "[alpha](../sources/alpha.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await sourceToSourceEdge(read(root)), []);
+});
+
+test("source-to-source-edge: a stub's source edge to itself belongs to self-referential-edge", async () => {
+  const root = writeVault({
+    "wiki/sources/alpha.md":
+      fmBlock('source:\n  - "[alpha](alpha.md)"\n') + "Body.\n",
+  });
+  assert.deepEqual(await sourceToSourceEdge(read(root)), []);
+  assert.equal((await selfReferentialEdge(read(root))).length, 1);
+});
+
+// ---------------------------------------------------------------------------
 // CHECKS registry
 // ---------------------------------------------------------------------------
 
-test("CHECKS registry contains all fifteen check names", () => {
+test("CHECKS registry contains all sixteen check names", () => {
   const expected = [
     "kind-folder-conformance",
     "ingestion-source-integrity",
@@ -1171,6 +1280,7 @@ test("CHECKS registry contains all fifteen check names", () => {
     "tags-shape",
     "self-referential-edge",
     "edge-shape",
+    "source-to-source-edge",
     "stale-synthesis",
     "missing-volatility-source-date",
     "unresolved-supersession",

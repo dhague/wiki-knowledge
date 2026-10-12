@@ -1053,6 +1053,180 @@ test("shape validation accepts an edge to a different page", () => {
   assert.equal(got, "");
 });
 
+// --- source-to-source edges ------------------------------------------------
+
+test("validation rejects a source page's source edge to another source page", () => {
+  const root = newVault({
+    "wiki/sources/alpha.md": "---\ntitle: Alpha\n---\nb\n",
+    "wiki/sources/beta.md": "---\ntitle: Beta\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/sources/beta.md","body":"b",
+     "edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("pages[0].edges.source"), got);
+  assert.ok(got.includes("wiki/sources/alpha.md"), got);
+  assert.ok(got.includes("wiki/sources/beta.md"), got);
+});
+
+// A create's kind comes from its own field, an existing target's from its
+// folder — the mixed state, and both refs must appear in the refusal.
+test("validation rejects a new stub citing an existing stub", () => {
+  const root = newVault({
+    "wiki/sources/alpha.md": "---\ntitle: Alpha\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"Beta","kind":"source","body":"b",
+     "frontmatter":{"volatility":"stable"},
+     "edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("pages[0].edges.source"), got);
+  assert.ok(got.includes("wiki/sources/alpha.md"), got);
+  assert.ok(got.includes("wiki/sources/beta.md"), got);
+});
+
+// Both ends written by the plan: the carrier's kind field and the target's
+// are known before either file exists.
+test("validation rejects a plan creating two stubs where one cites the other", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"Alpha","kind":"source","body":"b",
+     "frontmatter":{"volatility":"stable"}},
+    {"op":"create","title":"Beta","kind":"source","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    newVault({}),
+  );
+  assert.ok(got.includes("pages[1].edges.source"), got);
+  assert.ok(got.includes("wiki/sources/alpha.md"), got);
+});
+
+test("validation accepts a synthesis page whose source edges point at the stubs", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"Alpha","kind":"source","body":"b",
+     "frontmatter":{"volatility":"stable"}},
+    {"op":"create","title":"Roundup","kind":"synthesis","body":"b",
+     "frontmatter":{"volatility":"stable"},"edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    newVault({}),
+  );
+  assert.equal(got, "");
+});
+
+test("validation accepts two stubs neither of which cites the other", () => {
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"create","title":"Alpha","kind":"source","body":"b",
+     "frontmatter":{"volatility":"stable"}},
+    {"op":"create","title":"Beta","kind":"source","body":"b",
+     "frontmatter":{"volatility":"stable"}}]}`,
+    newVault({}),
+  );
+  assert.equal(got, "");
+});
+
+// The rule is directional: only a source -> source edge is malformed, so a
+// stub may cite a concept, and raw_source is a different key entirely.
+test("validation accepts a stub's source edge to a non-source page", () => {
+  const root = newVault({
+    "wiki/sources/beta.md": "---\ntitle: Beta\n---\nb\n",
+    "wiki/concepts/water.md": "---\ntitle: Water\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/sources/beta.md","body":"b",
+     "edges":{"source":["wiki/concepts/water.md"]}}]}`,
+    root,
+  );
+  assert.equal(got, "");
+});
+
+test("validation skips a source edge whose target is no page", () => {
+  const root = newVault({
+    "wiki/sources/beta.md": "---\ntitle: Beta\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/sources/beta.md","body":"b",
+     "edges":{"source":["wiki/sources/gone.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("does not resolve to a real page"), got);
+  assert.ok(!got.includes("another source page"), got);
+});
+
+test("validation reads a custom folder declaring source as a source page", () => {
+  const root = newVault({
+    "wiki/artifacts/KIND.md": "---\nkind: source\n---\n",
+    "wiki/sources/alpha.md": "---\ntitle: Alpha\n---\nb\n",
+    "wiki/artifacts/beta.md": "---\ntitle: Beta\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/artifacts/beta.md","body":"b",
+     "edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("another source page"), got);
+});
+
+test("validation accepts a custom folder declaring another kind", () => {
+  const root = newVault({
+    "wiki/artifacts/KIND.md": "---\nkind: artifact\n---\n",
+    "wiki/sources/alpha.md": "---\ntitle: Alpha\n---\nb\n",
+    "wiki/artifacts/beta.md": "---\ntitle: Beta\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/artifacts/beta.md","body":"b",
+     "edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    root,
+  );
+  assert.equal(got, "");
+});
+
+// A self-edge is the self-reference refusal's row; one entry must not earn two.
+test("a stub's source edge to itself is refused once, by the self-edge rule", () => {
+  const root = newVault({
+    "wiki/sources/beta.md": "---\ntitle: Beta\n---\nb\n",
+  });
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/sources/beta.md","body":"b",
+     "edges":{"source":["wiki/sources/beta.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("points at wiki/sources/beta.md itself"), got);
+  assert.ok(!got.includes("another source page"), got);
+});
+
+// A refused plan writes nothing: only the pre-write validation keeps the
+// malformed edge off the stub's page.
+test("a refused source-to-source plan writes no page", () => {
+  const root = newVault({
+    "wiki/sources/alpha.md": "---\ntitle: Alpha\n---\nb\n",
+    "wiki/sources/beta.md": "---\ntitle: Beta\n---\nb\n",
+  });
+  const before = fs.readFileSync(
+    path.join(root, "wiki", "sources", "beta.md"),
+    "utf8",
+  );
+  const got = validationErrors(
+    `{"title":"T","pages":[
+    {"op":"update","page_ref":"wiki/sources/beta.md","body":"rewritten\\n",
+     "edges":{"source":["wiki/sources/alpha.md"]}}]}`,
+    root,
+  );
+  assert.ok(got.includes("another source page"), got);
+  assert.equal(
+    fs.readFileSync(path.join(root, "wiki", "sources", "beta.md"), "utf8"),
+    before,
+  );
+});
+
 // An edge key the schema does not name is the same silent write-through a
 // frontmatter typo is: nothing downstream reads the key.
 test("shape validation rejects an edge key outside the vocabulary", () => {
