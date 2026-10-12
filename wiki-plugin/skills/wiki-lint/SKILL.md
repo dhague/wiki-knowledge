@@ -44,13 +44,14 @@ Run every check in one call:
 "$RUNTIME" "$ENCHIRIDION" check --all --json
 ```
 
-One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row naming its own check — and nothing at all when clean (no `[]` to unwrap). `concept-fragmentation` adds a structured `cluster` key (members, basis, similarity, suggested survivor) to each row it raises.
+One JSON Lines row per finding — `{"check", "pageRef", "detail"}`, each row naming its own check, plus a `severity` key (`HIGH`/`LOW`) on `edge-shape` rows only — and nothing at all when clean (no `[]` to unwrap). `concept-fragmentation` adds a structured `cluster` key (members, basis, similarity, suggested survivor) to each row it raises.
 
 - **Kind-folder conformance** (`kind-folder-conformance`) — every `.md` under `wiki/` (bar `KIND.md` and `_index.md`) sits directly under a valid kind-folder — canonical four or a custom folder the vault already carries. Pages at the `wiki/` root or nested below a kind-folder are violations; the repair is `enchiridion vault move`.
 - **Ingestion source integrity** (`ingestion-source-integrity`) — every `wiki/sources/*.md` carries `raw_source:`.
 - **Frontmatter link format** (`frontmatter-link-format`) — every frontmatter edge value is a quoted markdown link with an encoded destination. A value that is no markdown link at all must be re-set with `page set`, or `page merge` with a JSON list — a fix cannot invent a label.
 - **Tags shape** (`tags-shape`) — every page's `tags` is a YAML list of plain tags: non-empty strings with no whitespace, comma or quote. A scalar, or an entry holding a delimited list collapsed into one string, indexes as a single junk tag every tag filter misses while the file still shows a value.
 - **Self-referential edge** (`self-referential-edge`) — no frontmatter edge key points at the page carrying it. A self-edge says nothing and inflates the graph retrieval follows; `ingest` refuses to write one, so a finding means a hand edit or a page predating that refusal.
+- **Edge shape** (`edge-shape`) — no edge key lists one target twice, and every edge label is its target's title rather than its filename. A duplicate inflates the inbound-link count that picks a `concept-fragmentation` survivor, so the miscount can feed a Consolidation a page it should not have proposed; a filename label degrades the readable graph an agent walks. `severity` is `HIGH` for a duplicate or a label ending `.md`, `LOW` for a label that differs from the target's title. `raw_source` is exempt — its label is the artifact's filename by design.
 - **Stale synthesis** (`stale-synthesis`) — synthesis pages whose last commit is > 30 days old.
 - **Missing volatility / source_date** (`missing-volatility-source-date`) — pages missing either field.
 - **Unresolved supersession** (`unresolved-supersession`) — a `contradicts:` edge with no `supersedes:` edge and no active `> [!warning] Contradiction` callout; the callout present makes it a live contradiction, which the next check reports instead.
@@ -179,9 +180,9 @@ After auto-fixes and confirms, emit the final report:
 The `Evidence:` line is the implicit-concept evidence block, printed under its proposal ([`reference/implicit-concepts.md`](reference/implicit-concepts.md)). When a sweep left eligible pages unread — a non-zero `remaining`, or `budget.exhausted` — say how many, rather than implying the run covered the vault.
 
 Priority ordering in the report:
-1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter, a malformed Consolidation-exclusion registry.
+1. **HIGH** — contradictions, kind-folder non-conformance, missing `raw_source` on source pages, frontmatter link format issues, tags shape, split links, duplicate frontmatter, a malformed Consolidation-exclusion registry, a duplicate edge target and a filename edge label.
 2. **MEDIUM** — orphans, concept fragmentation, under-typed edges, over-typed and stale edges, stale synthesis, missing `volatility`/`source_date`.
-3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession.
+3. **LOW** — summary quality, implicit concepts, missing cross-references, data gaps, stale claims, unresolved supersession, an edge label differing from its target's title.
 
 If no findings remain after fixes, report "Vault is clean."
 
@@ -196,6 +197,7 @@ Mechanical checks are named by their `enchiridion check <name>` slug; the judgme
 | `frontmatter-link-format` | auto-fix (quoting/encoding) / report only (non-link) |
 | `tags-shape` | report only |
 | `self-referential-edge` | report only |
+| `edge-shape` | report only |
 | `stale-synthesis` | report only |
 | `missing-volatility-source-date` | report only |
 | `unresolved-supersession` | report only |

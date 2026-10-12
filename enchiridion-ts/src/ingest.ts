@@ -106,6 +106,7 @@ import { isPageRef } from "./pagepredicate.js";
 import {
   EdgeKeys,
   Volatilities,
+  edgeTargets,
   newPageRecord,
   isSingleLinkEdgeKey,
   type PageRecord,
@@ -846,7 +847,7 @@ export class Resolved {
     const consolidated = new Set(c.absorbed.map((a) => a.pageRef));
     const haveTargets = new Set(
       have.edges.flatMap((edge) =>
-        edge.targets.map((ref) => path.posix.normalize(ref)),
+        edgeTargets(edge).map((ref) => path.posix.normalize(ref)),
       ),
     );
     const wantTags = new Set<string>();
@@ -889,7 +890,7 @@ export class Resolved {
       }
       const record = absorbed.frontmatter.record;
       for (const edge of record.edges) {
-        for (const raw of edge.targets) {
+        for (const raw of edgeTargets(edge)) {
           const ref = path.posix.normalize(raw);
           if (consolidated.has(ref) || ref === c.survivorRef) continue;
           if (!haveTargets.has(ref)) {

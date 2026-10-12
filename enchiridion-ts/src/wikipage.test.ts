@@ -29,7 +29,7 @@ import {
 import type { LinkMatch } from "./wikipage.js";
 // The reader that finds frontmatter links through the YAML parser rather than
 // by scanning raw text — the second oracle.
-import { newPageRecord } from "./pagerecord.js";
+import { edgeTargets, newPageRecord } from "./pagerecord.js";
 
 // ---------------------------------------------------------------------------
 // splitFrontmatter
@@ -1195,7 +1195,7 @@ function frontmatterEdges(
   if (!underKindFolder(ref)) return null;
   const edges: Record<string, string[]> = {};
   for (const edge of newPageRecord(ref, text).edges) {
-    edges[edge.key] = edge.targets;
+    edges[edge.key] = edgeTargets(edge);
   }
   return edges;
 }

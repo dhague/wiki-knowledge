@@ -13,6 +13,7 @@ import path from "node:path";
 import { Vault } from "./vault.js";
 import type { PageWithText } from "./vault.js";
 import { VaultGit } from "./vaultgit.js";
+import { edgeTargets } from "./pagerecord.js";
 import {
   Filename,
   compile,
@@ -109,7 +110,7 @@ export function backPointersByRaw(
   for (const [pageRef, page] of Object.entries(pages)) {
     for (const edge of page.record.edges) {
       if (edge.key !== "raw_source") continue;
-      for (const target of edge.targets) {
+      for (const target of edgeTargets(edge)) {
         (out[target.toLowerCase()] ??= []).push(pageRef);
       }
     }

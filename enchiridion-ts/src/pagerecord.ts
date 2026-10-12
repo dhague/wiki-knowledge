@@ -10,7 +10,7 @@
 
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
-import { linkDest, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
+import { iterLinks, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
 import { resolveKind } from "./kindmeta.js";
 import { parseSourceDate } from "./sourcedate.js";
 
@@ -37,10 +37,22 @@ export function isSingleLinkEdgeKey(key: string): boolean {
   return singleLinkKeys[key] === true;
 }
 
-/** One frontmatter edge key with its resolved, vault-relative targets. */
+/** One frontmatter edge key with its decoded links. */
 export interface Edge {
   key: string;
-  targets: string[];
+  links: EdgeLink[];
+}
+
+/** One edge link as written: the markdown label, and the vault-relative page
+ * reference its destination resolves to. */
+export interface EdgeLink {
+  label: string;
+  target: string;
+}
+
+/** The vault-relative targets of one edge, in document order. */
+export function edgeTargets(edge: Edge): string[] {
+  return edge.links.map((link) => link.target);
 }
 
 /** One page's frontmatter, decoded to plain values. */
@@ -59,48 +71,51 @@ export interface PageRecord {
 /** Returns the targets of this record's `supersedes` edge, or null. */
 export function supersedes(r: PageRecord): string[] | null {
   for (const e of r.edges) {
-    if (e.key === "supersedes") return e.targets;
+    if (e.key === "supersedes") return edgeTargets(e);
   }
   return null;
 }
 
-/** Decode one edge key's value into vault-relative targets, collecting every
- * refusal rather than raising on the first. Absence is not malformation: a
- * missing, null or empty value is simply no edge. */
+/** Decode one edge key's value into its links, collecting every refusal rather
+ * than raising on the first. Absence is not malformation: a missing, null or
+ * empty value is simply no edge. */
 function decodeEdge(
   key: string,
   raw: unknown,
   pageDir: string,
-): { targets: string[]; errors: string[] } {
+): { links: EdgeLink[]; errors: string[] } {
   const errors: string[] = [];
   let values: unknown[];
   if (isSingleLinkEdgeKey(key)) {
-    if (typeof raw !== "string" || raw === "") return { targets: [], errors };
+    if (typeof raw !== "string" || raw === "") return { links: [], errors };
     values = [raw];
   } else {
-    if (!Array.isArray(raw) || raw.length === 0) return { targets: [], errors };
+    if (!Array.isArray(raw) || raw.length === 0) return { links: [], errors };
     values = raw;
   }
 
-  const targets: string[] = [];
+  const links: EdgeLink[] = [];
   for (const value of values) {
     if (typeof value !== "string") {
       errors.push(`${key} entry is not a markdown link: ${String(value)}`);
       continue;
     }
-    const { dest, ok } = linkDest(value);
-    if (!ok) {
+    const [link] = iterLinks(value);
+    if (link === undefined) {
       errors.push(`${key}: not a markdown link: "${value}"`);
       continue;
     }
-    targets.push(resolveLinkDest(dest, pageDir));
+    links.push({
+      label: link.label,
+      target: resolveLinkDest(link.decodedPath, pageDir),
+    });
   }
-  return { targets, errors };
+  return { links, errors };
 }
 
-/** Decode every [EdgeKeys] value: the vault-relative targets, plus a refusal
- * message per value the schema rejects. One enumeration feeds both
- * [newPageRecord]'s strict raise and [malformedEdges]'s report. */
+/** Decode every [EdgeKeys] value into one Edge per key, plus a refusal message
+ * per value the schema rejects. One enumeration feeds both [newPageRecord]'s
+ * strict raise and [malformedEdges]'s report. */
 function decodeEdges(
   data: Record<string, unknown>,
   pageDir: string,
@@ -110,9 +125,9 @@ function decodeEdges(
   for (const key of EdgeKeys) {
     const raw = data[key];
     if (raw === undefined || raw === null) continue;
-    const { targets, errors } = decodeEdge(key, raw, pageDir);
+    const { links, errors } = decodeEdge(key, raw, pageDir);
     malformed.push(...errors);
-    if (targets.length > 0) edges.push({ key, targets });
+    if (links.length > 0) edges.push({ key, links });
   }
   return { edges, malformed };
 }

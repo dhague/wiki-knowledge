@@ -2458,6 +2458,53 @@ test("check: neither a name nor --all errors non-zero", () => {
   assert.match(stderr, /--all/);
 });
 
+/** Two edge-shape violations on one page: `related` lists one target twice
+ * under a filename label. */
+const EDGE_SHAPE_PAGES = {
+  "wiki/concepts/alpha.md":
+    '---\ntitle: Alpha\nrelated:\n  - "[beta.md](beta.md)"\n  - "[beta.md](beta.md)"\n---\nbody\n',
+  "wiki/concepts/beta.md": "---\ntitle: Beta Wad\n---\nbody\n",
+};
+
+test("check edge-shape --json: rows carry a severity tier", async () => {
+  const root = await buildFragmentedVault(EDGE_SHAPE_PAGES);
+  const { status, stdout, stderr } = runEnv(["check", "edge-shape", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  const duplicate = rows.find((r) => /lists .* 2 times/.test(r.detail));
+  assert.ok(duplicate, `no duplicate row in ${stdout}`);
+  assert.equal(duplicate.severity, "HIGH");
+  const label = rows.find((r) => /filename/.test(r.detail));
+  assert.ok(label, `no filename-label row in ${stdout}`);
+  assert.equal(label.severity, "HIGH");
+});
+
+test("check --all --json: only edge-shape's rows carry severity", async () => {
+  const root = await buildFragmentedVault(EDGE_SHAPE_PAGES);
+  const { status, stdout, stderr } = runEnv(["check", "--all", "--json"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.equal(status, 0, stderr);
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  const shape = rows.filter((r) => r.check === "edge-shape");
+  assert.ok(shape.length > 0, `no edge-shape row in ${stdout}`);
+  for (const row of shape) assert.ok(row.severity, JSON.stringify(row));
+  const others = rows.filter((r) => r.check !== "edge-shape");
+  assert.ok(others.length > 0, `no other check's row in ${stdout}`);
+  for (const row of others)
+    assert.ok(!("severity" in row), JSON.stringify(row));
+});
+
 test("check self-referential-edge: a self-edge on disk is reported", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-selfedge-"));
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
@@ -2580,6 +2627,16 @@ test("fix: an unknown name errors non-zero, naming the known ones", () => {
   });
   assert.notEqual(status, 0);
   assert.match(stderr, /unknown fix "nope"/);
+});
+
+test("fix edge-shape: edge-shape is report only, so the fix registry refuses it", () => {
+  const root = buildLintableVault();
+  const { status, stderr } = runEnv(["fix", "edge-shape"], {
+    cwd: root,
+    env: { WIKI_ROOT: root },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /unknown fix "edge-shape"/);
 });
 
 test("watch --dequeue: removes one queue entry and exits", () => {
