@@ -713,7 +713,8 @@ export class Resolved {
         );
       }
 
-      for (const target of pageLinkTargets(page, this.plan)) {
+      const targets = pageLinkTargets(page, this.plan);
+      for (const target of targets) {
         if (prospective.has(target.ref)) continue;
         // `exists` is file-only, so a directory target fails here rather than
         // composing a link to something unopenable.
@@ -724,12 +725,10 @@ export class Resolved {
         }
       }
 
-      // A `source` edge between two `source` pages inverts the evidence
-      // direction: page -> sources/ stub -> raw/ artifact would end at a second
-      // stub. Both ends' kinds are vault facts (ADR-0020), so this sits in the
-      // semantic pass; a self-edge is the self-reference refusal's row.
+      // A source -> source edge ends the chain of evidence at a second stub.
+      // Both ends' kinds are vault facts (ADR-0020), hence the semantic pass.
       if (rp.pageRef !== "") {
-        for (const target of pageLinkTargets(page, this.plan)) {
+        for (const target of targets) {
           if (target.key !== "source" || target.ref === rp.pageRef) continue;
           if (kindAt(rp.pageRef, this.pages, v) !== "source") continue;
           if (kindAt(target.ref, this.pages, v) !== "source") continue;
@@ -1370,11 +1369,9 @@ interface LinkTarget {
   ref: string;
 }
 
-/** The kind of the page at ref as this plan's validation sees it: a plan
- * create's own kind field (its folder is not on disk yet), else the vault's
- * folder -> kind ladder (ADR-0020), so a custom folder declaring `source` reads
- * as one. Null when no page resolves there — a dangling target has no kind to
- * judge, and the target-existence rule reports it instead. */
+/** The kind of the page at ref: a plan create's own kind field (its folder is
+ * not on disk yet), else the vault's folder -> kind ladder (ADR-0020). Null when
+ * no page resolves there — a dangling target has no kind to judge. */
 function kindAt(ref: string, pages: ResolvedPage[], v: Vault): string | null {
   for (const rp of pages) {
     if (rp.pageRef === ref && rp.plan.op === OpCreate) return rp.plan.kind;

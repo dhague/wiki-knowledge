@@ -1197,6 +1197,17 @@ test("source-to-source-edge: one finding per offending target", async () => {
     assert.equal(finding.pageRef, "wiki/sources/beta.md");
 });
 
+test("source-to-source-edge: one target named in two spellings reports once", async () => {
+  const pages = stubCitingStub();
+  pages["wiki/sources/beta.md"] =
+    fmBlock(
+      'raw_source: "[notes.md](../../raw/notes.md)"\nsource:\n  - "[alpha](alpha.md)"\n  - "[alpha](../sources/./alpha.md)"\n',
+    ) + "Body.\n";
+  const findings = await sourceToSourceEdge(read(writeVault(pages)));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].pageRef, "wiki/sources/beta.md");
+});
+
 test("source-to-source-edge: a synthesis or concept page citing a stub is the chain working", async () => {
   const root = writeVault({
     "wiki/sources/alpha.md":

@@ -294,12 +294,10 @@ function edgeLabelShape(
   return findings;
 }
 
-/** sourceToSourceEdge — a `source:` edge between two pages of kind `source`.
- * The chain of evidence runs page → `sources/` stub → `raw/` artifact, so a stub
- * citing a stub inverts it: the walk ends at another stub rather than at the
- * evidence. Kind is the folder → kind ladder both ends resolve through
- * (ADR-0020), so a custom folder declaring `source` reads as one; a target no
- * page resolves to has no kind to judge and is skipped. */
+/** sourceToSourceEdge — a `source:` edge whose both ends are kind `source`: a
+ * stub citing a stub inverts the chain of evidence (page → `sources/` stub →
+ * `raw/` artifact). Kind is the folder → kind ladder (ADR-0020); a target no
+ * page resolves to has no kind, so it is skipped rather than guessed. */
 export async function sourceToSourceEdge(read: VaultRead): Promise<Finding[]> {
   const pages = read.records();
   const findings: Finding[] = [];
@@ -307,9 +305,13 @@ export async function sourceToSourceEdge(read: VaultRead): Promise<Finding[]> {
     if (record.kind !== "source") continue;
     for (const edge of record.edges) {
       if (edge.key !== "source") continue;
+      // One finding per offending target: two spellings of one ref are one
+      // target, whose repetition is `edge-shape`'s finding.
+      const reported = new Set<string>();
       for (const target of edgeTargets(edge)) {
         // A self-edge is `self-referential-edge`'s row.
-        if (isSelfEdge(ref, target)) continue;
+        if (isSelfEdge(ref, target) || reported.has(target)) continue;
+        reported.add(target);
         if (pages[target]?.kind !== "source") continue;
         findings.push({
           pageRef: ref,

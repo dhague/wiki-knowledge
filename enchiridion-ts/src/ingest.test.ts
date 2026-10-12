@@ -1105,13 +1105,14 @@ test("validation rejects a plan creating two stubs where one cites the other", (
 });
 
 test("validation accepts a synthesis page whose source edges point at the stubs", () => {
+  const root = newVault({ "raw/doc.md": "raw\n" });
   const got = validationErrors(
-    `{"title":"T","pages":[
+    `{"title":"T","raw":"raw/doc.md","pages":[
     {"op":"create","title":"Alpha","kind":"source","body":"b",
-     "frontmatter":{"volatility":"stable"}},
+     "frontmatter":{"volatility":"stable","raw_source":true}},
     {"op":"create","title":"Roundup","kind":"synthesis","body":"b",
      "frontmatter":{"volatility":"stable"},"edges":{"source":["wiki/sources/alpha.md"]}}]}`,
-    newVault({}),
+    root,
   );
   assert.equal(got, "");
 });

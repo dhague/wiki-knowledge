@@ -97,11 +97,11 @@ name, are both judgment.
 
 ## `source-to-source-edge`
 
-A `source` edge whose both ends are pages of kind `source` — a stub citing a
+A `source` edge with a page of kind `source` at each end — a stub citing a
 stub. The chain of evidence runs page → `sources/` stub → `raw/` artifact; a
 stub's own provenance is its `raw_source`, so pointing its `source` key at a
 second stub inverts the direction and leaves the walk ending at another stub,
-with neither page the evidence.
+neither page the evidence.
 
 The rule is one-directional, not a ban on `source` for a `source` page:
 `synthesis` and `concept` pages exist to carry `source` edges at their inputs,
