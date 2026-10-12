@@ -454,7 +454,8 @@ test("renderAggregatePages: front page uses fallback ranking when no starters su
   );
 });
 
-test("renderAggregatePages: supplied starters with non-exported pageRef are silently skipped", () => {
+// The render layer drops such a ref; the CLI is what warns (see droppedStarters).
+test("renderAggregatePages: a supplied starter the export does not carry is dropped from the block", () => {
   const meta = buildExportMeta(wikiPages);
   const opts = {
     starters: [

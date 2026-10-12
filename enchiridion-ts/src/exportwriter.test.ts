@@ -629,7 +629,23 @@ test("runExport: the title resolution is the same in both modes", async () => {
   );
 });
 
-test("runExport: an oversized single file is still written, and warns", async (t) => {
+/** Run `fn` with console.error captured, returning the lines written. Bun's
+ *  node:test shim has no `mock`, so the swap is by hand. */
+async function warningsFrom(fn: () => Promise<void>): Promise<string[]> {
+  const warnings: string[] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  try {
+    await fn();
+  } finally {
+    console.error = originalError;
+  }
+  return warnings;
+}
+
+test("runExport: an oversized single file is still written, and warns", async () => {
   const root = tmpDir();
   await setupVault(root);
   // One page whose rendered form clears the warning threshold.
@@ -640,13 +656,10 @@ test("runExport: an oversized single file is still written, and warns", async (t
   );
   await commitAll(root, "add huge page");
 
-  const warnings: string[] = [];
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  });
-
   const outFile = path.join(root, "wiki.html");
-  await runExport(root, { out: outFile, allowDirty: true, singleFile: true });
+  const warnings = await warningsFrom(() =>
+    runExport(root, { out: outFile, allowDirty: true, singleFile: true }),
+  );
 
   const bytes = fs.statSync(outFile).size;
   assert.ok(bytes > 5 * 1024 * 1024, `fixture should be oversized (${bytes})`);
@@ -654,20 +667,17 @@ test("runExport: an oversized single file is still written, and warns", async (t
   assert.match(warnings[0], /multi-page/i, "the warning suggests multi-page");
 });
 
-test("runExport: a comfortably-sized single file writes no warning", async (t) => {
+test("runExport: a comfortably-sized single file writes no warning", async () => {
   const root = tmpDir();
   await setupVault(root);
 
-  const warnings: string[] = [];
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  });
-
-  await runExport(root, {
-    out: path.join(root, "wiki.html"),
-    allowDirty: true,
-    singleFile: true,
-  });
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "wiki.html"),
+      allowDirty: true,
+      singleFile: true,
+    }),
+  );
   assert.deepEqual(warnings, [], "a small export should say nothing");
 });
 
@@ -896,51 +906,26 @@ test("runExport: a malformed config still degrades to the generated front page",
 test("runExport: --starters beside a start page warns and still writes the export", async () => {
   const root = tmpDir();
   await setupVaultWithHome(root);
-  // Swapped by hand: Bun's node:test shim has no `mock`, and this must pass on
-  // both runtimes.
-  const warnings: string[] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  };
-  try {
-    const outDir = path.join(root, "web");
-    await runExport(root, {
+  const outDir = path.join(root, "web");
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
       out: outDir,
       allowDirty: true,
       startPage: START_PAGE_REF,
       starters: [{ pageRef: "wiki/concepts/alpha-concept.md" }],
-    });
+    }),
+  );
 
-    assert.equal(warnings.length, 1, "exactly one warning");
-    assert.match(warnings[0], /--starters/);
-    assert.match(warnings[0], /start page/);
-    const idx = readOut(outDir, "index.html");
-    assert.ok(idx.includes("<h1>Home</h1>"), "the export was written anyway");
-  } finally {
-    console.error = originalError;
-  }
+  assert.equal(warnings.length, 1, "exactly one warning");
+  assert.match(warnings[0], /--starters/);
+  assert.match(warnings[0], /start page/);
+  const idx = readOut(outDir, "index.html");
+  assert.ok(idx.includes("<h1>Home</h1>"), "the export was written anyway");
 });
 
 // ---------------------------------------------------------------------------
 // runExport — a --starters ref the export does not carry
 // ---------------------------------------------------------------------------
-
-/** Run `fn` with console.error captured, returning the lines written. Bun's
- *  node:test shim has no `mock`, so the swap is by hand. */
-async function warningsFrom(fn: () => Promise<void>): Promise<string[]> {
-  const warnings: string[] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  };
-  try {
-    await fn();
-  } finally {
-    console.error = originalError;
-  }
-  return warnings;
-}
 
 /** The front page's get-started block — the one list `--starters` governs. */
 function getStartedBlock(html: string): string {
