@@ -4,7 +4,7 @@ The runtime rules for calling the script layer, and every `enchiridion` subcomma
 
 ## Script runtime contract
 
-**The vault root — the one place this rule is stated; every other skill points here.** The script resolves it itself: `$VAULT` when set and non-empty, else the nearest ancestor of the working directory carrying a `wiki/` or `.wiki-root` marker, else the working directory.
+**The vault root — the one place this rule is stated; every other skill points here.** The script resolves it itself: **`enchiridion` uses `$VAULT` as the vault location** when set and non-empty, else the nearest ancestor of the working directory carrying a `wiki/` or `.wiki-root` marker, else the working directory.
 
 One exception: `page` resolves no root for a plain value — an edge value's vault-relative ref is composed against the vault the file sits in, so the file's own location wins and `$VAULT` is not consulted.
 
