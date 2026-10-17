@@ -19,13 +19,8 @@ import {
   Page,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
-import {
-  edgeTargets,
-  loadRecords,
-  malformedEdges,
-  malformedTags,
-} from "./pagerecord.js";
-import type { PageRecord } from "./pagerecord.js";
+import { edgeTargets, malformedEdges, malformedTags } from "./pagerecord.js";
+import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";
 import { KindFolders } from "./place.js";
 import {
   memberSetKey,
@@ -81,6 +76,10 @@ export type TaggedFinding = Finding & { check: string };
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** A check run reports on every page it can parse: one malformed edge costs
+ * that edge, not the page or the run. */
+const TOLERANT: LoadRecordsOptions = { skipMalformedEdges: true };
+
 /** The sources kind-folder and the relative route from it into `raw/` (both
  * fixed by the plugin, ADR-0008). */
 const SOURCES_DIR = `wiki/${KindFolders["source"]}`;
@@ -120,7 +119,7 @@ export async function kindFolderConformance(
 export async function ingestionSourceIntegrity(
   read: VaultRead,
 ): Promise<Finding[]> {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -202,7 +201,7 @@ function isSelfEdge(ref: string, target: string): boolean {
  * is semantically empty and inflates the graph retrieval follows; the target a
  * move repoints is the page itself. */
 export async function selfReferentialEdge(read: VaultRead): Promise<Finding[]> {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     for (const edge of record.edges) {
@@ -223,7 +222,7 @@ export async function selfReferentialEdge(read: VaultRead): Promise<Finding[]> {
  * destination repeated within one edge key, and a label that is not the
  * target's title. */
 export async function edgeShape(read: VaultRead): Promise<Finding[]> {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     findings.push(...duplicateEdgeTargets(ref, record));
@@ -299,7 +298,7 @@ function edgeLabelShape(
  * `raw/` artifact). Kind is the folder → kind ladder (ADR-0020); a target no
  * page resolves to has no kind, so it is skipped rather than guessed. */
 export async function sourceToSourceEdge(read: VaultRead): Promise<Finding[]> {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -329,7 +328,7 @@ export const StaleSynthesisDays = 30;
 /** staleSynthesis — synthesis pages whose last git commit is older than
  * [StaleSynthesisDays]. */
 export async function staleSynthesis(read: VaultRead): Promise<Finding[]> {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const vaultGit = new VaultGit(read.root);
   const findings: Finding[] = [];
   const cutoffMs = Date.now() - StaleSynthesisDays * 24 * 60 * 60 * 1000;
@@ -353,7 +352,7 @@ export async function staleSynthesis(read: VaultRead): Promise<Finding[]> {
 export async function missingVolatilitySourceDate(
   read: VaultRead,
 ): Promise<Finding[]> {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (!record.volatility)
@@ -369,7 +368,7 @@ export async function missingVolatilitySourceDate(
 export async function unresolvedSupersession(
   read: VaultRead,
 ): Promise<Finding[]> {
-  const pagesWithText = read.pagesWithText();
+  const pagesWithText = read.pagesWithText(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, { record, text }] of Object.entries(pagesWithText)) {
     const hasContradicts = record.edges.some(
@@ -395,7 +394,7 @@ export async function unresolvedSupersession(
 export async function contradictionCallouts(
   read: VaultRead,
 ): Promise<Finding[]> {
-  const pagesWithText = read.pagesWithText();
+  const pagesWithText = read.pagesWithText(TOLERANT);
   const findings: Finding[] = [];
   for (const [ref, { text }] of Object.entries(pagesWithText)) {
     const { body } = splitFrontmatter(text);
@@ -407,7 +406,7 @@ export async function contradictionCallouts(
 
 /** orphans — pages with zero inbound links from other wiki pages (body or frontmatter). */
 export async function orphans(read: VaultRead): Promise<Finding[]> {
-  const pagesWithText = read.pagesWithText();
+  const pagesWithText = read.pagesWithText(TOLERANT);
   const allRefs = new Set(Object.keys(pagesWithText));
   const inbound = new Map<string, number>();
   for (const ref of allRefs) inbound.set(ref, 0);
@@ -962,9 +961,7 @@ export async function conceptFragmentation(
     let conflicts: Set<string> | null = null;
     const conflictEdges = (): Set<string> =>
       (conflicts ??= conflictingPairs(
-        loadRecords(Object.fromEntries(text), undefined, {
-          skipMalformedEdges: true,
-        }),
+        read.recordsFor(Object.fromEntries(text), TOLERANT),
       ));
 
     const findings: Finding[] = [];
@@ -1526,10 +1523,11 @@ export async function fixMissingCrossReferences(
   root: string,
   opts: FixOptions = {},
 ): Promise<string[]> {
+  const read = new VaultRead(root);
   const vault = new Vault(root);
   const pages: Record<string, CrossReferencePage> = {};
   for (const [ref, { record, text }] of Object.entries(
-    vault.pagesWithText({ skipMalformedEdges: true }),
+    read.pagesWithText(TOLERANT),
   )) {
     pages[ref] = { title: record.title, text };
   }
