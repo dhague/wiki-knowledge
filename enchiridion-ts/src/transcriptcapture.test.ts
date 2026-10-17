@@ -310,8 +310,10 @@ test("findTranscriptPath throws when CLAUDE_CODE_SESSION_ID is unset", () => {
 
 test("findTranscriptPath throws when no state directory exists", () => {
   const lookupEnv = env({ CLAUDE_CODE_SESSION_ID: "sess-1" });
+  // Empty cwd means "here" — this checkout, which dogfoods and already has a
+  // sessions directory. A marker-free temp dir lets the walk find no project.
   assert.throws(
-    () => findTranscriptPath("", lookupEnv),
+    () => findTranscriptPath(tmp(), lookupEnv),
     (err: unknown) =>
       err instanceof CaptureError &&
       /Could not locate a session state directory/.test(err.message),
