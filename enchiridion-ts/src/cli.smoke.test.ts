@@ -1,7 +1,8 @@
 /**
  * Full-CLI smoke tests against the esbuild-bundled `dist/cli.cjs`: one test per
  * subcommand, asserting stdout and exit code against a golden input. Skips
- * (never fails) when the bundle is absent — `npm run build` first.
+ * (never fails) when the bundle is absent, and `--version` also skips when a
+ * stale bundle predates plugin.json — `npm run build` first.
  */
 
 import { test } from "node:test";
@@ -16,6 +17,14 @@ import { SCHEMA_VERSION } from "./searchindex.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distCli = path.join(__dirname, "..", "dist", "cli.cjs");
+const pluginJsonPath = path.join(
+  __dirname,
+  "..",
+  "..",
+  "wiki-plugin",
+  ".claude-plugin",
+  "plugin.json",
+);
 
 // Spawned children inherit this environment; an exported root override would
 // redirect cases whose env means "no vault root set".
@@ -29,6 +38,14 @@ const runtimeName = process.versions.bun !== undefined ? "bun" : "node";
 const skipReason = fs.existsSync(distCli)
   ? false
   : "dist/cli.cjs not built — run `npm run build` first";
+
+// A bundle older than plugin.json may still carry a previous release's version;
+// only a fresh build makes the baked version equal the checkout's.
+const versionSkipReason = skipReason
+  ? skipReason
+  : fs.statSync(distCli).mtimeMs < fs.statSync(pluginJsonPath).mtimeMs
+    ? "dist/cli.cjs predates plugin.json — run `npm run build` first"
+    : false;
 
 /** Run the bundled CLI synchronously, layering optional env/cwd/stdin. */
 function runBundled(
@@ -98,24 +115,14 @@ async function buildCommittedVault(): Promise<string> {
 
 test(
   `[${runtimeName}] --version: prints the version baked in from plugin.json, exit 0`,
-  { skip: skipReason },
+  { skip: versionSkipReason },
   () => {
     // The bundle is built from the checkout, so the version `--version` prints
     // is the one `scripts/release.sh` last bumped — the define, not a runtime
     // lookup that a packaged copy could miss.
-    const pluginJson = JSON.parse(
-      fs.readFileSync(
-        path.join(
-          __dirname,
-          "..",
-          "..",
-          "wiki-plugin",
-          ".claude-plugin",
-          "plugin.json",
-        ),
-        "utf8",
-      ),
-    ) as { version: string };
+    const pluginJson = JSON.parse(fs.readFileSync(pluginJsonPath, "utf8")) as {
+      version: string;
+    };
     const { status, stdout, stderr } = runBundled(["--version"]);
     assert.equal(status, 0, stderr);
     assert.equal(stdout.trim(), pluginJson.version);
