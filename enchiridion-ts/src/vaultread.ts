@@ -1,14 +1,14 @@
 /**
- * One run's read of a vault's working tree: text and records, each loaded at
- * most once however many readers ask, so `check --all` stops re-walking and
- * re-parsing the vault per check.
+ * One run's read of a vault's text and records — working tree or caller-held —
+ * each loaded at most once however many readers ask, so `check --all` stops
+ * re-walking and re-parsing the vault per check.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { Vault } from "./vault.js";
 import type { PageWithText } from "./vault.js";
-import type { PageRecord } from "./pagerecord.js";
+import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";
 
 /** All `.md` refs under `wiki/`, including ones that fail isPageRef and that
  * enumeratePageRefs skips. */
@@ -39,7 +39,12 @@ export class VaultRead {
   private readonly vault: Vault;
   private textsCache?: Record<string, string>;
   private allRefsCache?: string[];
-  private recordsCache?: Record<string, PageRecord>;
+  /** Keyed by error mode — `skipMalformedEdges` is the only option that changes
+   * decoding; a new one needs a key too. */
+  private readonly recordsCache = new Map<
+    boolean,
+    Record<string, PageRecord>
+  >();
   private kindsCache?: string[];
   private registryCache?: Array<{ ref: string; text: string }>;
 
@@ -57,17 +62,31 @@ export class VaultRead {
     return (this.allRefsCache ??= walkAllMd(this.root));
   }
 
-  /** Parsed records, tolerant of malformed edges — the read every check uses. */
-  records(): Record<string, PageRecord> {
-    return (this.recordsCache ??= this.vault.recordsFor(this.texts(), {
-      skipMalformedEdges: true,
-    }));
+  /** Parsed records for the working tree, strict by default; `opts` per
+   * [LoadRecordsOptions]. */
+  records(opts: LoadRecordsOptions = {}): Record<string, PageRecord> {
+    const tolerant = opts.skipMalformedEdges === true;
+    let records = this.recordsCache.get(tolerant);
+    if (records === undefined) {
+      records = this.vault.recordsFor(this.texts(), opts);
+      this.recordsCache.set(tolerant, records);
+    }
+    return records;
   }
 
-  /** Each page's parsed record paired with the text it was decoded from. */
-  pagesWithText(): Record<string, PageWithText> {
+  /** Parsed records for `pages` the caller already holds, such as HEAD text;
+   * not cached. */
+  recordsFor(
+    pages: Record<string, string>,
+    opts: LoadRecordsOptions = {},
+  ): Record<string, PageRecord> {
+    return this.vault.recordsFor(pages, opts);
+  }
+
+  /** Each page's parsed record paired with its text, strict by default. */
+  pagesWithText(opts: LoadRecordsOptions = {}): Record<string, PageWithText> {
     const texts = this.texts();
-    const records = this.records();
+    const records = this.records(opts);
     const out: Record<string, PageWithText> = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: texts[ref] };
