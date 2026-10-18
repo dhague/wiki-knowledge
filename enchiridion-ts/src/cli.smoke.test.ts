@@ -146,6 +146,51 @@ test(
   },
 );
 
+test(
+  `[${runtimeName}] bare invocation: usage to stdout, exit 0`,
+  { skip: skipReason },
+  () => {
+    const { status, stdout, stderr } = runBundled([]);
+    assert.equal(status, 0, stderr);
+    assert.match(stdout, /Usage: enchiridion/);
+    assert.equal(stderr, "");
+  },
+);
+
+test(
+  `[${runtimeName}] stray root option: named on stderr, exit 2, no usage dump`,
+  { skip: skipReason },
+  () => {
+    const { status, stdout, stderr } = runBundled(["--json", "search", "x"]);
+    assert.equal(status, 2, stderr);
+    assert.equal(stdout, "");
+    assert.match(stderr, /^unknown option '--json'/);
+  },
+);
+
+test(
+  `[${runtimeName}] isMainModule: the bundle runs main as the entry and stays inert when imported`,
+  { skip: skipReason },
+  () => {
+    // Importing must not run main: the child prints a sentinel and no usage.
+    const imported = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        "import(process.argv[1]).then(() => console.log('import-alive'))",
+        distCli,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(imported.status, 0, imported.stderr);
+    assert.match(imported.stdout, /import-alive/);
+    assert.ok(
+      !imported.stdout.includes("Usage:"),
+      "importing the bundle ran main()",
+    );
+  },
+);
+
 // ---------------------------------------------------------------------------
 // search
 // ---------------------------------------------------------------------------

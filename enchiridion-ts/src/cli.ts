@@ -10,12 +10,14 @@
 import { Command } from "commander";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import util from "node:util";
 import {
   ExitBadInvocation,
   ExitSuccess,
+  OutputSink,
   exitCodeFor,
   failureMessage,
+  processSink,
+  setOutputSink,
 } from "./output.js";
 import { PluginVersion } from "./version.js";
 import { registerPageCommands } from "./pagecommand.js";
@@ -123,145 +125,115 @@ function isMainModule(): boolean {
   return import.meta.url === pathToFileURL(path.resolve(arg)).href;
 }
 
-/** Commander copies the exit override into a subcommand only when it is
- * *created*, so setting it on the root after `buildProgram` would leave every
- * subcommand's own parse refusal to call `process.exit(1)` — killing an
- * in-process host and bypassing the exit-code contract. */
-function overrideEveryExit(program: Command): void {
-  program.exitOverride();
-  for (const cmd of program.commands) overrideEveryExit(cmd);
+/** Commander copies a setting into a subcommand only when it is *created*, so
+ * each setting is applied to the whole tree after `buildProgram`. */
+function forEveryCommand(
+  program: Command,
+  visit: (cmd: Command) => void,
+): void {
+  visit(program);
+  for (const cmd of program.commands) forEveryCommand(cmd, visit);
 }
 
-/** The in-process (plugin) entry. Captures stdout/stderr as data instead of
- * writing to the process streams, and overrides commander's exit so neither
- * help() nor an error can terminate the host process. */
+/** One command left out would answer a parse refusal with process.exit(1),
+ * killing an in-process host. */
+function overrideEveryExit(program: Command): void {
+  forEveryCommand(program, (cmd) => cmd.exitOverride());
+}
+
+/** One command left out would write the process streams, escaping run's sink. */
+function configureEveryOutput(program: Command, sink: OutputSink): void {
+  forEveryCommand(program, (cmd) =>
+    cmd.configureOutput({
+      writeOut: (chunk: string) => sink.out(chunk),
+      writeErr: (chunk: string) => sink.err(chunk),
+    }),
+  );
+}
+
+/** The contract's data shape: what one invocation wrote, and its exit code. */
 export interface RunResult {
   stdout: string;
   stderr: string;
   exitCode: number;
 }
 
-export async function run(argv: string[]): Promise<RunResult> {
+/** The in-process (plugin) entry and the one implementation of the contract:
+ * writes through `sink` — the process streams by default — and returns the same
+ * bytes. One run at a time; the sink is installed for the run and restored
+ * after. */
+export async function run(
+  argv: string[],
+  sink: OutputSink = processSink,
+): Promise<RunResult> {
   const stdout: string[] = [];
   const stderr: string[] = [];
-  const program = buildProgram();
-  overrideEveryExit(program);
-  program.configureOutput({
-    writeOut: (s: string) => stdout.push(s),
-    writeErr: (s: string) => stderr.push(s),
+  const tee: OutputSink = {
+    out: (chunk) => {
+      stdout.push(chunk);
+      sink.out(chunk);
+    },
+    err: (chunk) => {
+      stderr.push(chunk);
+      sink.err(chunk);
+    },
+  };
+  const result = (exitCode: number): RunResult => ({
+    stdout: stdout.join(""),
+    stderr: stderr.join(""),
+    exitCode,
   });
 
-  // Swap both the process streams and console for the run (console.log
-  // bypasses process.stdout.write on Bun) and restore them in a finally, so
-  // the host process keeps its own streams.
-  const outWrite = process.stdout.write;
-  const errWrite = process.stderr.write;
-  const consoleLog = console.log;
-  const consoleError = console.error;
-  process.stdout.write = ((chunk: unknown, ..._rest: unknown[]) => {
-    stdout.push(String(chunk));
-    return true;
-  }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: unknown, ..._rest: unknown[]) => {
-    stderr.push(String(chunk));
-    return true;
-  }) as typeof process.stderr.write;
-  console.log = (...args: unknown[]) => {
-    stdout.push(util.format(...args) + "\n");
-  };
-  console.error = (...args: unknown[]) => {
-    stderr.push(util.format(...args) + "\n");
-  };
+  const program = buildProgram();
+  overrideEveryExit(program);
+  configureEveryOutput(program, tee);
+  setOutputSink(tee);
 
   try {
-    // Bare invocation: usage to stdout, exit 0. Under exitOverride help()
-    // writes to the captured streams and throws a CommanderError with
-    // exitCode 0 instead of process.exit(0).
+    // Bare invocation: usage to stdout, exit 0. Under exitOverride help() writes
+    // to the sink and throws a CommanderError with exitCode 0 instead of
+    // process.exit(0).
     if (argv.length === 0) {
       try {
         program.help();
       } catch {
         /* CommanderError with exitCode 0 — swallowed */
       }
-      return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 0 };
+      return result(ExitSuccess);
     }
 
     const stray = rootOptionRefusal(argv);
     if (stray !== null) {
-      stderr.push(stray + "\n");
-      return {
-        stdout: stdout.join(""),
-        stderr: stderr.join(""),
-        exitCode: ExitBadInvocation,
-      };
+      tee.err(stray + "\n");
+      return result(ExitBadInvocation);
     }
 
     try {
       await program.parseAsync([process.execPath, "enchiridion", ...argv]);
     } catch (err) {
       const commanderCode = commanderExitCode(err);
-      if (commanderCode !== null) {
-        return {
-          stdout: stdout.join(""),
-          stderr: stderr.join(""),
-          exitCode: commanderCode,
-        };
-      }
+      if (commanderCode !== null) return result(commanderCode);
       // An action handler failed — `fail`, or an error commander rejected
-      // parseAsync with rather than wrapping in a CommanderError. Render it as
-      // main() does: message on stderr, the class's exit code, as data rather
-      // than an exit.
-      stderr.push(failureMessage(err));
-      return {
-        stdout: stdout.join(""),
-        stderr: stderr.join(""),
-        exitCode: exitCodeFor(err),
-      };
+      // parseAsync with rather than wrapping in a CommanderError.
+      tee.err(failureMessage(err));
+      return result(exitCodeFor(err));
     }
     // Read a leaked process.exitCode so it is reported rather than swallowed,
     // but never leave it set on the host process.
     const exitCode = Number(process.exitCode ?? 0);
     process.exitCode = 0;
-    return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode };
+    return result(exitCode);
   } finally {
-    process.stdout.write = outWrite;
-    process.stderr.write = errWrite;
-    console.log = consoleLog;
-    console.error = consoleError;
+    setOutputSink(null);
   }
 }
 
+/** The process edge: collect argv, run once, and carry the result's exit code
+ * onto the process. Output reached the process streams through run's default
+ * sink as it was written. */
 function main(): void {
-  const argv = process.argv.slice(2);
-  const stray = rootOptionRefusal(argv);
-  if (stray !== null) {
-    process.stderr.write(stray + "\n");
-    process.exitCode = ExitBadInvocation;
-    return;
-  }
-  const program = buildProgram();
-  if (argv.length === 0) {
-    // Commander would treat bare invocation as a missing subcommand (help to
-    // stderr, exit 1); match the established usage-to-stdout, exit-0 behaviour
-    // instead.
-    program.help();
-    return;
-  }
-  // Classify exactly as run() does. Without the override commander answers its
-  // own parse errors with process.exit(1), which would leave every one of them
-  // outside the exit-code contract.
-  overrideEveryExit(program);
-  // Render a failed command exactly as run() does: message on stderr, the
-  // class's exit code, no stack trace standing in for a diagnostic.
-  void program.parseAsync(process.argv).catch((err: unknown) => {
-    const commanderCode = commanderExitCode(err);
-    if (commanderCode !== null) {
-      // Commander already wrote its message (help to stdout, errors to stderr).
-      process.exitCode = commanderCode;
-      return;
-    }
-    process.stderr.write(failureMessage(err));
-    process.exitCode = exitCodeFor(err);
+  void run(process.argv.slice(2)).then((result) => {
+    process.exitCode = result.exitCode;
   });
 }
 

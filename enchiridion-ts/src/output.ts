@@ -17,11 +17,11 @@
  * sink.
  *
  * A command that cannot do its job calls [fail] (bad environment) or
- * [failBadInvocation] (bad invocation), which throw. Both entry points — `main`
- * and the in-process `run` — render that throw through [failureMessage] onto
- * stderr, exiting with [exitCodeFor]'s class: 2 when the caller's invocation is
- * at fault, 1 when the vault, a file or the environment is. The class rides the
- * exit code alone, never the message (ADR-0034).
+ * [failBadInvocation] (bad invocation), which throw. The in-process `run`
+ * renders that throw through [failureMessage] onto stderr, reporting
+ * [exitCodeFor]'s class: 2 when the caller's invocation is at fault, 1 when the
+ * vault, a file or the environment is. The class rides the exit code alone,
+ * never the message (ADR-0034). `main` carries the result onto the process.
  */
 
 /** Exit codes: success, and the two failure classes ADR-0034 fixes. */
@@ -36,9 +36,10 @@ export interface OutputSink {
   err(chunk: string): void;
 }
 
-/** Resolving the stream per write, never capturing its `write` function: `run`
- * swaps those properties, and a captured reference would escape the swap. */
-const processSink: OutputSink = {
+/** The default transport: the process's own streams. Each write resolves the
+ * stream property rather than capturing its `write` function, so a host that
+ * replaces either stream keeps being written to. */
+export const processSink: OutputSink = {
   out: (chunk) => {
     process.stdout.write(chunk);
   },
