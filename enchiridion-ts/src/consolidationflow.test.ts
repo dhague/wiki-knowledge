@@ -482,6 +482,46 @@ test("a move within a kind refreshes the fingerprints of members whose links it 
   );
 });
 
+test("a move that rewrites the moved page's own self-link refreshes its fingerprint", async () => {
+  // A self-link is the one link a within-kind move rewrites in the moved page
+  // itself: the old destination would point at the removed original.
+  const root = await committedVault({
+    ...fixture(),
+    [B]: taggedPage(
+      "Cache invalidation",
+      ["caching", "performance"],
+      "",
+      "See [this page](cache-invalidation.md).\n",
+    ),
+  });
+  await addExclusion(root, [A, B], "Distinct concepts.");
+  const before = parseRegistry(registryText(root)).exclusions[0].members.find(
+    (m) => m.pageRef === B,
+  )!;
+
+  const moved = "wiki/concepts/cache-invalidation-notes.md";
+  assert.ok(new Vault(root).movePage(B, moved).includes(REGISTRY));
+  const after = parseRegistry(registryText(root)).exclusions[0];
+  assert.deepEqual(
+    after.members.map((m) => m.pageRef),
+    [A, moved],
+    "the record keeps both members, with the moved ref followed",
+  );
+  const memberB = after.members.find((m) => m.pageRef === moved)!;
+  assert.notEqual(
+    memberB.fingerprint,
+    before.fingerprint,
+    "the moved page's own rebased link changed its cached meaning",
+  );
+
+  await commitAll(root, "move B");
+  assert.deepEqual(
+    await conceptFragmentation(read(root)),
+    [],
+    "a stale fingerprint would silently un-suppress the cluster",
+  );
+});
+
 test("deleting a record by hand lets its cluster be proposed again", async () => {
   const root = await committedVault(fixture());
   await addExclusion(root, [A, B], "Distinct concepts.");

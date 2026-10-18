@@ -111,13 +111,34 @@ export interface PageWithText {
 }
 
 /**
+ * The effects a move performs, in the order [Vault.movePage] performs them:
+ * lay every rewritten page down, drop the ref it left, then follow it through
+ * the source kind-folder's consolidation-exclusion registry. [Vault] is the
+ * filesystem adapter; a test can substitute a recorder to observe the order,
+ * which final state cannot.
+ */
+export interface MoveEffects {
+  /** Write one page's post-move text to pageRef. */
+  write(pageRef: string, page: Page): void;
+  /** Delete the page at pageRef. */
+  remove(pageRef: string): void;
+  /** Rewrite the source kind-folder's registry from planned's post-move texts,
+   * returning its ref when it changed, else null. */
+  followMoveInRegistries(
+    oldRef: string,
+    newRef: string,
+    planned: Record<string, string>,
+  ): string | null;
+}
+
+/**
  * Vault I/O and cross-page operations over the pages at root.
  *
  * Root is an absolute path; every page ref taken or returned is vault-relative
  * with `/` separators (ADR-0009), so a ref passes straight to another method or
  * into an ingest plan.
  */
-export class Vault {
+export class Vault implements MoveEffects {
   constructor(readonly root: string) {}
 
   /** Singular kind-folders left over from before ADR-0008, sorted —
@@ -333,11 +354,12 @@ export class Vault {
     return out;
   }
 
-  /** Write every page in planned whose text differs from before, returning the
-   * changed vault-relative paths, sorted. */
+  /** Write every page in planned whose text differs from before, through
+   * effects, returning the changed vault-relative paths, sorted. */
   private writeChanged(
     planned: Record<string, string>,
     before: Record<string, string>,
+    effects: MoveEffects,
   ): string[] {
     const changed: string[] = [];
     for (const [pageRef, text] of Object.entries(planned)) {
@@ -345,7 +367,7 @@ export class Vault {
       // "unchanged" is the file already holding this text, not falsy text.
       const prev = before[pageRef];
       if (prev !== undefined && text === prev) continue;
-      this.write(pageRef, new Page(text));
+      effects.write(pageRef, new Page(text));
       changed.push(pageRef);
     }
     return changed.sort();
@@ -356,7 +378,11 @@ export class Vault {
    * Reads every `wiki/**` page (never `raw/`), writes back only the pages whose
    * text changed, then removes the original. Returns the changed refs, sorted;
    * empty for oldRef == newRef. */
-  movePage(oldRef: string, newRef: string): string[] {
+  movePage(
+    oldRef: string,
+    newRef: string,
+    effects: MoveEffects = this,
+  ): string[] {
     const files = this.loadWikiPages();
     if (!(oldRef in files)) {
       throw new Error(
@@ -367,32 +393,34 @@ export class Vault {
     // planMove keys the moved page under newRef, so writing every changed page
     // also lays the moved file down; only the original is left to drop.
     const planned = planMove(files, oldRef, newRef);
-    const changed = this.writeChanged(planned, files);
+    const changed = this.writeChanged(planned, files, effects);
     if (this.path(oldRef) !== this.path(newRef)) {
-      fs.unlinkSync(this.path(oldRef));
+      effects.remove(oldRef);
     }
-    changed.push(...this.followMoveInRegistries(oldRef, newRef, planned));
+    const registry = effects.followMoveInRegistries(oldRef, newRef, planned);
+    if (registry !== null) changed.push(registry);
     return changed.sort();
   }
 
-  /** Rewrite the source kind-folder's exclusion registry for a move: within a
-   * kind the moved page's reference follows it, across kinds it leaves the
-   * record (a cluster never mixes kinds). `planned` is the post-move text, so a
-   * member whose inbound link the move re-spelled has its cached fingerprint
+  /** [MoveEffects.followMoveInRegistries]: rewrite the source kind-folder's
+   * exclusion registry for a move: within a kind the moved page's reference
+   * follows it, across kinds it leaves the record (a cluster never mixes
+   * kinds). `planned` is the post-move text, so a member whose link the move
+   * re-spelled — the moved page included — has its cached fingerprint
    * refreshed rather than quietly dropping out of the exclusion. */
-  private followMoveInRegistries(
+  followMoveInRegistries(
     oldRef: string,
     newRef: string,
     planned: Record<string, string>,
-  ): string[] {
+  ): string | null {
     const folder = folderOf(oldRef);
-    if (!this.isConsolidatable(folder)) return [];
+    if (!this.isConsolidatable(folder)) return null;
     const ref = registryRef(folder);
     let text: string;
     try {
       text = fs.readFileSync(this.path(ref), "utf8");
     } catch (err) {
-      if (isENOENT(err)) return [];
+      if (isENOENT(err)) return null;
       throw err;
     }
     const next = moveInRegistry(
@@ -402,10 +430,10 @@ export class Vault {
       folderOf(oldRef) === folderOf(newRef),
       (pageRef) => this.fingerprintOf(pageRef, planned[pageRef]),
     );
-    if (next === null || next === text) return [];
+    if (next === null || next === text) return null;
     mkdirSafe(path.dirname(this.path(ref)), 0o755);
     fs.writeFileSync(this.path(ref), next, { mode: 0o644 });
-    return [ref];
+    return ref;
   }
 
   /** One page's semantic fingerprint, or null when its text isn't a readable
@@ -437,7 +465,7 @@ export class Vault {
       losers,
       survivorRef,
     );
-    const changed = this.writeChanged(planned, files);
+    const changed = this.writeChanged(planned, files, this);
     for (const ref of losers) this.remove(ref);
     return changed;
   }
