@@ -7,6 +7,7 @@ import { Vault } from "./vault.js";
 import { VaultRead } from "./vaultread.js";
 import { VaultGit } from "./vaultgit.js";
 import { Index } from "./searchindex.js";
+import { emitSkippedPages } from "./output.js";
 import {
   splitFrontmatter,
   iterLinks,
@@ -998,6 +999,7 @@ export async function conceptFragmentation(
     }
     return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
   } finally {
+    emitSkippedPages(index.skippedPages());
     index.close();
   }
 }
@@ -1073,6 +1075,7 @@ export async function consolidationExclusions(
     }
     return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
   } finally {
+    emitSkippedPages(index.skippedPages());
     index.close();
   }
 }
@@ -1571,6 +1574,7 @@ export async function fixConsolidationExclusions(
       changed.push(registry.ref);
     }
   } finally {
+    emitSkippedPages(index.skippedPages());
     index.close();
   }
   return changed.sort();

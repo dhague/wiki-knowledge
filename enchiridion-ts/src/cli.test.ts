@@ -3951,6 +3951,71 @@ test("discover: reports the pass the index itself ran, not the plan's query coun
 });
 
 // ---------------------------------------------------------------------------
+// check / fix — the index-opening paths the opener roster fences
+// ---------------------------------------------------------------------------
+
+test("check concept-fragmentation: names a page the index cannot hold on stderr", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = await runEnv(
+    ["check", "concept-fragmentation", "--json"],
+    { cwd: root, env: { VAULT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  assert.equal(
+    stdout,
+    "",
+    "the skipped-page diagnostic belongs on stderr, not in the JSON Lines",
+  );
+});
+
+test("check consolidation-exclusions: names a page the index cannot hold on stderr", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = await runEnv(
+    ["check", "consolidation-exclusions", "--json"],
+    { cwd: root, env: { VAULT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  assert.equal(
+    stdout,
+    "",
+    "the skipped-page diagnostic belongs on stderr, not in the JSON Lines",
+  );
+});
+
+test("fix consolidation-exclusions: names a page the index cannot hold when a registry exists", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  // The fix opens an index only when a registry file exists.
+  fs.writeFileSync(
+    path.join(root, "wiki", "concepts", "CONSOLIDATION_EXCLUSIONS.yaml"),
+    "exclusions: []\n",
+  );
+  const { status, stdout, stderr } = await runEnv(
+    ["fix", "consolidation-exclusions"],
+    { cwd: root, env: { VAULT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.match(stderr, skippedBrokenPageRE);
+  assert.equal(stdout, "", "a no-op fix writes no changed ref");
+});
+
+test("search --status: reports an unparsable page in band, never on stderr", async () => {
+  const root = await buildVaultWithUnparsablePage();
+  const { status, stdout, stderr } = await runEnv(
+    ["search", "--status", "--json"],
+    { cwd: root, env: { VAULT: root } },
+  );
+  assert.equal(status, 0, stderr);
+  assert.equal(stderr, "", "search --status reports skips in its own document");
+  const payload = JSON.parse(stdout);
+  assert.deepEqual(
+    payload.unindexed_pages.map((p: { page_ref: string }) => p.page_ref),
+    ["wiki/concepts/broken.md"],
+  );
+});
+
+// ---------------------------------------------------------------------------
 // search — JSON Lines for hits, one document for the index's own state
 // ---------------------------------------------------------------------------
 

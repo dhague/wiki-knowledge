@@ -31,7 +31,7 @@ Merge commits contribute to *path enumeration* (diffed against first parent) but
 
 **The `Git` seam grows a payload but keeps its shape.** One method — `CommittedPages(since string) (Snapshot, error)` — returns the new `HEAD`, whether it fell back to a full tree read, and the per-page `{page_ref, date, content, deleted}` list. Reachability lives inside `vaultgit`, the only package that can answer it, rather than leaking into `searchindex`. `since == ""` means "all of `HEAD`'s tree," so first-build and full-rebuild are the same call. A whole-vault snapshot is single-digit MB at 2000 pages.
 
-**`searchindex`'s centre of gravity moves from `vault` to `vaultgit`.** The `vault` import survives only for `Status()`'s on-disk count. `docs/architecture.md`'s package graph is stale until redrawn.
+**`searchindex`'s centre of gravity moves from `vault` to `vaultgit`.** The import edge to `vault` is gone in both directions: `Index.open` reaches `vaultgit` for the blob source, and `Status()`'s on-disk count walks the page refs itself. `docs/architecture.md`'s package graph is stale until redrawn.
 
 **`--reindex` is re-pointed, not removed.** Bare `--reindex` forces the range walk to `HEAD`; `--reindex --full` drops and rebuilds from `HEAD`'s tree. `Stats.Updated` now counts pages re-read because a commit touched them, not because their bytes changed on disk.
 
