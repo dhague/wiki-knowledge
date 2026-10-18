@@ -311,20 +311,30 @@ export function registerSearchCommand(program: Command): void {
             }
           }
         }
-        const index = await Index.open(root);
-        try {
-          if (opts.status) {
+        if (opts.status) {
+          const index = await Index.open(root);
+          try {
             renderStatus(await index.status(), opts.json ?? false);
-            return;
+          } finally {
+            index.close();
           }
-          if (opts.reindex) {
+          return;
+        }
+        if (opts.reindex) {
+          const index = await Index.open(root);
+          try {
             renderReindex(
               await index.reindex(opts.full ?? false),
               opts.full ?? false,
               opts.json ?? false,
             );
-            return;
+          } finally {
+            index.close();
           }
+          return;
+        }
+        const index = await Index.open(root);
+        try {
           const query: Query = {
             text: text ?? "",
             raw: opts.raw ?? false,
