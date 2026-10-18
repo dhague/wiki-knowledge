@@ -29,7 +29,11 @@ import { splitFrontmatter } from "./frontmatter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(__dirname, "cli.ts");
-const tsxBin = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
+// The stdin cases need a real process; load the TS entry directly rather than
+// through the tsx shim, which pays a second interpreter start per case.
+const cliRuntime = process.versions.bun
+  ? [cliPath]
+  : ["--import", fileURLToPath(import.meta.resolve("tsx")), cliPath];
 
 // Commands read this process's environment; an exported root override would
 // redirect cases whose env means "no vault root set".
@@ -112,7 +116,7 @@ function runWithStdin(
   stdout: string;
   stderr: string;
 } {
-  const result = spawnSync(tsxBin, [cliPath, ...args], {
+  const result = spawnSync(process.execPath, [...cliRuntime, ...args], {
     encoding: "utf8",
     input,
     cwd,
@@ -3452,12 +3456,16 @@ test("discover: --plan - reads the draft from stdin", async () => {
       },
     ],
   });
-  const result = spawnSync(tsxBin, [cliPath, "discover", "--plan", "-"], {
-    encoding: "utf8",
-    input: draft,
-    cwd: root,
-    env: { ...process.env, VAULT: root },
-  });
+  const result = spawnSync(
+    process.execPath,
+    [...cliRuntime, "discover", "--plan", "-"],
+    {
+      encoding: "utf8",
+      input: draft,
+      cwd: root,
+      env: { ...process.env, VAULT: root },
+    },
+  );
   assert.equal(result.status, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
   assert.ok(Array.isArray(payload.pages));

@@ -8,8 +8,8 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "npx tsx --test src/*.test.ts",
-    "test:file": "npx tsx --test",
+    "test": "node --import tsx --test src/*.test.ts",
+    "test:file": "node --import tsx --test",
     "test:bun": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
