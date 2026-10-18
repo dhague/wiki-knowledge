@@ -7,7 +7,7 @@
 import type { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
-import { Page, isStringListKey } from "./wikipage.js";
+import { Page, isStringListKey } from "./frontmatter.js";
 import { Vault, resolveRoot, vaultForFile } from "./vault.js";
 import { isPageRef } from "./pagepredicate.js";
 import { resolve as resolveSuperseded } from "./supersededby.js";

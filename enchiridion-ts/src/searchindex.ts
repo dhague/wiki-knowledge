@@ -20,7 +20,7 @@ import type { Git, Snapshot, PageChange } from "./vaultgit.js";
 import { newPageRecord, supersedes as supersedesOf } from "./pagerecord.js";
 import type { PageRecord } from "./pagerecord.js";
 import { semanticFingerprint } from "./fingerprint.js";
-import { splitFrontmatter } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import { enumeratePageRefs } from "./pagepredicate.js";
 import { kindByFolder } from "./kindmeta.js";
 

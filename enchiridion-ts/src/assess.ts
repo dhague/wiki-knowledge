@@ -2,7 +2,7 @@
 // members in full from one committed HEAD snapshot, and re-check that pin before
 // a Consolidation writes (ADR-0028).
 
-import { splitFrontmatter } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import { newPageRecord } from "./pagerecord.js";
 import { semanticFingerprint } from "./fingerprint.js";
 import type { PageFact } from "./searchindex.js";

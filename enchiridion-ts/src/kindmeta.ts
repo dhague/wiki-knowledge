@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
-import { splitFrontmatter } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import { FolderKinds, folderToKind } from "./place.js";
 
 /** A `KIND.md` declaration: the kind value a folder declares (`null` when only

@@ -12,7 +12,7 @@ import {
 } from "./vault.js";
 import type { LookupEnv } from "./vault.js";
 import { readKindMeta } from "./kindmeta.js";
-import { Page } from "./wikipage.js";
+import { Page } from "./frontmatter.js";
 
 function env(pairs: Record<string, string>): LookupEnv {
   return (key: string): [string | undefined, boolean] => {

@@ -12,7 +12,7 @@ import {
   sectionIdFor,
   type LinkMode,
 } from "./exportrender.js";
-import { planMove } from "./wikipage.js";
+import { planMove } from "./moveplan.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -985,8 +985,8 @@ function exportClaims(dest: string, mode: LinkMode): boolean {
 }
 
 /** Whether a page move re-spells dest: the page carrying it moves across
- *  folders, so a destination wikipage reads as vault-relative cannot come back
- *  byte-identical. */
+ *  folders, so a destination the link rule reads as vault-relative cannot come
+ *  back byte-identical. */
 function moveRespells(dest: string): boolean {
   const text = `# A\n\nSee [x](${dest}).\n`;
   const moved = planMove(
@@ -997,7 +997,7 @@ function moveRespells(dest: string): boolean {
   return moved["wiki/entities/a.md"] !== text;
 }
 
-test("export and wikipage agree on which destinations are vault-relative", () => {
+test("export and a page move agree on which destinations are vault-relative", () => {
   for (const [dest, vaultRelative] of destCases) {
     assert.equal(
       exportClaims(dest, "single-file"),
@@ -1014,8 +1014,8 @@ test("export and wikipage agree on which destinations are vault-relative", () =>
 
 test("multi-page output is the narrower test, and its half is deliberate", () => {
   // Multi-page leaves a non-`.md` relative path where the author put it, while
-  // wikipage owns every vault-relative destination: the one column where the
-  // two are meant to differ.
+  // linkencoding owns every vault-relative destination: the one column where
+  // the two are meant to differ.
   for (const [dest, vaultRelative] of destCases) {
     assert.equal(
       exportClaims(dest, "multi-page"),

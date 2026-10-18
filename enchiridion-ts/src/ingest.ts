@@ -86,12 +86,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import {
-  Page,
-  canonicalizeLinkTargets,
-  normalizeBodyLinks,
-  splitFrontmatter,
-} from "./wikipage.js";
+import { Page, splitFrontmatter } from "./frontmatter.js";
+import { canonicalizeLinkTargets } from "./moveplan.js";
+import { normalizeBodyLinks } from "./wikipage.js";
 import { composeEdgeLink } from "./pageedge.js";
 import {
   path as placePath,

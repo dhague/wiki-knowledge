@@ -34,12 +34,9 @@ import {
   mdToHtml,
   tagPagePath,
 } from "./exportmeta.js";
-import {
-  isVaultRelativeDest,
-  iterLinks,
-  resolveLinkDest,
-  splitFrontmatter,
-} from "./wikipage.js";
+import { isVaultRelativeDest } from "./linkencoding.js";
+import { iterLinks, resolveLinkDest } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import { slugify } from "./place.js";
 import { STYLESHEET_DIR, STYLESHEET_FILE } from "./exportstyle.js";
 

@@ -27,7 +27,7 @@ import {
 } from "./contract.js";
 import { isPlanAction, PlanActions, SummaryWordGuideline } from "./ingest.js";
 import { Markers, RootEnvVar } from "./vault.js";
-import { EncodeChars } from "./wikipage.js";
+import { EncodeChars } from "./linkencoding.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -700,7 +700,7 @@ test("the four prose constants track their code constants", () => {
     );
   }
 
-  // The percent-encode charset, wikipage.ts.
+  // The percent-encode charset, linkencoding.ts.
   const charset = [...EncodeChars]
     .map((ch) => (ch === " " ? "space" : `\`${ch}\``))
     .join(", ");
