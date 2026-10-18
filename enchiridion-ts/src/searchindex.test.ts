@@ -6,7 +6,18 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Index, tokenizeQuery, SCHEMA_VERSION } from "./searchindex.js";
+import nodeSqlite3Wasm from "node-sqlite3-wasm";
+// Node does not statically detect this CJS package's named exports, so take the
+// default import, as the module under test does.
+const { Database } = nodeSqlite3Wasm as unknown as {
+  Database: typeof import("node-sqlite3-wasm").Database;
+};
+import {
+  Index,
+  inTransaction,
+  tokenizeQuery,
+  SCHEMA_VERSION,
+} from "./searchindex.js";
 import type { Git, Snapshot, PageChange } from "./vaultgit.js";
 import { VaultGit } from "./vaultgit.js";
 import { Vault } from "./vault.js";
@@ -1298,6 +1309,32 @@ describe("declared kind", () => {
       }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Transactions
+// ---------------------------------------------------------------------------
+
+describe("inTransaction", () => {
+  it("commits on success and rolls back on throw", () => {
+    const db = new Database();
+    try {
+      db.exec("CREATE TABLE t (x TEXT)");
+      inTransaction(db, () => db.run("INSERT INTO t VALUES (?)", ["kept"]));
+      assert.throws(
+        () =>
+          inTransaction(db, () => {
+            db.run("INSERT INTO t VALUES (?)", ["dropped"]);
+            throw new Error("boom");
+          }),
+        /boom/,
+      );
+      assert.deepEqual(db.all("SELECT x FROM t"), [{ x: "kept" }]);
+      assert.equal(db.inTransaction, false, "no transaction left open");
+    } finally {
+      db.close();
     }
   });
 });

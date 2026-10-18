@@ -216,6 +216,28 @@ function reasonOf(err: unknown, pageRef: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Transactions
+// ---------------------------------------------------------------------------
+
+/** Run `fn` inside one SQLite transaction; must not be nested. Batching matters
+ * because each autocommit statement fsyncs, and a rebuild is hundreds. */
+export function inTransaction<T>(db: DatabaseType, fn: () => T): T {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // SQLite already unwound the transaction.
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Index
 // ---------------------------------------------------------------------------
 
@@ -284,6 +306,11 @@ export class Index {
   // -------------------------------------------------------------------------
 
   private createSchema(): void {
+    inTransaction(this.db, () => this.execSchema());
+  }
+
+  /** The DDL alone, for a caller already inside a transaction. */
+  private execSchema(): void {
     this.db.exec(SCHEMA_DDL);
     this.db.run(
       "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
@@ -378,14 +405,16 @@ export class Index {
   }
 
   private async apply(snap: Snapshot): Promise<Stats> {
-    let stats: Stats;
-    if (snap.fullRebuild) {
-      stats = this.applyFullRebuild(snap);
-    } else {
-      stats = this.applyDelta(snap);
-    }
-    this.setWatermark(snap.head);
-    return stats;
+    return inTransaction(this.db, () => {
+      let stats: Stats;
+      if (snap.fullRebuild) {
+        stats = this.applyFullRebuild(snap);
+      } else {
+        stats = this.applyDelta(snap);
+      }
+      this.setWatermark(snap.head);
+      return stats;
+    });
   }
 
   private applyFullRebuild(snap: Snapshot): Stats {
@@ -396,7 +425,7 @@ export class Index {
       DROP TABLE IF EXISTS page;
       DROP TABLE IF EXISTS page_fts;
     `);
-    this.createSchema();
+    this.execSchema();
     this.setKindDeclarationsKey();
     this.skippedRefs.clear();
     let inserted = 0;
