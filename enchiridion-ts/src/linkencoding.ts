@@ -6,7 +6,8 @@
 /** The minimal charset that makes a raw/ filename linkable. */
 export const EncodeChars = " #%()<>";
 
-/** Percent-encode [EncodeChars] in path; all else stays literal. */
+/** Percent-encode [EncodeChars] in path; all else — unicode included — stays
+ * literal. Not `encodeURIComponent`, whose set escapes `/` and unicode too. */
 export function percentEncode(p: string): string {
   let out = "";
   for (const ch of p) {
@@ -19,7 +20,8 @@ export function percentEncode(p: string): string {
   return out;
 }
 
-/** Reverse [percentEncode]. An invalid or truncated escape is left verbatim. */
+/** Reverse [percentEncode]. An invalid or truncated escape is left verbatim,
+ * where `decodeURIComponent` would throw. */
 export function percentDecode(p: string): string {
   let out = "";
   for (let i = 0; i < p.length; i++) {
