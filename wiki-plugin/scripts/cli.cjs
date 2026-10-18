@@ -9044,13 +9044,13 @@ var require_inherits_browser = __commonJS({
 var require_inherits = __commonJS({
   "node_modules/inherits/inherits.js"(exports2, module2) {
     try {
-      util2 = require("util");
-      if (typeof util2.inherits !== "function") throw "";
-      module2.exports = util2.inherits;
+      util = require("util");
+      if (typeof util.inherits !== "function") throw "";
+      module2.exports = util.inherits;
     } catch (e) {
       module2.exports = require_inherits_browser();
     }
-    var util2;
+    var util;
   }
 });
 
@@ -31718,17 +31718,48 @@ var program = new Command();
 // src/cli.ts
 var import_node_path35 = __toESM(require("node:path"), 1);
 var import_node_url = require("node:url");
-var import_node_util5 = __toESM(require("node:util"), 1);
 
 // src/output.ts
 var ExitSuccess = 0;
 var ExitBadEnvironment = 1;
 var ExitBadInvocation = 2;
+var processSink = {
+  out: (chunk) => {
+    process.stdout.write(chunk);
+  },
+  err: (chunk) => {
+    process.stderr.write(chunk);
+  }
+};
+var sink = processSink;
+function setOutputSink(next) {
+  sink = next ?? processSink;
+}
+function writeOut(chunk) {
+  sink.out(chunk);
+}
+function writeErr(chunk) {
+  sink.err(chunk);
+}
 function emitRows(rows) {
-  for (const row of rows) console.log(JSON.stringify(row));
+  for (const row of rows) writeOut(JSON.stringify(row) + "\n");
 }
 function emitDocument(value) {
-  console.log(JSON.stringify(value));
+  writeOut(JSON.stringify(value) + "\n");
+}
+function emitText(line) {
+  writeOut(line + "\n");
+}
+function emitRaw(chunk) {
+  writeOut(chunk);
+}
+function emitDiagnostic(line) {
+  writeErr(line + "\n");
+}
+function emitSkippedPages(skipped) {
+  for (const page of skipped) {
+    emitDiagnostic(`skipped ${page.pageRef}: ${page.reason}`);
+  }
 }
 var BadInvocationError = class extends Error {
   constructor(message2) {
@@ -31751,15 +31782,71 @@ function failureMessage(err) {
 }
 
 // src/version.ts
-var PluginVersion = true ? "0.25.0" : "0.0.0-dev";
+var PluginVersion = true ? "0.26.0" : "0.0.0-dev";
 
 // src/pagecommand.ts
 var import_node_fs6 = __toESM(require("node:fs"), 1);
 var import_node_path9 = __toESM(require("node:path"), 1);
 
-// src/wikipage.ts
+// src/frontmatter.ts
 var import_yaml = __toESM(require_dist(), 1);
 var import_node_util3 = require("node:util");
+
+// src/sourcedate.ts
+var CANONICAL_DATE_FORMAT = "YYYY-MM-DD";
+function parseSourceDate(value) {
+  if (value instanceof Date) {
+    return formatDateOnly(
+      value.getUTCFullYear(),
+      value.getUTCMonth() + 1,
+      value.getUTCDate()
+    );
+  }
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  const dateOnly = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [y, mo, d] = [
+      Number(dateOnly[1]),
+      Number(dateOnly[2]),
+      Number(dateOnly[3])
+    ];
+    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
+  }
+  const stamp = s.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/
+  );
+  if (stamp) {
+    const [y, mo, d] = [Number(stamp[1]), Number(stamp[2]), Number(stamp[3])];
+    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
+  }
+  return null;
+}
+function canonicalSourceDate(value) {
+  if (value === null || value === void 0) return value;
+  const date = parseSourceDate(value);
+  if (date === null) {
+    throw new Error(
+      `source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(value)}`
+    );
+  }
+  return date;
+}
+function truncateSourceDate(value) {
+  const date = parseSourceDate(value);
+  return date !== null ? date : value;
+}
+function validDate(y, mo, d) {
+  if (mo < 1 || mo > 12 || d < 1) return false;
+  const leap = y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return d <= days[mo - 1];
+}
+function formatDateOnly(y, mo, d) {
+  return `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// src/wikipage.ts
 var import_node_path2 = __toESM(require("node:path"), 1);
 
 // node_modules/mdurl/index.mjs
@@ -36781,80 +36868,8 @@ _defineProperty(MarkdownIt, "ParserInline", ParserInline);
 _defineProperty(MarkdownIt, "StateInline", StateInline);
 var MarkdownItCallable = callable(MarkdownIt);
 
-// src/sourcedate.ts
-var CANONICAL_DATE_FORMAT = "YYYY-MM-DD";
-function parseSourceDate(value) {
-  if (value instanceof Date) {
-    return formatDateOnly(
-      value.getUTCFullYear(),
-      value.getUTCMonth() + 1,
-      value.getUTCDate()
-    );
-  }
-  if (typeof value !== "string") return null;
-  const s = value.trim();
-  const dateOnly = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) {
-    const [y, mo, d] = [
-      Number(dateOnly[1]),
-      Number(dateOnly[2]),
-      Number(dateOnly[3])
-    ];
-    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
-  }
-  const stamp = s.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/
-  );
-  if (stamp) {
-    const [y, mo, d] = [Number(stamp[1]), Number(stamp[2]), Number(stamp[3])];
-    return validDate(y, mo, d) ? formatDateOnly(y, mo, d) : null;
-  }
-  return null;
-}
-function canonicalSourceDate(value) {
-  if (value === null || value === void 0) return value;
-  const date = parseSourceDate(value);
-  if (date === null) {
-    throw new Error(
-      `source_date must be a valid date (${CANONICAL_DATE_FORMAT}), got ${String(value)}`
-    );
-  }
-  return date;
-}
-function truncateSourceDate(value) {
-  const date = parseSourceDate(value);
-  return date !== null ? date : value;
-}
-function validDate(y, mo, d) {
-  if (mo < 1 || mo > 12 || d < 1) return false;
-  const leap = y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return d <= days[mo - 1];
-}
-function formatDateOnly(y, mo, d) {
-  return `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-}
-
-// src/wikipage.ts
+// src/linkencoding.ts
 var EncodeChars = " #%()<>";
-var FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
-var ESCAPED_LINE_BREAK_RE = /\\\r?\n[ \t]*/g;
-function joinEscapedLineBreaks(dest) {
-  return dest.replace(ESCAPED_LINE_BREAK_RE, "");
-}
-var DEST_ATOM = `(?:[^()\\s]|${ESCAPED_LINE_BREAK_RE.source})`;
-function nestedParenDest(depth) {
-  let frag = `${DEST_ATOM}*`;
-  for (let i = 0; i < depth; i++) {
-    frag = `(?:${DEST_ATOM}|\\(${frag}\\))*`;
-  }
-  return frag;
-}
-var ANGLE_DEST = `<[^<>\\n]*(?:${ESCAPED_LINE_BREAK_RE.source}[^<>\\n]*)*>`;
-var LINK_RE = new RegExp(
-  `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]((?:${ESCAPED_LINE_BREAK_RE.source})*)\\([ \\t]*(${ANGLE_DEST}|${nestedParenDest(4)})(?:[ \\t]+(?:"[^"]*"|'[^']*'|\\([^)]*\\)))?[ \\t]*\\)`,
-  "gd"
-);
 function percentEncode(p) {
   let out = "";
   for (const ch of p) {
@@ -36891,33 +36906,39 @@ function splitDest(dest) {
     anchor: hash === -1 ? "" : percentDecode(encodedAnchor)
   };
 }
-function splitFrontmatter(src) {
-  const m = FRONTMATTER_RE.exec(src);
-  if (!m) {
-    return { frontmatter: "", body: src, bodyOffset: 0, hasFrontmatter: false };
+function encodeDest(p, anchor) {
+  let dest = percentEncode(p);
+  if (anchor !== "") dest += "#" + percentEncode(anchor);
+  return dest;
+}
+var SCHEME_RE2 = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+function hasScheme(dest) {
+  return SCHEME_RE2.test(dest);
+}
+function isVaultRelativeDest(p) {
+  if (p === "" || p.startsWith("/") || p.includes("://")) return false;
+  if (p.endsWith(".md")) return true;
+  return !hasScheme(p);
+}
+
+// src/wikipage.ts
+var ESCAPED_LINE_BREAK_RE = /\\\r?\n[ \t]*/g;
+function joinEscapedLineBreaks(dest) {
+  return dest.replace(ESCAPED_LINE_BREAK_RE, "");
+}
+var DEST_ATOM = `(?:[^()\\s]|${ESCAPED_LINE_BREAK_RE.source})`;
+function nestedParenDest(depth) {
+  let frag = `${DEST_ATOM}*`;
+  for (let i = 0; i < depth; i++) {
+    frag = `(?:${DEST_ATOM}|\\(${frag}\\))*`;
   }
-  const frontmatter = m[1] !== void 0 ? m[1] : "";
-  const bodyOffset = m[0].length;
-  return {
-    frontmatter,
-    body: src.slice(bodyOffset),
-    bodyOffset,
-    hasFrontmatter: true
-  };
+  return frag;
 }
-var UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
-function isUnquotedListLinkLine(line) {
-  return UNQUOTED_LIST_LINK_RE.test(line);
-}
-function quoteUnquotedListLinks(frontmatter) {
-  return frontmatter.split("\n").map((line) => {
-    if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
-    const open2 = line.indexOf("[");
-    const close = line.lastIndexOf(")");
-    if (open2 < 0 || close < 0) return line;
-    return line.slice(0, open2) + `"${line.slice(open2, close + 1)}"` + line.slice(close + 1);
-  }).join("\n");
-}
+var ANGLE_DEST = `<[^<>\\n]*(?:${ESCAPED_LINE_BREAK_RE.source}[^<>\\n]*)*>`;
+var LINK_RE = new RegExp(
+  `(!?)\\[((?:[^\\[\\]]|\\[[^\\[\\]]*\\])*)\\]((?:${ESCAPED_LINE_BREAK_RE.source})*)\\([ \\t]*(${ANGLE_DEST}|${nestedParenDest(4)})(?:[ \\t]+(?:"[^"]*"|'[^']*'|\\([^)]*\\)))?[ \\t]*\\)`,
+  "gd"
+);
 var md = new MarkdownItCallable();
 function codeLineRanges(src) {
   const lines = /* @__PURE__ */ new Set();
@@ -36981,6 +37002,92 @@ function linkDest(link2) {
   if (matches.length === 0) return { dest: "", ok: false };
   return { dest: matches[0].decodedPath, ok: true };
 }
+function composeLink(title, targetRel, pageDir) {
+  const dest = relPath(import_node_path2.default.posix.normalize(targetRel), pageDir);
+  return `[${title}](${encodeDest(dest, "")})`;
+}
+function normalizeBodyLinks(src) {
+  const edits = [];
+  for (const link2 of iterLinks(src)) {
+    if (!isVaultRelativeDest(link2.decodedPath)) continue;
+    const dest = encodeDest(link2.decodedPath, link2.decodedAnchor);
+    if (dest !== link2.dest)
+      edits.push({ start: link2.start, end: link2.end, dest });
+  }
+  return applyEdits(src, edits);
+}
+function applyEdits(src, edits) {
+  edits.sort((a, b) => b.start - a.start);
+  for (const e of edits) {
+    src = src.slice(0, e.start) + e.dest + src.slice(e.end);
+  }
+  return src;
+}
+function rewriteText(text2, fileRel, oldRel, newRel) {
+  const isMovedFile = fileRel === oldRel;
+  const oldDir = import_node_path2.default.posix.dirname(fileRel);
+  let newDir = import_node_path2.default.posix.dirname(fileRel);
+  if (isMovedFile) newDir = import_node_path2.default.posix.dirname(newRel);
+  const edits = [];
+  for (const link2 of iterLinks(text2)) {
+    if (!isVaultRelativeDest(link2.decodedPath)) continue;
+    const target = resolveLinkDest(link2.decodedPath, oldDir);
+    if (!isMovedFile && target !== oldRel) continue;
+    const movedTarget = target === oldRel ? newRel : target;
+    const dest = encodeDest(relPath(movedTarget, newDir), link2.decodedAnchor);
+    if (dest !== link2.dest)
+      edits.push({ start: link2.start, end: link2.end, dest });
+  }
+  return applyEdits(text2, edits);
+}
+function relPath(target, base) {
+  const targetParts = pathParts(target);
+  const baseParts = pathParts(base);
+  let common = 0;
+  while (common < targetParts.length && common < baseParts.length && targetParts[common] === baseParts[common]) {
+    common++;
+  }
+  const parts = [];
+  for (let i = common; i < baseParts.length; i++) parts.push("..");
+  parts.push(...targetParts.slice(common));
+  if (parts.length === 0) return ".";
+  return parts.join("/");
+}
+function pathParts(p) {
+  const cleaned = import_node_path2.default.posix.normalize(p);
+  if (cleaned === "." || cleaned === "") return [];
+  return cleaned.split("/");
+}
+
+// src/frontmatter.ts
+var FRONTMATTER_RE = /^---[ \t]*\r?\n(.*?\n)?---[ \t]*(?:\r?\n|$)/s;
+function splitFrontmatter(src) {
+  const m = FRONTMATTER_RE.exec(src);
+  if (!m) {
+    return { frontmatter: "", body: src, bodyOffset: 0, hasFrontmatter: false };
+  }
+  const frontmatter = m[1] !== void 0 ? m[1] : "";
+  const bodyOffset = m[0].length;
+  return {
+    frontmatter,
+    body: src.slice(bodyOffset),
+    bodyOffset,
+    hasFrontmatter: true
+  };
+}
+var UNQUOTED_LIST_LINK_RE = /^\s*-\s+\[/;
+function isUnquotedListLinkLine(line) {
+  return UNQUOTED_LIST_LINK_RE.test(line);
+}
+function quoteUnquotedListLinks(frontmatter) {
+  return frontmatter.split("\n").map((line) => {
+    if (!UNQUOTED_LIST_LINK_RE.test(line)) return line;
+    const open2 = line.indexOf("[");
+    const close = line.lastIndexOf(")");
+    if (open2 < 0 || close < 0) return line;
+    return line.slice(0, open2) + `"${line.slice(open2, close + 1)}"` + line.slice(close + 1);
+  }).join("\n");
+}
 var YAML_INDENT = 2;
 var StringListKeys = ["tags"];
 function isStringListKey(key) {
@@ -37031,7 +37138,8 @@ var Page = class _Page {
    * Return a new page with frontmatter key set to value, canonicalised first
    * — see [rewriteFrontmatter]. Mints a frontmatter block when the page has
    * none; only the block is re-serialised, and the body is spliced back
-   * verbatim.
+   * verbatim. A no-op set is not byte-identical (ADR-0012), but key order is
+   * preserved.
    */
   set(key, value) {
     return new _Page(
@@ -37076,108 +37184,6 @@ var Page = class _Page {
     return new _Page(rewriteText(this.text, fileRel, oldRel, newRel));
   }
 };
-function planMove(pages, oldRel, newRel) {
-  const out = {};
-  for (const [rel, text2] of Object.entries(pages)) {
-    const key = rel === oldRel ? newRel : rel;
-    out[key] = new Page(text2).retarget(rel, oldRel, newRel).text;
-  }
-  return out;
-}
-function planConsolidate(pages, losers, survivor) {
-  const dropped = new Set(losers);
-  const out = {};
-  for (const [rel, text2] of Object.entries(pages)) {
-    if (dropped.has(rel)) continue;
-    let next = text2;
-    for (const loser of losers) {
-      next = new Page(next).retarget(rel, loser, survivor).text;
-    }
-    out[rel] = next;
-  }
-  return out;
-}
-function canonicalizeLinkTargets(text2, pageDir, target = (ref) => ref) {
-  const edits = [];
-  for (const link2 of iterLinks(text2)) {
-    if (!isVaultRelativeDest(link2.decodedPath)) continue;
-    const resolved = target(resolveLinkDest(link2.decodedPath, pageDir));
-    const dest = link2.decodedAnchor === "" ? resolved : `${resolved}#${link2.decodedAnchor}`;
-    if (dest !== link2.dest)
-      edits.push({ start: link2.start, end: link2.end, dest });
-  }
-  return applyEdits(text2, edits);
-}
-function composeLink(title, targetRel, pageDir) {
-  const dest = relPath(import_node_path2.default.posix.normalize(targetRel), pageDir);
-  return `[${title}](${percentEncode(dest)})`;
-}
-function normalizeBodyLinks(src) {
-  const edits = [];
-  for (const link2 of iterLinks(src)) {
-    if (!isVaultRelativeDest(link2.decodedPath)) continue;
-    const dest = encodeDest(link2.decodedPath, link2.decodedAnchor);
-    if (dest !== link2.dest)
-      edits.push({ start: link2.start, end: link2.end, dest });
-  }
-  return applyEdits(src, edits);
-}
-function applyEdits(src, edits) {
-  edits.sort((a, b) => b.start - a.start);
-  for (const e of edits) {
-    src = src.slice(0, e.start) + e.dest + src.slice(e.end);
-  }
-  return src;
-}
-function encodeDest(p, anchor) {
-  let dest = percentEncode(p);
-  if (anchor !== "") dest += "#" + percentEncode(anchor);
-  return dest;
-}
-var SCHEME_RE2 = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-function hasScheme(dest) {
-  return SCHEME_RE2.test(dest);
-}
-function isVaultRelativeDest(p) {
-  if (p === "" || p.startsWith("/") || p.includes("://")) return false;
-  if (p.endsWith(".md")) return true;
-  return !hasScheme(p);
-}
-function rewriteText(text2, fileRel, oldRel, newRel) {
-  const isMovedFile = fileRel === oldRel;
-  const oldDir = import_node_path2.default.posix.dirname(fileRel);
-  let newDir = import_node_path2.default.posix.dirname(fileRel);
-  if (isMovedFile) newDir = import_node_path2.default.posix.dirname(newRel);
-  const edits = [];
-  for (const link2 of iterLinks(text2)) {
-    if (!isVaultRelativeDest(link2.decodedPath)) continue;
-    const target = resolveLinkDest(link2.decodedPath, oldDir);
-    if (!isMovedFile && target !== oldRel) continue;
-    const movedTarget = target === oldRel ? newRel : target;
-    const dest = encodeDest(relPath(movedTarget, newDir), link2.decodedAnchor);
-    if (dest !== link2.dest)
-      edits.push({ start: link2.start, end: link2.end, dest });
-  }
-  return applyEdits(text2, edits);
-}
-function relPath(target, base) {
-  const targetParts = pathParts(target);
-  const baseParts = pathParts(base);
-  let common = 0;
-  while (common < targetParts.length && common < baseParts.length && targetParts[common] === baseParts[common]) {
-    common++;
-  }
-  const parts = [];
-  for (let i = common; i < baseParts.length; i++) parts.push("..");
-  parts.push(...targetParts.slice(common));
-  if (parts.length === 0) return ".";
-  return parts.join("/");
-}
-function pathParts(p) {
-  const cleaned = import_node_path2.default.posix.normalize(p);
-  if (cleaned === "." || cleaned === "") return [];
-  return cleaned.split("/");
-}
 function containsValue(values, value) {
   return values.some((existing) => (0, import_node_util3.isDeepStrictEqual)(existing, value));
 }
@@ -37462,6 +37468,40 @@ function kindByFolder(root) {
     if (entry.isDirectory()) out[entry.name] = kindForFolder(root, entry.name);
   }
   return out;
+}
+
+// src/moveplan.ts
+function planMove(pages, oldRel, newRel) {
+  const out = {};
+  for (const [rel, text2] of Object.entries(pages)) {
+    const key = rel === oldRel ? newRel : rel;
+    out[key] = new Page(text2).retarget(rel, oldRel, newRel).text;
+  }
+  return out;
+}
+function planConsolidate(pages, losers, survivor) {
+  const dropped = new Set(losers);
+  const out = {};
+  for (const [rel, text2] of Object.entries(pages)) {
+    if (dropped.has(rel)) continue;
+    let next = text2;
+    for (const loser of losers) {
+      next = new Page(next).retarget(rel, loser, survivor).text;
+    }
+    out[rel] = next;
+  }
+  return out;
+}
+function canonicalizeLinkTargets(text2, pageDir, target = (ref) => ref) {
+  const edits = [];
+  for (const link2 of iterLinks(text2)) {
+    if (!isVaultRelativeDest(link2.decodedPath)) continue;
+    const resolved = target(resolveLinkDest(link2.decodedPath, pageDir));
+    const dest = link2.decodedAnchor === "" ? resolved : `${resolved}#${link2.decodedAnchor}`;
+    if (dest !== link2.dest)
+      edits.push({ start: link2.start, end: link2.end, dest });
+  }
+  return applyEdits(text2, edits);
 }
 
 // src/pagerecord.ts
@@ -38136,14 +38176,14 @@ var Vault = class {
     for (const ref of Object.keys(withText)) out[ref] = withText[ref].record;
     return out;
   }
-  /** Write every page in planned whose text differs from before, returning the
-   * changed vault-relative paths, sorted. */
-  writeChanged(planned, before) {
+  /** Write every page in planned whose text differs from before, through
+   * effects, returning the changed vault-relative paths, sorted. */
+  writeChanged(planned, before, effects) {
     const changed = [];
     for (const [pageRef2, text2] of Object.entries(planned)) {
       const prev = before[pageRef2];
       if (prev !== void 0 && text2 === prev) continue;
-      this.write(pageRef2, new Page(text2));
+      effects.write(pageRef2, new Page(text2));
       changed.push(pageRef2);
     }
     return changed.sort();
@@ -38153,7 +38193,7 @@ var Vault = class {
    * Reads every `wiki/**` page (never `raw/`), writes back only the pages whose
    * text changed, then removes the original. Returns the changed refs, sorted;
    * empty for oldRef == newRef. */
-  movePage(oldRef, newRef) {
+  movePage(oldRef, newRef, effects = this) {
     const files = this.loadWikiPages();
     if (!(oldRef in files)) {
       throw new Error(
@@ -38161,27 +38201,29 @@ var Vault = class {
       );
     }
     const planned = planMove(files, oldRef, newRef);
-    const changed = this.writeChanged(planned, files);
+    const changed = this.writeChanged(planned, files, effects);
     if (this.path(oldRef) !== this.path(newRef)) {
-      import_node_fs5.default.unlinkSync(this.path(oldRef));
+      effects.remove(oldRef);
     }
-    changed.push(...this.followMoveInRegistries(oldRef, newRef, planned));
+    const registry = effects.followMoveInRegistries(oldRef, newRef, planned);
+    if (registry !== null) changed.push(registry);
     return changed.sort();
   }
-  /** Rewrite the source kind-folder's exclusion registry for a move: within a
-   * kind the moved page's reference follows it, across kinds it leaves the
-   * record (a cluster never mixes kinds). `planned` is the post-move text, so a
-   * member whose inbound link the move re-spelled has its cached fingerprint
+  /** [MoveEffects.followMoveInRegistries]: rewrite the source kind-folder's
+   * exclusion registry for a move: within a kind the moved page's reference
+   * follows it, across kinds it leaves the record (a cluster never mixes
+   * kinds). `planned` is the post-move text, so a member whose link the move
+   * re-spelled — the moved page included — has its cached fingerprint
    * refreshed rather than quietly dropping out of the exclusion. */
   followMoveInRegistries(oldRef, newRef, planned) {
     const folder = folderOf(oldRef);
-    if (!this.isConsolidatable(folder)) return [];
+    if (!this.isConsolidatable(folder)) return null;
     const ref = registryRef(folder);
     let text2;
     try {
       text2 = import_node_fs5.default.readFileSync(this.path(ref), "utf8");
     } catch (err) {
-      if (isENOENT2(err)) return [];
+      if (isENOENT2(err)) return null;
       throw err;
     }
     const next = moveInRegistry(
@@ -38191,10 +38233,10 @@ var Vault = class {
       folderOf(oldRef) === folderOf(newRef),
       (pageRef2) => this.fingerprintOf(pageRef2, planned[pageRef2])
     );
-    if (next === null || next === text2) return [];
+    if (next === null || next === text2) return null;
     mkdirSafe(import_node_path7.default.dirname(this.path(ref)), 493);
     import_node_fs5.default.writeFileSync(this.path(ref), next, { mode: 420 });
-    return [ref];
+    return ref;
   }
   /** One page's semantic fingerprint, or null when its text isn't a readable
    * page — the ref is needed for the page's own edge resolution. */
@@ -38221,7 +38263,7 @@ var Vault = class {
       losers,
       survivorRef
     );
-    const changed = this.writeChanged(planned, files);
+    const changed = this.writeChanged(planned, files, this);
     for (const ref of losers) this.remove(ref);
     return changed;
   }
@@ -38429,7 +38471,7 @@ function registerPageCommands(program2) {
     if (!ok || value === null || value === void 0) {
       fail(`no frontmatter key "${key}" in ${file}`);
     }
-    console.log(formatFrontmatterValue(value));
+    emitText(formatFrontmatterValue(value));
   });
   page.command("set").argument("<file>", FileArgument).argument("<key>", "frontmatter key").argument(
     "<value>",
@@ -38507,7 +38549,7 @@ function registerPageCommands(program2) {
       });
       return;
     }
-    process.stdout.write(page2.text);
+    emitRaw(page2.text);
   });
   program2.command("superseded-by <page_ref...>").description("Resolve page refs to their current supersession heads").option("--json", "emit results as JSON Lines (one object per line)").action(async (pageRefs, opts) => {
     const root = resolveRoot();
@@ -38525,14 +38567,14 @@ function registerPageCommands(program2) {
     }
     for (const res of resolutions) {
       if (res.chain.length === 0) {
-        console.log(`${res.seed}  (current)`);
+        emitText(`${res.seed}  (current)`);
         continue;
       }
       let via = "";
       if (res.chain.length > 1) {
         via = ` via ${res.chain.slice(0, -1).join(" -> ")}`;
       }
-      console.log(`${res.seed}  ->  ${res.active}${via}`);
+      emitText(`${res.seed}  ->  ${res.active}${via}`);
     }
   });
 }
@@ -38603,6 +38645,20 @@ function reasonOf(err, pageRef2) {
   }
   return message2;
 }
+function inTransaction(db, fn) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+    }
+    throw err;
+  }
+}
 var Index = class _Index {
   constructor(root, dbPath, db, git2, kindByFolder2) {
     this.root = root;
@@ -38659,6 +38715,10 @@ var Index = class _Index {
   // Schema lifecycle
   // -------------------------------------------------------------------------
   createSchema() {
+    inTransaction(this.db, () => this.execSchema());
+  }
+  /** The DDL alone, for a caller already inside a transaction. */
+  execSchema() {
     this.db.exec(SCHEMA_DDL);
     this.db.run(
       "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
@@ -38742,14 +38802,16 @@ var Index = class _Index {
     return this.apply(snap);
   }
   async apply(snap) {
-    let stats;
-    if (snap.fullRebuild) {
-      stats = this.applyFullRebuild(snap);
-    } else {
-      stats = this.applyDelta(snap);
-    }
-    this.setWatermark(snap.head);
-    return stats;
+    return inTransaction(this.db, () => {
+      let stats;
+      if (snap.fullRebuild) {
+        stats = this.applyFullRebuild(snap);
+      } else {
+        stats = this.applyDelta(snap);
+      }
+      this.setWatermark(snap.head);
+      return stats;
+    });
   }
   applyFullRebuild(snap) {
     this.db.exec(`
@@ -38758,7 +38820,7 @@ var Index = class _Index {
       DROP TABLE IF EXISTS page;
       DROP TABLE IF EXISTS page_fts;
     `);
-    this.createSchema();
+    this.execSchema();
     this.setKindDeclarationsKey();
     this.skippedRefs.clear();
     let inserted = 0;
@@ -39250,7 +39312,7 @@ function renderHits(hits, asJSON) {
     if (hit.pageRef.length > width) width = hit.pageRef.length;
   }
   for (const hit of hits) {
-    console.log(
+    emitText(
       `${hit.pageRef.padEnd(width)}  ${hit.score.toFixed(2).padStart(7)}  ${orDash(hit.title)}  [${orDash(hit.volatility)}]  src=${orDash(hit.sourceDate)}  git=${orDashPtr(hit.gitDate)}`
     );
   }
@@ -39271,36 +39333,31 @@ function renderStatus(st, asJSON) {
     });
     return;
   }
-  console.log(`pages:             ${st.pages}`);
-  console.log(`db_size_bytes:     ${st.dbSizeBytes}`);
-  console.log(`backend:           ${st.backend}`);
-  console.log(`schema_version:    ${st.schemaVersion}`);
-  console.log(`git_head:          ${orDash(st.gitHead)}`);
+  emitText(`pages:             ${st.pages}`);
+  emitText(`db_size_bytes:     ${st.dbSizeBytes}`);
+  emitText(`backend:           ${st.backend}`);
+  emitText(`schema_version:    ${st.schemaVersion}`);
+  emitText(`git_head:          ${orDash(st.gitHead)}`);
   if (st.unindexedPages.length > 0) {
-    console.log(
+    emitText(
       `unindexed_pages: ${st.unindexedPages.length} page(s) the index cannot hold:`
     );
     for (const page of st.unindexedPages) {
-      console.log(`  ${page.pageRef}: ${page.reason}`);
+      emitText(`  ${page.pageRef}: ${page.reason}`);
     }
   } else {
-    console.log(`unindexed_pages: 0`);
+    emitText(`unindexed_pages: 0`);
   }
   if (st.uncommittedPages > 0) {
-    console.log(
+    emitText(
       `uncommitted_pages: ${st.uncommittedPages} page(s) on disk not yet committed \u2014 not searchable.`
     );
   } else {
-    console.log(`uncommitted_pages: 0`);
-  }
-}
-function renderSkipped(skipped) {
-  for (const page of skipped) {
-    console.error(`skipped ${page.pageRef}: ${page.reason}`);
+    emitText(`uncommitted_pages: 0`);
   }
 }
 function renderReindex(stats, full, asJSON) {
-  renderSkipped(stats.skipped);
+  emitSkippedPages(stats.skipped);
   if (asJSON) {
     emitDocument({
       pages: stats.pages,
@@ -39312,7 +39369,7 @@ function renderReindex(stats, full, asJSON) {
     return;
   }
   const action = full ? "full reindex" : "reindex";
-  console.log(
+  emitText(
     `${action}: ${stats.pages} pages (+${stats.inserted} ~${stats.updated} -${stats.removed}) in ${stats.durationMs.toFixed(1)} ms`
   );
 }
@@ -39427,20 +39484,30 @@ function registerSearchCommand(program2) {
           }
         }
       }
-      const index = await Index.open(root);
-      try {
-        if (opts.status) {
-          renderStatus(await index.status(), opts.json ?? false);
-          return;
+      if (opts.status) {
+        const index2 = await Index.open(root);
+        try {
+          renderStatus(await index2.status(), opts.json ?? false);
+        } finally {
+          index2.close();
         }
-        if (opts.reindex) {
+        return;
+      }
+      if (opts.reindex) {
+        const index2 = await Index.open(root);
+        try {
           renderReindex(
-            await index.reindex(opts.full ?? false),
+            await index2.reindex(opts.full ?? false),
             opts.full ?? false,
             opts.json ?? false
           );
-          return;
+        } finally {
+          index2.close();
         }
+        return;
+      }
+      const index = await Index.open(root);
+      try {
         const query = {
           text: text2 ?? "",
           raw: opts.raw ?? false,
@@ -39462,7 +39529,7 @@ function registerSearchCommand(program2) {
           if (err instanceof FtsQueryError) failBadInvocation(err.message);
           throw err;
         }
-        renderSkipped(index.skippedPages());
+        emitSkippedPages(index.skippedPages());
         renderHits(hits, opts.json ?? false);
       } finally {
         index.close();
@@ -41874,10 +41941,10 @@ var delFromSet = (main2, prop, item) => {
 };
 var isEmptySet = (val) => val instanceof Set ? val.size === 0 : !val;
 var FsWatchInstances = /* @__PURE__ */ new Map();
-function createFsWatchInstance(path36, options, listener, errHandler, emitRaw) {
+function createFsWatchInstance(path36, options, listener, errHandler, emitRaw2) {
   const handleEvent = (rawEvent, evPath) => {
     listener(path36);
-    emitRaw(rawEvent, evPath, { watchedPath: path36 });
+    emitRaw2(rawEvent, evPath, { watchedPath: path36 });
     if (evPath && path36 !== evPath) {
       fsWatchBroadcast(sp.resolve(path36, evPath), KEY_LISTENERS, sp.join(path36, evPath));
     }
@@ -43332,7 +43399,7 @@ function runWatch(paths, options = {}) {
   const schedule = options.schedule ?? defaultSchedule;
   const onSignal = options.onSignal ?? defaultOnSignal;
   const offSignal = options.offSignal ?? defaultOffSignal;
-  const log2 = options.log ?? console.log;
+  const log2 = options.log ?? emitText;
   const pid = options.pid ?? process.pid;
   return new Promise((resolve6) => {
     let cancel = () => {
@@ -43414,7 +43481,7 @@ function normalizeFolderArg(arg) {
 }
 function renderScanTable(result) {
   if (result.eligible.length === 0 && result.ignored.length === 0) {
-    console.log("no eligible files; 0 ignored");
+    emitText("no eligible files; 0 ignored");
     return;
   }
   let width = 10;
@@ -43425,12 +43492,12 @@ function renderScanTable(result) {
     if (rawRel.length > width) width = rawRel.length;
   }
   for (const c of result.eligible) {
-    console.log(`${c.rawRel.padEnd(width)}  ${c.reason}`);
+    emitText(`${c.rawRel.padEnd(width)}  ${c.reason}`);
   }
   if (result.ignored.length > 0) {
-    console.log(`
+    emitText(`
 ${result.ignored.length} ignored by .ingestignore:`);
-    for (const rawRel of result.ignored) console.log(`  ${rawRel}`);
+    for (const rawRel of result.ignored) emitText(`  ${rawRel}`);
   }
 }
 async function runPlan(planPath, root, dryRun) {
@@ -43447,12 +43514,12 @@ async function runPlan(planPath, root, dryRun) {
     if (stale.length > 0) fail(`stale assessment: ${stale.join("; ")}`);
   }
   if (dryRun) {
-    console.log(resolved.describe());
+    emitText(resolved.describe());
     return;
   }
   const { sha, written } = await resolved.execute(new VaultGit(root));
-  console.log(sha);
-  for (const page of written) console.log(`${page.op} ${page.pageRef}`);
+  emitText(sha);
+  for (const page of written) emitText(`${page.op} ${page.pageRef}`);
   printToolCallSummary();
   if (planPath !== "-") {
     import_node_fs17.default.unlinkSync(planPath);
@@ -43463,7 +43530,7 @@ function printToolCallSummary() {
   if (!sessionID) return;
   const events = readLog(sessionID, "");
   if (events.length === 0) return;
-  console.log(formatSummary(summarize(events)));
+  emitText(formatSummary(summarize(events)));
 }
 async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
   const text2 = readInput(planPath, "--plan");
@@ -43474,6 +43541,7 @@ async function runDiscoverPlan(index, planPath, opts, tagsContain, tagCount) {
     candidates: r.candidates
   }));
   const vocab = await index.tagCounts();
+  emitSkippedPages(index.skippedPages());
   const payload = { pages };
   if (tagsContain === "" && tagCount === "") {
     payload.vocabulary = vocab;
@@ -43504,7 +43572,9 @@ async function runDiscoverRef(index, root, ref, opts) {
   } catch {
   }
   const body = splitFrontmatter(page.content).body;
-  emitRows(await nominate(index, ref, title, summary, body, opts));
+  const nominees = await nominate(index, ref, title, summary, body, opts);
+  emitSkippedPages(index.skippedPages());
+  emitRows(nominees);
 }
 function ignoreRawFile(root, rawRel, comment) {
   const rel = import_node_path21.default.posix.normalize(rawRel);
@@ -43575,7 +43645,7 @@ function registerIngestCommands(program2) {
         );
       }
       if (stalePID !== null) {
-        console.log(
+        emitText(
           `previous watcher exited without cleanup, removing stale lock (pid=${stalePID})`
         );
       }
@@ -43644,7 +43714,7 @@ function registerIngestCommands(program2) {
       );
     }
     const sha = await commit2(root, manifest, new VaultGit(root));
-    console.log(sha);
+    emitText(sha);
   });
   program2.command("discover").description(
     "Find pages overlapping a planned page, plus the tag vocabulary"
@@ -43739,6 +43809,7 @@ function registerIngestCommands(program2) {
           body,
           { ...discoverOpts, exclude: opts.exclude }
         );
+        emitSkippedPages(index.skippedPages());
         emitRows(candidates);
       } finally {
         index.close();
@@ -43856,7 +43927,7 @@ function registerPlacementCommands(program2) {
         opts.mode,
         opts.pluginRoot ?? ""
       );
-      console.log(root);
+      emitText(root);
     }
   );
   program2.command("place <kind> <title>").description(
@@ -43870,7 +43941,7 @@ function registerPlacementCommands(program2) {
     } catch (err) {
       failBadInvocation(err.message);
     }
-    console.log(rel);
+    emitText(rel);
   });
 }
 function registerVaultCommand(program2) {
@@ -43883,18 +43954,18 @@ function registerVaultCommand(program2) {
       );
     }
     const root = resolveRoot();
-    console.log(root);
+    emitText(root);
   });
   vault.command("root").description("Print the resolved vault root (the no-argument default)").action(() => {
     const root = resolveRoot();
-    console.log(root);
+    emitText(root);
   });
   vault.command("move").description(
     "Move a page within the vault and fix every link, inbound and outbound"
   ).argument("<old_ref>", "vault-relative path of the page to move").argument("<new_ref>", "vault-relative destination path").action((oldRef, newRef) => {
     const root = resolveRoot();
     const changed = new Vault(root).movePage(oldRef, newRef);
-    for (const pageRef2 of changed) console.log(pageRef2);
+    for (const pageRef2 of changed) emitText(pageRef2);
   });
   vault.command("kinds").description(
     `List all placement kinds as one compact JSON array: canonical four plus any discovered custom folders; each entry: {${KindFields.join(", ")}}, definition {${KindDefinitionFields.join(", ")}} or null`
@@ -43965,7 +44036,9 @@ var VaultRead = class {
   vault;
   textsCache;
   allRefsCache;
-  recordsCache;
+  /** Keyed by error mode — `skipMalformedEdges` is the only option that changes
+   * decoding; a new one needs a key too. */
+  recordsCache = /* @__PURE__ */ new Map();
   kindsCache;
   registryCache;
   /** Every `wiki/**` page as a {pageRef: text} map. */
@@ -43976,16 +44049,26 @@ var VaultRead = class {
   allRefs() {
     return this.allRefsCache ??= walkAllMd(this.root);
   }
-  /** Parsed records, tolerant of malformed edges — the read every check uses. */
-  records() {
-    return this.recordsCache ??= this.vault.recordsFor(this.texts(), {
-      skipMalformedEdges: true
-    });
+  /** Parsed records for the working tree, strict by default; `opts` per
+   * [LoadRecordsOptions]. */
+  records(opts = {}) {
+    const tolerant = opts.skipMalformedEdges === true;
+    let records = this.recordsCache.get(tolerant);
+    if (records === void 0) {
+      records = this.vault.recordsFor(this.texts(), opts);
+      this.recordsCache.set(tolerant, records);
+    }
+    return records;
   }
-  /** Each page's parsed record paired with the text it was decoded from. */
-  pagesWithText() {
+  /** Parsed records for `pages` the caller already holds, such as HEAD text;
+   * not cached. */
+  recordsFor(pages, opts = {}) {
+    return this.vault.recordsFor(pages, opts);
+  }
+  /** Each page's parsed record paired with its text, strict by default. */
+  pagesWithText(opts = {}) {
     const texts = this.texts();
-    const records = this.records();
+    const records = this.records(opts);
     const out = {};
     for (const ref of Object.keys(records)) {
       out[ref] = { record: records[ref], text: texts[ref] };
@@ -44006,6 +44089,7 @@ var VaultRead = class {
 // src/check.ts
 init_vaultgit();
 init_pagepredicate();
+var TOLERANT = { skipMalformedEdges: true };
 var SOURCES_DIR = `wiki/${KindFolders["source"]}`;
 var RAW_HREF_PREFIX = import_node_path25.default.posix.relative(SOURCES_DIR, "raw");
 function regexEscape(s) {
@@ -44027,7 +44111,7 @@ async function kindFolderConformance(read) {
   return findings;
 }
 async function ingestionSourceIntegrity(read) {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -44086,7 +44170,7 @@ function isSelfEdge(ref, target) {
   return import_node_path25.default.posix.normalize(target) === ref;
 }
 async function selfReferentialEdge(read) {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     for (const edge of record.edges) {
@@ -44103,7 +44187,7 @@ async function selfReferentialEdge(read) {
   return findings;
 }
 async function edgeShape(read) {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     findings.push(...duplicateEdgeTargets(ref, record));
@@ -44158,7 +44242,7 @@ function edgeLabelShape(ref, record, pages) {
   return findings;
 }
 async function sourceToSourceEdge(read) {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (record.kind !== "source") continue;
@@ -44180,7 +44264,7 @@ async function sourceToSourceEdge(read) {
 }
 var StaleSynthesisDays = 30;
 async function staleSynthesis(read) {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const vaultGit = new VaultGit(read.root);
   const findings = [];
   const cutoffMs = Date.now() - StaleSynthesisDays * 24 * 60 * 60 * 1e3;
@@ -44200,7 +44284,7 @@ async function staleSynthesis(read) {
   return findings;
 }
 async function missingVolatilitySourceDate(read) {
-  const pages = read.records();
+  const pages = read.records(TOLERANT);
   const findings = [];
   for (const [ref, record] of Object.entries(pages)) {
     if (!record.volatility)
@@ -44211,7 +44295,7 @@ async function missingVolatilitySourceDate(read) {
   return findings;
 }
 async function unresolvedSupersession(read) {
-  const pagesWithText = read.pagesWithText();
+  const pagesWithText = read.pagesWithText(TOLERANT);
   const findings = [];
   for (const [ref, { record, text: text2 }] of Object.entries(pagesWithText)) {
     const hasContradicts = record.edges.some(
@@ -44232,7 +44316,7 @@ async function unresolvedSupersession(read) {
   return findings;
 }
 async function contradictionCallouts(read) {
-  const pagesWithText = read.pagesWithText();
+  const pagesWithText = read.pagesWithText(TOLERANT);
   const findings = [];
   for (const [ref, { text: text2 }] of Object.entries(pagesWithText)) {
     const { body } = splitFrontmatter(text2);
@@ -44242,7 +44326,7 @@ async function contradictionCallouts(read) {
   return findings;
 }
 async function orphans(read) {
-  const pagesWithText = read.pagesWithText();
+  const pagesWithText = read.pagesWithText(TOLERANT);
   const allRefs = new Set(Object.keys(pagesWithText));
   const inbound = /* @__PURE__ */ new Map();
   for (const ref of allRefs) inbound.set(ref, 0);
@@ -44585,9 +44669,7 @@ async function conceptFragmentation(read, opts = {}) {
     const inbound = inboundCounts(text2);
     let conflicts = null;
     const conflictEdges = () => conflicts ??= conflictingPairs(
-      loadRecords(Object.fromEntries(text2), void 0, {
-        skipMalformedEdges: true
-      })
+      read.recordsFor(Object.fromEntries(text2), TOLERANT)
     );
     const findings = [];
     for (const [root, refs] of clusters) {
@@ -44620,6 +44702,7 @@ async function conceptFragmentation(read, opts = {}) {
     }
     return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
   } finally {
+    emitSkippedPages(index.skippedPages());
     index.close();
   }
 }
@@ -44673,6 +44756,7 @@ async function consolidationExclusions(read) {
     }
     return findings.sort((a, b) => a.pageRef.localeCompare(b.pageRef));
   } finally {
+    emitSkippedPages(index.skippedPages());
     index.close();
   }
 }
@@ -44955,10 +45039,11 @@ async function fixIngestionSourceIntegrity(root) {
   );
 }
 async function fixMissingCrossReferences(root, opts = {}) {
+  const read = new VaultRead(root);
   const vault = new Vault(root);
   const pages = {};
   for (const [ref, { record, text: text2 }] of Object.entries(
-    vault.pagesWithText({ skipMalformedEdges: true })
+    read.pagesWithText(TOLERANT)
   )) {
     pages[ref] = { title: record.title, text: text2 };
   }
@@ -44989,6 +45074,7 @@ async function fixConsolidationExclusions(root, opts = {}) {
       changed.push(registry.ref);
     }
   } finally {
+    emitSkippedPages(index.skippedPages());
     index.close();
   }
   return changed.sort();
@@ -45034,7 +45120,7 @@ function registerCheckFixCommands(program2) {
         if (opts.json) emitRows(rows);
         else
           for (const f of rows)
-            console.log(`${f.check}: ${f.pageRef}: ${f.detail}`);
+            emitText(`${f.check}: ${f.pageRef}: ${f.detail}`);
         return;
       }
       const fn = name ? CHECKS[name] : void 0;
@@ -45048,7 +45134,7 @@ function registerCheckFixCommands(program2) {
         minSimilarity: opts.minSimilarity
       });
       if (opts.json) emitRows(findings);
-      else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+      else for (const f of findings) emitText(`${f.pageRef}: ${f.detail}`);
     }
   );
   const fixNames = Object.keys(FIXES).join(", ");
@@ -45077,7 +45163,7 @@ function registerCheckFixCommands(program2) {
     }
     const root = resolveRoot();
     const changed = await fn(root, opts);
-    for (const ref of changed) console.log(ref);
+    for (const ref of changed) emitText(ref);
   });
 }
 
@@ -45368,7 +45454,7 @@ async function addExclusion(root, refs, reason, git2 = new VaultGit(root)) {
     upsertExclusion(existing, { members: captured, reason })
   );
   if (rendered === text2) {
-    console.log(ref);
+    emitText(ref);
     return;
   }
   if (before.head !== (await git2.committedPages("")).head) {
@@ -45378,7 +45464,7 @@ async function addExclusion(root, refs, reason, git2 = new VaultGit(root)) {
   }
   vault.write(ref, new Page(rendered));
   await git2.stageAndCommit([ref], exclusionMessage(captured, reason));
-  console.log(ref);
+  emitText(ref);
 }
 function registerExclusionCommand(program2) {
   const exclusion = program2.command("exclusion").description(
@@ -46032,6 +46118,15 @@ function buildExportMeta(pages, opts = {}) {
     startPage,
     outputPathFor
   };
+}
+function carries(meta, starter) {
+  return meta.exported.has(starter.pageRef);
+}
+function carriedStarters(starters, meta) {
+  return starters.filter((s) => carries(meta, s));
+}
+function droppedStarters(starters, meta) {
+  return starters.filter((s) => !carries(meta, s));
 }
 function kindFolder(kind, pageRefs) {
   if (KindFolders[kind]) return KindFolders[kind];
@@ -46824,10 +46919,8 @@ function renderFrontPage(meta, opts, pages, tagSlugMap, wikiTitle, context) {
     }
   );
   let startedItems;
-  const suppliedStarters = opts.starters?.filter(
-    (s) => meta.exported.has(s.pageRef)
-  );
-  if (suppliedStarters && suppliedStarters.length > 0) {
+  const suppliedStarters = carriedStarters(opts.starters ?? [], meta);
+  if (suppliedStarters.length > 0) {
     startedItems = suppliedStarters.map(({ pageRef: pageRef2, annotation }) => {
       const title = pages.get(pageRef2)?.record?.title ?? pageRef2;
       const link2 = pageLink(htmlPath, pageRef2, title, context);
@@ -47145,7 +47238,7 @@ function writeSingleFile(outFile, html) {
     throw err;
   }
   const warning = singleFileSizeWarning(import_node_fs25.default.statSync(outFile).size, outFile);
-  if (warning) console.error(warning);
+  if (warning) emitDiagnostic(warning);
 }
 async function runExport2(root, opts) {
   const outDir = opts.out;
@@ -47221,9 +47314,15 @@ async function runExport2(root, opts) {
     );
   }
   if (startPageRef !== void 0 && starters.length > 0) {
-    console.error(
+    emitDiagnostic(
       `Warning: --starters is ignored because "${startPageRef}" is the start page. Exporting the start page without a get-started block.`
     );
+  } else {
+    for (const { pageRef: pageRef2 } of droppedStarters(starters, meta)) {
+      emitDiagnostic(
+        `Warning: --starters ref "${pageRef2}" names no page this export carries; it was dropped from the get-started block.`
+      );
+    }
   }
   function* allPages() {
     yield* renderPages(pagesMap, meta, exportOpts);
@@ -47280,7 +47379,7 @@ function registerSessionCommands(program2) {
       void 0,
       /* @__PURE__ */ new Date()
     );
-    console.log(rel);
+    emitText(rel);
   });
   program2.command("tool-call-stats").description("Summarise a session's tool-call log").option(
     "--session-id <id>",
@@ -47297,7 +47396,7 @@ function registerSessionCommands(program2) {
     if (events.length === 0) {
       fail(`no log found at ${logPath(id, "")}`);
     }
-    console.log(formatSummary(summarize(events)));
+    emitText(formatSummary(summarize(events)));
   });
 }
 function registerHookCommands(program2) {
@@ -47351,7 +47450,7 @@ function registerExportCommands(program2) {
           }
           fail(`enchiridion export: ${err.message}`);
         }
-        console.log(
+        emitText(
           `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`
         );
         return;
@@ -47364,7 +47463,7 @@ function registerExportCommands(program2) {
           );
         }
         saveExportStartPage(root, opts.saveStartPage);
-        console.log(
+        emitText(
           ref === "" ? `Cleared the saved start page in ${exportConfigPath(root)}` : `Saved start page "${ref}" to ${exportConfigPath(root)}`
         );
         return;
@@ -47400,7 +47499,7 @@ function registerExportCommands(program2) {
           startPage: opts.startPage,
           starters
         });
-        console.log(`Exported to ${outPath}`);
+        emitText(`Exported to ${outPath}`);
       } catch (err) {
         if (err instanceof ExportDirtyError || err instanceof ExportTargetNotEmptyError || err instanceof ExportTargetIsDirectoryError || err instanceof ExportStartPageError) {
           fail(`enchiridion export: ${err.message}`);
@@ -47452,104 +47551,75 @@ function isMainModule() {
   if (arg === void 0) return false;
   return import_meta.url === (0, import_node_url.pathToFileURL)(import_node_path35.default.resolve(arg)).href;
 }
-function overrideEveryExit(program2) {
-  program2.exitOverride();
-  for (const cmd of program2.commands) overrideEveryExit(cmd);
+function forEveryCommand(program2, visit) {
+  visit(program2);
+  for (const cmd of program2.commands) forEveryCommand(cmd, visit);
 }
-async function run(argv) {
+function overrideEveryExit(program2) {
+  forEveryCommand(program2, (cmd) => cmd.exitOverride());
+}
+function configureEveryOutput(program2, sink2) {
+  forEveryCommand(
+    program2,
+    (cmd) => cmd.configureOutput({
+      writeOut: (chunk) => sink2.out(chunk),
+      writeErr: (chunk) => sink2.err(chunk)
+    })
+  );
+}
+async function run(argv, sink2 = processSink) {
   const stdout = [];
   const stderr = [];
+  const tee = {
+    out: (chunk) => {
+      stdout.push(chunk);
+      sink2.out(chunk);
+    },
+    err: (chunk) => {
+      stderr.push(chunk);
+      sink2.err(chunk);
+    }
+  };
+  const result = (exitCode) => ({
+    stdout: stdout.join(""),
+    stderr: stderr.join(""),
+    exitCode
+  });
   const program2 = buildProgram();
   overrideEveryExit(program2);
-  program2.configureOutput({
-    writeOut: (s) => stdout.push(s),
-    writeErr: (s) => stderr.push(s)
-  });
-  const outWrite = process.stdout.write;
-  const errWrite = process.stderr.write;
-  const consoleLog = console.log;
-  const consoleError = console.error;
-  process.stdout.write = ((chunk, ..._rest) => {
-    stdout.push(String(chunk));
-    return true;
-  });
-  process.stderr.write = ((chunk, ..._rest) => {
-    stderr.push(String(chunk));
-    return true;
-  });
-  console.log = (...args) => {
-    stdout.push(import_node_util5.default.format(...args) + "\n");
-  };
-  console.error = (...args) => {
-    stderr.push(import_node_util5.default.format(...args) + "\n");
-  };
+  configureEveryOutput(program2, tee);
+  setOutputSink(tee);
   try {
     if (argv.length === 0) {
       try {
         program2.help();
       } catch {
       }
-      return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: 0 };
+      return result(ExitSuccess);
     }
     const stray = rootOptionRefusal(argv);
     if (stray !== null) {
-      stderr.push(stray + "\n");
-      return {
-        stdout: stdout.join(""),
-        stderr: stderr.join(""),
-        exitCode: ExitBadInvocation
-      };
+      tee.err(stray + "\n");
+      return result(ExitBadInvocation);
     }
     try {
       await program2.parseAsync([process.execPath, "enchiridion", ...argv]);
     } catch (err) {
       const commanderCode = commanderExitCode(err);
-      if (commanderCode !== null) {
-        return {
-          stdout: stdout.join(""),
-          stderr: stderr.join(""),
-          exitCode: commanderCode
-        };
-      }
-      stderr.push(failureMessage(err));
-      return {
-        stdout: stdout.join(""),
-        stderr: stderr.join(""),
-        exitCode: exitCodeFor(err)
-      };
+      if (commanderCode !== null) return result(commanderCode);
+      tee.err(failureMessage(err));
+      return result(exitCodeFor(err));
     }
     const exitCode = Number(process.exitCode ?? 0);
     process.exitCode = 0;
-    return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode };
+    return result(exitCode);
   } finally {
-    process.stdout.write = outWrite;
-    process.stderr.write = errWrite;
-    console.log = consoleLog;
-    console.error = consoleError;
+    setOutputSink(null);
   }
 }
 function main() {
-  const argv = process.argv.slice(2);
-  const stray = rootOptionRefusal(argv);
-  if (stray !== null) {
-    process.stderr.write(stray + "\n");
-    process.exitCode = ExitBadInvocation;
-    return;
-  }
-  const program2 = buildProgram();
-  if (argv.length === 0) {
-    program2.help();
-    return;
-  }
-  overrideEveryExit(program2);
-  void program2.parseAsync(process.argv).catch((err) => {
-    const commanderCode = commanderExitCode(err);
-    if (commanderCode !== null) {
-      process.exitCode = commanderCode;
-      return;
-    }
-    process.stderr.write(failureMessage(err));
-    process.exitCode = exitCodeFor(err);
+  void run(process.argv.slice(2)).then((result) => {
+    process.exitCode = result.exitCode;
   });
 }
 if (isMainModule()) {
