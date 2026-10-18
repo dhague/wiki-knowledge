@@ -30,14 +30,40 @@ const mod = await import("../dist/cli.cjs");
 const entry = mod.run ? mod : mod.default;
 assert.equal(typeof entry.run, "function", "bundle must export run()");
 
-const usage = await entry.run([]);
+/** A sink that records, so run() has somewhere to write besides this process. */
+function capture() {
+  const out = [];
+  const err = [];
+  return {
+    sink: { out: (chunk) => out.push(chunk), err: (chunk) => err.push(chunk) },
+    out,
+    err,
+  };
+}
+
+const usageStream = capture();
+const usage = await entry.run([], usageStream.sink);
 assert.equal(usage.exitCode, 0, "run([]) must exit 0");
 assert.ok(
   usage.stdout.includes("Usage:"),
   "run([]) must print usage to stdout",
 );
+assert.equal(
+  usageStream.out.join(""),
+  usage.stdout,
+  "run() must write the result through its sink",
+);
+assert.equal(
+  usageStream.err.join(""),
+  usage.stderr,
+  "run() must write stderr through its sink",
+);
 
-const placed = await entry.run(["place", "concept", "import-safety-check"]);
+const placedStream = capture();
+const placed = await entry.run(
+  ["place", "concept", "import-safety-check"],
+  placedStream.sink,
+);
 assert.equal(placed.exitCode, 0, "run(place) must exit 0");
 assert.ok(
   placed.stdout.includes("import-safety-check"),

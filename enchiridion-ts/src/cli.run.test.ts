@@ -1,7 +1,7 @@
 /**
- * In-process `run()` tests against the esbuild-bundled `dist/cli.cjs`: importing
- * the bundle must be inert and `run(argv)` captures output without touching the
- * host. Skips (never fails) when the bundle is absent — `npm run build` first.
+ * `run()` tests against the esbuild-bundled `dist/cli.cjs`: importing the
+ * bundle must be inert, and `run(argv, sink)` must write only to the sink it is
+ * given. Skips (never fails) when the bundle is absent — `npm run build` first.
  */
 
 import { test } from "node:test";
@@ -25,10 +25,32 @@ const skipReason = fs.existsSync(distCli)
   ? false
   : "dist/cli.cjs not built — run `npm run build` first";
 
+interface OutputSink {
+  out(chunk: string): void;
+  err(chunk: string): void;
+}
+
 interface RunResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+}
+
+type Run = (argv: string[], sink: OutputSink) => Promise<RunResult>;
+
+/** A sink that records every chunk, so a case can assert where the bytes went. */
+function captureSink(): {
+  sink: OutputSink;
+  out: string[];
+  err: string[];
+} {
+  const out: string[] = [];
+  const err: string[] = [];
+  return {
+    sink: { out: (chunk) => out.push(chunk), err: (chunk) => err.push(chunk) },
+    out,
+    err,
+  };
 }
 
 // Snapshot the host's pre-import state. The require below runs at module scope,
@@ -39,15 +61,21 @@ const realStderrWrite = process.stderr.write;
 const realConsoleLog = console.log;
 const realConsoleError = console.error;
 
-let run: (argv: string[]) => Promise<RunResult>;
+let run: Run;
 if (!skipReason) {
   const require = createRequire(import.meta.url);
-  ({ run } = require(distCli) as {
-    run: (argv: string[]) => Promise<RunResult>;
-  });
+  ({ run } = require(distCli) as { run: Run });
 }
 
-/** A committed vault with one searchable page. */
+/** run() must leave the host's streams and console exactly as it found them. */
+function hostStreamsUntouched(): void {
+  assert.equal(process.stdout.write, realStdoutWrite);
+  assert.equal(process.stderr.write, realStderrWrite);
+  assert.equal(console.log, realConsoleLog);
+  assert.equal(console.error, realConsoleError);
+}
+
+/** A committed vault with two searchable pages. */
 async function buildCommittedVault(): Promise<string> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "enchiridion-run-vault-"));
   fs.writeFileSync(path.join(root, ".wiki-root"), "");
@@ -81,42 +109,59 @@ async function buildCommittedVault(): Promise<string> {
   return root;
 }
 
+/** Run once with env layered over the process's own, restoring it after. An
+ * undefined value unsets the variable for the run. */
+async function runEnv(
+  argv: string[],
+  env: Record<string, string | undefined>,
+): Promise<RunResult> {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(env)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    const { sink } = captureSink();
+    return await run(argv, sink);
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 test(
-  "importing the bundle is inert: host survives, exitCode unset",
+  "importing the bundle is inert: host survives, streams and exitCode untouched",
   { skip: skipReason },
   () => {
     // Merely reaching this test proves the import didn't process.exit the host.
     assert.equal(process.exitCode, exitCodeBeforeImport);
+    hostStreamsUntouched();
   },
 );
 
 test(
-  "run([]): bare invocation prints usage to stdout, exitCode 0",
+  "run([]): bare invocation writes usage through the given sink, exitCode 0",
   { skip: skipReason },
   async () => {
-    const result = await run([]);
-    assert.match(result.stdout, /Usage:/);
+    const { sink, out, err } = captureSink();
+    const result = await run([], sink);
+    assert.match(out.join(""), /Usage:/);
+    assert.equal(result.stdout, out.join(""), "the result is the sink's bytes");
+    assert.equal(result.stderr, err.join(""), "stderr reached the sink too");
     assert.equal(result.stderr, "");
     assert.equal(result.exitCode, 0);
+    assert.equal(process.stdout.write, realStdoutWrite);
+    assert.equal(process.stderr.write, realStderrWrite);
+    assert.equal(console.log, realConsoleLog);
+    assert.equal(console.error, realConsoleError);
     // The help path never sets it — unset (or 0) is the "not left set" bar.
     assert.ok(
       process.exitCode == null || process.exitCode === 0,
       "host exitCode left set",
     );
-    assert.equal(process.stdout.write, realStdoutWrite);
-    assert.equal(process.stderr.write, realStderrWrite);
-    assert.equal(console.log, realConsoleLog);
-    assert.equal(console.error, realConsoleError);
-  },
-);
-
-test(
-  "run(['--help']): help to stdout, exitCode 0",
-  { skip: skipReason },
-  async () => {
-    const result = await run(["--help"]);
-    assert.match(result.stdout, /Usage:/);
-    assert.equal(result.exitCode, 0);
   },
 );
 
@@ -124,25 +169,11 @@ test(
   "run(['place', ...]): computes a vault-relative path in-process",
   { skip: skipReason },
   async () => {
-    const result = await run(["place", "concept", "Connection Pooling"]);
-    assert.equal(result.stdout.trim(), "wiki/concepts/connection-pooling.md");
+    const { sink, out } = captureSink();
+    const result = await run(["place", "concept", "Connection Pooling"], sink);
+    assert.equal(out.join("").trim(), "wiki/concepts/connection-pooling.md");
     assert.equal(result.stderr, "");
     assert.equal(result.exitCode, 0);
-  },
-);
-
-test(
-  "run(['place', 'nonsense', 'X']): error to stderr, exitCode non-zero, host exitCode untouched",
-  { skip: skipReason },
-  async () => {
-    const result = await run(["place", "nonsense", "X"]);
-    assert.notEqual(result.exitCode, 0);
-    assert.match(result.stderr, /unknown kind/);
-    // The failure is reported in the result, never left on the host process.
-    assert.ok(
-      process.exitCode == null || process.exitCode === 0,
-      "host exitCode left set",
-    );
   },
 );
 
@@ -158,7 +189,7 @@ test(
       ["place"],
       ["totally-bogus-command"],
     ]) {
-      const result = await run(argv);
+      const result = await runEnv(argv, {});
       assert.equal(result.exitCode, 2, `${argv.join(" ")}: ${result.stderr}`);
     }
 
@@ -167,40 +198,18 @@ test(
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "enchiridion-run-root-"),
     );
-    const prevVault = process.env.VAULT;
-    process.env.VAULT = root;
-    try {
-      const result = await run(["read-page", "wiki/concepts/missing.md"]);
-      assert.equal(result.exitCode, 1, result.stderr);
-      assert.match(result.stderr, /page not found/);
-    } finally {
-      if (prevVault === undefined) delete process.env.VAULT;
-      else process.env.VAULT = prevVault;
-    }
+    const result = await runEnv(["read-page", "wiki/concepts/missing.md"], {
+      VAULT: root,
+    });
+    assert.equal(result.exitCode, 1, result.stderr);
+    assert.match(result.stderr, /page not found/);
 
-    assert.equal((await run(["--version"])).exitCode, 0);
+    assert.equal((await runEnv(["--version"], {})).exitCode, 0);
     assert.ok(
       process.exitCode == null || process.exitCode === 0,
       "host exitCode left set",
     );
-  },
-);
-
-test(
-  "after runs: streams restored to the real ones, host can still write",
-  { skip: skipReason },
-  async () => {
-    await run(["place", "concept", "Restored Streams"]);
-    assert.equal(process.stdout.write, realStdoutWrite);
-    assert.equal(process.stderr.write, realStderrWrite);
-    assert.equal(console.log, realConsoleLog);
-    assert.equal(console.error, realConsoleError);
-    assert.ok(
-      process.exitCode == null || process.exitCode === 0,
-      "host exitCode left set",
-    );
-    // Writing now reaches the real stream, not a captured array.
-    assert.equal(process.stdout.write(""), true);
+    hostStreamsUntouched();
   },
 );
 
@@ -209,21 +218,12 @@ test(
   { skip: skipReason },
   async () => {
     const root = await buildCommittedVault();
-    const prevVault = process.env.VAULT;
-    process.env.VAULT = root;
-    try {
-      const result = await run(["search", "bm25", "--limit", "2"]);
-      assert.equal(result.exitCode, 0, result.stderr);
-      assert.match(result.stdout, /wiki\/concepts\/bm25-ranking\.md/);
-      assert.equal(process.exitCode, 0);
-      assert.equal(process.stdout.write, realStdoutWrite);
-      assert.equal(process.stderr.write, realStderrWrite);
-      assert.equal(console.log, realConsoleLog);
-      assert.equal(console.error, realConsoleError);
-    } finally {
-      if (prevVault === undefined) delete process.env.VAULT;
-      else process.env.VAULT = prevVault;
-    }
+    const result = await runEnv(["search", "bm25", "--limit", "2"], {
+      VAULT: root,
+    });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout, /wiki\/concepts\/bm25-ranking\.md/);
+    hostStreamsUntouched();
   },
 );
 
@@ -231,28 +231,20 @@ test(
   "run(['save-session']): reads OPENCODE_SESSION_ID from process.env (not 'neither ID' error)",
   { skip: skipReason },
   async () => {
-    const prevSessionID = process.env.OPENCODE_SESSION_ID;
-    const prevClaudeID = process.env.CLAUDE_CODE_SESSION_ID;
-    process.env.OPENCODE_SESSION_ID = "test-opencode-session-id";
     // This suite may itself run inside a Claude Code session that sets
     // CLAUDE_CODE_SESSION_ID; unset it so only the OpenCode path runs.
-    delete process.env.CLAUDE_CODE_SESSION_ID;
-    try {
-      const result = await run(["save-session", "--slug", "test-session"]);
-      // The "neither ID" error would mean the env var was invisible.
-      assert.notEqual(result.exitCode, 0);
-      assert.ok(
-        !result.stderr.includes("Neither $CLAUDE_CODE_SESSION_ID"),
-        `Expected OPENCODE_SESSION_ID to be read; got: ${result.stderr.trim()}`,
-      );
-      // Any failure past the host-ID check: tracker diagnostics, a missing CLI,
-      // or an `export` that failed for whatever reason the local machine has.
-      assert.match(result.stderr, /opencode|session-tracker/i);
-    } finally {
-      if (prevSessionID === undefined) delete process.env.OPENCODE_SESSION_ID;
-      else process.env.OPENCODE_SESSION_ID = prevSessionID;
-      if (prevClaudeID === undefined) delete process.env.CLAUDE_CODE_SESSION_ID;
-      else process.env.CLAUDE_CODE_SESSION_ID = prevClaudeID;
-    }
+    const result = await runEnv(["save-session", "--slug", "test-session"], {
+      OPENCODE_SESSION_ID: "test-opencode-session-id",
+      CLAUDE_CODE_SESSION_ID: undefined,
+    });
+    // The "neither ID" error would mean the env var was invisible.
+    assert.notEqual(result.exitCode, 0);
+    assert.ok(
+      !result.stderr.includes("Neither $CLAUDE_CODE_SESSION_ID"),
+      `Expected OPENCODE_SESSION_ID to be read; got: ${result.stderr.trim()}`,
+    );
+    // Any failure past the host-ID check: tracker diagnostics, a missing CLI,
+    // or an `export` that failed for whatever reason the local machine has.
+    assert.match(result.stderr, /opencode|session-tracker/i);
   },
 );
