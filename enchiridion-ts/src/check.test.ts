@@ -831,6 +831,22 @@ test("split-links: a split inside a fenced code block is not a finding", async (
   assert.deepEqual(await splitLinks(read(root)), []);
 });
 
+test("split-links: a body split after a fenced block reports its document line", async () => {
+  // codeLineRanges indexes the slice handed to it; the body-relative indices
+  // would read this earlier fence as covering the split and skip the finding.
+  const root = writeVault({
+    "wiki/concepts/foo.md": page(
+      "Foo",
+      "",
+      "```\ninside the fence\n```\n\n" +
+        "See [composition](../concepts/rbwm-council-political-\ncomposition.md).\n",
+    ),
+  });
+  const findings = await splitLinks(read(root));
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].detail, /line 8/);
+});
+
 // ---------------------------------------------------------------------------
 // duplicateFrontmatter
 // ---------------------------------------------------------------------------

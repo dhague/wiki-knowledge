@@ -20,7 +20,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { Page } from "./wikipage.js";
+import { Page } from "./frontmatter.js";
 import { check } from "./chainofevidence.js";
 
 /** Thrown when a manifest fails the chain-of-evidence gate; distinct from a

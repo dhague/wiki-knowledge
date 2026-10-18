@@ -10,14 +10,16 @@ import { Index } from "./searchindex.js";
 import { emitSkippedPages } from "./output.js";
 import {
   splitFrontmatter,
-  iterLinks,
-  composeLink,
-  resolveLinkDest,
-  encodeDest,
-  codeLineRanges,
   rewriteFrontmatter,
   isUnquotedListLinkLine,
   Page,
+} from "./frontmatter.js";
+import { encodeDest } from "./linkencoding.js";
+import {
+  iterLinks,
+  composeLink,
+  resolveLinkDest,
+  codeLineRanges,
 } from "./wikipage.js";
 import { isPageRef } from "./pagepredicate.js";
 import { edgeTargets, malformedEdges, malformedTags } from "./pagerecord.js";

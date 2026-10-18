@@ -9,14 +9,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { mkdirSafe } from "./fsutil.js";
 import { kindByFolder, kindForFolder, readKindMeta } from "./kindmeta.js";
-import {
-  Page,
-  linkDest,
-  planConsolidate,
-  planMove,
-  resolveLinkDest,
-  splitFrontmatter,
-} from "./wikipage.js";
+import { Page, splitFrontmatter } from "./frontmatter.js";
+import { planConsolidate, planMove } from "./moveplan.js";
+import { linkDest, resolveLinkDest } from "./wikipage.js";
 import { loadRecords, newPageRecord } from "./pagerecord.js";
 import { semanticFingerprint } from "./fingerprint.js";
 import type { LoadRecordsOptions, PageRecord } from "./pagerecord.js";

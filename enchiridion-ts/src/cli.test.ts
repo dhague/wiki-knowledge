@@ -25,7 +25,7 @@ import {
 import { PlanActions } from "./ingest.js";
 import { assessCluster } from "./assess.js";
 import { MaxSlugLength, slugify } from "./place.js";
-import { splitFrontmatter } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(__dirname, "cli.ts");

@@ -29,7 +29,7 @@ import {
 } from "./discover.js";
 import { headPages } from "./assess.js";
 import { newPageRecord } from "./pagerecord.js";
-import { splitFrontmatter } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import {
   DefaultDebounceSeconds,
   DefaultPollIntervalSeconds,

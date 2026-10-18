@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { headPages, type HeadPage } from "./assess.js";
 import { mkdirSafe } from "./fsutil.js";
-import { splitFrontmatter } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 
 /** Pages one call returns when the caller names no limit. */
 export const DefaultLimit = 12;

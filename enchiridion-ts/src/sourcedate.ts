@@ -3,7 +3,7 @@
  * time with exactly one canonical spelling, [CANONICAL_DATE_FORMAT].
  *
  * [parseSourceDate] is the shared fact. The writer tolerates a non-date
- * ([truncateSourceDate], applied in [wikipage.Page.set] so no caller can skip
+ * ([truncateSourceDate], applied in [frontmatter.Page.set] so no caller can skip
  * it); validation refuses ([canonicalSourceDate], for callers that validate
  * before writing). A writer must never throw on content it was handed.
  */

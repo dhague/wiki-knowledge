@@ -9,7 +9,7 @@ import { Vault, resolveRoot } from "./vault.js";
 import { headPageFacts, headPages, type HeadPage } from "./assess.js";
 import { VaultGit } from "./vaultgit.js";
 import type { Snapshot } from "./vaultgit.js";
-import { Page } from "./wikipage.js";
+import { Page } from "./frontmatter.js";
 import {
   folderOf,
   parseRegistry,

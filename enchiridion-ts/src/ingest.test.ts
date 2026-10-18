@@ -19,7 +19,7 @@ import {
 } from "./ingest.js";
 import { missingVolatilitySourceDate } from "./check.js";
 import { type PlanAssessment } from "./assess.js";
-import { Page } from "./wikipage.js";
+import { Page } from "./frontmatter.js";
 import { Vault } from "./vault.js";
 import { VaultRead } from "./vaultread.js";
 import { VaultGit } from "./vaultgit.js";

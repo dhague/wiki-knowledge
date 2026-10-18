@@ -13,7 +13,8 @@
 
 import path from "node:path";
 import { KindFolders } from "./place.js";
-import { Page, linkDest, resolveLinkDest } from "./wikipage.js";
+import { Page } from "./frontmatter.js";
+import { linkDest, resolveLinkDest } from "./wikipage.js";
 
 const sourceDir = `wiki/${KindFolders["source"]}`;
 

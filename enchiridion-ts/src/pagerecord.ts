@@ -1,7 +1,7 @@
 /**
  * The one reader of the frontmatter schema: frontmatter text in, one typed
  * record out, so the schema changes in exactly one place. Canonicalising a
- * value on the way to disk is `wikipage.ts`'s job, not this module's.
+ * value on the way to disk is `frontmatter.ts`'s job, not this module's.
  *
  * Paths are vault-relative (ADR-0009); kind is derived from the page's folder
  * (ADR-0008); SupersededBy is inverted from every other page's `supersedes`
@@ -10,7 +10,8 @@
 
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
-import { iterLinks, resolveLinkDest, splitFrontmatter } from "./wikipage.js";
+import { iterLinks, resolveLinkDest } from "./wikipage.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import { resolveKind } from "./kindmeta.js";
 import { parseSourceDate } from "./sourcedate.js";
 

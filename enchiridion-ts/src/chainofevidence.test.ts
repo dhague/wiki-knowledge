@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Page } from "./wikipage.js";
+import { Page } from "./frontmatter.js";
 import { check } from "./chainofevidence.js";
 
 function page(frontmatter: string): Page {

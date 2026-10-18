@@ -9,7 +9,8 @@
 
 import path from "node:path";
 import { EdgeKeys, isSingleLinkEdgeKey } from "./pagerecord.js";
-import { composeLink, isVaultRelativeDest, iterLinks } from "./wikipage.js";
+import { isVaultRelativeDest } from "./linkencoding.js";
+import { composeLink, iterLinks } from "./wikipage.js";
 import { fail, failBadInvocation } from "./output.js";
 
 /** The [EdgeKeys] that hold a list of links, not a single one. */

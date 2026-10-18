@@ -102,24 +102,34 @@ test("the single-link edge key is decided by pagerecord.isSingleLinkEdgeKey alon
 });
 
 test("composeLink is the only place a vault-relative link is composed", () => {
-  // wikipage.composeLink owns relativise-then-percent-encode; a caller that
-  // builds `[label](dest)` itself restates it.
+  // wikipage.composeLink owns relativise-then-encode; a caller that builds
+  // `[label](dest)` itself restates it.
   const owner = "wikipage.ts";
   assert.ok(
     codeOf(owner).includes("composeLink"),
     `${owner} must own composeLink`,
   );
-  for (const { label, code } of sourceFiles()) {
-    if (label === owner) continue;
-    assert.ok(
-      !code.includes("percentEncode"),
-      `${label}: composes a link by hand — call wikipage.composeLink instead`,
-    );
-  }
   assert.ok(
     codeOf("check.ts").includes("composeLink("),
     "check.ts must compose its auto-fix links through composeLink",
   );
+});
+
+test("percentEncode is spelled in linkencoding.ts alone", () => {
+  // The encoding leaf owns the charset; every other module, the link seam
+  // included, reaches it through encodeDest.
+  const owner = "linkencoding.ts";
+  assert.ok(
+    codeOf(owner).includes("percentEncode"),
+    `${owner} must own the percent-encode charset`,
+  );
+  for (const { label, code } of sourceFiles()) {
+    if (label === owner) continue;
+    assert.ok(
+      !code.includes("percentEncode"),
+      `${label}: composes a link by hand — call linkencoding.encodeDest instead`,
+    );
+  }
 });
 
 test("the folder → kind ladder is read from kindmeta alone", () => {
@@ -186,10 +196,10 @@ test("output.ts owns the transport: command modules write only through its emitt
   );
 });
 
-test("only wikipage.ts assembles a frontmatter block", () => {
+test("only frontmatter.ts assembles a frontmatter block", () => {
   // rewriteFrontmatter owns the `---\n…---\n` splice; a second assembly site
   // skips the writer's canonicalisation and link quoting.
-  const owner = "wikipage.ts";
+  const owner = "frontmatter.ts";
   const fence = /["'`]---\\n/;
   for (const { label, code } of sourceFiles()) {
     if (label === owner) continue;
@@ -197,7 +207,7 @@ test("only wikipage.ts assembles a frontmatter block", () => {
     assert.equal(
       match,
       null,
-      `${label}: assembles a frontmatter block — write through wikipage.rewriteFrontmatter`,
+      `${label}: assembles a frontmatter block — write through frontmatter.rewriteFrontmatter`,
     );
   }
   assert.ok(

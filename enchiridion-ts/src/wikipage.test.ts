@@ -9,24 +9,26 @@ import fc from "fast-check";
 import path from "node:path";
 // The conforming YAML reader — the oracle for what a fold means.
 import { parse as parseYaml } from "yaml";
+import { Page, splitFrontmatter, rewriteFrontmatter } from "./frontmatter.js";
 import {
-  Page,
   percentEncode,
   percentDecode,
   splitDest,
   encodeDest,
-  splitFrontmatter,
+} from "./linkencoding.js";
+import {
   iterLinks,
   linkDest,
   resolveLinkDest,
   composeLink,
   normalizeBodyLinks,
+} from "./wikipage.js";
+import type { LinkMatch } from "./wikipage.js";
+import {
   planMove,
   planConsolidate,
   canonicalizeLinkTargets,
-  rewriteFrontmatter,
-} from "./wikipage.js";
-import type { LinkMatch } from "./wikipage.js";
+} from "./moveplan.js";
 // The reader that finds frontmatter links through the YAML parser rather than
 // by scanning raw text — the second oracle.
 import { edgeTargets, newPageRecord } from "./pagerecord.js";
