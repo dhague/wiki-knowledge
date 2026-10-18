@@ -19,7 +19,7 @@ import {
   upsertExclusion,
 } from "./consolidationexclusions.js";
 import type { Exclusion, ExclusionMember } from "./consolidationexclusions.js";
-import { fail, failBadInvocation } from "./output.js";
+import { emitText, fail, failBadInvocation } from "./output.js";
 
 function isENOENT(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === "ENOENT";
@@ -120,7 +120,7 @@ export async function addExclusion(
     upsertExclusion(existing, { members: captured, reason }),
   );
   if (rendered === text) {
-    console.log(ref);
+    emitText(ref);
     return;
   }
   // The registry must land on the snapshot the blob oids were captured from; a
@@ -132,7 +132,7 @@ export async function addExclusion(
   }
   vault.write(ref, new Page(rendered));
   await git.stageAndCommit([ref], exclusionMessage(captured, reason));
-  console.log(ref);
+  emitText(ref);
 }
 
 export function registerExclusionCommand(program: Command): void {

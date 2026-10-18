@@ -18,6 +18,7 @@ import {
   emitDocument,
   emitRows,
   emitSkippedPages,
+  emitText,
   failBadInvocation,
 } from "./output.js";
 import { collectFlag, splitCommaList } from "./cliargs.js";
@@ -61,7 +62,7 @@ function renderHits(hits: Hit[], asJSON: boolean): void {
     if (hit.pageRef.length > width) width = hit.pageRef.length;
   }
   for (const hit of hits) {
-    console.log(
+    emitText(
       `${hit.pageRef.padEnd(width)}  ${hit.score.toFixed(2).padStart(7)}  ${orDash(hit.title)}  [${orDash(hit.volatility)}]  src=${orDash(hit.sourceDate)}  git=${orDashPtr(hit.gitDate)}`,
     );
   }
@@ -94,27 +95,27 @@ function renderStatus(
     });
     return;
   }
-  console.log(`pages:             ${st.pages}`);
-  console.log(`db_size_bytes:     ${st.dbSizeBytes}`);
-  console.log(`backend:           ${st.backend}`);
-  console.log(`schema_version:    ${st.schemaVersion}`);
-  console.log(`git_head:          ${orDash(st.gitHead)}`);
+  emitText(`pages:             ${st.pages}`);
+  emitText(`db_size_bytes:     ${st.dbSizeBytes}`);
+  emitText(`backend:           ${st.backend}`);
+  emitText(`schema_version:    ${st.schemaVersion}`);
+  emitText(`git_head:          ${orDash(st.gitHead)}`);
   if (st.unindexedPages.length > 0) {
-    console.log(
+    emitText(
       `unindexed_pages: ${st.unindexedPages.length} page(s) the index cannot hold:`,
     );
     for (const page of st.unindexedPages) {
-      console.log(`  ${page.pageRef}: ${page.reason}`);
+      emitText(`  ${page.pageRef}: ${page.reason}`);
     }
   } else {
-    console.log(`unindexed_pages: 0`);
+    emitText(`unindexed_pages: 0`);
   }
   if (st.uncommittedPages > 0) {
-    console.log(
+    emitText(
       `uncommitted_pages: ${st.uncommittedPages} page(s) on disk not yet committed — not searchable.`,
     );
   } else {
-    console.log(`uncommitted_pages: 0`);
+    emitText(`uncommitted_pages: 0`);
   }
 }
 
@@ -142,7 +143,7 @@ function renderReindex(
     return;
   }
   const action = full ? "full reindex" : "reindex";
-  console.log(
+  emitText(
     `${action}: ${stats.pages} pages (+${stats.inserted} ~${stats.updated} -${stats.removed}) in ${stats.durationMs.toFixed(1)} ms`,
   );
 }

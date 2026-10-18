@@ -11,6 +11,7 @@ import { mkdirSafe } from "./fsutil.js";
 import { watch as watchRaw } from "chokidar";
 import { scan as scanEligible } from "./ingestscan.js";
 import { WatchStartedMarker } from "./contract.js";
+import { emitText } from "./output.js";
 
 /** The per-file settle window. */
 export const DefaultDebounceSeconds = 30;
@@ -500,7 +501,7 @@ export function runWatch(
   const schedule = options.schedule ?? defaultSchedule;
   const onSignal = options.onSignal ?? defaultOnSignal;
   const offSignal = options.offSignal ?? defaultOffSignal;
-  const log = options.log ?? console.log;
+  const log = options.log ?? emitText;
   const pid = options.pid ?? process.pid;
 
   return new Promise<void>((resolve) => {

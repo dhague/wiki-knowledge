@@ -14,6 +14,7 @@ import {
   ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
 } from "./exportwriter.js";
+import { setOutputSink } from "./output.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -629,20 +630,17 @@ test("runExport: the title resolution is the same in both modes", async () => {
   );
 });
 
-/** Run `fn` with console.error captured, returning the lines written. Bun's
- *  node:test shim has no `mock`, so the swap is by hand. */
+/** Run `fn` with stderr captured through the output sink, returning the lines
+ *  written. */
 async function warningsFrom(fn: () => Promise<void>): Promise<string[]> {
-  const warnings: string[] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  };
+  let err = "";
+  setOutputSink({ out: () => {}, err: (chunk) => (err += chunk) });
   try {
     await fn();
   } finally {
-    console.error = originalError;
+    setOutputSink(null);
   }
-  return warnings;
+  return err.split("\n").filter((line) => line !== "");
 }
 
 test("runExport: an oversized single file is still written, and warns", async () => {

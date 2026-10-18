@@ -15,7 +15,7 @@ import {
   type FixOptions,
 } from "./check.js";
 import { VaultRead } from "./vaultread.js";
-import { emitRows, failBadInvocation } from "./output.js";
+import { emitRows, emitText, failBadInvocation } from "./output.js";
 import { resolveRoot } from "./vault.js";
 
 export function registerCheckFixCommands(program: Command): void {
@@ -60,7 +60,7 @@ export function registerCheckFixCommands(program: Command): void {
           if (opts.json) emitRows(rows);
           else
             for (const f of rows)
-              console.log(`${f.check}: ${f.pageRef}: ${f.detail}`);
+              emitText(`${f.check}: ${f.pageRef}: ${f.detail}`);
           return;
         }
         const fn = name ? CHECKS[name] : undefined;
@@ -77,7 +77,7 @@ export function registerCheckFixCommands(program: Command): void {
           minSimilarity: opts.minSimilarity,
         });
         if (opts.json) emitRows(findings);
-        else for (const f of findings) console.log(`${f.pageRef}: ${f.detail}`);
+        else for (const f of findings) emitText(`${f.pageRef}: ${f.detail}`);
       },
     );
 
@@ -117,6 +117,6 @@ export function registerCheckFixCommands(program: Command): void {
       }
       const root = resolveRoot();
       const changed = await fn(root, opts);
-      for (const ref of changed) console.log(ref);
+      for (const ref of changed) emitText(ref);
     });
 }

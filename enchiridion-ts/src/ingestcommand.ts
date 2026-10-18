@@ -47,6 +47,7 @@ import {
   emitDocument,
   emitRows,
   emitSkippedPages,
+  emitText,
   fail,
   failBadInvocation,
 } from "./output.js";
@@ -82,7 +83,7 @@ function renderScanTable(result: {
   ignored: string[];
 }): void {
   if (result.eligible.length === 0 && result.ignored.length === 0) {
-    console.log("no eligible files; 0 ignored");
+    emitText("no eligible files; 0 ignored");
     return;
   }
   let width = 10;
@@ -93,11 +94,11 @@ function renderScanTable(result: {
     if (rawRel.length > width) width = rawRel.length;
   }
   for (const c of result.eligible) {
-    console.log(`${c.rawRel.padEnd(width)}  ${c.reason}`);
+    emitText(`${c.rawRel.padEnd(width)}  ${c.reason}`);
   }
   if (result.ignored.length > 0) {
-    console.log(`\n${result.ignored.length} ignored by .ingestignore:`);
-    for (const rawRel of result.ignored) console.log(`  ${rawRel}`);
+    emitText(`\n${result.ignored.length} ignored by .ingestignore:`);
+    for (const rawRel of result.ignored) emitText(`  ${rawRel}`);
   }
 }
 
@@ -124,13 +125,13 @@ async function runPlan(
     if (stale.length > 0) fail(`stale assessment: ${stale.join("; ")}`);
   }
   if (dryRun) {
-    console.log(resolved.describe());
+    emitText(resolved.describe());
     return;
   }
 
   const { sha, written } = await resolved.execute(new VaultGit(root));
-  console.log(sha);
-  for (const page of written) console.log(`${page.op} ${page.pageRef}`);
+  emitText(sha);
+  for (const page of written) emitText(`${page.op} ${page.pageRef}`);
   printToolCallSummary();
   if (planPath !== "-") {
     fs.unlinkSync(planPath);
@@ -145,7 +146,7 @@ function printToolCallSummary(): void {
   if (!sessionID) return;
   const events = readLog(sessionID, "");
   if (events.length === 0) return;
-  console.log(formatSummary(summarize(events)));
+  emitText(formatSummary(summarize(events)));
 }
 
 /** The tag-vocabulary fields discover may report; the selected form rides in
@@ -330,7 +331,7 @@ export function registerIngestCommands(program: Command): void {
           );
         }
         if (stalePID !== null) {
-          console.log(
+          emitText(
             `previous watcher exited without cleanup, removing stale lock (pid=${stalePID})`,
           );
         }
@@ -421,7 +422,7 @@ export function registerIngestCommands(program: Command): void {
         );
       }
       const sha = await commitManifest(root, manifest, new VaultGit(root));
-      console.log(sha);
+      emitText(sha);
     });
 
   // discover — three modes: --plan discovers candidates for every page in a

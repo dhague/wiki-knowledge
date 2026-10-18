@@ -19,7 +19,14 @@ import {
   isListEdgeKey,
   type RefLookup,
 } from "./pageedge.js";
-import { emitDocument, emitRows, fail, failBadInvocation } from "./output.js";
+import {
+  emitDocument,
+  emitRaw,
+  emitRows,
+  emitText,
+  fail,
+  failBadInvocation,
+} from "./output.js";
 
 /** Run an operation on one page, naming that page in any refusal — [Page]'s
  * YAML refusals carry no path of their own. */
@@ -188,7 +195,7 @@ export function registerPageCommands(program: Command): void {
       if (!ok || value === null || value === undefined) {
         fail(`no frontmatter key "${key}" in ${file}`);
       }
-      console.log(formatFrontmatterValue(value));
+      emitText(formatFrontmatterValue(value));
     });
 
   page
@@ -291,7 +298,7 @@ export function registerPageCommands(program: Command): void {
         });
         return;
       }
-      process.stdout.write(page.text);
+      emitRaw(page.text);
     });
 
   // superseded-by <page_ref>... — resolve refs to their current supersession
@@ -319,14 +326,14 @@ export function registerPageCommands(program: Command): void {
       }
       for (const res of resolutions) {
         if (res.chain.length === 0) {
-          console.log(`${res.seed}  (current)`);
+          emitText(`${res.seed}  (current)`);
           continue;
         }
         let via = "";
         if (res.chain.length > 1) {
           via = ` via ${res.chain.slice(0, -1).join(" -> ")}`;
         }
-        console.log(`${res.seed}  ->  ${res.active}${via}`);
+        emitText(`${res.seed}  ->  ${res.active}${via}`);
       }
     });
 }

@@ -7,27 +7,42 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BadInvocationError,
+  emitDiagnostic,
   emitDocument,
+  emitRaw,
   emitRows,
+  emitSkippedPages,
+  emitText,
   exitCodeFor,
   fail,
   failBadInvocation,
   failureMessage,
+  setOutputSink,
 } from "./output.js";
 
-/** Capture what `console.log` would have written to stdout. */
-function captureLog(fn: () => void): string {
-  let out = "";
-  const original = console.log;
-  console.log = (...args: unknown[]) => {
-    out += args.join(" ") + "\n";
-  };
+interface Captured {
+  out: string;
+  err: string;
+}
+
+/** Capture both streams through the sink the emitters write to. */
+function capture(fn: () => void): Captured {
+  const captured: Captured = { out: "", err: "" };
+  setOutputSink({
+    out: (chunk) => (captured.out += chunk),
+    err: (chunk) => (captured.err += chunk),
+  });
   try {
     fn();
   } finally {
-    console.log = original;
+    setOutputSink(null);
   }
-  return out;
+  return captured;
+}
+
+/** Capture what the emitters would have written to stdout. */
+function captureStdout(fn: () => void): string {
+  return capture(fn).out;
 }
 
 /** The lines a payload occupies on stdout — what a consumer splits on. */
@@ -40,7 +55,7 @@ function lines(text: string): string[] {
 // ---------------------------------------------------------------------------
 
 test("emitRows: one compact JSON object per line, in order", () => {
-  const out = captureLog(() =>
+  const out = captureStdout(() =>
     emitRows([
       { page_ref: "wiki/a.md", score: 1 },
       { page_ref: "wiki/b.md", score: 2 },
@@ -59,19 +74,19 @@ test("emitRows: one compact JSON object per line, in order", () => {
 
 test("emitRows: nothing to report is silence, not an empty array", () => {
   assert.equal(
-    captureLog(() => emitRows([])),
+    captureStdout(() => emitRows([])),
     "",
   );
 });
 
 test("emitRows: every line parses on its own", () => {
-  const out = captureLog(() => emitRows([{ a: [1, 2] }, { a: { b: "c" } }]));
+  const out = captureStdout(() => emitRows([{ a: [1, 2] }, { a: { b: "c" } }]));
   const parsed = lines(out).map((l) => JSON.parse(l));
   assert.deepEqual(parsed, [{ a: [1, 2] }, { a: { b: "c" } }]);
 });
 
 test("emitRows: a row carrying text that needs escaping stays on one line", () => {
-  const out = captureLog(() => emitRows([{ detail: 'a "quoted"\nthing' }]));
+  const out = captureStdout(() => emitRows([{ detail: 'a "quoted"\nthing' }]));
   assert.equal(lines(out).length, 1);
   assert.equal(JSON.parse(lines(out)[0]).detail, 'a "quoted"\nthing');
 });
@@ -81,14 +96,14 @@ test("emitRows: a row carrying text that needs escaping stays on one line", () =
 // ---------------------------------------------------------------------------
 
 test("emitDocument: one compact line, never indented", () => {
-  const out = captureLog(() =>
+  const out = captureStdout(() =>
     emitDocument({ page_ref: "wiki/a.md", body: "x" }),
   );
   assert.equal(out, '{"page_ref":"wiki/a.md","body":"x"}\n');
 });
 
 test("emitDocument: the value may itself be an array — the dialect is how many documents", () => {
-  const out = captureLog(() =>
+  const out = captureStdout(() =>
     emitDocument([
       { kind: "concept", folder: "concepts" },
       { kind: "entity", folder: "entities" },
@@ -101,7 +116,7 @@ test("emitDocument: the value may itself be an array — the dialect is how many
 });
 
 test("emitDocument: nested structures stay on the one line", () => {
-  const out = captureLog(() =>
+  const out = captureStdout(() =>
     emitDocument({
       frontmatter: { tags: ["db", "sql"] },
       body: "\nbody text\n",
@@ -114,10 +129,90 @@ test("emitDocument: nested structures stay on the one line", () => {
 });
 
 test("the two dialects disagree about document count, which is the whole point", () => {
-  const rows = captureLog(() => emitRows([{ a: 1 }, { a: 2 }]));
-  const doc = captureLog(() => emitDocument([{ a: 1 }, { a: 2 }]));
+  const rows = captureStdout(() => emitRows([{ a: 1 }, { a: 2 }]));
+  const doc = captureStdout(() => emitDocument([{ a: 1 }, { a: 2 }]));
   assert.equal(lines(rows).length, 2);
   assert.equal(lines(doc).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// The other transports
+// ---------------------------------------------------------------------------
+
+test("emitText: one human-readable line, newline-terminated exactly once", () => {
+  assert.equal(
+    captureStdout(() => emitText("wiki/concepts/a.md")),
+    "wiki/concepts/a.md\n",
+  );
+});
+
+test("emitRaw: the chunk byte-for-byte, adding no newline", () => {
+  assert.equal(
+    captureStdout(() => emitRaw("---\ntitle: A\n---\n\nbody\n")),
+    "---\ntitle: A\n---\n\nbody\n",
+  );
+});
+
+test("emitRaw: a chunk with no trailing newline stays unterminated", () => {
+  assert.equal(
+    captureStdout(() => emitRaw("no newline")),
+    "no newline",
+  );
+});
+
+test("emitDiagnostic: one newline-terminated line on stderr, never stdout", () => {
+  const { out, err } = capture(() => emitDiagnostic("Warning: dropped"));
+  assert.equal(out, "");
+  assert.equal(err, "Warning: dropped\n");
+});
+
+test("emitSkippedPages: one `skipped <page_ref>: <reason>` line per page, on stderr", () => {
+  const { out, err } = capture(() =>
+    emitSkippedPages([
+      { pageRef: "wiki/concepts/a.md", reason: "no frontmatter" },
+      { pageRef: "wiki/concepts/b.md", reason: "unparsable YAML" },
+    ]),
+  );
+  assert.equal(out, "");
+  assert.equal(
+    err,
+    "skipped wiki/concepts/a.md: no frontmatter\n" +
+      "skipped wiki/concepts/b.md: unparsable YAML\n",
+  );
+});
+
+test("the default sink resolves each process stream per write, never at import", () => {
+  // run() captures output by swapping the stream properties; a write function
+  // captured at module load would keep going to the real stream.
+  let out = "";
+  let err = "";
+  const realOut = process.stdout.write;
+  const realErr = process.stderr.write;
+  process.stdout.write = ((chunk: unknown) => {
+    out += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: unknown) => {
+    err += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    emitText("live");
+    emitDiagnostic("diagnosed");
+  } finally {
+    process.stdout.write = realOut;
+    process.stderr.write = realErr;
+  }
+  assert.equal(out, "live\n");
+  assert.equal(err, "diagnosed\n");
+});
+
+test("installing a sink leaves the process streams alone", () => {
+  const realOut = process.stdout.write;
+  const realErr = process.stderr.write;
+  capture(() => {});
+  assert.equal(process.stdout.write, realOut);
+  assert.equal(process.stderr.write, realErr);
 });
 
 // ---------------------------------------------------------------------------

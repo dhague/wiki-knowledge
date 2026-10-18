@@ -30,6 +30,7 @@ import type { StarterEntry } from "./exportmeta.js";
 import {
   BadInvocationError,
   emitDocument,
+  emitText,
   fail,
   failBadInvocation,
 } from "./output.js";
@@ -54,7 +55,7 @@ export function registerSessionCommands(program: Command): void {
         undefined,
         new Date(),
       );
-      console.log(rel);
+      emitText(rel);
     });
 
   // tool-call-stats — summarise one session's tool-call log.
@@ -77,7 +78,7 @@ export function registerSessionCommands(program: Command): void {
       if (events.length === 0) {
         fail(`no log found at ${logPath(id, "")}`);
       }
-      console.log(formatSummary(summarize(events)));
+      emitText(formatSummary(summarize(events)));
     });
 }
 
@@ -181,7 +182,7 @@ export function registerExportCommands(program: Command): void {
             }
             fail(`enchiridion export: ${(err as Error).message}`);
           }
-          console.log(
+          emitText(
             `Saved wiki title "${opts.saveTitle.trim()}" to ${exportConfigPath(root)}`,
           );
           return;
@@ -197,7 +198,7 @@ export function registerExportCommands(program: Command): void {
             );
           }
           saveExportStartPage(root, opts.saveStartPage);
-          console.log(
+          emitText(
             ref === ""
               ? `Cleared the saved start page in ${exportConfigPath(root)}`
               : `Saved start page "${ref}" to ${exportConfigPath(root)}`,
@@ -243,7 +244,7 @@ export function registerExportCommands(program: Command): void {
             startPage: opts.startPage,
             starters,
           });
-          console.log(`Exported to ${outPath}`);
+          emitText(`Exported to ${outPath}`);
         } catch (err) {
           if (
             err instanceof ExportDirtyError ||
