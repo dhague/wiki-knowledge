@@ -10,7 +10,7 @@ import { KindFolders, Kinds, path as placePath } from "./place.js";
 import { Vault, resolveRoot } from "./vault.js";
 import { readKindMeta } from "./kindmeta.js";
 import { init as initWiki, Modes } from "./initwiki.js";
-import { emitDocument, failBadInvocation } from "./output.js";
+import { emitDocument, emitText, failBadInvocation } from "./output.js";
 import { KindDefinitionFields, KindFields } from "./contract.js";
 
 export function registerPlacementCommands(program: Command): void {
@@ -39,7 +39,7 @@ export function registerPlacementCommands(program: Command): void {
           opts.mode,
           opts.pluginRoot ?? "",
         );
-        console.log(root);
+        emitText(root);
       },
     );
 
@@ -62,7 +62,7 @@ export function registerPlacementCommands(program: Command): void {
       } catch (err) {
         failBadInvocation((err as Error).message);
       }
-      console.log(rel);
+      emitText(rel);
     });
 }
 
@@ -85,14 +85,14 @@ export function registerVaultCommand(program: Command): void {
         );
       }
       const root = resolveRoot();
-      console.log(root);
+      emitText(root);
     });
   vault
     .command("root")
     .description("Print the resolved vault root (the no-argument default)")
     .action(() => {
       const root = resolveRoot();
-      console.log(root);
+      emitText(root);
     });
   vault
     .command("move")
@@ -104,7 +104,7 @@ export function registerVaultCommand(program: Command): void {
     .action((oldRef: string, newRef: string) => {
       const root = resolveRoot();
       const changed = new Vault(root).movePage(oldRef, newRef);
-      for (const pageRef of changed) console.log(pageRef);
+      for (const pageRef of changed) emitText(pageRef);
     });
   vault
     .command("kinds")

@@ -1,5 +1,5 @@
 /**
- * The CLI's output contract. Two dialects:
+ * The CLI's output contract and its one transport. Two dialects:
  *
  * - Rows ([emitRows]) — JSON Lines, one compact object per line. `search`,
  *   `superseded-by`, `ingest-scan`, `check`, `discover`'s single-page mode.
@@ -12,7 +12,9 @@
  * i.e. input, not output. Every other `--json` selects an output dialect.
  *
  * [emitSkippedPages] is neither dialect: a stderr diagnostic naming each page
- * the index could not hold.
+ * the index could not hold. [emitText] and [emitRaw] carry the human-readable
+ * and byte-exact stdout forms. Every emitter writes through [setOutputSink]'s
+ * sink.
  *
  * A command that cannot do its job calls [fail] (bad environment) or
  * [failBadInvocation] (bad invocation), which throw. Both entry points — `main`
@@ -27,13 +29,62 @@ export const ExitSuccess = 0;
 export const ExitBadEnvironment = 1;
 export const ExitBadInvocation = 2;
 
+/** One write function per stream, chunk-oriented like `process.stdout.write`:
+ * each call carries exactly the text to write. */
+export interface OutputSink {
+  out(chunk: string): void;
+  err(chunk: string): void;
+}
+
+/** Resolving the stream per write, never capturing its `write` function: `run`
+ * swaps those properties, and a captured reference would escape the swap. */
+const processSink: OutputSink = {
+  out: (chunk) => {
+    process.stdout.write(chunk);
+  },
+  err: (chunk) => {
+    process.stderr.write(chunk);
+  },
+};
+
+let sink: OutputSink = processSink;
+
+/** Install a sink for an in-process run; null restores the default that writes
+ * the process streams. The setter never swaps those streams itself. */
+export function setOutputSink(next: OutputSink | null): void {
+  sink = next ?? processSink;
+}
+
+function writeOut(chunk: string): void {
+  sink.out(chunk);
+}
+
+function writeErr(chunk: string): void {
+  sink.err(chunk);
+}
+
 /** Write rows as JSON Lines; an empty result set is silence, not `[]`. */
 export function emitRows(rows: Iterable<unknown>): void {
-  for (const row of rows) console.log(JSON.stringify(row));
+  for (const row of rows) writeOut(JSON.stringify(row) + "\n");
 }
 
 export function emitDocument(value: unknown): void {
-  console.log(JSON.stringify(value));
+  writeOut(JSON.stringify(value) + "\n");
+}
+
+/** One human-readable line on stdout. */
+export function emitText(line: string): void {
+  writeOut(line + "\n");
+}
+
+/** A chunk on stdout exactly as given, adding no newline. */
+export function emitRaw(chunk: string): void {
+  writeOut(chunk);
+}
+
+/** One newline-terminated line on stderr. */
+export function emitDiagnostic(line: string): void {
+  writeErr(line + "\n");
 }
 
 /** Name every page the index could not hold, one `skipped <page_ref>: <reason>`
@@ -42,7 +93,7 @@ export function emitSkippedPages(
   skipped: Iterable<{ pageRef: string; reason: string }>,
 ): void {
   for (const page of skipped) {
-    console.error(`skipped ${page.pageRef}: ${page.reason}`);
+    emitDiagnostic(`skipped ${page.pageRef}: ${page.reason}`);
   }
 }
 

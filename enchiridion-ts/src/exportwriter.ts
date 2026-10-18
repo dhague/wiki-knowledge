@@ -22,6 +22,7 @@ import {
   STYLESHEET_FILE,
 } from "./exportstyle.js";
 import type { PageRecord } from "./pagerecord.js";
+import { emitDiagnostic } from "./output.js";
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -198,7 +199,7 @@ function writeSingleFile(outFile: string, html: string): void {
   }
 
   const warning = singleFileSizeWarning(fs.statSync(outFile).size, outFile);
-  if (warning) console.error(warning);
+  if (warning) emitDiagnostic(warning);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,12 +313,12 @@ export async function runExport(
   // flow must keep working. A dropped ref is a warning for the same reason —
   // the export is still written, and an all-dropped set still falls back.
   if (startPageRef !== undefined && starters.length > 0) {
-    console.error(
+    emitDiagnostic(
       `Warning: --starters is ignored because "${startPageRef}" is the start page. Exporting the start page without a get-started block.`,
     );
   } else {
     for (const { pageRef } of droppedStarters(starters, meta)) {
-      console.error(
+      emitDiagnostic(
         `Warning: --starters ref "${pageRef}" names no page this export carries; it was dropped from the get-started block.`,
       );
     }

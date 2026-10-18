@@ -167,6 +167,26 @@ test("KIND.md is parsed by kindmeta alone", () => {
   );
 });
 
+test("output.ts owns the transport: command modules write only through its emitters", () => {
+  // run() captures output by swapping the process streams, so a direct write
+  // escapes it; cli.ts is allowlisted only because it owns that swap.
+  const owners = ["output.ts", "cli.ts"];
+  const transport = /\bconsole\.\w+\s*\(|\bprocess\.(?:stdout|stderr)\b/;
+  for (const { label, code } of sourceFiles()) {
+    if (owners.includes(label)) continue;
+    const token = transport.exec(code)?.[0] ?? null;
+    assert.equal(
+      token,
+      null,
+      `${label}: writes ${JSON.stringify(token)} — route output through output.ts's emitters`,
+    );
+  }
+  assert.ok(
+    codeOf("output.ts").includes("setOutputSink"),
+    "output.ts must own the output sink",
+  );
+});
+
 test("only wikipage.ts assembles a frontmatter block", () => {
   // rewriteFrontmatter owns the `---\n…---\n` splice; a second assembly site
   // skips the writer's canonicalisation and link quoting.
