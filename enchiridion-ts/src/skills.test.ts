@@ -475,7 +475,8 @@ const ASK_SKILL = "wiki-plugin/skills/wiki-ask/SKILL.md";
 const SAVING_SYNTHESIS = "wiki-plugin/skills/wiki-ask/saving-synthesis.md";
 
 /** The bundle-resolution paragraph every skill that calls the script carries
- * verbatim; the vault-root rule belongs to [SCRIPTS_REF] alone. */
+ * verbatim; it names `$VAULT` because that is the only way to redirect a
+ * root-resolving command, while the resolution order stays in [SCRIPTS_REF]. */
 const SHARED_INVOCATION = [
   "The script layer ships in this skill's `scripts/` directory. Resolve it once before any step that calls it — the host reports this skill's base directory when the skill loads:",
   "",
@@ -486,7 +487,7 @@ const SHARED_INVOCATION = [
   "",
   "`ENCHIRIDION` MUST be an absolute local filesystem path. A harness-internal `skill://` URI is not one — the runtime is an external process and resolves it as a relative file path, so the call fails before the script runs. If the host reports the base directory as such a URI rather than a real path, convert it first (`baseDir=$(realpath '<base-dir>')`).",
   "",
-  'Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop.',
+  'Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neither runtime is present, say so and stop. The script resolves the vault root itself — point it at another vault with `$VAULT`. No `--vault` flag or vault path.',
 ].join("\n");
 
 /** The one string that marks a file as resolving the bundle, however it spells
@@ -512,6 +513,37 @@ test("every file that resolves the bundle carries the shared invocation paragrap
       text.split(SHARED_INVOCATION).length - 1,
       1,
       `${label}: must carry the shared invocation paragraph exactly once, byte-identically`,
+    );
+  }
+});
+
+test("the shared invocation forbids a vault path, not just a --vault flag", () => {
+  // A reference link is not context; the rule travels with the invocation.
+  assert.ok(
+    SHARED_INVOCATION.includes("No `--vault` flag or vault path"),
+    "the shared invocation must refuse both --vault and a vault path",
+  );
+  assert.ok(
+    SHARED_INVOCATION.includes("`$VAULT`"),
+    "the shared invocation must name $VAULT as the way to place the vault",
+  );
+});
+
+test("the script runtime contract states the vault-path prohibition outright", () => {
+  assert.ok(
+    proseFor(SCRIPTS_REF).includes(
+      "No subcommand accepts a `--vault` flag, and no vault-root-resolving command takes a vault path",
+    ),
+    `${SCRIPTS_REF}: must state that no subcommand accepts a --vault flag or a vault path`,
+  );
+});
+
+test("the two vault kinds examples agents copy say they take no vault path or flag", () => {
+  for (const label of [INGEST_SKILL, CONVENTIONS]) {
+    assert.equal(
+      proseFor(label).split("takes no vault path or flag").length - 1,
+      1,
+      `${label}: a bare vault kinds example must say it takes no vault path or flag`,
     );
   }
 });
