@@ -31782,7 +31782,7 @@ function failureMessage(err) {
 }
 
 // src/version.ts
-var PluginVersion = true ? "0.26.0" : "0.0.0-dev";
+var PluginVersion = true ? "0.26.1" : "0.0.0-dev";
 
 // src/pagecommand.ts
 var import_node_fs6 = __toESM(require("node:fs"), 1);
