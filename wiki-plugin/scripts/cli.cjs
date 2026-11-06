@@ -31782,7 +31782,7 @@ function failureMessage(err) {
 }
 
 // src/version.ts
-var PluginVersion = true ? "0.26.1" : "0.0.0-dev";
+var PluginVersion = true ? "0.26.2" : "0.0.0-dev";
 
 // src/pagecommand.ts
 var import_node_fs6 = __toESM(require("node:fs"), 1);
@@ -46050,15 +46050,20 @@ function outboundRefs(pageRef2, body) {
   }
   return refs;
 }
-function buildExportMeta(pages, opts = {}) {
+function buildExportMeta(pages, opts = {}, copiedRefs = []) {
   const includeRaw = opts.includeRaw ?? false;
   const startPage = opts.startPage;
   const outputPathFor = (pageRef2) => startPage !== void 0 && pageRef2 === startPage ? FRONT_PAGE_PATH : mdToHtml(pageRef2);
+  const inScope = (pageRef2) => pageRef2.startsWith("wiki/") || includeRaw && pageRef2.startsWith("raw/");
   const exported = /* @__PURE__ */ new Set();
+  const rendered = /* @__PURE__ */ new Set();
   for (const pageRef2 of pages.keys()) {
-    if (pageRef2.startsWith("wiki/") || includeRaw && pageRef2.startsWith("raw/")) {
-      exported.add(pageRef2);
-    }
+    if (!inScope(pageRef2)) continue;
+    exported.add(pageRef2);
+    rendered.add(pageRef2);
+  }
+  for (const pageRef2 of copiedRefs) {
+    if (inScope(pageRef2)) exported.add(pageRef2);
   }
   const tagMap = /* @__PURE__ */ new Map();
   const kindMap = /* @__PURE__ */ new Map();
@@ -46066,7 +46071,7 @@ function buildExportMeta(pages, opts = {}) {
   for (const pageRef2 of exported) {
     inboundCounts2.set(pageRef2, 0);
   }
-  for (const pageRef2 of exported) {
+  for (const pageRef2 of rendered) {
     const entry = pages.get(pageRef2);
     const { record } = entry;
     if (pageRef2.startsWith("wiki/") && record) {
@@ -46090,8 +46095,9 @@ function buildExportMeta(pages, opts = {}) {
   for (const list2 of tagMap.values()) list2.sort();
   for (const list2 of kindMap.values()) list2.sort();
   const wikiEntries = [];
-  for (const [pageRef2, entry] of pages) {
+  for (const pageRef2 of rendered) {
     if (!pageRef2.startsWith("wiki/")) continue;
+    const entry = pages.get(pageRef2);
     const { record } = entry;
     if (!record) continue;
     wikiEntries.push({
@@ -46111,6 +46117,7 @@ function buildExportMeta(pages, opts = {}) {
   const getStarted = wikiEntries.slice(0, GET_STARTED_COUNT);
   return {
     exported,
+    rendered,
     tagMap,
     kindMap,
     inboundCounts: inboundCounts2,
@@ -46120,7 +46127,7 @@ function buildExportMeta(pages, opts = {}) {
   };
 }
 function carries(meta, starter) {
-  return meta.exported.has(starter.pageRef);
+  return meta.rendered.has(starter.pageRef);
 }
 function carriedStarters(starters, meta) {
   return starters.filter((s) => carries(meta, s));
@@ -46498,12 +46505,8 @@ function escHtml(s) {
 function pageHtmlDir(pageRef2) {
   return import_node_path31.default.posix.dirname(mdToHtml(pageRef2));
 }
-function relHtmlPath(fromPageRef, toPageRef, anchor = "") {
-  const rel = import_node_path31.default.posix.relative(
-    pageHtmlDir(fromPageRef),
-    mdToHtml(toPageRef)
-  );
-  return anchor ? `${rel}#${anchor}` : rel;
+function relHtmlPath(fromPageRef, toPageRef) {
+  return import_node_path31.default.posix.relative(pageHtmlDir(fromPageRef), mdToHtml(toPageRef));
 }
 function rootPrefix(htmlPath) {
   const depth = htmlPath.split("/").length - 1;
@@ -46519,13 +46522,18 @@ function sectionIdFor(htmlPath) {
   const withoutExt = htmlPath.endsWith(".html") ? htmlPath.slice(0, -".html".length) : htmlPath;
   return withoutExt.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
-var relativeHref = (fromHtmlPath, toHtmlPath, anchor = "") => relHtmlPath(fromHtmlPath, toHtmlPath, anchor);
+var relativeHref = (fromHtmlPath, toHtmlPath, anchor = "") => encodeDest(relHtmlPath(fromHtmlPath, toHtmlPath), anchor);
 var hashHref = (_fromHtmlPath, toHtmlPath) => `#${sectionIdFor(toHtmlPath)}`;
 function hrefFor(mode) {
   return mode === "single-file" ? hashHref : relativeHref;
 }
 function linkContext(meta, mode) {
-  return { exported: meta.exported, mode, outputPathFor: meta.outputPathFor };
+  return {
+    exported: meta.exported,
+    rendered: meta.rendered,
+    mode,
+    outputPathFor: meta.outputPathFor
+  };
 }
 function kindIndexEntries(meta, fromHtmlPath, mode) {
   return [...meta.kindMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([kind, refs]) => {
@@ -46554,24 +46562,28 @@ function applyEdits2(src, edits) {
   }
   return src;
 }
-function claimsDest(dest, mode) {
+function rewritesDest(dest, target, link2) {
   if (!isVaultRelativeDest(dest)) return false;
-  if (dest.endsWith(".md")) return true;
-  return mode === "single-file";
+  if (link2.mode === "single-file") return true;
+  return dest.endsWith(".md") || link2.exported.has(target);
+}
+function addressesIn(link2) {
+  return link2.mode === "single-file" ? link2.rendered : link2.exported;
 }
 function rewriteBodyLinks(bodyText, pageRef2, link2) {
-  const { exported, mode, outputPathFor } = link2;
+  const { mode, outputPathFor } = link2;
   const pageDir = vaultPageDir(pageRef2);
   const href = hrefFor(mode);
   const fromHtmlPath = outputPathFor(pageRef2);
+  const addresses = addressesIn(link2);
   const edits = [];
   for (const anchor of iterLinks(bodyText)) {
     if (anchor.isImage && mode === "single-file") continue;
     const p = anchor.decodedPath;
-    if (!claimsDest(p, mode)) continue;
     const target = resolveLinkDest(p, pageDir);
+    if (!rewritesDest(p, target, link2)) continue;
     edits.push(
-      exported.has(target) ? {
+      addresses.has(target) ? {
         start: anchor.start,
         end: anchor.end,
         replacement: href(
@@ -46594,16 +46606,16 @@ function rewriteBodyLinks(bodyText, pageRef2, link2) {
 var FM_LINK_KEYS = new Set(EdgeKeys);
 var HEADER_KEYS = /* @__PURE__ */ new Set(["title", "summary"]);
 function renderFmLink(markdownLink, pageRef2, context) {
-  const { exported, mode, outputPathFor } = context;
+  const { mode, outputPathFor } = context;
   const links = iterLinks(markdownLink);
   if (links.length === 0) return escHtml(markdownLink);
   const link2 = links[0];
   const p = link2.decodedPath;
-  if (!claimsDest(p, mode)) {
+  const target = resolveLinkDest(p, vaultPageDir(pageRef2));
+  if (!rewritesDest(p, target, context)) {
     return `<a href="${escHtml(link2.dest)}">${escHtml(link2.label)}</a>`;
   }
-  const target = resolveLinkDest(p, vaultPageDir(pageRef2));
-  if (!exported.has(target)) return escHtml(link2.label);
+  if (!addressesIn(context).has(target)) return escHtml(link2.label);
   const href = hrefFor(mode);
   return `<a href="${escHtml(href(outputPathFor(pageRef2), outputPathFor(target), link2.decodedAnchor))}">${escHtml(link2.label)}</a>`;
 }
@@ -46648,7 +46660,7 @@ function renderFmValue(key, value, pageRef2, tagSlugMap, context) {
 function renderPageLink(targetRef, pageRef2, allPages, context) {
   const entry = allPages.get(targetRef);
   const label = entry?.record?.title ?? targetRef;
-  if (!context.exported.has(targetRef)) return escHtml(label);
+  if (!context.rendered.has(targetRef)) return escHtml(label);
   const href = hrefFor(context.mode)(
     context.outputPathFor(pageRef2),
     context.outputPathFor(targetRef)
@@ -46806,7 +46818,7 @@ ${rows.join("\n")}
 function* renderPageParts(pages, meta, opts = {}, mode = "multi-page") {
   const wikiTitle = exportTitle(opts);
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
-  for (const pageRef2 of meta.exported) {
+  for (const pageRef2 of meta.rendered) {
     const entry = pages.get(pageRef2);
     const { record, text: text2 } = entry;
     const htmlPath = meta.outputPathFor(pageRef2);
@@ -46981,6 +46993,13 @@ function singleFileSizeWarning(bytes, file) {
   if (bytes <= SINGLE_FILE_WARN_BYTES) return null;
   const mb = (n) => (n / (1024 * 1024)).toFixed(1);
   return `Warning: ${file} is ${mb(bytes)} MB \u2014 over the ${mb(SINGLE_FILE_WARN_BYTES)} MB that is comfortable to email. The file has been written; multi-page export (without --single-file) may suit a vault this size better.`;
+}
+function singleFileRawAssetWarning(assetRefs) {
+  if (assetRefs.length === 0) return null;
+  const shown = assetRefs.slice(0, 5).map((ref) => `"${ref}"`).join(", ");
+  const rest = assetRefs.length > 5 ? `, and ${assetRefs.length - 5} more` : "";
+  const files = assetRefs.length === 1 ? "file was" : "files were";
+  return `Warning: --single-file carries only text sources; ${assetRefs.length} non-markdown raw ${files} not included: ${shown}${rest}. Use multi-page export to carry them.`;
 }
 var SINGLE_FILE_CSS = `/* enchiridion single-file supplement
  * ===================================
@@ -47174,6 +47193,12 @@ var ExportStartPageError = class extends Error {
     this.name = "ExportStartPageError";
   }
 };
+var ExportRawCollisionError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "ExportRawCollisionError";
+  }
+};
 function enumerateRawRefs(root) {
   const rawDir = import_node_path33.default.join(root, "raw");
   const refs = [];
@@ -47185,6 +47210,7 @@ function enumerateRawRefs(root) {
       return;
     }
     for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
       const abs = import_node_path33.default.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk2(abs);
@@ -47197,25 +47223,42 @@ function enumerateRawRefs(root) {
   walk2(rawDir);
   return refs.sort();
 }
+function isRawPage(ref) {
+  return ref.endsWith(".md");
+}
 function vaultPageRefs(root) {
   const refs = new Set(Object.keys(new Vault(root).pagesWithText()));
-  for (const ref of enumerateRawRefs(root)) refs.add(ref);
+  for (const ref of enumerateRawRefs(root)) {
+    if (isRawPage(ref)) refs.add(ref);
+  }
   return refs;
 }
 function startPageErrorMessage(root, ref, fromFlag, includeRaw) {
   const source = fromFlag ? `--start-page "${ref}"` : `the saved start page "${ref}" (${import_node_path33.default.join(".wiki-knowledge", "config.json")})`;
-  if (!includeRaw && ref.startsWith("raw/") && import_node_fs25.default.existsSync(import_node_path33.default.join(root, ...ref.split("/")))) {
+  if (!includeRaw && ref.startsWith("raw/") && isRawPage(ref) && import_node_fs25.default.existsSync(import_node_path33.default.join(root, ...ref.split("/")))) {
     return `${source} is a raw/ page, which this run does not include. Pass --raw to include raw/ pages, or nominate a wiki/ page.`;
   }
   if (fromFlag) {
     return `${source} does not name a page in this export. Check the ref, or drop --start-page to use the generated front page.`;
   }
-  return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is under raw/.`;
+  return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is a raw/ markdown file.`;
 }
 function writeFileIn(tempDir, relPath2, content) {
   const abs = import_node_path33.default.join(tempDir, ...relPath2.split("/"));
   import_node_fs25.default.mkdirSync(import_node_path33.default.dirname(abs), { recursive: true });
   import_node_fs25.default.writeFileSync(abs, content, "utf8");
+}
+function copyRawAssetIn(tempDir, root, ref) {
+  const abs = import_node_path33.default.join(tempDir, ...ref.split("/"));
+  import_node_fs25.default.mkdirSync(import_node_path33.default.dirname(abs), { recursive: true });
+  try {
+    import_node_fs25.default.copyFileSync(import_node_path33.default.join(root, ...ref.split("/")), abs);
+  } catch (err) {
+    throw new Error(
+      `raw asset "${ref}" could not be copied into the export: ${err.message}`,
+      { cause: err }
+    );
+  }
 }
 function writeTempSite(tempDir, pages) {
   for (const { path: relPath2, content } of pages) {
@@ -47284,13 +47327,17 @@ async function runExport2(root, opts) {
   }
   const vault = new Vault(root);
   const pagesMap = /* @__PURE__ */ new Map();
+  const copiedRawRefs = [];
   const wikiWithText = vault.pagesWithText();
   for (const [ref, { record, text: text2 }] of Object.entries(wikiWithText)) {
     pagesMap.set(ref, { record, text: text2 });
   }
   if (includeRaw) {
-    const rawRefs = enumerateRawRefs(root);
-    for (const ref of rawRefs) {
+    for (const ref of enumerateRawRefs(root)) {
+      if (!isRawPage(ref)) {
+        copiedRawRefs.push(ref);
+        continue;
+      }
       try {
         const text2 = import_node_fs25.default.readFileSync(
           import_node_path33.default.join(root, ...ref.split("/")),
@@ -47307,11 +47354,29 @@ async function runExport2(root, opts) {
     title,
     startPage: startPageRef
   };
-  const meta = buildExportMeta(pagesMap, exportOpts);
-  if (startPageRef !== void 0 && !meta.exported.has(startPageRef)) {
+  const meta = buildExportMeta(
+    pagesMap,
+    exportOpts,
+    singleFile ? [] : copiedRawRefs
+  );
+  if (startPageRef !== void 0 && !meta.rendered.has(startPageRef)) {
     throw new ExportStartPageError(
       startPageErrorMessage(root, startPageRef, startPageFromFlag, includeRaw)
     );
+  }
+  if (!singleFile) {
+    const renderedPaths = /* @__PURE__ */ new Map();
+    for (const ref of meta.rendered) {
+      renderedPaths.set(meta.outputPathFor(ref), ref);
+    }
+    for (const ref of copiedRawRefs) {
+      const pageRef2 = renderedPaths.get(ref);
+      if (pageRef2 !== void 0) {
+        throw new ExportRawCollisionError(
+          `raw asset "${ref}" and the page rendered from "${pageRef2}" both write "${ref}" in this export. Rename or remove one of them.`
+        );
+      }
+    }
   }
   if (startPageRef !== void 0 && starters.length > 0) {
     emitDiagnostic(
@@ -47332,11 +47397,14 @@ async function runExport2(root, opts) {
   import_node_fs25.default.mkdirSync(outParent, { recursive: true });
   if (singleFile) {
     writeSingleFile(outDir, renderSingleFile(pagesMap, meta, exportOpts));
+    const assetWarning = singleFileRawAssetWarning(copiedRawRefs);
+    if (assetWarning) emitDiagnostic(assetWarning);
     return;
   }
   const tempDir = import_node_fs25.default.mkdtempSync(import_node_path33.default.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());
+    for (const ref of copiedRawRefs) copyRawAssetIn(tempDir, root, ref);
     writeFileIn(
       tempDir,
       `${STYLESHEET_DIR}/${STYLESHEET_FILE}`,
@@ -47501,7 +47569,7 @@ function registerExportCommands(program2) {
         });
         emitText(`Exported to ${outPath}`);
       } catch (err) {
-        if (err instanceof ExportDirtyError || err instanceof ExportTargetNotEmptyError || err instanceof ExportTargetIsDirectoryError || err instanceof ExportStartPageError) {
+        if (err instanceof ExportDirtyError || err instanceof ExportTargetNotEmptyError || err instanceof ExportTargetIsDirectoryError || err instanceof ExportStartPageError || err instanceof ExportRawCollisionError) {
           fail(`enchiridion export: ${err.message}`);
         } else {
           throw err;
