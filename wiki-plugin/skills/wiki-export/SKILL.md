@@ -73,6 +73,8 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
    `--single-file` is replaced on re-run without `--force`; `--force` is for a multi-page target.
 
+   `--raw` renders markdown raw files as pages and copies every other file under `raw/` verbatim (images, PDFs, office documents). Multi-page keeps those copies; `--single-file` has no second file to put them in, so it omits them and prints a warning naming them. When the vault's raw sources are mostly binaries, multi-page is the format that carries them.
+
 8. **Offer to save the title and the start page.** Ask about each only when there is something to save: the title when step 2 found one, the start page when step 5 was accepted. On yes:
    ```bash
    "$RUNTIME" "$ENCHIRIDION" export --save-title "<title>"
@@ -80,10 +82,10 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
    ```
    Each writes `.wiki-knowledge/config.json` at the vault root and exports nothing — a cheap second call, not a re-run. Every later export carries the saved title and start page unless a flag overrides them for one run; a blank `--save-start-page ""` clears the saved start page and returns the vault to the generated front page. On no, say nothing further.
 
-9. **Report the result.** Where the output was written, how many pages it contains, the title it was written under, and which page is the landing page when a start page was used. In single-file mode, report how large the file is when the run warned about its size: that file is awkward to email, and multi-page is the alternative.
+9. **Report the result.** Where the output was written, how many pages it contains, the title it was written under, and which page is the landing page when a start page was used. In single-file mode, report how large the file is when the run warned about its size, and name the raw files the run warned it could not carry: that file is awkward to email, and multi-page is the alternative.
 
 ## Errors
 
-Surface the message as-is — each one names its own remedy. A `Warning:` line on stderr (the size warning, the `--starters`-ignored warning, the dropped-`--starters` warning) is not a failure: the file was written.
+Surface the message as-is — each one names its own remedy. A `Warning:` line on stderr (the size warning, the `--starters`-ignored warning, the dropped-`--starters` warning, the omitted-raw-assets warning) is not a failure: the file was written.
 
 **A `--starters` ref that names no page the export carries warns and is dropped** — a typo, or a `raw/` page without `--raw`. The export is still written; when no supplied ref survives, the get-started block falls back to the ranked candidates. Fix the ref or add `--raw` and re-export, rather than reporting success over a get-started block that does not match step 6's choice.

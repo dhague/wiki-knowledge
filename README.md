@@ -174,7 +174,7 @@ attachment, with no unzip, no server and no network.
 |---|---|
 | `--single-file` | Write one self-contained HTML file instead of a directory tree |
 | `--out <path>` | Output directory — or, with `--single-file`, the output file (defaults: `web/`, or `wiki.html` at the vault root) |
-| `--raw` | Include `raw/` pages in the site |
+| `--raw` | Include `raw/` sources — markdown files render as pages, every other file is copied verbatim (multi-page only) |
 | `--force` | Overwrite a non-empty output directory (multi-page only) |
 | `--allow-dirty` | Export with uncommitted changes in the exported subtree |
 | `--title <title>` | Wiki title for this run only |
@@ -185,7 +185,9 @@ attachment, with no unzip, no server and no network.
 | `--starters <refs...>` | The entry-point pages for the front page, optionally as `ref=annotation` |
 
 A single-file export over 5 MB is still written, with a note on stderr
-suggesting multi-page mode.
+suggesting multi-page mode. A single-file document has no second file to put a
+raw binary in, so `--raw --single-file` omits non-markdown raw files and names
+them in a warning; multi-page is the form that carries them.
 
 The site's title — the sticky nav bar and the front page heading — resolves
 `--title` → the saved title → the vault root directory name. `/wiki-export

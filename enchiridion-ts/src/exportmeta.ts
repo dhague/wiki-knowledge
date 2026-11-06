@@ -1,10 +1,7 @@
 /**
  * The pure metadata pass for `enchiridion export` — tags, kinds, inbound-link
- * counts and the get-started ranking — with no filesystem or model access.
- *
- * The exported set is wiki/ always, raw/ only when `includeRaw`; decided here
- * once and published as [ExportMeta.exported]. A nominated start page is mapped
- * to the front page's output path by [ExportMeta.outputPathFor].
+ * counts, the get-started ranking and the exported/rendered sets — with no
+ * filesystem or model access.
  */
 
 import path from "node:path";
@@ -74,11 +71,17 @@ export interface GetStartedEntry {
 
 export interface ExportMeta {
   /**
-   * Which pageRefs the export carries — wiki/ always, raw/ only under
-   * `includeRaw`. The one owner of that rule: consumers ask this set rather
-   * than re-deriving it from ref prefixes.
+   * Which pageRefs the run carries — wiki/ always, raw/ only under `includeRaw`.
+   * A non-markdown raw file is carried too, though it is copied rather than
+   * rendered. The one owner of that rule: consumers ask this set rather than
+   * re-deriving it from ref prefixes.
    */
   exported: Set<string>;
+  /**
+   * The subset of [exported] that becomes an HTML document. A copied raw asset
+   * is carried but never rendered, so it has no page to link or list.
+   */
+  rendered: Set<string>;
   /** Tag → sorted pageRefs. A start page is listed like any other member. */
   tagMap: Map<string, string[]>;
   /**
@@ -166,13 +169,15 @@ function outboundRefs(pageRef: string, body: string): Set<string> {
 }
 
 /**
- * All aggregate metadata from pageRef → { record?, text } plus export options.
- * `text` feeds link extraction; a raw/ ref may omit its record and then
- * contributes only inbound counts.
+ * All aggregate metadata from pageRef → { record?, text }, export options, and
+ * the raw refs the run copies verbatim rather than renders. `text` feeds link
+ * extraction; a raw/ ref may omit its record and then contributes only inbound
+ * counts.
  */
 export function buildExportMeta(
   pages: Map<string, { record?: PageRecord; text: string }>,
   opts: ExportOptions = {},
+  copiedRefs: Iterable<string> = [],
 ): ExportMeta {
   const includeRaw = opts.includeRaw ?? false;
   const startPage = opts.startPage;
@@ -182,14 +187,18 @@ export function buildExportMeta(
       ? FRONT_PAGE_PATH
       : mdToHtml(pageRef);
 
+  const inScope = (pageRef: string): boolean =>
+    pageRef.startsWith("wiki/") || (includeRaw && pageRef.startsWith("raw/"));
+
   const exported = new Set<string>();
+  const rendered = new Set<string>();
   for (const pageRef of pages.keys()) {
-    if (
-      pageRef.startsWith("wiki/") ||
-      (includeRaw && pageRef.startsWith("raw/"))
-    ) {
-      exported.add(pageRef);
-    }
+    if (!inScope(pageRef)) continue;
+    exported.add(pageRef);
+    rendered.add(pageRef);
+  }
+  for (const pageRef of copiedRefs) {
+    if (inScope(pageRef)) exported.add(pageRef);
   }
 
   const tagMap = new Map<string, string[]>();
@@ -200,7 +209,7 @@ export function buildExportMeta(
     inboundCounts.set(pageRef, 0);
   }
 
-  for (const pageRef of exported) {
+  for (const pageRef of rendered) {
     const entry = pages.get(pageRef)!;
     const { record } = entry;
 
@@ -231,8 +240,9 @@ export function buildExportMeta(
   // Wiki-only is this list's own rule, not a consequence of `exported`: under
   // includeRaw the export carries raw/ pages the fallback must never rank.
   const wikiEntries: GetStartedEntry[] = [];
-  for (const [pageRef, entry] of pages) {
+  for (const pageRef of rendered) {
     if (!pageRef.startsWith("wiki/")) continue;
+    const entry = pages.get(pageRef)!;
     const { record } = entry;
     if (!record) continue;
     wikiEntries.push({
@@ -255,6 +265,7 @@ export function buildExportMeta(
 
   return {
     exported,
+    rendered,
     tagMap,
     kindMap,
     inboundCounts,
@@ -264,12 +275,12 @@ export function buildExportMeta(
   };
 }
 
-/** The one admission test for a supplied starter: the export carries its ref. */
+/** A starter must name a page the run renders; a copied raw asset is no page. */
 function carries(meta: ExportMeta, starter: StarterEntry): boolean {
-  return meta.exported.has(starter.pageRef);
+  return meta.rendered.has(starter.pageRef);
 }
 
-/** The supplied starters the export carries, in the order supplied — what the
+/** The supplied starters the export renders, in the order supplied — what the
  *  get-started block renders. */
 export function carriedStarters(
   starters: StarterEntry[],
@@ -278,7 +289,7 @@ export function carriedStarters(
   return starters.filter((s) => carries(meta, s));
 }
 
-/** The supplied starters the export does not carry, in the order supplied — the
+/** The supplied starters the export does not render, in the order supplied — the
  *  ones the block drops, which the CLI names on stderr ([ADR-0032]). */
 export function droppedStarters(
   starters: StarterEntry[],

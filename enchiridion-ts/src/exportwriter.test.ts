@@ -10,6 +10,7 @@ import {
   runExport,
   vaultPageRefs,
   ExportDirtyError,
+  ExportRawCollisionError,
   ExportStartPageError,
   ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
@@ -1087,20 +1088,342 @@ test("runExport: --single-file with a start page makes it the __front section", 
 });
 
 // ---------------------------------------------------------------------------
+// runExport — non-markdown raw assets
+// ---------------------------------------------------------------------------
+
+/** Bytes that are neither valid UTF-8 nor an HTML document. */
+const PNG_BYTES = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe, 0x01,
+]);
+
+function writeBytes(root: string, rel: string, bytes: Buffer): void {
+  const abs = path.join(root, ...rel.split("/"));
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, bytes);
+}
+
+test("runExport: a non-markdown raw file is copied byte-for-byte", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/probe.png", PNG_BYTES);
+  await commitAll(root, "add binary raw asset");
+
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const out = path.join(outDir, "raw", "probe.png");
+  assert.ok(
+    fs.existsSync(out),
+    "the asset should be written at its vault path",
+  );
+  assert.ok(
+    fs.readFileSync(out).equals(PNG_BYTES),
+    "the bytes must be copied, not decoded as text and wrapped in HTML",
+  );
+});
+
+test("runExport: an unreadable raw asset fails naming the ref", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  fs.symlinkSync("nowhere.pdf", path.join(root, "raw", "dangling.pdf"));
+
+  await assert.rejects(
+    () =>
+      runExport(root, {
+        out: path.join(root, "web"),
+        allowDirty: true,
+        raw: true,
+      }),
+    (err: unknown) => {
+      assert.match((err as Error).message, /raw asset "raw\/dangling\.pdf"/);
+      assert.match((err as Error).message, /could not be copied/);
+      return true;
+    },
+  );
+});
+
+test("runExport: a raw asset colliding with a rendered page fails loudly", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeFile(root, "raw/report.md", "# Report\n\nBody.\n");
+  writeFile(root, "raw/report.html", "<p>an asset</p>\n");
+  await commitAll(root, "add colliding raw files");
+
+  const outDir = path.join(root, "web");
+  await assert.rejects(
+    () => runExport(root, { out: outDir, allowDirty: true, raw: true }),
+    (err: unknown) => {
+      assert.ok(err instanceof ExportRawCollisionError);
+      assert.match((err as Error).message, /raw asset "raw\/report\.html"/);
+      assert.match((err as Error).message, /raw\/report\.md/);
+      return true;
+    },
+  );
+  assert.ok(!fs.existsSync(outDir), "a refused export writes no site");
+});
+
+test("runExport: a markdown raw file still renders to html", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const html = readOut(outDir, "raw/transcript.html");
+  assert.ok(html.startsWith("<!DOCTYPE html>"), "markdown becomes a page");
+  assert.ok(html.includes("Raw transcript"), "its content is rendered");
+  assert.ok(
+    !fs.existsSync(path.join(outDir, "raw", "transcript.md")),
+    "no markdown source is copied alongside it",
+  );
+});
+
+test("runExport: a dotfile under raw/ becomes neither page nor asset", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeFile(root, "raw/.gitkeep", "");
+  writeBytes(root, "raw/.DS_Store", Buffer.from([0x00, 0x01]));
+  await commitAll(root, "add dotfiles");
+
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  assert.ok(
+    !fs.existsSync(path.join(outDir, "raw", ".gitkeep")),
+    ".gitkeep must not be copied",
+  );
+  assert.ok(
+    !fs.existsSync(path.join(outDir, "raw", ".DS_Store")),
+    ".DS_Store must not be copied",
+  );
+});
+
+test("runExport: a raw binary feeds no tag, kind or front-page listing", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/probe.png", PNG_BYTES);
+  await commitAll(root, "add binary raw asset");
+
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  for (const [rel, html] of readHtmlTree(outDir)) {
+    if (rel.startsWith("raw/")) continue;
+    assert.ok(
+      !html.includes("probe.png"),
+      `${rel} must not list a binary raw file as a page`,
+    );
+  }
+});
+
+test("runExport: a wiki link to a raw binary resolves to the copied file", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/reports/report.pdf", Buffer.from("%PDF-1.4\n"));
+  writeFile(
+    root,
+    "wiki/sources/source-one.md",
+    `---
+title: Source One
+kind: source
+---
+
+See [the report](../../raw/reports/report.pdf).
+`,
+  );
+  await commitAll(root, "add source linking a binary");
+
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const html = readOut(outDir, "wiki/sources/source-one.html");
+  const href = /href="([^"]*report\.pdf)"/.exec(html)?.[1];
+  assert.ok(href, "the page should link the raw report");
+  const resolved = path.join(
+    path.dirname(path.join(outDir, "wiki", "sources", "source-one.html")),
+    ...href.split("/"),
+  );
+  assert.ok(
+    fs.existsSync(resolved),
+    "the link should resolve to the copied file",
+  );
+  assert.ok(fs.readFileSync(resolved).equals(Buffer.from("%PDF-1.4\n")));
+});
+
+test("runExport: a raw asset's encoded name survives link rewriting", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/reports/q3 #1.pdf", Buffer.from("%PDF-1.4\n"));
+  writeFile(
+    root,
+    "wiki/sources/source-one.md",
+    `---
+title: Source One
+kind: source
+---
+
+See [the report](../../raw/reports/q3%20%231.pdf).
+`,
+  );
+  await commitAll(root, "add source linking an encoded binary name");
+
+  const outDir = path.join(root, "web");
+  await runExport(root, { out: outDir, allowDirty: true, raw: true });
+
+  const html = readOut(outDir, "wiki/sources/source-one.html");
+  assert.ok(
+    html.includes('href="../../raw/reports/q3%20%231.pdf"'),
+    "the encoded space and hash stay encoded, so the path is not cut at '#'",
+  );
+  assert.ok(
+    fs.existsSync(path.join(outDir, "raw", "reports", "q3 #1.pdf")),
+    "the copied file keeps its vault-relative name verbatim",
+  );
+});
+
+test("runExport: a promoted start page's link to a raw binary is rewritten", async () => {
+  const root = tmpDir();
+  await setupVaultWithHome(root);
+  writeBytes(root, "raw/reports/report.pdf", Buffer.from("%PDF-1.4\n"));
+  writeFile(
+    root,
+    "wiki/home/home.md",
+    `---
+title: Home
+kind: home
+---
+
+Read [the report](../../raw/reports/report.pdf).
+`,
+  );
+  await commitAll(root, "add raw report and home link");
+
+  const outDir = path.join(root, "web");
+  await runExport(root, {
+    out: outDir,
+    allowDirty: true,
+    raw: true,
+    startPage: START_PAGE_REF,
+  });
+
+  const idx = readOut(outDir, "index.html");
+  assert.ok(
+    idx.includes('href="raw/reports/report.pdf"'),
+    "the promoted page links from the site root, not from its vacated path",
+  );
+});
+
+test("runExport: a non-markdown raw file cannot be the start page", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/probe.png", PNG_BYTES);
+  await commitAll(root, "add binary raw asset");
+
+  const outDir = path.join(root, "web");
+  await assert.rejects(
+    () =>
+      runExport(root, {
+        out: outDir,
+        allowDirty: true,
+        startPage: "raw/probe.png",
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof ExportStartPageError);
+      assert.doesNotMatch(
+        (err as Error).message,
+        /Pass --raw/,
+        "--raw cannot make an asset a page, so it is not the remedy",
+      );
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      runExport(root, {
+        out: outDir,
+        allowDirty: true,
+        raw: true,
+        startPage: "raw/probe.png",
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof ExportStartPageError);
+      assert.match((err as Error).message, /probe\.png/);
+      return true;
+    },
+  );
+  assert.ok(!fs.existsSync(outDir), "a refused start page writes no site");
+});
+
+test("runExport: --single-file --raw omits non-markdown raw files and warns", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/probe.png", PNG_BYTES);
+  await commitAll(root, "add binary raw asset");
+
+  const outFile = path.join(root, "wiki.html");
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: outFile,
+      allowDirty: true,
+      singleFile: true,
+      raw: true,
+    }),
+  );
+
+  assert.equal(warnings.length, 1, "one warning, naming what was omitted");
+  assert.match(warnings[0], /probe\.png/);
+  assert.match(warnings[0], /multi-page/i);
+
+  const html = fs.readFileSync(outFile, "utf8");
+  assert.ok(
+    html.includes('id="raw-transcript"'),
+    "the markdown raw page is still a section",
+  );
+  assert.ok(
+    !html.includes(PNG_BYTES.toString("latin1")),
+    "the binary never enters the one-file document",
+  );
+  assert.ok(
+    !html.includes("probe.png"),
+    "and nothing links to a file this shape does not write",
+  );
+});
+
+test("runExport: --single-file without --raw says nothing about raw assets", async () => {
+  const root = tmpDir();
+  await setupVaultWithRaw(root);
+  writeBytes(root, "raw/probe.png", PNG_BYTES);
+  await commitAll(root, "add binary raw asset");
+
+  const warnings = await warningsFrom(() =>
+    runExport(root, {
+      out: path.join(root, "wiki.html"),
+      allowDirty: true,
+      singleFile: true,
+    }),
+  );
+  assert.deepEqual(warnings, []);
+});
+
+// ---------------------------------------------------------------------------
 // vaultPageRefs — the save-time validation set
 // ---------------------------------------------------------------------------
 
-test("vaultPageRefs: enumerates wiki/ pages and raw/ files alike", async () => {
+test("vaultPageRefs: lists markdown raw pages, not copied assets or dotfiles", async () => {
   const root = tmpDir();
   await setupVaultWithHome(root);
   writeFile(root, "raw/transcript.md", "# Raw\n");
+  writeFile(root, "raw/.gitkeep", "");
+  writeBytes(root, "raw/probe.png", PNG_BYTES);
   await commitAll(root, "add raw");
 
   const refs = vaultPageRefs(root);
   assert.ok(refs.has("wiki/home/home.md"), "wiki pages are listed");
   assert.ok(
     refs.has("raw/transcript.md"),
-    "raw files are listed even though the export may not carry them",
+    "raw markdown pages are listed even though the export may not carry them",
   );
+  assert.ok(!refs.has("raw/probe.png"), "a copied asset is not a page");
+  assert.ok(!refs.has("raw/.gitkeep"), "a dotfile is not a page");
   assert.ok(!refs.has("wiki/nowhere/missing.md"));
 });

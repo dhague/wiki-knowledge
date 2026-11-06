@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadRecords, type PageRecord } from "./pagerecord.js";
-import { buildExportMeta, droppedStarters } from "./exportmeta.js";
+import {
+  buildExportMeta,
+  carriedStarters,
+  droppedStarters,
+} from "./exportmeta.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -319,6 +323,34 @@ test("buildExportMeta: exported set is wiki/ always, raw/ only under includeRaw"
     [...withRaw.exported],
     ["wiki/concepts/alpha-concept.md", "raw/raw-doc.md"],
     "includeRaw adds the raw/ refs to the exported set",
+  );
+});
+
+test("buildExportMeta: a copied raw asset is exported but not rendered", () => {
+  const pages = makePages([["wiki/concepts/alpha-concept.md", conceptA]]);
+  const asset = "raw/reports/report.pdf";
+
+  const meta = buildExportMeta(pages, { includeRaw: true }, [asset]);
+  assert.ok(meta.exported.has(asset), "the export carries the asset");
+  assert.ok(!meta.rendered.has(asset), "but it never becomes a page");
+  assert.deepEqual([...meta.rendered], ["wiki/concepts/alpha-concept.md"]);
+
+  const withoutRaw = buildExportMeta(pages, {}, [asset]);
+  assert.ok(
+    !withoutRaw.exported.has(asset),
+    "a raw asset is not carried without --raw",
+  );
+});
+
+test("buildExportMeta: a copied raw asset is not a get-started starter", () => {
+  const asset = "raw/reports/report.pdf";
+  const starters = [{ pageRef: asset }];
+  const meta = buildExportMeta(new Map(), { includeRaw: true }, [asset]);
+
+  assert.deepEqual(carriedStarters(starters, meta), []);
+  assert.deepEqual(
+    droppedStarters(starters, meta).map((s) => s.pageRef),
+    [asset],
   );
 });
 

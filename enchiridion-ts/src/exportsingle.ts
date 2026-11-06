@@ -36,6 +36,20 @@ export function singleFileSizeWarning(
   return `Warning: ${file} is ${mb(bytes)} MB — over the ${mb(SINGLE_FILE_WARN_BYTES)} MB that is comfortable to email. The file has been written; multi-page export (without --single-file) may suit a vault this size better.`;
 }
 
+/** One document has no second file to put a raw asset in, so the mode carries
+ *  only text sources. Silently dropping the rest would hide why a linked source
+ *  is absent from the site, hence a warning naming them ([ADR-0032]). */
+export function singleFileRawAssetWarning(assetRefs: string[]): string | null {
+  if (assetRefs.length === 0) return null;
+  const shown = assetRefs
+    .slice(0, 5)
+    .map((ref) => `"${ref}"`)
+    .join(", ");
+  const rest = assetRefs.length > 5 ? `, and ${assetRefs.length - 5} more` : "";
+  const files = assetRefs.length === 1 ? "file was" : "files were";
+  return `Warning: --single-file carries only text sources; ${assetRefs.length} non-markdown raw ${files} not included: ${shown}${rest}. Use multi-page export to carry them.`;
+}
+
 // ---------------------------------------------------------------------------
 // The single-file-only CSS and script
 // ---------------------------------------------------------------------------

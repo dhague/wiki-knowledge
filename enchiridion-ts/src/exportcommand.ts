@@ -15,6 +15,7 @@ import {
   buildCandidates,
   vaultPageRefs,
   ExportDirtyError,
+  ExportRawCollisionError,
   ExportStartPageError,
   ExportTargetIsDirectoryError,
   ExportTargetNotEmptyError,
@@ -250,7 +251,8 @@ export function registerExportCommands(program: Command): void {
             err instanceof ExportDirtyError ||
             err instanceof ExportTargetNotEmptyError ||
             err instanceof ExportTargetIsDirectoryError ||
-            err instanceof ExportStartPageError
+            err instanceof ExportStartPageError ||
+            err instanceof ExportRawCollisionError
           ) {
             fail(`enchiridion export: ${(err as Error).message}`);
           } else {
