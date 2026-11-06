@@ -12,6 +12,7 @@ import { renderAggregateParts } from "./exportaggregate.js";
 import {
   SINGLE_FILE_WARN_BYTES,
   renderSingleFile,
+  singleFileRawAssetWarning,
   singleFileSizeWarning,
 } from "./exportsingle.js";
 
@@ -83,8 +84,9 @@ raw_source: "[transcript.txt](../../raw/notes/transcript.txt)"
 Read [the transcript](../../raw/notes/transcript.txt).
 `;
 
-const rawTranscript = `Transcript of a session, kept verbatim.
-`;
+/** The raw artifact's vault-relative ref — carried by the run, never rendered as
+ *  a section, because a one-file document has nowhere to put its bytes. */
+const RAW_TRANSCRIPT = "raw/notes/transcript.txt";
 
 function makePages(
   entries: Array<[string, string]>,
@@ -112,8 +114,12 @@ const wikiPages = makePages([
   ["wiki/entities/alpha-entity.md", entityA],
 ]);
 
-function render(pages: typeof wikiPages, opts: ExportOptions = {}) {
-  const meta = buildExportMeta(pages, opts);
+function render(
+  pages: typeof wikiPages,
+  opts: ExportOptions = {},
+  copied: string[] = [],
+) {
+  const meta = buildExportMeta(pages, opts, copied);
   return renderSingleFile(pages, meta, opts);
 }
 
@@ -266,9 +272,10 @@ test("renderSingleFile: no section leads with a frontmatter table", () => {
     ["wiki/concepts/alpha-concept.md", conceptA],
     ["wiki/sources/source-with-raw.md", sourceWithRaw],
     ["raw/raw-doc.md", rawDoc],
-    ["raw/notes/transcript.txt", rawTranscript],
   ]);
-  const html = render(pages, { title: "Test Vault", includeRaw: true });
+  const html = render(pages, { title: "Test Vault", includeRaw: true }, [
+    RAW_TRANSCRIPT,
+  ]);
 
   const sections = [
     ...html.matchAll(/<section id="([^"]+)"[^>]*>([\s\S]*?)<\/section>/g),
@@ -400,35 +407,39 @@ test("renderSingleFile: no href is a relative path at all", () => {
   const pages = makePages([
     ["wiki/concepts/alpha-concept.md", conceptA],
     ["wiki/sources/source-with-raw.md", sourceWithRaw],
-    ["raw/notes/transcript.txt", rawTranscript],
   ]);
-  const html = render(pages, { title: "Test Vault", includeRaw: true });
+  const html = render(pages, { title: "Test Vault", includeRaw: true }, [
+    RAW_TRANSCRIPT,
+  ]);
   const relative = hrefs(html).filter(
     (h) => !h.startsWith("#") && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(h),
   );
   assert.deepEqual(relative, [], "no href should point outside the document");
 });
 
-test("renderSingleFile: a raw_source pointer becomes a section fragment", () => {
-  const pages = makePages([
-    ["wiki/sources/source-with-raw.md", sourceWithRaw],
-    ["raw/notes/transcript.txt", rawTranscript],
-  ]);
+test("renderSingleFile: a non-markdown raw_source pointer is stripped, not dead-linked", () => {
+  const pages = makePages([["wiki/sources/source-with-raw.md", sourceWithRaw]]);
 
-  const withRaw = render(pages, { title: "Test Vault", includeRaw: true });
+  const withRaw = render(pages, { title: "Test Vault", includeRaw: true }, [
+    RAW_TRANSCRIPT,
+  ]);
   assert.ok(
-    withRaw.includes('href="#raw-notes-transcript-txt"'),
-    "the raw artifact's link should point at its section",
+    !withRaw.includes("raw/notes/transcript.txt"),
+    "a one-file document cannot carry the artifact, so no destination survives",
   );
   assert.ok(
-    sectionIds(withRaw).includes("raw-notes-transcript-txt"),
-    "and that section should exist — the raw file keeps its own extension",
+    !sectionIds(withRaw).includes("raw-notes-transcript-txt"),
+    "no section is written for a file that was not rendered",
+  );
+  assert.ok(
+    withRaw.includes("transcript.txt"),
+    "its label stays as plain text",
   );
 
   const withoutRaw = render(pages, { title: "Test Vault" });
   assert.ok(
     !withoutRaw.includes("raw/notes/transcript.txt"),
-    "an unexported artifact leaves no destination behind",
+    "an unexported artifact leaves no destination behind either",
   );
   assert.ok(
     withoutRaw.includes("transcript.txt"),
@@ -531,6 +542,31 @@ test("singleFileSizeWarning: warns above it, and suggests multi-page", () => {
   assert.ok(warning, "an oversized export should warn");
   assert.match(warning, /wiki\.html/, "the warning names the file");
   assert.match(warning, /multi-page/i, "the warning suggests the alternative");
+});
+
+test("singleFileRawAssetWarning: silent with nothing omitted", () => {
+  assert.equal(singleFileRawAssetWarning([]), null);
+});
+
+test("singleFileRawAssetWarning: names the omitted files and the mode that carries them", () => {
+  const warning = singleFileRawAssetWarning([
+    "raw/probe.png",
+    "raw/reports/report.pdf",
+  ]);
+  assert.ok(warning, "an omitted asset should warn");
+  assert.match(warning, /raw\/probe\.png/);
+  assert.match(warning, /raw\/reports\/report\.pdf/);
+  assert.match(warning, /multi-page/i, "the warning names the remedy");
+});
+
+test("singleFileRawAssetWarning: bounds a long list and keeps the count", () => {
+  const refs = Array.from({ length: 8 }, (_, i) => `raw/file-${i}.pdf`);
+  const warning = singleFileRawAssetWarning(refs);
+  assert.ok(warning);
+  assert.match(warning, /8 /, "the count covers every omitted file");
+  assert.match(warning, /file-0\.pdf/);
+  assert.ok(!warning.includes("file-7.pdf"), "the list is capped");
+  assert.match(warning, /3 more/);
 });
 
 // ---------------------------------------------------------------------------

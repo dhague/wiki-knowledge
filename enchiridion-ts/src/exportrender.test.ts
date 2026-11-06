@@ -877,8 +877,9 @@ function renderOne(
   pages: Map<string, { record?: PageRecord; text: string }>,
   opts: ExportOptions,
   mode: "multi-page" | "single-file",
+  copied: string[] = [],
 ): string {
-  const meta = buildExportMeta(pages, opts);
+  const meta = buildExportMeta(pages, opts, copied);
   const found = [...renderPageParts(pages, meta, opts, mode)].find(
     (p) => p.path === "wiki/sources/source-one.html",
   );
@@ -886,27 +887,30 @@ function renderOne(
   return found.parts.main;
 }
 
-test("renderPageParts: single-file rewrites a link to a non-.md exported page", () => {
-  const pages = makePages([
-    ["wiki/sources/source-one.md", rawLinkingSource],
-    ["raw/reports/report.txt", "raw text"],
+/** The source page with the raw artifact as a copied asset — the shape the
+ *  writer produces: the file is carried, but it is not a page. */
+function sourcePages(): Map<string, { record?: PageRecord; text: string }> {
+  return makePages([["wiki/sources/source-one.md", rawLinkingSource]]);
+}
+
+const COPIED_REPORT = "raw/reports/report.txt";
+
+test("renderPageParts: single-file strips a link to a copied raw asset", () => {
+  const main = renderOne(sourcePages(), { includeRaw: true }, "single-file", [
+    COPIED_REPORT,
   ]);
-  const main = renderOne(pages, { includeRaw: true }, "single-file");
   assert.ok(
-    main.includes('href="#raw-reports-report-txt"'),
-    "a raw artifact's link should become its section's fragment",
+    main.includes("the report"),
+    "the label should survive as plain text",
   );
   assert.ok(
     !main.includes("raw/reports/report.txt"),
-    "no relative destination should survive in a one-file document",
+    "a one-file document has no second file to link to",
   );
 });
 
 test("renderPageParts: single-file strips a link to a non-exported relative path", () => {
-  const pages = makePages([
-    ["wiki/sources/source-one.md", rawLinkingSource],
-    ["raw/reports/report.txt", "raw text"],
-  ]);
+  const pages = sourcePages();
   const main = renderOne(pages, {}, "single-file");
   assert.ok(
     main.includes("the report"),
@@ -918,24 +922,36 @@ test("renderPageParts: single-file strips a link to a non-exported relative path
   );
 });
 
-test("renderPageParts: multi-page leaves a non-.md relative link alone", () => {
-  const pages = makePages([
-    ["wiki/sources/source-one.md", rawLinkingSource],
-    ["raw/reports/report.txt", "raw text"],
+test("renderPageParts: multi-page keeps a carried raw asset's link at its path", () => {
+  const main = renderOne(sourcePages(), { includeRaw: true }, "multi-page", [
+    COPIED_REPORT,
   ]);
-  const main = renderOne(pages, { includeRaw: true }, "multi-page");
   assert.ok(
     main.includes('href="../../raw/reports/report.txt"'),
-    "multi-page output writes the file the link names, so it keeps the link",
+    "multi-page writes the file the link names, so it keeps the link",
+  );
+});
+
+test("renderPageParts: a promoted start page's raw asset link is rewritten", () => {
+  const pages = sourcePages();
+  const startPage = "wiki/sources/source-one.md";
+  const meta = buildExportMeta(pages, { includeRaw: true, startPage }, [
+    COPIED_REPORT,
+  ]);
+  const front = [...renderPageParts(pages, meta, {}, "multi-page")].find(
+    (p) => p.path === "index.html",
+  );
+  assert.ok(front, "the start page should be written at index.html");
+  assert.ok(
+    front.parts.main.includes('href="raw/reports/report.txt"'),
+    "the link is spelled from the front page's own output path",
   );
 });
 
 test("renderPageParts: single-file leaves images and absolute URIs alone", () => {
-  const pages = makePages([
-    ["wiki/sources/source-one.md", rawLinkingSource],
-    ["raw/reports/report.txt", "raw text"],
+  const main = renderOne(sourcePages(), { includeRaw: true }, "single-file", [
+    COPIED_REPORT,
   ]);
-  const main = renderOne(pages, { includeRaw: true }, "single-file");
   assert.ok(
     main.includes('src="../assets/diagram.png"'),
     "an image is not a link out of the file — it is left as the author wrote it",

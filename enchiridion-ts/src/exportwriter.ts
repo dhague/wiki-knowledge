@@ -10,7 +10,11 @@ import {
 } from "./exportmeta.js";
 import { renderPages } from "./exportrender.js";
 import { renderAggregatePages } from "./exportaggregate.js";
-import { renderSingleFile, singleFileSizeWarning } from "./exportsingle.js";
+import {
+  renderSingleFile,
+  singleFileRawAssetWarning,
+  singleFileSizeWarning,
+} from "./exportsingle.js";
 import {
   isSupplied,
   resolveExportStartPage,
@@ -89,11 +93,22 @@ export class ExportStartPageError extends Error {
   }
 }
 
+/** A raw asset and a rendered raw page would write the same site path, so one
+ *  would silently clobber the other. */
+export class ExportRawCollisionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExportRawCollisionError";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Raw page enumeration
 // ---------------------------------------------------------------------------
 
-/** All vault-relative paths under `raw/`; empty when `raw/` is absent. */
+/** All non-dotfile files under `raw/`; empty when absent. A dotfile or hidden
+ *  directory (`.gitkeep`, `.DS_Store`, `.obsidian/`) is a folder artifact, not a
+ *  source, so it is skipped. */
 function enumerateRawRefs(root: string): string[] {
   const rawDir = path.join(root, "raw");
   const refs: string[] = [];
@@ -105,6 +120,7 @@ function enumerateRawRefs(root: string): string[] {
       return;
     }
     for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(abs);
@@ -118,14 +134,20 @@ function enumerateRawRefs(root: string): string[] {
   return refs.sort();
 }
 
-/**
- * Every page ref the vault holds — every `wiki/` page plus every file under
- * `raw/`. Save-time validation uses this, not the export's `--raw`-filtered
- * set: whether a run carries a `raw/` page is a question only the run answers.
- */
+/** A raw/ file is a page when it is markdown; every other file is an asset
+ *  copied verbatim. */
+function isRawPage(ref: string): boolean {
+  return ref.endsWith(".md");
+}
+
+/** Every page ref the vault holds — every `wiki/` page plus every markdown file
+ *  under `raw/`. A raw asset is not a page. Save-time validation uses this, not
+ *  the export's `--raw`-filtered set. */
 export function vaultPageRefs(root: string): Set<string> {
   const refs = new Set<string>(Object.keys(new Vault(root).pagesWithText()));
-  for (const ref of enumerateRawRefs(root)) refs.add(ref);
+  for (const ref of enumerateRawRefs(root)) {
+    if (isRawPage(ref)) refs.add(ref);
+  }
   return refs;
 }
 
@@ -145,6 +167,7 @@ function startPageErrorMessage(
   if (
     !includeRaw &&
     ref.startsWith("raw/") &&
+    isRawPage(ref) &&
     fs.existsSync(path.join(root, ...ref.split("/")))
   ) {
     return `${source} is a raw/ page, which this run does not include. Pass --raw to include raw/ pages, or nominate a wiki/ page.`;
@@ -153,7 +176,7 @@ function startPageErrorMessage(
   if (fromFlag) {
     return `${source} does not name a page in this export. Check the ref, or drop --start-page to use the generated front page.`;
   }
-  return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is under raw/.`;
+  return `${source} does not name a page in this export. Re-save a different page with --save-start-page, clear it with a blank --save-start-page, or pass --raw if the page is a raw/ markdown file.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +188,21 @@ function writeFileIn(tempDir: string, relPath: string, content: string): void {
   const abs = path.join(tempDir, ...relPath.split("/"));
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content, "utf8");
+}
+
+/** Copy one raw asset byte-for-byte to its vault-relative site path. A failure
+ *  names the ref before the host's own detail (ADR-0032). */
+function copyRawAssetIn(tempDir: string, root: string, ref: string): void {
+  const abs = path.join(tempDir, ...ref.split("/"));
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  try {
+    fs.copyFileSync(path.join(root, ...ref.split("/")), abs);
+  } catch (err) {
+    throw new Error(
+      `raw asset "${ref}" could not be copied into the export: ${(err as Error).message}`,
+      { cause: err },
+    );
+  }
 }
 
 function writeTempSite(
@@ -272,6 +310,7 @@ export async function runExport(
 
   const vault = new Vault(root);
   const pagesMap = new Map<string, { record?: PageRecord; text: string }>();
+  const copiedRawRefs: string[] = [];
 
   const wikiWithText = vault.pagesWithText();
   for (const [ref, { record, text }] of Object.entries(wikiWithText)) {
@@ -279,8 +318,12 @@ export async function runExport(
   }
 
   if (includeRaw) {
-    const rawRefs = enumerateRawRefs(root);
-    for (const ref of rawRefs) {
+    for (const ref of enumerateRawRefs(root)) {
+      // Non-markdown is copied, never decoded: a UTF-8 read corrupts the bytes.
+      if (!isRawPage(ref)) {
+        copiedRawRefs.push(ref);
+        continue;
+      }
       try {
         const text = fs.readFileSync(
           path.join(root, ...ref.split("/")),
@@ -299,13 +342,38 @@ export async function runExport(
     title,
     startPage: startPageRef,
   };
-  const meta = buildExportMeta(pagesMap, exportOpts);
+  // A one-file export omits raw assets, so they are not part of the set it
+  // carries; multi-page writes them and counts them as carried.
+  const meta = buildExportMeta(
+    pagesMap,
+    exportOpts,
+    singleFile ? [] : copiedRawRefs,
+  );
 
-  // The start page must be a page this export carries, checked before any write.
-  if (startPageRef !== undefined && !meta.exported.has(startPageRef)) {
+  // The start page must be a page this export renders, checked before any
+  // write. A copied raw asset is carried but is not a page: promoting it would
+  // leave the site without a front page.
+  if (startPageRef !== undefined && !meta.rendered.has(startPageRef)) {
     throw new ExportStartPageError(
       startPageErrorMessage(root, startPageRef, startPageFromFlag, includeRaw),
     );
+  }
+
+  // A raw asset can claim the path a raw markdown page renders to
+  // (raw/x.html beside raw/x.md). Refuse rather than let one clobber the other.
+  if (!singleFile) {
+    const renderedPaths = new Map<string, string>();
+    for (const ref of meta.rendered) {
+      renderedPaths.set(meta.outputPathFor(ref), ref);
+    }
+    for (const ref of copiedRawRefs) {
+      const pageRef = renderedPaths.get(ref);
+      if (pageRef !== undefined) {
+        throw new ExportRawCollisionError(
+          `raw asset "${ref}" and the page rendered from "${pageRef}" both write "${ref}" in this export. Rename or remove one of them.`,
+        );
+      }
+    }
   }
 
   // A supplied get-started set is meaningless beside a start page, but a
@@ -334,12 +402,15 @@ export async function runExport(
 
   if (singleFile) {
     writeSingleFile(outDir, renderSingleFile(pagesMap, meta, exportOpts));
+    const assetWarning = singleFileRawAssetWarning(copiedRawRefs);
+    if (assetWarning) emitDiagnostic(assetWarning);
     return;
   }
 
   const tempDir = fs.mkdtempSync(path.join(outParent, ".export-tmp-"));
   try {
     writeTempSite(tempDir, allPages());
+    for (const ref of copiedRawRefs) copyRawAssetIn(tempDir, root, ref);
     // Site-relative paths here are always "/"-separated, whichever platform we
     // are on.
     writeFileIn(

@@ -7,10 +7,11 @@
  * pure; the path is vault-relative with .html extension.
  *
  * Link rewriting follows [LinkMode]: multi-page rewrites the export's own `.md`
- * destinations to `.html` (anchors preserved), single-file rewrites every
- * relative destination to the section that holds it, and either mode strips a
- * claimed destination outside the exported set to plain label text. Aggregate
- * pages are a separate pass in exportaggregate.ts, in the same two layers.
+ * destinations to `.html` (anchors preserved) and keeps a carried raw asset's
+ * path, single-file rewrites every relative destination to the section that
+ * holds it, and either mode strips a claimed destination the mode gives no
+ * address to back to plain label text. Aggregate pages are a separate pass in
+ * exportaggregate.ts, in the same two layers.
  *
  * A nominated start page is an output-path redirect: it is yielded at the front
  * page's path, every link site asks `meta.outputPathFor` for both ends, and the
@@ -34,7 +35,7 @@ import {
   mdToHtml,
   tagPagePath,
 } from "./exportmeta.js";
-import { isVaultRelativeDest } from "./linkencoding.js";
+import { isVaultRelativeDest, encodeDest } from "./linkencoding.js";
 import { iterLinks, resolveLinkDest } from "./wikipage.js";
 import { splitFrontmatter } from "./frontmatter.js";
 import { slugify } from "./place.js";
@@ -110,17 +111,9 @@ function pageHtmlDir(pageRef: string): string {
   return path.posix.dirname(mdToHtml(pageRef));
 }
 
-/** Relative path from a page's HTML file to a target HTML file, with optional anchor. */
-function relHtmlPath(
-  fromPageRef: string,
-  toPageRef: string,
-  anchor = "",
-): string {
-  const rel = path.posix.relative(
-    pageHtmlDir(fromPageRef),
-    mdToHtml(toPageRef),
-  );
-  return anchor ? `${rel}#${anchor}` : rel;
+/** Relative path from a page's HTML file to a target's own output path. */
+function relHtmlPath(fromPageRef: string, toPageRef: string): string {
+  return path.posix.relative(pageHtmlDir(fromPageRef), mdToHtml(toPageRef));
 }
 
 /** Relative path from an HTML file to the output root (e.g. "../../"). */
@@ -180,12 +173,10 @@ type HrefFor = (
   anchor?: string,
 ) => string;
 
-/** Multi-page: a relative path to the target's own `.html` file. */
-const relativeHref: HrefFor = (
-  fromHtmlPath: string,
-  toHtmlPath: string,
-  anchor = "",
-) => relHtmlPath(fromHtmlPath, toHtmlPath, anchor);
+/** Multi-page: a relative path to the target's own output, encoded so a `#`,
+ *  space or parenthesis in a raw asset's name stays part of the path. */
+const relativeHref: HrefFor = (fromHtmlPath, toHtmlPath, anchor = "") =>
+  encodeDest(relHtmlPath(fromHtmlPath, toHtmlPath), anchor);
 
 /**
  * Single-file: the target section's fragment.
@@ -205,12 +196,16 @@ export function hrefFor(mode: LinkMode): HrefFor {
 
 /**
  * Everything a link site needs to spell a destination: which refs the export
- * carries, which mode's href strategy to use, and where each ref is written.
- * They travel together — a site never wants one without the others.
+ * carries, which of them become an address a link can land on, which mode's
+ * href strategy to use, and where each ref is written. They travel together — a
+ * site never wants one without the others.
  */
 export interface LinkContext {
   /** `meta.exported` — the one owner of "the export carries this ref". */
   exported: Set<string>;
+  /** `meta.rendered` — the subset with an address a link can land on; see
+   *  [ExportMeta.rendered]. */
+  rendered: Set<string>;
   mode: LinkMode;
   /** `meta.outputPathFor` — the start page's promotion lives here. */
   outputPathFor: OutputPathFor;
@@ -218,7 +213,12 @@ export interface LinkContext {
 
 /** The link context a render pass threads through its link sites. */
 export function linkContext(meta: ExportMeta, mode: LinkMode): LinkContext {
-  return { exported: meta.exported, mode, outputPathFor: meta.outputPathFor };
+  return {
+    exported: meta.exported,
+    rendered: meta.rendered,
+    mode,
+    outputPathFor: meta.outputPathFor,
+  };
 }
 
 /**
@@ -291,35 +291,42 @@ function applyEdits(src: string, edits: Edit[]): string {
   return src;
 }
 
-/**
- * Whether a mode claims a destination an author wrote — the export rewrites it
- * rather than leaving it as it stands. A `.md` destination is a vault page in
- * either mode; every other relative destination belongs to single-file output
- * alone, since a relative path in a one-file document is a link out of it.
- *
- * Neither mode rewrites a bare in-page anchor, an absolute destination, or a
- * URI with a scheme — exactly the question [isVaultRelativeDest] answers.
- */
-function claimsDest(dest: string, mode: LinkMode): boolean {
+/** Whether a mode rewrites a destination: a `.md` page in either mode; every
+ *  other relative destination in single-file; and, in multi-page, a carried raw
+ *  asset whose path a promoted start page can move. Absolute and anchor
+ *  destinations are [isVaultRelativeDest]'s question. */
+function rewritesDest(
+  dest: string,
+  target: string,
+  link: LinkContext,
+): boolean {
   if (!isVaultRelativeDest(dest)) return false;
-  if (dest.endsWith(".md")) return true;
-  return mode === "single-file";
+  if (link.mode === "single-file") return true;
+  return dest.endsWith(".md") || link.exported.has(target);
+}
+
+/** The set that answers whether a target has an address in this mode: a
+ *  one-file document lands only on a rendered section, a directory tree also
+ *  lands on a copied raw asset at its path. */
+function addressesIn(link: LinkContext): Set<string> {
+  return link.mode === "single-file" ? link.rendered : link.exported;
 }
 
 /**
  * Rewrite/strip links in the body text before markdown-it rendering: a claimed
- * destination naming an exported page becomes that page's href in this mode; one
- * naming anything else is stripped to its label, not left as a dead href.
+ * destination naming something the mode gives an address becomes that address;
+ * one naming anything else is stripped to its label, not left as a dead href.
  */
 function rewriteBodyLinks(
   bodyText: string,
   pageRef: string,
   link: LinkContext,
 ): string {
-  const { exported, mode, outputPathFor } = link;
+  const { mode, outputPathFor } = link;
   const pageDir = vaultPageDir(pageRef);
   const href = hrefFor(mode);
   const fromHtmlPath = outputPathFor(pageRef);
+  const addresses = addressesIn(link);
   const edits: Edit[] = [];
 
   for (const anchor of iterLinks(bodyText)) {
@@ -327,12 +334,11 @@ function rewriteBodyLinks(
     // stripping one would replace the picture with its alt text.
     if (anchor.isImage && mode === "single-file") continue;
     const p = anchor.decodedPath;
-    if (!claimsDest(p, mode)) continue;
-
     const target = resolveLinkDest(p, pageDir);
+    if (!rewritesDest(p, target, link)) continue;
 
     edits.push(
-      exported.has(target)
+      addresses.has(target)
         ? {
             start: anchor.start,
             end: anchor.end,
@@ -371,25 +377,25 @@ const HEADER_KEYS = new Set(["title", "summary"]);
  * edge, a `supersedes`, or the `raw_source` pointer, which is why this is not a
  * `.md`-only path: a raw artifact keeps its own extension (`.txt`, `.pdf`, …).
  *
- * The same two [claimsDest] rules as the body, for the same reason.
+ * The same two [rewritesDest] rules as the body, for the same reason.
  */
 function renderFmLink(
   markdownLink: string,
   pageRef: string,
   context: LinkContext,
 ): string {
-  const { exported, mode, outputPathFor } = context;
+  const { mode, outputPathFor } = context;
   const links = iterLinks(markdownLink);
   if (links.length === 0) return escHtml(markdownLink);
   const link = links[0];
   const p = link.decodedPath;
+  const target = resolveLinkDest(p, vaultPageDir(pageRef));
 
-  if (!claimsDest(p, mode)) {
+  if (!rewritesDest(p, target, context)) {
     return `<a href="${escHtml(link.dest)}">${escHtml(link.label)}</a>`;
   }
 
-  const target = resolveLinkDest(p, vaultPageDir(pageRef));
-  if (!exported.has(target)) return escHtml(link.label);
+  if (!addressesIn(context).has(target)) return escHtml(link.label);
   const href = hrefFor(mode);
   return `<a href="${escHtml(href(outputPathFor(pageRef), outputPathFor(target), link.decodedAnchor))}">${escHtml(link.label)}</a>`;
 }
@@ -462,7 +468,7 @@ function renderPageLink(
 ): string {
   const entry = allPages.get(targetRef);
   const label = entry?.record?.title ?? targetRef;
-  if (!context.exported.has(targetRef)) return escHtml(label);
+  if (!context.rendered.has(targetRef)) return escHtml(label);
   const href = hrefFor(context.mode)(
     context.outputPathFor(pageRef),
     context.outputPathFor(targetRef),
@@ -748,13 +754,14 @@ function buildRawPageParts(
 // ---------------------------------------------------------------------------
 
 /**
- * Lazy generator yielding one page's parts per exported page, with no document
- * shell around them.
+ * Lazy generator yielding one page's parts per rendered page, with no document
+ * shell around them. A copied raw asset is carried by the run but yielded by no
+ * generator: it is written byte-for-byte instead (see exportwriter).
  *
  * A page is yielded at `meta.outputPathFor(pageRef)` — the front page's path for
  * the start page, its own otherwise — so the promoted page is exported exactly
- * once and nothing is written at its old path. `meta.exported` is the one owner
- * of what the export carries; `mode` is [LinkMode].
+ * once and nothing is written at its old path. `meta.rendered` is the one owner
+ * of what becomes a page; `mode` is [LinkMode].
  */
 export function* renderPageParts(
   pages: Map<string, { record?: PageRecord; text: string }>,
@@ -766,7 +773,7 @@ export function* renderPageParts(
 
   const tagSlugMap = buildTagSlugMap([...meta.tagMap.keys()]);
 
-  for (const pageRef of meta.exported) {
+  for (const pageRef of meta.rendered) {
     const entry = pages.get(pageRef)!;
     const { record, text } = entry;
     const htmlPath = meta.outputPathFor(pageRef);
