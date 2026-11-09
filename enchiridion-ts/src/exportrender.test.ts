@@ -463,6 +463,31 @@ test("renderPages: markdown-link frontmatter values become HTML links", () => {
   );
 });
 
+test("renderPages: source_url rendered as clickable external link", () => {
+  const pages = makePages([
+    [
+      "wiki/sources/a-source.md",
+      `---
+title: A Source
+summary: A remote artifact
+volatility: stable
+raw_source: "[a-source.md](../../raw/a-source.md)"
+source_url: "[A Source](https://example.com/original)"
+---
+Body.
+`,
+    ],
+  ]);
+  const rendered = collectPages(pages);
+  const html = rendered.get("wiki/sources/a-source.html")!;
+  assert.ok(html, "page should render");
+  assert.ok(
+    html.includes('href="https://example.com/original"') &&
+      html.includes("A Source"),
+    `source_url should render as an <a> pointing at the external URL`,
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 4. .md → .html link rewriting; anchors preserved
 // ---------------------------------------------------------------------------

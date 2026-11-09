@@ -40,6 +40,10 @@ A kind for a saved retrieval result — written by `wiki-researcher` only on the
 An immutable original file under `raw/` (an email, meeting note, clipping, document, …). Ingestion never edits its contents, though it may rename the file to normalize it.
 _Avoid_: Source document, attachment.
 
+**Remote artifact**:
+A raw artifact whose bytes were fetched from a URL — a web page, video transcript, PDF, or other online resource — and saved by the agent as a `.md` file under `raw/` with YAML frontmatter capturing the origin metadata (`title`, `source_url`, `date`, `author`). Its corresponding source stub carries a `source_url` frontmatter key (a markdown link to the originating URL) alongside `raw_source`, giving the vault a clickable provenance record back to the web. Distinct from a locally-delivered raw artifact, where no URL exists to record. The artifact itself is treated identically by ingestion; only the source stub's `source_url` marks the origin.
+_Avoid_: URL artifact, web artifact, fetched artifact.
+
 **Typed edge**:
 A directional, named relationship from one page to another, recorded as a frontmatter key holding a list of markdown links. The five types are `refines`, `contradicts`, `example-of`, `source`, and `related` — each page names only the keys it has edges for.
 _Avoid_: Link (a typed edge is a specific relationship; "link" alone means any markdown link, typed or not), backlink.

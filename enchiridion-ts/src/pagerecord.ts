@@ -15,6 +15,10 @@ import { splitFrontmatter } from "./frontmatter.js";
 import { resolveKind } from "./kindmeta.js";
 import { parseSourceDate } from "./sourcedate.js";
 
+/** Frontmatter keys holding markdown links to external URLs (not vault pages).
+ * Each value is a single markdown link; rendered as HTML anchor in export. */
+export const ExternalLinkKeys: string[] = ["source_url"];
+
 /** Frontmatter keys holding markdown links to other pages, in conventions-spec
  * order. `raw_source` is a single link; every other key is a list. */
 export const EdgeKeys: string[] = [
