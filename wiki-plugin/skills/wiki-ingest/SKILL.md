@@ -26,7 +26,7 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 - **A URL argument** — fetch the source, save as a raw artifact, then ingest. Procedure:
   1. **Fetch and convert to Markdown.** Use the tool for the URL type:
      - **YouTube** (`youtu.be` or `youtube.com`): `uvx --from youtube-transcript-api youtube_transcript_api <video-id> --format text` for the transcript. Prepend YAML frontmatter with `title`, `source_url: "[Title](https://youtu.be/<id>)"`, `date`, `author`, and `chapters` (a list of chapter headings, if the video has them).
-     - **Any other URL**: fetch with `curl -L <url>`, extract readable text (strip nav/ads with a tool like `readable` if available, otherwise extract manually), convert to Markdown. Write the same YAML frontmatter block: `title`, `source_url: "[Title](<url>)"`, `date`, `author`.
+     - **Any other URL**: prefer the `fetch` tool from the `mcp-server-fetch` MCP server if it is available in this session — it converts HTML to Markdown via Mozilla Readability automatically. Otherwise fetch with `curl -L <url>` and convert manually. Write the same YAML frontmatter block: `title`, `source_url: "[Title](<url>)"`, `date`, `author`.
   2. **Save as `raw/YYYY-MM-DD-hhmm-<title-slug>.md`** (plugin naming convention for agent-created files).
   3. **Include `source_url` in the source stub's `frontmatter`** in the ingest plan — copy the markdown link value from the raw artifact's YAML frontmatter verbatim. `source_url` is the vault's clickable provenance back to the origin URL.
   4. **Ingest the saved file** — follow the file argument procedure below.
