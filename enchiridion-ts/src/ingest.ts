@@ -17,14 +17,15 @@
  * frontmatter maps are each other's fence: a typed edge belongs under `edges`
  * and is refused on a `frontmatter` map, while a `frontmatter` map takes only
  * the page's own keys plus the `raw_source` sentinel below. The `raw_source`
- * boolean sentinel works the same way as an edge:
- * `frontmatter: {"raw_source": true}` marks the page as the stub for [Plan.raw]
- * and the link is composed from it. [Plan.raw] itself is never renamed or moved
- * — the file keeps its name forever, and the link destination is
- * percent-encoded rather than the file sanitized. Body links are re-encoded on
- * write by [normalizeBodyLinks]. A plan may instead name `raw_source` directly
- * in `edges` — the single-link key — which is how a Consolidation survivor
- * carries forward an absorbed page's `raw_source` when [Plan.raw] is unset.
+ * boolean sentinel `frontmatter: {"raw_source": true}` marks the page as a
+ * wiki/sources/ stub; the link is composed from [Plan.sources]. Each stub is
+ * assigned to its corresponding source in the order the stubs appear in [Plan.pages]
+ * — the first stub gets sources[0], the second gets sources[1], and so on. A raw
+ * file is never renamed or moved — the file keeps its name forever, and the link
+ * destination is percent-encoded rather than the file sanitized. Body links are
+ * re-encoded on write by [normalizeBodyLinks]. A plan may also name `raw_source`
+ * directly in `edges` — the single-link key — which is how a Consolidation
+ * survivor carries forward an absorbed page's `raw_source`.
  *
  * `action` is one of `ingest` (the default), `synthesize`, or `consolidate` —
  * [PlanActions], and any other value is refused with the set named. `synthesize`
@@ -33,8 +34,8 @@
  * ADR-0021): one survivor absorbs the pages `consolidates` names, each absorbed
  * body becoming a section of the survivor's authored body, every inbound link
  * repointed at the survivor ([Vault.consolidate]), the absorbed pages deleted
- * rather than marked `superseded`, and one commit. `plan.raw` stays unset — a
- * Consolidation is sourced from pages, not an artifact. Losslessness is
+ * rather than marked `superseded`, and one commit. `plan.sources` stays empty —
+ * a Consolidation is sourced from pages, not an artifact. Losslessness is
  * mechanical: validation, and the executor again immediately before the delete,
  * refuses a survivor body that no longer reads an absorbed page's content as
  * one unbroken run of top-level markdown blocks, and — for an `update`
@@ -224,12 +225,10 @@ export interface Plan {
   /** The commit verb ([Manifest.action]); see the module comment. */
   action: string;
   source_date: string;
-  /** Single raw artifact — backward-compatible form. Mutually exclusive with
-   * [sources]. A single string keeps today's behaviour; for multi-source plans
-   * use [sources] instead. */
-  raw: string;
-  /** Multiple raw artifacts for a joint ingestion. Mutually exclusive with
-   * [raw]. Each entry names one artifact under `raw/`. */
+  /** Raw artifacts for this ingestion — one entry per source artifact under
+   * `raw/`. Each stub in [pages] (the nth stub with `raw_source: true`) is
+   * assigned to sources[n] in the order the stubs appear in [pages]. Empty
+   * when no raw artifact is involved (synthesize, consolidate). */
   sources: string[];
   pages: PagePlan[];
   /** For `consolidate`, the vault-relative refs the survivor absorbs; empty otherwise. */
@@ -239,26 +238,15 @@ export interface Plan {
   assessed: PlanAssessment | null;
 }
 
-/** All raw artifact paths from a plan: [Plan.sources] when non-empty, otherwise
- * a single-element list from [Plan.raw], or an empty list when no artifacts are
- * declared. [Plan.raw] and [Plan.sources] are mutually exclusive — validation
- * refuses a plan that sets both. */
+/** All raw artifact paths from a plan. Empty when no artifacts are declared. */
 export function normalizedSources(plan: Plan): string[] {
-  if (plan.sources.length > 0) return plan.sources;
-  if (plan.raw !== "") return [plan.raw];
-  return [];
+  return plan.sources;
 }
 
-/** Whether [value] is an accepted raw_source sentinel in a page's frontmatter
- * map: `true` (the original single-source boolean) or a non-negative integer
- * index into [Plan.sources]. */
+/** Whether [value] is the accepted raw_source sentinel in a page's frontmatter
+ * map: only `true`. */
 function isRawSourceSentinel(value: unknown): boolean {
-  if (value === true) return true;
-  return (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    (value as number) >= 0
-  );
+  return value === true;
 }
 
 /** The JSON type of a value, for a refusal that has to say what it got. */
@@ -317,7 +305,6 @@ export function decodePlan(jsonText: string, source = ""): Plan {
     action: action === "" ? ActionIngest : action,
     source_date:
       typeof data["source_date"] === "string" ? data["source_date"] : "",
-    raw: typeof data["raw"] === "string" ? data["raw"] : "",
     sources: (() => {
       // The key "source" + "s" avoids a bare "sources" literal: singleowner.test
       // bans kind-folder name literals outside place.ts, and "sources" is one.
@@ -478,9 +465,7 @@ export class Resolved {
         }
       }
 
-      // `raw_source` here is the `true` sentinel or an integer index into
-      // plan.sources; a ref under it is a typed edge and is refused below with
-      // the map that composes one.
+      // `raw_source: true` is the stub sentinel — requires plan.sources to be set.
       const rawSource = page.frontmatter.get("raw_source");
       if (rawSource.ok && rawSource.value !== null) {
         const sv = rawSource.value;
@@ -488,17 +473,7 @@ export class Resolved {
         if (sv === true) {
           if (allSrcs.length === 0) {
             problems.push(
-              `${prefix}.frontmatter.raw_source is true but no sources are declared (set plan.raw or plan.sources)`,
-            );
-          }
-        } else if (typeof sv === "number") {
-          if (!Number.isInteger(sv) || (sv as number) < 0) {
-            problems.push(
-              `${prefix}.frontmatter.raw_source index must be a non-negative integer, got ${sv}`,
-            );
-          } else if ((sv as number) >= allSrcs.length) {
-            problems.push(
-              `${prefix}.frontmatter.raw_source index ${sv} is out of range; plan.sources has ${allSrcs.length} entr${allSrcs.length === 1 ? "y" : "ies"}`,
+              `${prefix}.frontmatter.raw_source is true but no sources are declared (set plan.sources)`,
             );
           }
         }
@@ -619,9 +594,9 @@ export class Resolved {
           `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`,
         );
       }
-      if (this.plan.raw !== "" || this.plan.sources.length > 0) {
+      if (this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw and plan.sources must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
+          `plan.sources must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
         );
       }
     } else if (this.plan.consolidates.length > 0) {
@@ -650,19 +625,14 @@ export class Resolved {
           );
         }
       }
-      if (this.plan.raw !== "" || this.plan.sources.length > 0) {
+      if (this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw and plan.sources must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
+          `plan.sources must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
         );
       }
     }
 
-    // plan.raw and plan.sources are mutually exclusive.
-    if (this.plan.raw !== "" && this.plan.sources.length > 0) {
-      problems.push(
-        "plan.raw and plan.sources are mutually exclusive: use plan.sources for multi-source plans, plan.raw for single-source",
-      );
-    }
+    // No longer need a mutual exclusion check — plan.raw is removed.
 
     // A pinned assessment is the cluster's snapshot guard: it is required on a
     // Consolidation, and it must name every page the plan absorbs.
@@ -1115,7 +1085,6 @@ export class Resolved {
         updated,
         deleted: losers,
         source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw,
       },
       git,
     );
@@ -1176,6 +1145,16 @@ export function resolve(plan: Plan, root: string): Resolved {
   }
 
   const resolvedPages: ResolvedPage[] = [];
+  // Pre-assign each stub (raw_source:true page) a source index by order of
+  // appearance in plan.pages — the nth stub gets sources[n].
+  const stubIndices = new Map<PagePlan, number>();
+  let stubCount = 0;
+  for (const planPage of plan.pages) {
+    if (planPage.frontmatter.get("raw_source").value === true) {
+      stubIndices.set(planPage, stubCount++);
+    }
+  }
+
   for (let i = 0; i < plan.pages.length; i++) {
     const planPage = plan.pages[i];
     const pageRef_ = refs[i];
@@ -1204,6 +1183,7 @@ export function resolve(plan: Plan, root: string): Resolved {
       plan,
       titles,
       v,
+      stubIndices.get(planPage) ?? 0,
     );
     page = applyBody(page, planPage.body);
 
@@ -1350,6 +1330,7 @@ function applyFrontmatter(
   plan: Plan,
   titles: Map<string, string>,
   v: Vault | null,
+  stubIndex: number,
 ): Page {
   if (planPage.op === OpCreate || planPage.title !== "") {
     page = page.set("title", planPage.title);
@@ -1361,11 +1342,10 @@ function applyFrontmatter(
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
     if (key === "raw_source" && isRawSourceSentinel(value)) {
-      const idx = value === true ? 0 : (value as number);
       const allSrcs = normalizedSources(plan);
-      const src = allSrcs[idx];
+      const src = allSrcs[stubIndex];
       if (src === undefined) {
-        // Out-of-range index — validation reports it; skip here.
+        // No source at this stub index — validation reports it; skip here.
         continue;
       }
       v_ = composeEdgeLink("raw_source", src, pageDir, "");
@@ -1456,9 +1436,9 @@ function pageLinkTargets(page: PagePlan, plan: Plan): LinkTarget[] {
   const targets: LinkTarget[] = [];
   const rawSource = page.frontmatter.get("raw_source");
   if (rawSource.ok && isRawSourceSentinel(rawSource.value)) {
-    const idx = rawSource.value === true ? 0 : (rawSource.value as number);
-    const allSrcs = normalizedSources(plan);
-    const src = allSrcs[idx];
+    // Use sources[0] for self-edge detection: raw_source targets a raw/ file,
+    // never a wiki/ page, so the exact index doesn't affect the check.
+    const src = normalizedSources(plan)[0];
     if (src !== undefined) {
       targets.push({
         at: "frontmatter.raw_source",

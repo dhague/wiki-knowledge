@@ -167,8 +167,11 @@ test("synthesize is one create of kind synthesis, with no raw", () => {
   );
 
   assert.match(
-    validationErrors(plan(synthesis, `,"raw":"raw/doc.md"`), newVault({})),
-    /plan\.raw and plan\.sources must not be set when action is 'synthesize'/,
+    validationErrors(
+      plan(synthesis, `,"sources":["raw/doc.md"]`),
+      newVault({}),
+    ),
+    /plan\.sources must not be set when action is 'synthesize'/,
   );
 
   assert.match(
@@ -367,7 +370,8 @@ test("resolve composes edge links from sibling plan pages", () => {
 
 test("resolve composes raw_source from sentinel", () => {
   const root = newVault({ "raw/a doc (v2).md": "raw\n" });
-  const plan = decodePlanOK(`{"title":"T","raw":"raw/a doc (v2).md","pages":[
+  const plan =
+    decodePlanOK(`{"title":"T","sources":["raw/a doc (v2).md"],"pages":[
     {"op":"create","title":"Doc","kind":"source","body":"b","frontmatter":{"raw_source":true}}]}`);
   const resolved = resolveOK(plan, root);
 
@@ -431,7 +435,8 @@ test("raw_source keeps the artifact filename, not the stub's title", () => {
     "raw/artifact.md": "raw\n",
     "wiki/sources/stub.md": "---\ntitle: Stub\n---\nbody\n",
   });
-  const plan = decodePlanOK(`{"title":"T","raw":"raw/artifact.md","pages":[
+  const plan =
+    decodePlanOK(`{"title":"T","sources":["raw/artifact.md"],"pages":[
     {"op":"update","page_ref":"wiki/sources/stub.md","title":"A Corrected Stub Title",
      "body":"b","frontmatter":{"volatility":"stable","raw_source":true}},
     {"op":"create","title":"New","kind":"concept","body":"b",
@@ -653,7 +658,7 @@ test("shape validation rejects a scalar edge value in a frontmatter map", () => 
 
 test("shape validation rejects a non-true raw_source at its edge route", () => {
   const got = validationErrors(
-    `{"title":"T","raw":"raw/d.md","pages":[
+    `{"title":"T","sources":["raw/d.md"],"pages":[
     {"op":"create","title":"A","kind":"source","body":"b","frontmatter":{"raw_source":"x"}}]}`,
     "",
   );
@@ -995,7 +1000,7 @@ test("shape validation rejects a self-referential raw_source link", () => {
     "raw/artifact.md": "raw\n",
   });
   const got = validationErrors(
-    `{"title":"T","raw":"raw/artifact.md","pages":[
+    `{"title":"T","sources":["raw/artifact.md"],"pages":[
     {"op":"update","page_ref":"wiki/sources/a.md","body":"b",
      "frontmatter":{"volatility":"stable"},"edges":{"raw_source":["wiki/sources/a.md"]}}]}`,
     root,
@@ -1016,7 +1021,7 @@ test("a raw_source sentinel on the stub itself is not a self-edge", () => {
     "wiki/sources/stub.md": "---\ntitle: Stub\n---\nb\n",
   });
   const got = validationErrors(
-    `{"title":"T","raw":"raw/doc.md","pages":[
+    `{"title":"T","sources":["raw/doc.md"],"pages":[
     {"op":"update","page_ref":"wiki/sources/stub.md","body":"b",
      "frontmatter":{"volatility":"stable","raw_source":true}}]}`,
     root,
@@ -1110,7 +1115,7 @@ test("validation rejects a plan creating two stubs where one cites the other", (
 test("validation accepts a synthesis page whose source edges point at the stubs", () => {
   const root = newVault({ "raw/doc.md": "raw\n" });
   const got = validationErrors(
-    `{"title":"T","raw":"raw/doc.md","pages":[
+    `{"title":"T","sources":["raw/doc.md"],"pages":[
     {"op":"create","title":"Alpha","kind":"source","body":"b",
      "frontmatter":{"volatility":"stable","raw_source":true}},
     {"op":"create","title":"Roundup","kind":"synthesis","body":"b",
@@ -1392,7 +1397,7 @@ test("semantic validation enforces path length", () => {
 test("semantic validation runs chain of evidence", () => {
   const root = newVault({ "raw/doc.md": "raw\n" });
   const got = validationErrors(
-    `{"title":"T","raw":"raw/doc.md","pages":[
+    `{"title":"T","sources":["raw/doc.md"],"pages":[
     {"op":"create","title":"A","kind":"concept","body":"b"}]}`,
     root,
   );
@@ -1414,7 +1419,7 @@ test("validate without a vault skips semantic checks", () => {
 // --- execution --------------------------------------------------------------
 
 const wholeIngestPlan = `{
-  "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","raw":"raw/doc.md",
+  "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","sources":["raw/doc.md"],
   "pages":[
     {"op":"create","title":"Doc","kind":"source","body":"stub body\\n",
      "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
@@ -1472,7 +1477,7 @@ test("execute reports an update beside the creates, in plan order", async () => 
     "wiki/concepts/old.md": "---\ntitle: Old\n---\nold\n",
   });
   const resolved = resolveOK(
-    decodePlanOK(`{"title":"T","source_date":"2026-03-01","raw":"raw/doc.md","pages":[
+    decodePlanOK(`{"title":"T","source_date":"2026-03-01","sources":["raw/doc.md"],"pages":[
       {"op":"create","title":"Doc","kind":"source","body":"stub\\n",
        "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
       {"op":"update","page_ref":"wiki/concepts/old.md","frontmatter":{"volatility":"stable"},
@@ -1675,7 +1680,7 @@ const consolidatePlan = `{"title":"Caching","action":"consolidate","consolidates
 function consolidateWith(overrides: {
   consolidates?: string[];
   page?: string;
-  raw?: string;
+  sources?: string[];
   action?: string;
 }): string {
   const consolidates = overrides.consolidates ?? [
@@ -1684,7 +1689,7 @@ function consolidateWith(overrides: {
   return JSON.stringify({
     title: "Caching",
     action: overrides.action ?? "consolidate",
-    ...(overrides.raw === undefined ? {} : { raw: overrides.raw }),
+    ...(overrides.sources === undefined ? {} : { sources: overrides.sources }),
     consolidates,
     assessed: pinFor(...consolidates),
     pages: [
@@ -1778,12 +1783,12 @@ test("shape validation requires the survivor's merged body", () => {
   assert.match(errors, /pages\[0\]\.body is required/);
 });
 
-test("shape validation rejects plan.raw on a Consolidation", () => {
+test("shape validation rejects plan.sources on a Consolidation", () => {
   const errors = validationErrors(
-    consolidateWith({ raw: "raw/doc.md" }),
+    consolidateWith({ sources: ["raw/doc.md"] }),
     newVault(fragmentedVault),
   );
-  assert.match(errors, /plan\.raw and plan\.sources must not be set/);
+  assert.match(errors, /plan\.sources must not be set/);
 });
 
 test("shape validation rejects a duplicated absorbed ref", () => {
@@ -2420,7 +2425,7 @@ async function initRepo(root: string): Promise<void> {
 
 /** A multi-page plan: create and update ops, a typed edge, a raw_source link. */
 const multiPagePlan = `{
-  "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","raw":"raw/doc.md",
+  "title":"Deploy notes","action":"ingest","source_date":"2026-03-01","sources":["raw/doc.md"],
   "pages":[
     {"op":"create","title":"Doc","kind":"source","body":"stub body\\n",
      "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
@@ -2499,7 +2504,7 @@ test("integration: the stub's position in the plan does not change its bytes", a
     fs.mkdirSync(path.join(root, "raw"), { recursive: true });
     fs.writeFileSync(path.join(root, "raw", "doc.md"), "raw\n");
 
-    const plan = `{"title":"Deploy notes","raw":"raw/doc.md","pages":[${pages.join(",")}]}`;
+    const plan = `{"title":"Deploy notes","sources":["raw/doc.md"],"pages":[${pages.join(",")}]}`;
     const resolved = resolve(decodePlanOK(plan), root);
     resolved.validate();
     await resolved.execute(new VaultGit(root));
@@ -2594,7 +2599,7 @@ test("an ingested plan leaves no missing-volatility-source-date findings", async
   const root = newVault({ "raw/doc.md": "raw\n" });
   const resolved = resolveOK(
     decodePlanOK(`{
-    "title":"Doc","source_date":"2026-03-01","raw":"raw/doc.md","pages":[
+    "title":"Doc","source_date":"2026-03-01","sources":["raw/doc.md"],"pages":[
       {"op":"create","title":"Doc","kind":"source","body":"stub\\n",
        "frontmatter":{"summary":"the doc","raw_source":true,"volatility":"stable"}},
       {"op":"create","title":"Prepared Statements","kind":"concept","body":"body\\n",
@@ -2618,11 +2623,10 @@ test("decodePlan decodes plan.sources as a list", () => {
     `{"title":"T","sources":["raw/a.md","raw/b.md"],"pages":[]}`,
   );
   assert.deepEqual(plan.sources, ["raw/a.md", "raw/b.md"]);
-  assert.equal(plan.raw, "");
 });
 
 test("decodePlan leaves plan.sources empty when absent", () => {
-  const plan = decodePlanOK(`{"title":"T","raw":"raw/doc.md","pages":[]}`);
+  const plan = decodePlanOK(`{"title":"T","pages":[]}`);
   assert.deepEqual(plan.sources, []);
 });
 
@@ -2631,20 +2635,6 @@ test("decodePlan skips non-string entries in plan.sources", () => {
     `{"title":"T","sources":["raw/a.md",42,null,"raw/b.md"],"pages":[]}`,
   );
   assert.deepEqual(plan.sources, ["raw/a.md", "raw/b.md"]);
-});
-
-test("shape validation rejects plan.raw and plan.sources together", () => {
-  const root = newVault({ "raw/a.md": "a\n", "raw/b.md": "b\n" });
-  const got = validationErrors(
-    `{"title":"T","raw":"raw/a.md","sources":["raw/b.md"],
-     "pages":[{"op":"create","title":"A","kind":"concept","body":"b",
-               "frontmatter":{"volatility":"stable"}}]}`,
-    root,
-  );
-  assert.ok(
-    got.includes("plan.raw and plan.sources are mutually exclusive"),
-    got,
-  );
 });
 
 test("shape validation rejects sources with consolidate action", () => {
@@ -2671,14 +2661,12 @@ test("shape validation rejects sources with consolidate action", () => {
     root,
   );
   assert.ok(
-    got.includes(
-      "plan.raw and plan.sources must not be set when action is 'consolidate'",
-    ),
+    got.includes("plan.sources must not be set when action is 'consolidate'"),
     got,
   );
 });
 
-test("shape validation rejects raw_source integer out of range", () => {
+test("shape validation rejects integer raw_source as an edge key violation", () => {
   const root = newVault({ "raw/a.md": "a\n" });
   const got = validationErrors(
     `{"title":"T","sources":["raw/a.md"],"pages":[
@@ -2686,10 +2674,10 @@ test("shape validation rejects raw_source integer out of range", () => {
        "frontmatter":{"volatility":"stable","raw_source":5}}]}`,
     root,
   );
-  assert.ok(got.includes("raw_source index 5 is out of range"), got);
+  assert.ok(got.includes("raw_source is an edge key"), got);
 });
 
-test("shape validation rejects negative raw_source integer", () => {
+test("shape validation rejects negative integer raw_source as an edge key violation", () => {
   const root = newVault({ "raw/a.md": "a\n" });
   const got = validationErrors(
     `{"title":"T","sources":["raw/a.md"],"pages":[
@@ -2697,21 +2685,18 @@ test("shape validation rejects negative raw_source integer", () => {
        "frontmatter":{"volatility":"stable","raw_source":-1}}]}`,
     root,
   );
-  assert.ok(
-    got.includes("raw_source index must be a non-negative integer"),
-    got,
-  );
+  assert.ok(got.includes("raw_source is an edge key"), got);
 });
 
-test("raw_source integer index selects the correct source from plan.sources", () => {
+test("position-based stub assignment: first stub gets sources[0], second gets sources[1]", () => {
   const root = newVault({ "raw/a.md": "a\n", "raw/b.md": "b\n" });
   const plan = decodePlanOK(`{
     "title":"T","sources":["raw/a.md","raw/b.md"],
     "pages":[
       {"op":"create","title":"Stub A","kind":"source","body":"b",
-       "frontmatter":{"volatility":"stable","raw_source":0}},
+       "frontmatter":{"volatility":"stable","raw_source":true}},
       {"op":"create","title":"Stub B","kind":"source","body":"b",
-       "frontmatter":{"volatility":"stable","raw_source":1}}
+       "frontmatter":{"volatility":"stable","raw_source":true}}
     ]}`);
   const resolved = resolveOK(plan, root);
   const stubA = resolved.pages[0].page!;
@@ -2751,9 +2736,9 @@ test("multi-source plan validates and executes: two stubs, two pages, one commit
     "title":"Bundle","sources":["raw/alpha.md","raw/beta.md"],
     "pages":[
       {"op":"create","title":"Stub Alpha","kind":"source","body":"alpha stub\\n",
-       "frontmatter":{"summary":"s","volatility":"stable","raw_source":0}},
+       "frontmatter":{"summary":"s","volatility":"stable","raw_source":true}},
       {"op":"create","title":"Stub Beta","kind":"source","body":"beta stub\\n",
-       "frontmatter":{"summary":"s","volatility":"stable","raw_source":1}},
+       "frontmatter":{"summary":"s","volatility":"stable","raw_source":true}},
       {"op":"create","title":"Concept A","kind":"concept","body":"from alpha\\n",
        "frontmatter":{"summary":"s","volatility":"evolving"},
        "edges":{"source":["wiki/sources/stub-alpha.md"]}},
@@ -2791,7 +2776,7 @@ test("multi-source plan: missing stub for one source fails validation", () => {
     `{"title":"T","sources":["raw/alpha.md","raw/beta.md"],
      "pages":[
        {"op":"create","title":"Stub Alpha","kind":"source","body":"b",
-        "frontmatter":{"summary":"s","volatility":"stable","raw_source":0}},
+        "frontmatter":{"summary":"s","volatility":"stable","raw_source":true}},
        {"op":"create","title":"Concept","kind":"concept","body":"b",
         "frontmatter":{"summary":"s","volatility":"evolving"},
         "edges":{"source":["wiki/sources/stub-alpha.md"]}}
@@ -2807,9 +2792,9 @@ test("describe shows source paths for dry-run output", () => {
     "title":"T","sources":["raw/a.md","raw/b.md"],
     "pages":[
       {"op":"create","title":"Stub A","kind":"source","body":"b",
-       "frontmatter":{"volatility":"stable","raw_source":0}},
+       "frontmatter":{"volatility":"stable","raw_source":true}},
       {"op":"create","title":"Stub B","kind":"source","body":"b",
-       "frontmatter":{"volatility":"stable","raw_source":1}}
+       "frontmatter":{"volatility":"stable","raw_source":true}}
     ]}`);
   const described = resolveOK(plan, root).describe();
   assert.ok(described.includes("source raw/a.md"), described);
