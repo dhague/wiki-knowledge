@@ -31782,7 +31782,7 @@ function failureMessage(err) {
 }
 
 // src/version.ts
-var PluginVersion = true ? "0.26.2" : "0.0.0-dev";
+var PluginVersion = true ? "0.27.0" : "0.0.0-dev";
 
 // src/pagecommand.ts
 var import_node_fs6 = __toESM(require("node:fs"), 1);
@@ -39914,6 +39914,59 @@ var import_node_path17 = __toESM(require("node:path"), 1);
 // src/chainofevidence.ts
 var import_node_path16 = __toESM(require("node:path"), 1);
 var sourceDir = `wiki/${KindFolders["source"]}`;
+function checkSources(staged, raws, existingStub) {
+  if (raws.length === 0) return [];
+  if (raws.length === 1) return check(staged, raws[0], existingStub);
+  const normalizedRaws = raws.map((r) => import_node_path16.default.posix.normalize(r));
+  const refs = sortedRefs(staged);
+  const problems = [];
+  const stubRefs = /* @__PURE__ */ new Set();
+  for (const raw of normalizedRaws) {
+    let stubRef = "";
+    for (const pageRef2 of refs) {
+      if (import_node_path16.default.posix.dirname(pageRef2) !== sourceDir) continue;
+      const link2 = staged[pageRef2].getString("raw_source");
+      if (link2 === "") continue;
+      const { dest, ok } = linkDest(link2);
+      if (ok && resolveLinkDest(dest, import_node_path16.default.posix.dirname(pageRef2)) === raw) {
+        stubRef = pageRef2;
+        break;
+      }
+    }
+    if (stubRef === "") {
+      const onDisk = existingStub === void 0 ? "" : existingStub(raw);
+      problems.push(
+        `${raw} needs a wiki/${KindFolders["source"]}/ stub among the pages this plan writes whose raw_source points at it` + (onDisk === "" ? ` \u2014 add one (op:"create", kind:"source", even a thin one)` : ` \u2014 ${onDisk} on disk already stands in for it, so bring it into the plan (op:"update")`) + `; every other page in the plan \u2014 updates included \u2014 needs a source edge to that stub`
+      );
+    } else {
+      stubRefs.add(stubRef);
+    }
+  }
+  if (stubRefs.size === 0) return problems;
+  const sortedStubs = [...stubRefs].sort();
+  for (const pageRef2 of refs) {
+    if (stubRefs.has(pageRef2)) continue;
+    const links = staged[pageRef2].getStringList("source");
+    const pageDir = import_node_path16.default.posix.dirname(pageRef2);
+    let found = false;
+    for (const link2 of links) {
+      const { dest, ok } = linkDest(link2);
+      if (ok) {
+        const resolved = resolveLinkDest(dest, pageDir);
+        if (stubRefs.has(resolved)) {
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      problems.push(
+        `${pageRef2} needs a source edge to one of the plan's stubs (${sortedStubs.join(", ")})`
+      );
+    }
+  }
+  return problems;
+}
 function check(staged, raw, existingStub) {
   raw = import_node_path16.default.posix.normalize(raw);
   const refs = sortedRefs(staged);
@@ -39965,13 +40018,19 @@ var ErrGate = class extends Error {
   }
 };
 var defaultAction = "ingest";
+function manifestRaws(m) {
+  const raws = [];
+  if (m.raw_source) raws.push(m.raw_source);
+  raws.push(...m.raw_sources ?? []);
+  return raws;
+}
 function stagedPaths(m) {
   const paths = [];
   paths.push(...m.created ?? []);
   paths.push(...m.updated ?? []);
   paths.push(...m.deleted ?? []);
   for (const s of m.superseded ?? []) paths.push(s.old, s.new);
-  if (m.raw_source) paths.push(m.raw_source);
+  paths.push(...manifestRaws(m));
   const seen = /* @__PURE__ */ new Set();
   const ordered = [];
   for (const p of paths) {
@@ -39991,10 +40050,12 @@ function buildMessage(m) {
   for (const s of m.superseded ?? [])
     lines.push(`superseded: ${s.old} -> ${s.new}`);
   if (m.source_date) lines.push(`source-date: ${m.source_date}`);
+  for (const src of manifestRaws(m)) lines.push(`raw-source: ${src}`);
   return lines.join("\n") + "\n";
 }
 async function checkChainOfEvidence(root, m) {
-  if (!m.raw_source) return;
+  const raws = manifestRaws(m);
+  if (raws.length === 0) return;
   const staged = {};
   for (const pageRef2 of [...m.created ?? [], ...m.updated ?? []]) {
     const abs = import_node_path17.default.join(root, ...pageRef2.split("/"));
@@ -40006,7 +40067,7 @@ async function checkChainOfEvidence(root, m) {
     }
     staged[pageRef2] = new Page(text2);
   }
-  const problems = check(staged, m.raw_source);
+  const problems = checkSources(staged, raws);
   if (problems.length > 0) {
     throw new ErrGate(`commit gated: ${problems.join("; ")}`);
   }
@@ -40303,6 +40364,12 @@ var OrderedMap = class _OrderedMap {
     return m;
   }
 };
+function normalizedSources(plan) {
+  return plan.sources;
+}
+function isRawSourceSentinel(value) {
+  return value === true;
+}
 function jsonShape(v) {
   return v === null ? "null" : Array.isArray(v) ? "an array" : typeof v;
 }
@@ -40347,7 +40414,11 @@ function decodePlan(jsonText, source = "") {
     title: typeof data["title"] === "string" ? data["title"] : "",
     action: action === "" ? ActionIngest : action,
     source_date: typeof data["source_date"] === "string" ? data["source_date"] : "",
-    raw: typeof data["raw"] === "string" ? data["raw"] : "",
+    sources: (() => {
+      const key = "sources";
+      const v = data[key];
+      return Array.isArray(v) ? v.filter((s) => typeof s === "string").map((s) => s) : [];
+    })(),
     pages,
     consolidates,
     assessed: decodeAssessment(data["assessed"])
@@ -40429,10 +40500,16 @@ var Resolved = class {
         }
       }
       const rawSource = page.frontmatter.get("raw_source");
-      if (rawSource.ok && rawSource.value === true && this.plan.raw === "") {
-        problems.push(
-          `${prefix}.frontmatter.raw_source is true but plan.raw is not set`
-        );
+      if (rawSource.ok && rawSource.value !== null) {
+        const sv = rawSource.value;
+        const allSrcs = normalizedSources(this.plan);
+        if (sv === true) {
+          if (allSrcs.length === 0) {
+            problems.push(
+              `${prefix}.frontmatter.raw_source is true but no sources are declared (set plan.sources)`
+            );
+          }
+        }
       }
       const sourceDate2 = page.frontmatter.get("source_date");
       if (sourceDate2.ok && sourceDate2.value !== null) {
@@ -40493,7 +40570,7 @@ var Resolved = class {
       }
       for (const [key, value] of page.frontmatter.all()) {
         if (value === null) continue;
-        if (EdgeKeys.includes(key) && !(key === "raw_source" && value === true)) {
+        if (EdgeKeys.includes(key) && !(key === "raw_source" && isRawSourceSentinel(value))) {
           problems.push(
             `${prefix}.frontmatter.${key} is an edge key \u2014 name it under ${prefix}.edges instead, where ingest composes the link`
           );
@@ -40519,9 +40596,9 @@ var Resolved = class {
           `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`
         );
       }
-      if (this.plan.raw !== "") {
+      if (this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`
+          `plan.sources must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`
         );
       }
     } else if (this.plan.consolidates.length > 0) {
@@ -40547,9 +40624,9 @@ var Resolved = class {
           );
         }
       }
-      if (this.plan.raw !== "") {
+      if (this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`
+          `plan.sources must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`
         );
       }
     }
@@ -40672,7 +40749,8 @@ var Resolved = class {
         }
       }
     }
-    if (this.plan.raw !== "") {
+    const allSources = normalizedSources(this.plan);
+    if (allSources.length > 0) {
       const staged = {};
       for (const rp of this.pages) {
         if (rp.pageRef !== "" && rp.page !== null) {
@@ -40680,9 +40758,9 @@ var Resolved = class {
         }
       }
       problems.push(
-        ...check(
+        ...checkSources(
           staged,
-          this.plan.raw,
+          allSources,
           (raw) => v.rawSourceStub(raw)
         )
       );
@@ -40884,6 +40962,7 @@ var Resolved = class {
     }
     const created = written.filter((page) => page.op === OpCreate).map((page) => page.pageRef);
     const updated = written.filter((page) => page.op !== OpCreate).map((page) => page.pageRef);
+    const allSources = normalizedSources(this.plan);
     const sha = await commit2(
       this.root,
       {
@@ -40893,7 +40972,8 @@ var Resolved = class {
         updated,
         superseded,
         source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw
+        raw_source: allSources.length === 1 ? allSources[0] : void 0,
+        raw_sources: allSources.length > 1 ? allSources : void 0
       },
       git2
     );
@@ -40935,8 +41015,7 @@ var Resolved = class {
         created,
         updated,
         deleted: losers,
-        source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw
+        source_date: manifestSourceDate(this.plan.source_date)
       },
       git2
     );
@@ -40945,6 +41024,9 @@ var Resolved = class {
   /** A human-readable summary of what [Resolved.execute] would write. */
   describe() {
     const lines = [`${this.plan.action}: ${this.plan.title}`];
+    for (const src of normalizedSources(this.plan)) {
+      lines.push(`  source ${src}`);
+    }
     for (const resolved of this.pages) {
       lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
     }
@@ -40980,6 +41062,13 @@ function resolve3(plan, root) {
     if (!titles.has(ref)) titles.set(ref, title);
   }
   const resolvedPages = [];
+  const stubIndices = /* @__PURE__ */ new Map();
+  let stubCount = 0;
+  for (const planPage of plan.pages) {
+    if (planPage.frontmatter.get("raw_source").value === true) {
+      stubIndices.set(planPage, stubCount++);
+    }
+  }
   for (let i = 0; i < plan.pages.length; i++) {
     const planPage = plan.pages[i];
     const pageRef_ = refs[i];
@@ -41005,7 +41094,8 @@ function resolve3(plan, root) {
       import_node_path18.default.posix.dirname(pageRef_),
       plan,
       titles,
-      v
+      v,
+      stubIndices.get(planPage) ?? 0
     );
     page = applyBody(page, planPage.body);
     resolvedPages.push({
@@ -41096,18 +41186,20 @@ function resolveTitle(targetRef, titles, v) {
   }
   return "";
 }
-function applyFrontmatter(page, planPage, pageDir, plan, titles, v) {
+function applyFrontmatter(page, planPage, pageDir, plan, titles, v, stubIndex) {
   if (planPage.op === OpCreate || planPage.title !== "") {
     page = page.set("title", planPage.title);
   }
   const merging = planPage.op === OpUpdate;
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
-    if (key === "raw_source" && value === true) {
-      if (plan.raw === "") {
+    if (key === "raw_source" && isRawSourceSentinel(value)) {
+      const allSrcs = normalizedSources(plan);
+      const src = allSrcs[stubIndex];
+      if (src === void 0) {
         continue;
       }
-      v_ = composeEdgeLink("raw_source", plan.raw, pageDir, "");
+      v_ = composeEdgeLink("raw_source", src, pageDir, "");
     }
     if (Array.isArray(v_) && merging) {
       page = page.merge(key, v_);
@@ -41160,12 +41252,15 @@ function kindAt(ref, pages, v) {
 function pageLinkTargets(page, plan) {
   const targets = [];
   const rawSource = page.frontmatter.get("raw_source");
-  if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
-    targets.push({
-      at: "frontmatter.raw_source",
-      key: "raw_source",
-      ref: import_node_path18.default.posix.normalize(plan.raw)
-    });
+  if (rawSource.ok && isRawSourceSentinel(rawSource.value)) {
+    const src = normalizedSources(plan)[0];
+    if (src !== void 0) {
+      targets.push({
+        at: "frontmatter.raw_source",
+        key: "raw_source",
+        ref: import_node_path18.default.posix.normalize(src)
+      });
+    }
   }
   for (const [key, refs] of page.edges.all()) {
     if (!Array.isArray(refs)) continue;
