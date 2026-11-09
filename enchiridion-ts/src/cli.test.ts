@@ -317,7 +317,7 @@ test("place: the ref it prints is the ref ingest writes for the same kind and ti
     JSON.stringify({
       title: "DNS migration",
       source_date: "2026-03-01",
-      raw: "raw/doc.md",
+      sources: ["raw/doc.md"],
       pages: [
         {
           op: "create",
@@ -1665,7 +1665,7 @@ test("ingest: executes a plan against a real git vault, printing the SHA, the wr
       title: "Deploy notes",
       action: "ingest",
       source_date: "2026-03-01",
-      raw: "raw/doc.md",
+      sources: ["raw/doc.md"],
       pages: [
         {
           op: "create",
@@ -1777,7 +1777,7 @@ test("ingest: a freshly ingested vault is clean under missing-volatility-source-
     JSON.stringify({
       title: "Deploy notes",
       source_date: "2026-03-01",
-      raw: "raw/doc.md",
+      sources: ["raw/doc.md"],
       pages: [
         {
           op: "create",

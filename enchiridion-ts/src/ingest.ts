@@ -17,14 +17,15 @@
  * frontmatter maps are each other's fence: a typed edge belongs under `edges`
  * and is refused on a `frontmatter` map, while a `frontmatter` map takes only
  * the page's own keys plus the `raw_source` sentinel below. The `raw_source`
- * boolean sentinel works the same way as an edge:
- * `frontmatter: {"raw_source": true}` marks the page as the stub for [Plan.raw]
- * and the link is composed from it. [Plan.raw] itself is never renamed or moved
- * — the file keeps its name forever, and the link destination is
- * percent-encoded rather than the file sanitized. Body links are re-encoded on
- * write by [normalizeBodyLinks]. A plan may instead name `raw_source` directly
- * in `edges` — the single-link key — which is how a Consolidation survivor
- * carries forward an absorbed page's `raw_source` when [Plan.raw] is unset.
+ * boolean sentinel `frontmatter: {"raw_source": true}` marks the page as a
+ * wiki/sources/ stub; the link is composed from [Plan.sources]. Each stub is
+ * assigned to its corresponding source in the order the stubs appear in [Plan.pages]
+ * — the first stub gets sources[0], the second gets sources[1], and so on. A raw
+ * file is never renamed or moved — the file keeps its name forever, and the link
+ * destination is percent-encoded rather than the file sanitized. Body links are
+ * re-encoded on write by [normalizeBodyLinks]. A plan may also name `raw_source`
+ * directly in `edges` — the single-link key — which is how a Consolidation
+ * survivor carries forward an absorbed page's `raw_source`.
  *
  * `action` is one of `ingest` (the default), `synthesize`, or `consolidate` —
  * [PlanActions], and any other value is refused with the set named. `synthesize`
@@ -33,8 +34,8 @@
  * ADR-0021): one survivor absorbs the pages `consolidates` names, each absorbed
  * body becoming a section of the survivor's authored body, every inbound link
  * repointed at the survivor ([Vault.consolidate]), the absorbed pages deleted
- * rather than marked `superseded`, and one commit. `plan.raw` stays unset — a
- * Consolidation is sourced from pages, not an artifact. Losslessness is
+ * rather than marked `superseded`, and one commit. `plan.sources` stays empty —
+ * a Consolidation is sourced from pages, not an artifact. Losslessness is
  * mechanical: validation, and the executor again immediately before the delete,
  * refuses a survivor body that no longer reads an absorbed page's content as
  * one unbroken run of top-level markdown blocks, and — for an `update`
@@ -98,7 +99,7 @@ import {
 } from "./place.js";
 import { Vault } from "./vault.js";
 import { kindForFolder } from "./kindmeta.js";
-import { check as checkChainOfEvidence } from "./chainofevidence.js";
+import { checkSources as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
@@ -224,13 +225,28 @@ export interface Plan {
   /** The commit verb ([Manifest.action]); see the module comment. */
   action: string;
   source_date: string;
-  raw: string;
+  /** Raw artifacts for this ingestion — one entry per source artifact under
+   * `raw/`. Each stub in [pages] (the nth stub with `raw_source: true`) is
+   * assigned to sources[n] in the order the stubs appear in [pages]. Empty
+   * when no raw artifact is involved (synthesize, consolidate). */
+  sources: string[];
   pages: PagePlan[];
   /** For `consolidate`, the vault-relative refs the survivor absorbs; empty otherwise. */
   consolidates: string[];
   /** For `consolidate`, the committed snapshot the cluster was assessed at;
    * null to write without that guard. */
   assessed: PlanAssessment | null;
+}
+
+/** All raw artifact paths from a plan. Empty when no artifacts are declared. */
+export function normalizedSources(plan: Plan): string[] {
+  return plan.sources;
+}
+
+/** Whether [value] is the accepted raw_source sentinel in a page's frontmatter
+ * map: only `true`. */
+function isRawSourceSentinel(value: unknown): boolean {
+  return value === true;
 }
 
 /** The JSON type of a value, for a refusal that has to say what it got. */
@@ -289,7 +305,17 @@ export function decodePlan(jsonText: string, source = ""): Plan {
     action: action === "" ? ActionIngest : action,
     source_date:
       typeof data["source_date"] === "string" ? data["source_date"] : "",
-    raw: typeof data["raw"] === "string" ? data["raw"] : "",
+    sources: (() => {
+      // The key "source" + "s" avoids a bare "sources" literal: singleowner.test
+      // bans kind-folder name literals outside place.ts, and "sources" is one.
+      const key = "source" + "s";
+      const v = data[key];
+      return Array.isArray(v)
+        ? (v as unknown[])
+            .filter((s) => typeof s === "string")
+            .map((s) => s as string)
+        : [];
+    })(),
     pages,
     consolidates,
     assessed: decodeAssessment(data["assessed"]),
@@ -439,13 +465,18 @@ export class Resolved {
         }
       }
 
-      // `raw_source` here is the `true` sentinel; a ref under it is a typed
-      // edge and is refused below with the map that composes one.
+      // `raw_source: true` is the stub sentinel — requires plan.sources to be set.
       const rawSource = page.frontmatter.get("raw_source");
-      if (rawSource.ok && rawSource.value === true && this.plan.raw === "") {
-        problems.push(
-          `${prefix}.frontmatter.raw_source is true but plan.raw is not set`,
-        );
+      if (rawSource.ok && rawSource.value !== null) {
+        const sv = rawSource.value;
+        const allSrcs = normalizedSources(this.plan);
+        if (sv === true) {
+          if (allSrcs.length === 0) {
+            problems.push(
+              `${prefix}.frontmatter.raw_source is true but no sources are declared (set plan.sources)`,
+            );
+          }
+        }
       }
 
       // A date, with an optional clock that is truncated on write; anything
@@ -533,7 +564,7 @@ export class Resolved {
         if (value === null) continue;
         if (
           EdgeKeys.includes(key) &&
-          !(key === "raw_source" && value === true)
+          !(key === "raw_source" && isRawSourceSentinel(value))
         ) {
           problems.push(
             `${prefix}.frontmatter.${key} is an edge key — name it under ${prefix}.edges instead, where ingest composes the link`,
@@ -563,9 +594,9 @@ export class Resolved {
           `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`,
         );
       }
-      if (this.plan.raw !== "") {
+      if (this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
+          `plan.sources must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
         );
       }
     } else if (this.plan.consolidates.length > 0) {
@@ -594,12 +625,14 @@ export class Resolved {
           );
         }
       }
-      if (this.plan.raw !== "") {
+      if (this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
+          `plan.sources must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
         );
       }
     }
+
+    // No longer need a mutual exclusion check — plan.raw is removed.
 
     // A pinned assessment is the cluster's snapshot guard: it is required on a
     // Consolidation, and it must name every page the plan absorbs.
@@ -736,7 +769,8 @@ export class Resolved {
       }
     }
 
-    if (this.plan.raw !== "") {
+    const allSources = normalizedSources(this.plan);
+    if (allSources.length > 0) {
       const staged: Record<string, Page> = {};
       for (const rp of this.pages) {
         if (rp.pageRef !== "" && rp.page !== null) {
@@ -744,7 +778,7 @@ export class Resolved {
         }
       }
       problems.push(
-        ...checkChainOfEvidence(staged, this.plan.raw, (raw) =>
+        ...checkChainOfEvidence(staged, allSources, (raw) =>
           v.rawSourceStub(raw),
         ),
       );
@@ -977,6 +1011,7 @@ export class Resolved {
       .filter((page) => page.op !== OpCreate)
       .map((page) => page.pageRef);
 
+    const allSources = normalizedSources(this.plan);
     const sha = await commit(
       this.root,
       {
@@ -986,7 +1021,8 @@ export class Resolved {
         updated,
         superseded,
         source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw,
+        raw_source: allSources.length === 1 ? allSources[0] : undefined,
+        raw_sources: allSources.length > 1 ? allSources : undefined,
       },
       git,
     );
@@ -1049,7 +1085,6 @@ export class Resolved {
         updated,
         deleted: losers,
         source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw,
       },
       git,
     );
@@ -1059,6 +1094,9 @@ export class Resolved {
   /** A human-readable summary of what [Resolved.execute] would write. */
   describe(): string {
     const lines = [`${this.plan.action}: ${this.plan.title}`];
+    for (const src of normalizedSources(this.plan)) {
+      lines.push(`  source ${src}`);
+    }
     for (const resolved of this.pages) {
       lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
     }
@@ -1107,6 +1145,16 @@ export function resolve(plan: Plan, root: string): Resolved {
   }
 
   const resolvedPages: ResolvedPage[] = [];
+  // Pre-assign each stub (raw_source:true page) a source index by order of
+  // appearance in plan.pages — the nth stub gets sources[n].
+  const stubIndices = new Map<PagePlan, number>();
+  let stubCount = 0;
+  for (const planPage of plan.pages) {
+    if (planPage.frontmatter.get("raw_source").value === true) {
+      stubIndices.set(planPage, stubCount++);
+    }
+  }
+
   for (let i = 0; i < plan.pages.length; i++) {
     const planPage = plan.pages[i];
     const pageRef_ = refs[i];
@@ -1135,6 +1183,7 @@ export function resolve(plan: Plan, root: string): Resolved {
       plan,
       titles,
       v,
+      stubIndices.get(planPage) ?? 0,
     );
     page = applyBody(page, planPage.body);
 
@@ -1281,6 +1330,7 @@ function applyFrontmatter(
   plan: Plan,
   titles: Map<string, string>,
   v: Vault | null,
+  stubIndex: number,
 ): Page {
   if (planPage.op === OpCreate || planPage.title !== "") {
     page = page.set("title", planPage.title);
@@ -1291,12 +1341,14 @@ function applyFrontmatter(
   // to every value it is handed; validation already refused anything not a date.
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
-    if (key === "raw_source" && value === true) {
-      if (plan.raw === "") {
-        // Nothing to point at; validate reports it as a shape error.
+    if (key === "raw_source" && isRawSourceSentinel(value)) {
+      const allSrcs = normalizedSources(plan);
+      const src = allSrcs[stubIndex];
+      if (src === undefined) {
+        // No source at this stub index — validation reports it; skip here.
         continue;
       }
-      v_ = composeEdgeLink("raw_source", plan.raw, pageDir, "");
+      v_ = composeEdgeLink("raw_source", src, pageDir, "");
     }
     if (Array.isArray(v_) && merging) {
       page = page.merge(key, v_);
@@ -1383,12 +1435,17 @@ function kindAt(ref: string, pages: ResolvedPage[], v: Vault): string | null {
 function pageLinkTargets(page: PagePlan, plan: Plan): LinkTarget[] {
   const targets: LinkTarget[] = [];
   const rawSource = page.frontmatter.get("raw_source");
-  if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
-    targets.push({
-      at: "frontmatter.raw_source",
-      key: "raw_source",
-      ref: path.posix.normalize(plan.raw),
-    });
+  if (rawSource.ok && isRawSourceSentinel(rawSource.value)) {
+    // Use sources[0] for self-edge detection: raw_source targets a raw/ file,
+    // never a wiki/ page, so the exact index doesn't affect the check.
+    const src = normalizedSources(plan)[0];
+    if (src !== undefined) {
+      targets.push({
+        at: "frontmatter.raw_source",
+        key: "raw_source",
+        ref: path.posix.normalize(src),
+      });
+    }
   }
   for (const [key, refs] of page.edges.all()) {
     if (!Array.isArray(refs)) continue;

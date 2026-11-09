@@ -24,9 +24,12 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 - A folder argument, or no argument — **sweep**, not single ingestion. Read [`reference/sweep.md`](reference/sweep.md) and follow it instead.
 - A file argument — ingest one document. Procedure below.
+- **Multiple file arguments** — ask before starting: ingest **individually** (one commit per file, in sequence) or as a **collection** (one `sources: [...]` plan, one commit for all)?
+  - **Individual**: run the procedure once per file in turn. Subagent delegation applies file by file.
+  - **Collection**: run the procedure once. Set `sources` to the file paths in the given order; place one stub per source in the same order in `pages` (first stub → sources[0], second stub → sources[1], …); every other page carries a `source` edge to at least one of the stubs.
 - **Consolidation** — a cluster handoff from the `wiki-lint` procedure's `concept-fragmentation` check ([Consolidation](reference/consolidation.md)), naming a survivor and the refs it absorbs: sourced from pages, and it deletes committed pages. Follow step 4's Consolidation variant.
-- **If this session can spawn a subagent** and the work is a single file: delegate only — hand the `wiki-ingest` procedure the document path, relay its returned report verbatim (manifest plus lint findings). Then read any `kind-md-proposal` blocks against [the block protocol](../wiki-conventions/reference/blocks.md#kind-md-proposal) — a block missing a declared field or carrying an unknown one is rejected, never guessed at; for each valid block, ask: *"Create `<folder>/KIND.md` for kind `<kind>`? Proposed summary: `<summary>`"* — on explicit yes, write that file with frontmatter `kind: <kind>` and `summary: <summary>` (no other fields required; optional freeform body may follow the closing `---`). Declining is safe — ingestion already committed against the bare folder. A Consolidation delegates the same way, naming the cluster's member refs and the check's suggested survivor — never author the merged body here.
-- **If already running the procedure as a subagent**, continue with procedure using own tools. (Single-file work only.)
+- **If this session can spawn a subagent** and the work is a single file or a collection: delegate only — hand the `wiki-ingest` procedure the document path(s), relay its returned report verbatim (manifest plus lint findings). Then read any `kind-md-proposal` blocks against [the block protocol](../wiki-conventions/reference/blocks.md#kind-md-proposal) — a block missing a declared field or carrying an unknown one is rejected, never guessed at; for each valid block, ask: *"Create `<folder>/KIND.md` for kind `<kind>`? Proposed summary: `<summary>`"* — on explicit yes, write that file with frontmatter `kind: <kind>` and `summary: <summary>` (no other fields required; optional freeform body may follow the closing `---`). Declining is safe — ingestion already committed against the bare folder. A Consolidation delegates the same way, naming the cluster's member refs and the check's suggested survivor — never author the merged body here.
+- **If already running the procedure as a subagent**, continue with procedure using own tools. (Single-file or collection work only.)
 
 ## Procedure
 
@@ -49,16 +52,16 @@ Given one document at `<path>`.
    {
      "title": "<source document's title>",
      "source_date": "<the document's own date, not today's>",  // pages inherit it
-     "raw": "raw/<artifact's path, exactly as it sits on disk>",   // omit if nothing came from raw/
+     "sources": ["raw/<artifact's path, exactly as it sits on disk>"],  // list; one entry for a single source, multiple for a batch
      "pages": [
        {
-         "op": "create",                 // source/ stub — mandatory when "raw" is set
+         "op": "create",                 // source/ stub — mandatory per source when "sources" is set
          "kind": "source",
          "title": "<the artifact's own title>",
          "body": "<what this artifact is; thin when distilled below>",
          "frontmatter": {
            "summary": "<one line, ≤ ~20 words>",
-           "raw_source": true,           // the "raw" stub — this kind only
+           "raw_source": true,           // marks this page as the stub; stubs appear in pages in the same order as their entry in "sources"
            "volatility": "stable"        // an artifact is frozen: its stub is stable
          },
          "edges": {}
@@ -96,7 +99,9 @@ Given one document at `<path>`.
 
    **Accepted actions** — `action` is `"ingest"` (the default when omitted), `"synthesize"` (wiki-ask's confirmed synthesis save), or `"consolidate"` (the variant below). Any other value is refused, naming the set.
 
-   Every `edges` value names its target by **vault-relative reference** — never a composed `[Title](../dest.md)` string; `enchiridion ingest` composes the link. That is a page reference (`wiki/concepts/foo.md`) except for the single-link `raw_source`, which names a `raw/` artifact. `raw_source: true` derives its own link from `plan.raw`. Exception: *body* links are ordinary markdown (`[label](destination)`), encoded or not — `enchiridion ingest` re-encodes on write.
+   Every `edges` value names its target by **vault-relative reference** — never a composed `[Title](../dest.md)` string; `enchiridion ingest` composes the link. That is a page reference (`wiki/concepts/foo.md`) except for the single-link `raw_source`, which names a `raw/` artifact. `raw_source: true` derives its own link from the corresponding entry in `plan.sources` — stubs appear in the `pages` array in the same order as their corresponding `sources` entries (first stub → sources[0], second stub → sources[1], and so on). Exception: *body* links are ordinary markdown (`[label](destination)`), encoded or not — `enchiridion ingest` re-encodes on write.
+
+   **`plan.sources`** is always a list — one element for a single source, multiple for a batch of closely related documents to commit together. All raw files and all pages land in one commit, so the batch is never half-published. Each source requires one stub (`raw_source: true`); every other page needs a `source` edge to at least one stub.
 
    **Every typed edge goes under `edges`** — that is the one map whose values are composed into a link. A typed-edge key on a `frontmatter` map is refused, naming the key and pointing at `edges`; a value there is written verbatim, so a ref would land bare.
 
@@ -114,7 +119,7 @@ Given one document at `<path>`.
    - **Body** for an `update`: write the *complete* new body (not a diff) when material changes; omit `body` entirely to leave the existing body untouched.
    - **Body states facts only** ([rule](reference/authoring.md#pages-state-facts)) — never narrate a correction or the vault's own process; a live disagreement goes in a `> [!warning] Contradiction` callout, in facts, naming both statements.
    - **Verify the body against the artifact before it lands** ([rule](reference/authoring.md#verify-against-the-source) — the artifact, then the primary source where it is silent).
-   - **`raw_source: true`** derives its link from the plan's `raw` field. **Ingestion never renames raw file** — a file from outside the plugin keeps its name verbatim.
+   - **`raw_source: true`** marks the page as a wiki/sources/ stub. Stubs appear in the `pages` array in the same order as their corresponding `sources` entries. **Ingestion never renames raw file** — a file from outside the plugin keeps its name verbatim.
 5. **Run it.** `"$RUNTIME" "$ENCHIRIDION" ingest --plan <plan.json>` validates the whole plan before writing, then executes place → frontmatter → body → commit in one pass and prints the commit SHA, then the written page refs one per line as `<op> <ref>` in plan order, then the tool-call cost summary when a hook log exists (`ingest --help` declares the order). **A later plan targeting a page this run wrote takes its ref from those lines — never re-derive the slug**, which is truncated at a word boundary. The index is not touched — the next search's staleness scan picks the pages up. On error: nothing committed, written pages left on disk uncommitted (writes idempotent — fix plan and rerun, don't hand-repair).
 6. **Lint.** After the commit — never after a failed step 5 — run every [mechanical check](../wiki-lint/SKILL.md#2-run-mechanical-checks) over the vault in one call:
 

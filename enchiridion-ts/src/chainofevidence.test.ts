@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Page } from "./frontmatter.js";
-import { check } from "./chainofevidence.js";
+import { check, checkSources } from "./chainofevidence.js";
 
 function page(frontmatter: string): Page {
   return new Page(`---\n${frontmatter}---\nbody\n`);
@@ -149,4 +149,118 @@ test("invalid frontmatter is an error", () => {
     "wiki/sources/doc.md": new Page("---\nraw_source: [unclosed\n---\nbody\n"),
   };
   assert.throws(() => check(staged, rawRef));
+});
+
+// -- checkSources (multi-source) -------------------------------------------
+
+test("checkSources: empty raws list returns no problems", () => {
+  const staged: Record<string, Page> = {
+    "wiki/concepts/a.md": page("title: A\n"),
+  };
+  assert.deepEqual(checkSources(staged, []), []);
+});
+
+test("checkSources: single source delegates to check", () => {
+  const staged: Record<string, Page> = {
+    "wiki/sources/doc.md": page('raw_source: "[doc.md](../../raw/doc.md)"\n'),
+    "wiki/concepts/a.md": page('source:\n  - "[doc.md](../sources/doc.md)"\n'),
+  };
+  assert.deepEqual(checkSources(staged, ["raw/doc.md"]), []);
+});
+
+test("checkSources: two sources, two stubs, all pages sourced — no problems", () => {
+  const staged: Record<string, Page> = {
+    "wiki/sources/alpha.md": page(
+      'raw_source: "[alpha.md](../../raw/alpha.md)"\n',
+    ),
+    "wiki/sources/beta.md": page(
+      'raw_source: "[beta.md](../../raw/beta.md)"\n',
+    ),
+    "wiki/concepts/a.md": page(
+      'source:\n  - "[alpha.md](../sources/alpha.md)"\n',
+    ),
+    "wiki/concepts/b.md": page(
+      'source:\n  - "[beta.md](../sources/beta.md)"\n',
+    ),
+  };
+  assert.deepEqual(checkSources(staged, ["raw/alpha.md", "raw/beta.md"]), []);
+});
+
+test("checkSources: missing stub for one source is reported", () => {
+  const staged: Record<string, Page> = {
+    "wiki/sources/alpha.md": page(
+      'raw_source: "[alpha.md](../../raw/alpha.md)"\n',
+    ),
+    "wiki/concepts/a.md": page(
+      'source:\n  - "[alpha.md](../sources/alpha.md)"\n',
+    ),
+  };
+  const errs = checkSources(staged, ["raw/alpha.md", "raw/beta.md"]);
+  assert.equal(errs.length, 1);
+  assert.match(errs[0], /raw\/beta\.md needs a wiki\/sources\/ stub/);
+});
+
+test("checkSources: non-stub page missing source edge to any stub is reported", () => {
+  const staged: Record<string, Page> = {
+    "wiki/sources/alpha.md": page(
+      'raw_source: "[alpha.md](../../raw/alpha.md)"\n',
+    ),
+    "wiki/sources/beta.md": page(
+      'raw_source: "[beta.md](../../raw/beta.md)"\n',
+    ),
+    "wiki/concepts/a.md": page("title: A\n"),
+  };
+  const errs = checkSources(staged, ["raw/alpha.md", "raw/beta.md"]);
+  assert.equal(errs.length, 1);
+  assert.match(
+    errs[0],
+    /wiki\/concepts\/a\.md needs a source edge to one of the plan's stubs/,
+  );
+  assert.match(errs[0], /wiki\/sources\/alpha\.md/);
+  assert.match(errs[0], /wiki\/sources\/beta\.md/);
+});
+
+test("checkSources: a source edge to either stub satisfies the requirement", () => {
+  const staged: Record<string, Page> = {
+    "wiki/sources/alpha.md": page(
+      'raw_source: "[alpha.md](../../raw/alpha.md)"\n',
+    ),
+    "wiki/sources/beta.md": page(
+      'raw_source: "[beta.md](../../raw/beta.md)"\n',
+    ),
+    "wiki/concepts/a.md": page(
+      'source:\n  - "[alpha.md](../sources/alpha.md)"\n',
+    ),
+    "wiki/concepts/b.md": page(
+      'source:\n  - "[beta.md](../sources/beta.md)"\n',
+    ),
+    "wiki/concepts/c.md": page(
+      'source:\n  - "[alpha.md](../sources/alpha.md)"\n  - "[beta.md](../sources/beta.md)"\n',
+    ),
+  };
+  assert.deepEqual(checkSources(staged, ["raw/alpha.md", "raw/beta.md"]), []);
+});
+
+test("checkSources: both missing stubs and unsourced pages reported together", () => {
+  const staged: Record<string, Page> = {
+    "wiki/concepts/a.md": page("title: A\n"),
+  };
+  const errs = checkSources(staged, ["raw/alpha.md", "raw/beta.md"]);
+  assert.equal(errs.length, 2);
+  assert.ok(
+    errs.some((e) => e.includes("raw/alpha.md")),
+    errs.join("|"),
+  );
+  assert.ok(
+    errs.some((e) => e.includes("raw/beta.md")),
+    errs.join("|"),
+  );
+  // Both stubs missing means stubRefs is empty — the per-page "source edge to
+  // one of the plan's stubs" check is skipped; no per-page problem is added.
+  assert.ok(
+    !errs.some((e) =>
+      e.includes("needs a source edge to one of the plan's stubs"),
+    ),
+    errs.join("|"),
+  );
 });
