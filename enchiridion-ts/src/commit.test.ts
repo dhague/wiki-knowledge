@@ -279,7 +279,8 @@ test("integration: writes a structured commit message and returns the SHA", asyn
     "ingest: Deploy notes\n\n" +
       "created: wiki/sources/doc.md\n" +
       "created: wiki/concepts/a.md\n" +
-      "source-date: 2026-03-01\n",
+      "source-date: 2026-03-01\n" +
+      "raw-source: raw/doc.md\n",
   );
 });
 

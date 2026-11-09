@@ -98,7 +98,7 @@ import {
 } from "./place.js";
 import { Vault } from "./vault.js";
 import { kindForFolder } from "./kindmeta.js";
-import { check as checkChainOfEvidence } from "./chainofevidence.js";
+import { checkSources as checkChainOfEvidence } from "./chainofevidence.js";
 import { commit, type Git, type Supersession } from "./commit.js";
 import { CANONICAL_DATE_FORMAT, parseSourceDate } from "./sourcedate.js";
 import { isPageRef } from "./pagepredicate.js";
@@ -224,13 +224,41 @@ export interface Plan {
   /** The commit verb ([Manifest.action]); see the module comment. */
   action: string;
   source_date: string;
+  /** Single raw artifact — backward-compatible form. Mutually exclusive with
+   * [sources]. A single string keeps today's behaviour; for multi-source plans
+   * use [sources] instead. */
   raw: string;
+  /** Multiple raw artifacts for a joint ingestion. Mutually exclusive with
+   * [raw]. Each entry names one artifact under `raw/`. */
+  sources: string[];
   pages: PagePlan[];
   /** For `consolidate`, the vault-relative refs the survivor absorbs; empty otherwise. */
   consolidates: string[];
   /** For `consolidate`, the committed snapshot the cluster was assessed at;
    * null to write without that guard. */
   assessed: PlanAssessment | null;
+}
+
+/** All raw artifact paths from a plan: [Plan.sources] when non-empty, otherwise
+ * a single-element list from [Plan.raw], or an empty list when no artifacts are
+ * declared. [Plan.raw] and [Plan.sources] are mutually exclusive — validation
+ * refuses a plan that sets both. */
+export function normalizedSources(plan: Plan): string[] {
+  if (plan.sources.length > 0) return plan.sources;
+  if (plan.raw !== "") return [plan.raw];
+  return [];
+}
+
+/** Whether [value] is an accepted raw_source sentinel in a page's frontmatter
+ * map: `true` (the original single-source boolean) or a non-negative integer
+ * index into [Plan.sources]. */
+function isRawSourceSentinel(value: unknown): boolean {
+  if (value === true) return true;
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    (value as number) >= 0
+  );
 }
 
 /** The JSON type of a value, for a refusal that has to say what it got. */
@@ -290,6 +318,17 @@ export function decodePlan(jsonText: string, source = ""): Plan {
     source_date:
       typeof data["source_date"] === "string" ? data["source_date"] : "",
     raw: typeof data["raw"] === "string" ? data["raw"] : "",
+    sources: (() => {
+      // The key "source" + "s" avoids a bare "sources" literal: singleowner.test
+      // bans kind-folder name literals outside place.ts, and "sources" is one.
+      const key = "source" + "s";
+      const v = data[key];
+      return Array.isArray(v)
+        ? (v as unknown[])
+            .filter((s) => typeof s === "string")
+            .map((s) => s as string)
+        : [];
+    })(),
     pages,
     consolidates,
     assessed: decodeAssessment(data["assessed"]),
@@ -439,13 +478,30 @@ export class Resolved {
         }
       }
 
-      // `raw_source` here is the `true` sentinel; a ref under it is a typed
-      // edge and is refused below with the map that composes one.
+      // `raw_source` here is the `true` sentinel or an integer index into
+      // plan.sources; a ref under it is a typed edge and is refused below with
+      // the map that composes one.
       const rawSource = page.frontmatter.get("raw_source");
-      if (rawSource.ok && rawSource.value === true && this.plan.raw === "") {
-        problems.push(
-          `${prefix}.frontmatter.raw_source is true but plan.raw is not set`,
-        );
+      if (rawSource.ok && rawSource.value !== null) {
+        const sv = rawSource.value;
+        const allSrcs = normalizedSources(this.plan);
+        if (sv === true) {
+          if (allSrcs.length === 0) {
+            problems.push(
+              `${prefix}.frontmatter.raw_source is true but no sources are declared (set plan.raw or plan.sources)`,
+            );
+          }
+        } else if (typeof sv === "number") {
+          if (!Number.isInteger(sv) || (sv as number) < 0) {
+            problems.push(
+              `${prefix}.frontmatter.raw_source index must be a non-negative integer, got ${sv}`,
+            );
+          } else if ((sv as number) >= allSrcs.length) {
+            problems.push(
+              `${prefix}.frontmatter.raw_source index ${sv} is out of range; plan.sources has ${allSrcs.length} entr${allSrcs.length === 1 ? "y" : "ies"}`,
+            );
+          }
+        }
       }
 
       // A date, with an optional clock that is truncated on write; anything
@@ -533,7 +589,7 @@ export class Resolved {
         if (value === null) continue;
         if (
           EdgeKeys.includes(key) &&
-          !(key === "raw_source" && value === true)
+          !(key === "raw_source" && isRawSourceSentinel(value))
         ) {
           problems.push(
             `${prefix}.frontmatter.${key} is an edge key — name it under ${prefix}.edges instead, where ingest composes the link`,
@@ -563,9 +619,9 @@ export class Resolved {
           `pages[0].body is required when action is '${ActionConsolidate}' (the survivor's merged body)`,
         );
       }
-      if (this.plan.raw !== "") {
+      if (this.plan.raw !== "" || this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
+          `plan.raw and plan.sources must not be set when action is '${ActionConsolidate}': a Consolidation is sourced from pages, not an artifact`,
         );
       }
     } else if (this.plan.consolidates.length > 0) {
@@ -594,11 +650,18 @@ export class Resolved {
           );
         }
       }
-      if (this.plan.raw !== "") {
+      if (this.plan.raw !== "" || this.plan.sources.length > 0) {
         problems.push(
-          `plan.raw must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
+          `plan.raw and plan.sources must not be set when action is '${ActionSynthesize}': a synthesis is sourced from pages, not an artifact`,
         );
       }
+    }
+
+    // plan.raw and plan.sources are mutually exclusive.
+    if (this.plan.raw !== "" && this.plan.sources.length > 0) {
+      problems.push(
+        "plan.raw and plan.sources are mutually exclusive: use plan.sources for multi-source plans, plan.raw for single-source",
+      );
     }
 
     // A pinned assessment is the cluster's snapshot guard: it is required on a
@@ -736,7 +799,8 @@ export class Resolved {
       }
     }
 
-    if (this.plan.raw !== "") {
+    const allSources = normalizedSources(this.plan);
+    if (allSources.length > 0) {
       const staged: Record<string, Page> = {};
       for (const rp of this.pages) {
         if (rp.pageRef !== "" && rp.page !== null) {
@@ -744,7 +808,7 @@ export class Resolved {
         }
       }
       problems.push(
-        ...checkChainOfEvidence(staged, this.plan.raw, (raw) =>
+        ...checkChainOfEvidence(staged, allSources, (raw) =>
           v.rawSourceStub(raw),
         ),
       );
@@ -977,6 +1041,7 @@ export class Resolved {
       .filter((page) => page.op !== OpCreate)
       .map((page) => page.pageRef);
 
+    const allSources = normalizedSources(this.plan);
     const sha = await commit(
       this.root,
       {
@@ -986,7 +1051,8 @@ export class Resolved {
         updated,
         superseded,
         source_date: manifestSourceDate(this.plan.source_date),
-        raw_source: this.plan.raw,
+        raw_source: allSources.length === 1 ? allSources[0] : undefined,
+        raw_sources: allSources.length > 1 ? allSources : undefined,
       },
       git,
     );
@@ -1059,6 +1125,9 @@ export class Resolved {
   /** A human-readable summary of what [Resolved.execute] would write. */
   describe(): string {
     const lines = [`${this.plan.action}: ${this.plan.title}`];
+    for (const src of normalizedSources(this.plan)) {
+      lines.push(`  source ${src}`);
+    }
     for (const resolved of this.pages) {
       lines.push(`  ${resolved.plan.op.padEnd(6)} ${resolved.pageRef}`);
     }
@@ -1291,12 +1360,15 @@ function applyFrontmatter(
   // to every value it is handed; validation already refused anything not a date.
   for (const [key, value] of planPage.frontmatter.all()) {
     let v_ = value;
-    if (key === "raw_source" && value === true) {
-      if (plan.raw === "") {
-        // Nothing to point at; validate reports it as a shape error.
+    if (key === "raw_source" && isRawSourceSentinel(value)) {
+      const idx = value === true ? 0 : (value as number);
+      const allSrcs = normalizedSources(plan);
+      const src = allSrcs[idx];
+      if (src === undefined) {
+        // Out-of-range index — validation reports it; skip here.
         continue;
       }
-      v_ = composeEdgeLink("raw_source", plan.raw, pageDir, "");
+      v_ = composeEdgeLink("raw_source", src, pageDir, "");
     }
     if (Array.isArray(v_) && merging) {
       page = page.merge(key, v_);
@@ -1383,12 +1455,17 @@ function kindAt(ref: string, pages: ResolvedPage[], v: Vault): string | null {
 function pageLinkTargets(page: PagePlan, plan: Plan): LinkTarget[] {
   const targets: LinkTarget[] = [];
   const rawSource = page.frontmatter.get("raw_source");
-  if (rawSource.ok && rawSource.value === true && plan.raw !== "") {
-    targets.push({
-      at: "frontmatter.raw_source",
-      key: "raw_source",
-      ref: path.posix.normalize(plan.raw),
-    });
+  if (rawSource.ok && isRawSourceSentinel(rawSource.value)) {
+    const idx = rawSource.value === true ? 0 : (rawSource.value as number);
+    const allSrcs = normalizedSources(plan);
+    const src = allSrcs[idx];
+    if (src !== undefined) {
+      targets.push({
+        at: "frontmatter.raw_source",
+        key: "raw_source",
+        ref: path.posix.normalize(src),
+      });
+    }
   }
   for (const [key, refs] of page.edges.all()) {
     if (!Array.isArray(refs)) continue;

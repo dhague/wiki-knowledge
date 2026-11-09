@@ -9,6 +9,10 @@
  * refusal but never satisfies the rule.
  *
  * `ingest` runs it before any write; `commit` re-runs it as the hard gate.
+ *
+ * [checkSources] is the multi-source generalisation: one stub per source,
+ * every non-stub page sources at least one of them. [check] is the
+ * single-source form — a thin wrapper kept for callers with one raw artifact.
  */
 
 import path from "node:path";
@@ -21,6 +25,81 @@ const sourceDir = `wiki/${KindFolders["source"]}`;
 /** Find the vault's own stand-in for a raw artifact, or "" — consulted only to
  * word a refusal, never to satisfy the rule. */
 export type StubLookup = (raw: string) => string;
+
+/**
+ * Multi-source generalisation of [check]: finds one stub per entry in raws,
+ * then checks every non-stub page sources at least one of them. Results are
+ * in sorted-ref order so the outcome is independent of map insertion order.
+ * Throws on unparseable frontmatter. [existingStub] is consulted only when
+ * no staged page stands in for a given source, to name an on-disk stand-in.
+ */
+export function checkSources(
+  staged: Record<string, Page>,
+  raws: string[],
+  existingStub?: StubLookup,
+): string[] {
+  if (raws.length === 0) return [];
+  if (raws.length === 1) return check(staged, raws[0], existingStub);
+
+  const normalizedRaws = raws.map((r) => path.posix.normalize(r));
+  const refs = sortedRefs(staged);
+  const problems: string[] = [];
+
+  // Find the stub for each source; record problems for missing stubs.
+  const stubRefs = new Set<string>();
+  for (const raw of normalizedRaws) {
+    let stubRef = "";
+    for (const pageRef of refs) {
+      if (path.posix.dirname(pageRef) !== sourceDir) continue;
+      const link = staged[pageRef].getString("raw_source");
+      if (link === "") continue;
+      const { dest, ok } = linkDest(link);
+      if (ok && resolveLinkDest(dest, path.posix.dirname(pageRef)) === raw) {
+        stubRef = pageRef;
+        break;
+      }
+    }
+    if (stubRef === "") {
+      const onDisk = existingStub === undefined ? "" : existingStub(raw);
+      problems.push(
+        `${raw} needs a wiki/${KindFolders["source"]}/ stub among the pages this plan writes whose raw_source points at it` +
+          (onDisk === ""
+            ? ` — add one (op:"create", kind:"source", even a thin one)`
+            : ` — ${onDisk} on disk already stands in for it, so bring it into the plan (op:"update")`) +
+          `; every other page in the plan — updates included — needs a source edge to that stub`,
+      );
+    } else {
+      stubRefs.add(stubRef);
+    }
+  }
+
+  if (stubRefs.size === 0) return problems;
+
+  // Every non-stub page must source at least one stub from this plan.
+  const sortedStubs = [...stubRefs].sort();
+  for (const pageRef of refs) {
+    if (stubRefs.has(pageRef)) continue;
+    const links = staged[pageRef].getStringList("source");
+    const pageDir = path.posix.dirname(pageRef);
+    let found = false;
+    for (const link of links) {
+      const { dest, ok } = linkDest(link);
+      if (ok) {
+        const resolved = resolveLinkDest(dest, pageDir);
+        if (stubRefs.has(resolved)) {
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      problems.push(
+        `${pageRef} needs a source edge to one of the plan's stubs (${sortedStubs.join(", ")})`,
+      );
+    }
+  }
+  return problems;
+}
 
 /**
  * Report whether staged leaves a valid page -> stub -> raw chain. staged holds

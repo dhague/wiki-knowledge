@@ -21,7 +21,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Page } from "./frontmatter.js";
-import { check } from "./chainofevidence.js";
+import { checkSources } from "./chainofevidence.js";
 
 /** Thrown when a manifest fails the chain-of-evidence gate; distinct from a
  * git failure, which is an environment problem rather than a planning bug. */
@@ -58,12 +58,26 @@ export interface Manifest {
   superseded?: Supersession[];
   source_date?: string;
   /** The raw/ artifact this ingestion is sourced from, if any. Staged in the
-   * same commit as the pages it produced. */
+   * same commit as the pages it produced. Single-source form; use
+   * [raw_sources] for multiple artifacts. */
   raw_source?: string;
+  /** Multiple raw/ artifacts for a joint multi-source ingestion. Staged in the
+   * same commit as the pages they produced. Mutually exclusive with
+   * [raw_source]. */
+  raw_sources?: string[];
 }
 
 /** The verb a manifest that names none commits under. */
 const defaultAction = "ingest";
+
+/** All raw artifact paths from a manifest, combining the single and multi
+ * forms in declaration order. */
+function manifestRaws(m: Manifest): string[] {
+  const raws: string[] = [];
+  if (m.raw_source) raws.push(m.raw_source);
+  raws.push(...(m.raw_sources ?? []));
+  return raws;
+}
 
 /** Every path this manifest touches, de-duplicated, in a stable order. */
 export function stagedPaths(m: Manifest): string[] {
@@ -72,7 +86,7 @@ export function stagedPaths(m: Manifest): string[] {
   paths.push(...(m.updated ?? []));
   paths.push(...(m.deleted ?? []));
   for (const s of m.superseded ?? []) paths.push(s.old, s.new);
-  if (m.raw_source) paths.push(m.raw_source);
+  paths.push(...manifestRaws(m));
 
   const seen = new Set<string>();
   const ordered: string[] = [];
@@ -96,14 +110,16 @@ export function buildMessage(m: Manifest): string {
   for (const s of m.superseded ?? [])
     lines.push(`superseded: ${s.old} -> ${s.new}`);
   if (m.source_date) lines.push(`source-date: ${m.source_date}`);
+  for (const src of manifestRaws(m)) lines.push(`raw-source: ${src}`);
   return lines.join("\n") + "\n";
 }
 
-/** Gate the commit on [check]; a no-op when `raw_source` is unset. Pages are
- * read from disk — the caller has already written them — and a staged page
- * missing from disk is skipped. */
+/** Gate the commit on [checkSources]; a no-op when no sources are declared.
+ * Pages are read from disk — the caller has already written them — and a
+ * staged page missing from disk is skipped. */
 async function checkChainOfEvidence(root: string, m: Manifest): Promise<void> {
-  if (!m.raw_source) return;
+  const raws = manifestRaws(m);
+  if (raws.length === 0) return;
 
   const staged: Record<string, Page> = {};
   for (const pageRef of [...(m.created ?? []), ...(m.updated ?? [])]) {
@@ -117,7 +133,7 @@ async function checkChainOfEvidence(root: string, m: Manifest): Promise<void> {
     staged[pageRef] = new Page(text);
   }
 
-  const problems = check(staged, m.raw_source);
+  const problems = checkSources(staged, raws);
   if (problems.length > 0) {
     throw new ErrGate(`commit gated: ${problems.join("; ")}`);
   }
