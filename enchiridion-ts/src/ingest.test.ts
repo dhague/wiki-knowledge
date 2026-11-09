@@ -914,7 +914,7 @@ test("shape validation rejects a frontmatter key outside the schema", () => {
   );
   assert.ok(
     got.includes(
-      "pages[0].frontmatter.summmary is not a frontmatter key; one of title, summary, tags, source_date, volatility, raw_source",
+      "pages[0].frontmatter.summmary is not a frontmatter key; one of title, summary, tags, source_date, volatility, raw_source, source_url",
     ),
     got,
   );
@@ -927,6 +927,17 @@ test("shape validation accepts every key in the schema", () => {
       "summary":"s","tags":["t"],"source_date":"2026-01-01",
       "volatility":"stable"}}]}`,
     newVault({}),
+  );
+  assert.equal(got, "");
+});
+
+test("shape validation accepts source_url on a source stub", () => {
+  const got = validationErrors(
+    `{"title":"T","sources":["raw/clip.md"],"pages":[
+    {"op":"create","kind":"source","title":"Clip","body":"b","frontmatter":{
+      "summary":"s","volatility":"stable","raw_source":true,
+      "source_url":"[Clip Title](https://example.com/clip)"}}]}`,
+    newVault({ "raw/clip.md": "content" }),
   );
   assert.equal(got, "");
 });

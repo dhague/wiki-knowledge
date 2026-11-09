@@ -129,7 +129,8 @@ export const OpCreate = "create";
 export const OpUpdate = "update";
 
 /** What a plan's `frontmatter` map may name: the page's own keys plus the
- * `raw_source` sentinel. An edge key is refused, pointing at `edges`. */
+ * `raw_source` sentinel and `source_url` for remote artifacts. An edge key is
+ * refused, pointing at `edges`. */
 const FrontmatterKeys: string[] = [
   "title",
   "summary",
@@ -137,6 +138,7 @@ const FrontmatterKeys: string[] = [
   "source_date",
   "volatility",
   "raw_source",
+  "source_url",
 ];
 
 export const ActionIngest = "ingest";

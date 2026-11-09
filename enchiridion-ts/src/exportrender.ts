@@ -21,7 +21,7 @@
 import path from "node:path";
 import MarkdownIt from "markdown-it";
 import { parse as parseYaml } from "yaml";
-import { PageRecord, EdgeKeys } from "./pagerecord.js";
+import { PageRecord, EdgeKeys, ExternalLinkKeys } from "./pagerecord.js";
 import {
   ExportMeta,
   ExportOptions,
@@ -364,7 +364,7 @@ function rewriteBodyLinks(
 // Frontmatter table rendering
 // ---------------------------------------------------------------------------
 
-const FM_LINK_KEYS = new Set(EdgeKeys);
+const FM_LINK_KEYS = new Set([...EdgeKeys, ...ExternalLinkKeys]);
 
 /**
  * The two frontmatter keys lifted out of the table and into the page header:

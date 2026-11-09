@@ -37507,6 +37507,7 @@ function canonicalizeLinkTargets(text2, pageDir, target = (ref) => ref) {
 // src/pagerecord.ts
 var import_node_path4 = __toESM(require("node:path"), 1);
 var import_yaml3 = __toESM(require_dist(), 1);
+var ExternalLinkKeys = ["source_url"];
 var EdgeKeys = [
   "raw_source",
   "supersedes",
@@ -40313,7 +40314,8 @@ var FrontmatterKeys = [
   "tags",
   "source_date",
   "volatility",
-  "raw_source"
+  "raw_source",
+  "source_url"
 ];
 var ActionIngest = "ingest";
 var ActionSynthesize = "synthesize";
@@ -46698,7 +46700,7 @@ function rewriteBodyLinks(bodyText, pageRef2, link2) {
   }
   return applyEdits2(bodyText, edits);
 }
-var FM_LINK_KEYS = new Set(EdgeKeys);
+var FM_LINK_KEYS = /* @__PURE__ */ new Set([...EdgeKeys, ...ExternalLinkKeys]);
 var HEADER_KEYS = /* @__PURE__ */ new Set(["title", "summary"]);
 function renderFmLink(markdownLink, pageRef2, context) {
   const { mode, outputPathFor } = context;
