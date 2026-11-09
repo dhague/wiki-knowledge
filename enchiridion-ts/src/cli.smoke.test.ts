@@ -368,7 +368,7 @@ test(
         title: "Deploy notes",
         action: "ingest",
         source_date: "2026-03-01",
-        raw: "raw/doc.md",
+        sources: ["raw/doc.md"],
         pages: [
           {
             op: "create",
