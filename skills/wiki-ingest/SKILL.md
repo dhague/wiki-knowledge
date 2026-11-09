@@ -20,6 +20,34 @@ Every call below is `"$RUNTIME" "$ENCHIRIDION" <subcommand> <args...>`. If neith
 
 [`wiki-conventions` → Scripts](../wiki-conventions/reference/scripts.md#script-runtime-contract) — the shared reference for vault-root resolution and the full subcommand catalogue
 
+## Ingesting URLs
+
+A URL is not a file — convert it to a raw artifact first, then run the normal procedure on that file.
+
+**YouTube videos:** extract the transcript with:
+
+```bash
+uvx --from youtube-transcript-api youtube_transcript_api <video-id> --format text
+```
+
+where `<video-id>` is the bare ID from the URL (e.g. `dQw4w9WgXcQ`). `yt-dlp` subtitle downloads reliably fail with HTTP 429; do not attempt it.
+
+Prepend a metadata header before the transcript body so the source stub has something to reference:
+
+```
+Title: <video title>
+Source URL: https://www.youtube.com/watch?v=<video-id>
+Date: <upload date YYYY-MM-DD>
+Author: <channel name>
+Chapters: <chapter list if available, else omit>
+
+<transcript text>
+```
+
+Save to `raw/<kebab-slug>.txt`, then run wiki-ingest on that path.
+
+**Other URLs** (articles, blog posts, PDFs with a URL): fetch the content with whatever tool is available (`curl`, `wget`, browser save), prepend `Title:`, `Source URL:`, and `Date:` headers, save to `raw/<kebab-slug>.<ext>`, then ingest normally.
+
 ## Invocation
 
 - A folder argument, or no argument — **sweep**, not single ingestion. Read [`reference/sweep.md`](reference/sweep.md) and follow it instead.
