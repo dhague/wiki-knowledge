@@ -10,7 +10,7 @@ One exception: `page` resolves no root for a plain value — an edge value's vau
 
 **Batch independent invocations** — several `search` queries, say — into one shell call rather than issuing each separately; every extra tool call costs a full turn.
 
-**A JSON document path of `-` reads stdin, not a file called `-`** — the shell spelling for piping a plan or manifest in without a temp file: `ingest --plan -`, `discover --plan -`, `commit --manifest -`. Anything else is read as a literal path — `/dev/stdin` and `/proc/self/fd/0` are not filesystem paths on Windows, where they fail with exit 1. Pass the plan or manifest file's path instead: both are written to disk before the command that reads them, so the `-` spelling is a shell convenience, not the normal one.
+**A JSON document path of `-` reads stdin, not a file called `-`** — the shell spelling for piping a plan or manifest in without a temp file: `ingest --plan -`, `discover --plan -`, `commit --manifest -`. Anything else is read as a literal path: `/dev/stdin` does not exist on Windows and `/proc/self/fd/0` exists on neither macOS nor Windows, so either spelling fails with exit 1. Pass the plan or manifest file's path instead: both are written to disk before the command that reads them, so the `-` spelling is a shell convenience, not the normal one.
 
 **`--json` output contract — one dialect, one spelling.** Two shapes, and the choice is *how many documents*, not the outer JSON type:
 
