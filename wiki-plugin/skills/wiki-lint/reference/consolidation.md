@@ -65,7 +65,7 @@ Each is confirmed on its own; a yes to one is never a yes to another.
 | Disposition | Offer | Command on yes |
 |---|---|---|
 | `consolidate` | Consolidate into `<survivor>`? | hand off to the `wiki-ingest` procedure with the assessment |
-| `relate` | Add `<key>` edge to `<target>`? | [`proposals.md`](proposals.md) — Consolidation `relate`, the new-edge `page merge` |
+| `relate` | Add `<key>` edge to `<target>`? | [`proposals.md`](proposals.md) — **`relate`**, the new-edge `page merge` |
 | `conflict` | Record the supersession? | [`proposals.md`](proposals.md) — edge review, **Supersede** |
 | any declined `consolidate` | Record a Consolidation exclusion? | `"$RUNTIME" "$ENCHIRIDION" exclusion add <refs...> --reason "<rationale>"` |
 
