@@ -14,8 +14,18 @@ to override it, a judgment the ingest flow also gets to make.
   (basis: `<shared tags / shared title terms>`, weakest pairwise similarity
   `<s>`): `<rationale>`. Consolidate into `<survivor>`?"
 - **`relate`** — "Pages `<a>` and `<b>` are distinct but related: `<rationale>`.
-  Add the `<key>` edge to `<target>`?" One confirmation per proposed edge, each
-  running the Edge-retyping command below.
+  Add the `<key>` edge to `<target>`?" One confirmation per proposed edge.
+  Command on yes — `page merge`, not `page set` (there is no `--append` flag) —
+  with `<a>`'s absolute path as the file and `<target>`'s vault-relative ref as
+  the value:
+
+  `"$RUNTIME" "$ENCHIRIDION" page merge <a absolute path> <key> '["<target vault-relative ref>"]'`
+
+  For a new edge that one command is the whole write: it composes the `<key>`
+  link and leaves `related:` untouched. The Edge-retyping command below applies
+  only when an existing `related:` edge is *promoted* to a sharper type — that
+  path also strips the target from `related:`, which a new edge has nothing to
+  strip.
 - **`conflict`** — "Pages `<a>` and `<b>` disagree: `<rationale>`. Keep both and
   record which one wins?" Run the Edge-review **Supersede** command below.
 
